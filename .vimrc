@@ -62,19 +62,23 @@ map //       <Plug>(easymotion-sn)
 
 map ˚ :bnext<cr>
 map ∆ :bprevious<cr>
-"map ˙ gT " <ALT-h>
-"map ¬ gt " <ALT-l>
 
-map <CR>u   :GundoToggle<cr>
-map <CR>dc  :cd ~/dunjeon-crawler/<cr>
-map <CR>ss  :SpotifySearch
-map <CR>sh  :ConqueTerm bash<cr>
-map <CR>tb  :TagbarToggle<cr>
-map <CR>pi  :PlugInstall<cr>
-map <CR>pc  :PlugClean<cr>
-map <CR>so  :so %<cr>
-map <CR>org :e ~/Dropbox/org/todo.org<cr>
-map <CR>vim :e ~/.vimrc<cr>
+map <cr>u   :GundoToggle<cr>
+map <cr>dc  :cd ~/dunjeon-crawler/<cr>
+map <cr>ss  :SpotifySearch
+map <cr>sh  :ConqueTerm bash<cr>
+map <cr>tb  :TagbarToggle<cr>
+
+map <cr>org :e ~/Dropbox/org/todo.org<cr>
+
+map <cr>vim :e ~/.vimrc<cr>
+map <cr>pi  :PlugInstall<cr>
+map <cr>pc  :PlugClean<cr>
+map <cr>so  :so %<cr>
+
+map <cr>hsk :cd ~/haskell-projects/<cr>
+map <cr>hg  :!hoogle --count=15 "
+map <cr>hl  :GhcModCheckAndLintAsync
 
 vmap <Space>a <Plug>(EasyAlign)
 nmap <Space>a <Plug>(EasyAlign)
