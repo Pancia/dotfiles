@@ -2,36 +2,46 @@ call plug#begin('~/.vim/plugged')
 
 "TODO: Lag might be caused by
 "utl|SyntaxRange|sexp*|NrrwRgn|tagbar|orgmode&co...
+
 Plug 'Lokaltog/vim-easymotion'
+Plug 'Shougo/vimproc.vim', { 'do' : 'make' }
+Plug 'Valloric/YouCompleteMe', { 'do' : 'git submodule update --init --recursive; ./install.sh' }
 Plug 'bling/vim-airline'
 Plug 'christoomey/vim-tmux-navigator'
-Plug 'clojure-emacs/cider-nrepl', { 'for' : 'clojure' }
-Plug 'guns/vim-clojure-highlight', { 'for' : 'clojure' }
-Plug 'guns/vim-clojure-static', { 'for' : 'clojure' }
-Plug 'guns/vim-sexp', { 'for' : 'clojure' }
-Plug 'itchyny/calendar.vim', { 'for' : 'org' }
-Plug 'jceb/vim-orgmode', { 'for' : 'org' }
 Plug 'junegunn/vim-easy-align'
 Plug 'kien/ctrlp.vim'
 Plug 'kien/rainbow_parentheses.vim'
 Plug 'majutsushi/tagbar'
 Plug 'mileszs/ack.vim'
 Plug 'ntpeters/vim-better-whitespace'
-Plug 'scrooloose/syntastic'
 Plug 'sjl/gundo.vim'
 Plug 'takac/vim-spotifysearch'
 Plug 'tpope/vim-dispatch'
-Plug 'tpope/vim-fireplace', { 'for' : 'clojure' }
 Plug 'tpope/vim-fugitive'
-Plug 'tpope/vim-leiningen', { 'for' : 'clojure' }
 Plug 'tpope/vim-projectionist'
 Plug 'tpope/vim-repeat'
-Plug 'tpope/vim-sexp-mappings-for-regular-people', { 'for' : 'clojure' }
 Plug 'tpope/vim-speeddating'
 Plug 'tpope/vim-surround'
+Plug 'vim-scripts/vim-auto-save'
+
+Plug 'itchyny/calendar.vim', { 'for' : 'org' }
+Plug 'jceb/vim-orgmode', { 'for' : 'org' }
 Plug 'vim-scripts/SyntaxRange', { 'for' : 'org' }
 Plug 'vim-scripts/utl.vim', { 'for' : 'org' }
-Plug 'vim-scripts/vim-auto-save'
+
+"Plug 'clojure-emacs/cider-nrepl', { 'for' : 'clojure' }
+Plug 'guns/vim-clojure-static', { 'for' : 'clojure' }
+"Plug 'tpope/vim-fireplace', { 'for' : 'clojure' }
+
+Plug 'guns/vim-clojure-highlight', { 'for' : 'clojure' }
+Plug 'tpope/vim-leiningen', { 'for' : 'clojure' }
+Plug 'guns/vim-sexp', { 'for' : 'clojure' }
+Plug 'tpope/vim-sexp-mappings-for-regular-people', { 'for' : 'clojure' }
+
+Plug 'dag/vim2hs', { 'for' : 'haskell' }
+Plug 'eagletmt/ghcmod-vim', { 'for' : 'haskell' }
+Plug 'eagletmt/neco-ghc', { 'for' : 'haskell' }
+Plug 'bitc/vim-hdevtools', { 'for' : 'haskell' }
 
 call plug#end()
 set nocompatible
