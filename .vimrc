@@ -98,7 +98,7 @@ let g:airline_detect_whitespace=0
 set wildignore+=*/target/*
 let g:auto_save=1
 let g:ctrlp_by_filename=1
-let g:airline#extensions#tabline#enabled = 1
+let g:airline#extensions#tabline#enabled=1
 let g:auto_save_in_insert_mode=0
 
 set backspace=indent,eol,start
