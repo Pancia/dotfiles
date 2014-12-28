@@ -101,6 +101,9 @@ let g:ctrlp_by_filename=1
 let g:airline#extensions#tabline#enabled=1
 let g:auto_save_in_insert_mode=0
 
+highlight ColorColumn ctermbg=magenta
+call matchadd('ColorColumn', '\%121v', 100)
+
 set backspace=indent,eol,start
 set nobackup
 set history=100
