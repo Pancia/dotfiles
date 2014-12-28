@@ -100,6 +100,8 @@ let g:auto_save=1
 let g:ctrlp_by_filename=1
 let g:airline#extensions#tabline#enabled=1
 let g:auto_save_in_insert_mode=0
+let g:clojure_maxlines=200
+let g:clojure_align_multiline_strings=1
 
 highlight ColorColumn ctermbg=magenta
 call matchadd('ColorColumn', '\%121v', 100)
