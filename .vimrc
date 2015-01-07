@@ -43,6 +43,8 @@ Plug 'eagletmt/ghcmod-vim', { 'for' : 'haskell' }
 Plug 'eagletmt/neco-ghc', { 'for' : 'haskell' }
 Plug 'bitc/vim-hdevtools', { 'for' : 'haskell' }
 
+Plug 'elixir-lang/vim-elixir', { 'for' : 'elixir' }
+
 call plug#end()
 set nocompatible
 
