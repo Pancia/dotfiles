@@ -24,6 +24,9 @@ Plug 'tpope/vim-speeddating'
 Plug 'tpope/vim-surround'
 Plug 'vim-scripts/vim-auto-save'
 
+Plug 'sirver/ultisnips'
+Plug 'honza/vim-snippets'
+
 Plug 'itchyny/calendar.vim', { 'for' : 'org' }
 Plug 'jceb/vim-orgmode', { 'for' : 'org' }
 Plug 'vim-scripts/SyntaxRange', { 'for' : 'org' }
