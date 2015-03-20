@@ -55,7 +55,7 @@ Plug 'adimit/prolog.vim', { 'for' : 'prolog' }
 
 call plug#end()
 
-map <cr>vim :e ~/.vimrc<cr>
+map <cr>vim :e ~/.vimrc<cr>:cd ~/.vim/plugin<cr>
 map <cr>pi  :PlugInstall<cr>
 map <cr>pc  :PlugClean<cr>
 map <cr>so  :so %<cr>
