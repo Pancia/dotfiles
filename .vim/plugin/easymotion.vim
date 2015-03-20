@@ -1,0 +1,5 @@
+"map <Space>  <Plug>(easymotion-prefix)
+map <Space>j <Plug>(easymotion-j)
+map <Space>k <Plug>(easymotion-k)
+map <Space>s <Plug>(easymotion-s)
+map //       <Plug>(easymotion-sn)
