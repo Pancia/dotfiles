@@ -13,4 +13,4 @@ endfunction
 
 map ,mm :CtrlP<CR>
 map ,mv :call CtrlP_WithDir('~/.vim')<CR>
-map ,ml :call CtrlP_WithDir('~/UCSC/loki-lang')<CR>
+map ,ml :call CtrlP_WithDir('~/projects/haskell/loki-lang')<CR>
