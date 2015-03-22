@@ -18,14 +18,17 @@ alias ucsc='ssh adambros@unix.ucsc.edu'
 alias todo='grep -Iir "todo" *'
 alias bashrc='vim ~/.bashrc'
 alias .bashrc='source ~/.bashrc'
-alias cat='tail -n +1 $*'
-alias cp='cp -n $*'
-alias mv='mv -n $*'
+alias cat='tail -n +1 $*' #will show files names if #files>1
+alias cp='cp -n $*' #will not overwrite
+alias mv='mv -n $*' #will not overwrite
 
+#Cleans trashbin
 function cln {
     command rm ~/.Trash/*
 }
 
+#Overrides rm to move it to the ~/.Trash (with a prefix)
+#TODO: Add a timestamp prefix
 function rm {
     local dir="$(pwd)"
     for i in "$@"; do

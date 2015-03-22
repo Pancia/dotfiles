@@ -56,11 +56,13 @@ Plug 'adimit/prolog.vim', { 'for' : 'prolog' }
 
 call plug#end()
 
-map <cr>pi  :PlugInstall<cr>
-map <cr>pc  :PlugClean<cr>
+map <CR>pi  :PlugInstall<CR>
+map <CR>pc  :PlugClean<CR>
 
-map <cr>vim :e ~/.vimrc<cr>:cd ~/.vim/plugin<cr>
-map <cr>so  :so %<cr>
+map <CR>bsh :e ~/.bashrc<CR>
+
+map <CR>vim :e ~/.vimrc<CR>:cd ~/.vim<CR>
+map <CR>so  :so %<CR>
 
 filetype plugin indent on
 
