@@ -37,10 +37,11 @@ Plug 'guns/vim-clojure-static',    { 'for' : 'clojure' }
 Plug 'guns/vim-clojure-highlight', { 'for' : 'clojure' }
 Plug 'tpope/vim-leiningen',        { 'for' : 'clojure' }
 Plug 'guns/vim-sexp',              { 'for' : 'clojure' }
+Plug 'tpope/vim-sexp-mappings-for-regular-people', { 'for' : 'clojure' }
+"TODO:
 "Lag caused by vim-fireplace
 "Plug 'clojure-emacs/cider-nrepl', { 'for' : 'clojure' }
 "Plug 'tpope/vim-fireplace',       { 'for' : 'clojure' }
-Plug 'tpope/vim-sexp-mappings-for-regular-people', { 'for' : 'clojure' }
 
 "Haskell
 Plug 'dag/vim2hs',          { 'for' : 'haskell' }
@@ -55,9 +56,10 @@ Plug 'adimit/prolog.vim', { 'for' : 'prolog' }
 
 call plug#end()
 
-map <cr>vim :e ~/.vimrc<cr>:cd ~/.vim/plugin<cr>
 map <cr>pi  :PlugInstall<cr>
 map <cr>pc  :PlugClean<cr>
+
+map <cr>vim :e ~/.vimrc<cr>:cd ~/.vim/plugin<cr>
 map <cr>so  :so %<cr>
 
 filetype plugin indent on
