@@ -4,18 +4,18 @@ let g:ctrlp_working_path_mode = '0'
 
 set wildignore+=*/target/*
 set wildignore+=*/dist/*
-set wildignore+=*/plugged/*
+set wildignore+=*/build/*
 
-function CtrlP_WithDir(dir)
+function! CtrlP_WithDir(dir)
     exe 'cd' a:dir
     :CtrlP a:dir<CR>
 endfunction
 
-map ,mm   :CtrlP<CR>
+map ,m,   :CtrlP<CR>
 map ,mv   :call CtrlP_WithDir('~/.vim')<CR>
-map ,mdw  :call CtrlP_WithDir('~/Downloads')<CR>
+map ,mdow :call CtrlP_WithDir('~/Downloads')<CR>
 map ,mdoc :call CtrlP_WithDir('~/Documents')<CR>
-map ,mdr  :call CtrlP_WithDir('~/Dropbox')<CR>
+map ,mdro :call CtrlP_WithDir('~/Dropbox')<CR>
 map ,mp   :call CtrlP_WithDir('~/projects')<CR>
 map ,mdc  :call CtrlP_WithDir('~/projects/clojure/dunjeon-crawler')<CR>
 map ,mma  :call CtrlP_WithDir('~/projects/clojure/clj-mini-apps')<CR>
