@@ -21,6 +21,7 @@ Plug 'Valloric/YouCompleteMe', { 'do' : 'git submodule update --init --recursive
 Plug 'godlygeek/tabular'
 Plug 'honza/vim-snippets'
 Plug 'kien/rainbow_parentheses.vim'
+Plug 'kshenoy/vim-signature'
 Plug 'majutsushi/tagbar'
 Plug 'mileszs/ack.vim'
 Plug 'ntpeters/vim-better-whitespace'
@@ -35,13 +36,12 @@ Plug 'tpope/vim-surround'
 "Clojure
 Plug 'guns/vim-clojure-static',    { 'for' : 'clojure' }
 Plug 'guns/vim-clojure-highlight', { 'for' : 'clojure' }
-Plug 'tpope/vim-leiningen',        { 'for' : 'clojure' }
 Plug 'guns/vim-sexp',              { 'for' : 'clojure' }
 Plug 'tpope/vim-sexp-mappings-for-regular-people', { 'for' : 'clojure' }
-"TODO:
-"Lag caused by vim-fireplace
-"Plug 'clojure-emacs/cider-nrepl', { 'for' : 'clojure' }
-"Plug 'tpope/vim-fireplace',       { 'for' : 'clojure' }
+"TODO: Lag caused by one of the following?
+Plug 'tpope/vim-leiningen',        { 'for' : 'clojure' }
+Plug 'clojure-emacs/cider-nrepl',  { 'for' : 'clojure' }
+Plug 'tpope/vim-fireplace',        { 'for' : 'clojure' }
 
 "Haskell
 Plug 'dag/vim2hs',          { 'for' : 'haskell' }

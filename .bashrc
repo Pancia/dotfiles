@@ -9,6 +9,7 @@ export PATH=$HOME/loki/.cabal-sandbox/bin/:$PATH
 
 export PS1="[\u@\w]?"
 
+alias vim='/Applications/MacVim.app/Contents/MacOS/Vim'
 alias help='echo "[show|hide]Files, ip, pl, ucsc, todo, [.]bashrc, loki"'
 alias showFiles='defaults write com.apple.finder AppleShowAllFiles YES'
 alias hideFiles='defaults write com.apple.finder AppleShowAllFiles NO'
@@ -18,25 +19,22 @@ alias ucsc='ssh adambros@unix.ucsc.edu'
 alias todo='grep -Iir "todo" *'
 alias bashrc='vim ~/.bashrc'
 alias .bashrc='source ~/.bashrc'
-alias cat='tail -n +1 $*' #will show files names if #files>1
-alias cp='cp -n $*' #will not overwrite
-alias mv='mv -n $*' #will not overwrite
-
-#Cleans trashbin
-function cln {
-    command rm ~/.Trash/*
-}
-
-#Overrides rm to move it to the ~/.Trash (with a prefix)
-#TODO: Add a timestamp prefix
-function rm {
-    local dir="$(pwd)"
-    for i in "$@"; do
-        local prefix=${dir//\//\_}
-        prefix=${prefix:(-20)}
-        mv $i ~/.Trash/${prefix}_${i}
-    done
-}
+alias cat='tail -n +1' #will show files names if #files>1
+alias ls='ls -h'
+alias mv='mv -i'
+alias cp='cp -i'
 
 #For ignoring spaces and duplicates in bash history
 export HISTCONTROL=ignoreboth:erasedups
+
+#Move to the trash instead
+rm() {
+    local dir prefix timestamp
+    dir="$(pwd)"
+    timestamp="$(date '+%Y-%m-%d_%X')"
+    prefix="${dir//\//_}_${timestamp}__"
+    for i in "$@"; do
+        #echo "$i $HOME/.Trash/${prefix}${i}"
+        mv $i "$HOME/.Trash/${prefix}${i}"
+    done
+}
