@@ -5,9 +5,7 @@ map <CR>hg  :!hoogle --count=15 "
 map <CR>hl  :GhcModCheckAndLintAsync<CR>
 map <CR>syn :SyntasticCheck<CR>
 map <c-t> :GhcModType<CR>
-if exists(":GhcModTypeClear")
-    map <c-c> :GhcModTypeClear<CR>
-endif
+map <c-c> :GhcModTypeClear<CR>
 
 let g:syntastic_haskell_checkers = ['ghc_mod', 'hlint', 'scan']
 let g:ghcmod_ghc_options = ['-fno-warn-orphans']

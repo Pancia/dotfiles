@@ -14,6 +14,7 @@ map Q gQ
 
 nnoremap U <c-r>
 nnoremap <c-r> <nop>
+map <c-r> :nohlsearch<CR>
 
 nmap <BS>   <c-o>
 nmap <S-BS> <c-i>
