@@ -26,6 +26,8 @@ alias cp='cp -i'
 
 #For ignoring spaces and duplicates in bash history
 export HISTCONTROL=ignoreboth:erasedups
+#disable EOF (<c-d>) closing terminal
+set -o ignoreeof
 
 #Move to the trash instead
 rm() {

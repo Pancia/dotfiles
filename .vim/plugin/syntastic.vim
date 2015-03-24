@@ -9,7 +9,7 @@ let g:syntastic_aggregate_errors = 1
 
 let g:syntastic_mode_map = {
             \ "mode": "active",
-            \ "passive_filetypes": ["haskell"] }
+            \ }
 
 augroup syntastic_plus_autosave
     au CursorHold,InsertLeave * nested update
