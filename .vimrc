@@ -82,6 +82,7 @@ function! SetCursorToLastKnownPosition()
         if line("'\"") > 1 && line("'\"") <= line("$")
             exe "normal! g`\""
             normal! zz
+            silent! normal! zO
         endif
     endif
 endfunction

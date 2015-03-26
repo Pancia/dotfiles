@@ -19,6 +19,9 @@ map <c-r> :nohlsearch<CR>
 nmap <BS>   <c-o>
 nmap <S-BS> <c-i>
 
+nnoremap zoo zO
+nnoremap zcc zC
+
 map ˚ :bnext<CR>
 map ∆ :bprevious<CR>
 map ˙ :tabp<CR>
