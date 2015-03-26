@@ -77,13 +77,18 @@ augroup rainbowParens
     au Syntax * RainbowParenthesesLoadBraces
 augroup END
 
+function! SetCursorToLastKnownPosition()
+    if &filetype !~ 'git\|commit\c'
+        if line("'\"") > 1 && line("'\"") <= line("$")
+            exe "normal! g`\""
+            normal! zz
+        endif
+    endif
+endfunction
+
 augroup essentials
     au!
-    "wrap at col=80
+    "wrap text files at col=80
     autocmd FileType text setlocal textwidth=80
-    "On open buffer, go to last spot
-    autocmd BufReadPost *
-                \ if line("'\"") > 1 && line("'\"") <= line("$") |
-                \   exe "normal! g`\"" |
-                \ endif
+    autocmd BufReadPost * call SetCursorToLastKnownPosition()
 augroup END

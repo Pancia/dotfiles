@@ -14,6 +14,13 @@ set guifont=Menlo\ Regular:h22
 set visualbell
 set foldmethod=indent
 
+if exists("&undodir")
+    set undofile
+    let &undodir=&directory
+    set undolevels=500
+    set undoreload=500
+endif
+
 "Highlight col 121 red, ~ marking it as too long!
 highlight ColorColumn ctermbg=magenta
 call matchadd('ColorColumn', '\%121v', 100)
