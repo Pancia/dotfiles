@@ -8,9 +8,12 @@ let mapleader = "<Space>"
 map s \
 map <Space><Space> \
 
-map j gj
-map k gk
-map Q gQ
+noremap j gj
+noremap k gk
+noremap gj j
+noremap gk k
+
+noremap Q gQ
 
 nnoremap U <c-r>
 nnoremap <c-r> <nop>
