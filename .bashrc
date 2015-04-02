@@ -35,6 +35,8 @@ export LSCOLORS=GxFxCxDxBxegedabagaced
 export HISTCONTROL=ignoreboth:erasedups
 #disable EOF (<c-d>) closing terminal
 set -o ignoreeof
+#dont autocomplete hidden files
+bind 'set match-hidden-files off'
 
 #Move to the trash instead
 rm() {
