@@ -16,7 +16,7 @@ Plug 'deris/vim-shot-f'
 Plug 'Shougo/vimproc.vim',     { 'do' : 'make' }
 
 "AutoComplete
-Plug 'Valloric/YouCompleteMe', { 'do' : 'git submodule update --init --recursive; ./install.sh' }
+Plug 'Valloric/YouCompleteMe', { 'do' : 'git submodule update --init --recursive; ./install.sh --clang-completer' }
 
 Plug 'godlygeek/tabular'
 Plug 'honza/vim-snippets'
