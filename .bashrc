@@ -24,6 +24,10 @@ alias ls='ls -h'
 alias mv='mv -i'
 alias cp='cp -i'
 
+#Add colors!
+export CLICOLOR=1
+export LSCOLORS=GxFxCxDxBxegedabagaced
+
 #For ignoring spaces and duplicates in bash history
 export HISTCONTROL=ignoreboth:erasedups
 #disable EOF (<c-d>) closing terminal
