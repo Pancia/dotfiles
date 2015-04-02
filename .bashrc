@@ -25,6 +25,7 @@ alias cat='tail -n +1' #will show files names if #files>1
 alias ls='ls -h'
 alias mv='mv -i'
 alias cp='cp -i'
+alias clear='clear ; echo -e "\e[3J"'
 
 #Add colors!
 export CLICOLOR=1
