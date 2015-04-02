@@ -43,7 +43,7 @@ rm() {
     local dir prefix timestamp
     dir="$(pwd)"
     timestamp="$(date '+%Y-%m-%d_%X')"
-    prefix="${dir//\//_}_${timestamp}__"
+    prefix="${dir//\//%}_${timestamp}_%"
     for i in "$@"; do
         #echo "$i $HOME/.Trash/${prefix}${i}"
         mv $i "$HOME/.Trash/${prefix}${i}"
