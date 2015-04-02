@@ -7,6 +7,7 @@ export PATH="/usr/local/heroku/bin:$PATH"
 export PATH=$HOME/.cabal/bin:$PATH
 export PATH=$HOME/loki/.cabal-sandbox/bin/:$PATH
 
+#Custom Prompt
 export PS1="[\u@\w]?"
 
 #ALIASES
