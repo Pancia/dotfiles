@@ -16,8 +16,7 @@ noremap gk k
 noremap Q gQ
 
 nnoremap U <c-r>
-nnoremap <c-r> <nop>
-map <c-r> :nohlsearch<CR>
+nnoremap <c-r> :nohlsearch<CR>
 
 nmap <BS>   <c-o>
 nmap <S-BS> <c-i>
@@ -33,6 +32,7 @@ nnoremap # #zz
 nnoremap g* g*zz
 nnoremap g# g#zz
 
+"alt: {j :bp, k :bn, h :tabp, l :tabn}
 map ˚ :bnext<CR>
 map ∆ :bprevious<CR>
 map ˙ :tabp<CR>
