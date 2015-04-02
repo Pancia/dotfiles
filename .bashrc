@@ -9,7 +9,9 @@ export PATH=$HOME/loki/.cabal-sandbox/bin/:$PATH
 
 export PS1="[\u@\w]?"
 
+#ALIASES
 alias vim='/Applications/MacVim.app/Contents/MacOS/Vim'
+alias vimrc='vim ~/.vimrc -c "cd ~/.vim"'
 alias help='echo "[show|hide]Files, ip, pl, ucsc, todo, [.]bashrc, loki"'
 alias showFiles='defaults write com.apple.finder AppleShowAllFiles YES'
 alias hideFiles='defaults write com.apple.finder AppleShowAllFiles NO'
