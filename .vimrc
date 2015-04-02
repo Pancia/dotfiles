@@ -81,6 +81,7 @@ function! SetCursorToLastKnownPosition()
     if &filetype !~ 'git\|commit\c'
         if line("'\"") > 1 && line("'\"") <= line("$")
             exe "normal! g`\""
+            "Center screen & unfold all
             normal! zz
             silent! normal! zR
         endif
