@@ -22,6 +22,14 @@ nmap <S-BS> <c-i>
 nnoremap zoo zO
 nnoremap zcc zC
 
+"Center screen when searching
+nnoremap n nzz
+nnoremap N Nzz
+nnoremap * *zz
+nnoremap # #zz
+nnoremap g* g*zz
+nnoremap g# g#zz
+
 map ˚ :bnext<CR>
 map ∆ :bprevious<CR>
 map ˙ :tabp<CR>
