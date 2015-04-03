@@ -193,7 +193,7 @@ let g:auto_save_in_insert_mode=0
 " CTRLP {{{
 let g:ctrlp_by_filename=1
 let g:ctrlp_working_path_mode = 'ra'
-set wildignore+=*/target/*,*/dist/*,*/build/*,*/build/*
+set wildignore+=*/target/*,*/dist/*,*/build/*,*/build/*,*.o
 function! MyCtrlP()
     if expand('%:t') =~ '.vimrc'
         silent! call CtrlP_WithDir('~/.vim')<CR>
