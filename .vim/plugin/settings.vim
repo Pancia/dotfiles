@@ -13,6 +13,9 @@ set expandtab "Use spaces!
 set guifont=Menlo\ Regular:h22
 set visualbell
 set foldmethod=indent
+set wildmenu "Visual autocomplete for command menu
+set lazyredraw "Silly macros
+set cursorline "Highlight line cursor is on
 
 if exists("&undodir")
     set undofile
