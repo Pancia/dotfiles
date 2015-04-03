@@ -170,6 +170,7 @@ augroup Essentials
     au BufReadPost * call SetCursorToLastKnownPosition()
     au BufWinEnter * call HighlightLongLines()
     au FileType vim setlocal foldmethod=marker
+    autocmd BufEnter * silent! lcd %:p:h " Eqv to `set autochdir`
 augroup END
 augroup RainbowParens
     au!
@@ -191,8 +192,15 @@ let g:auto_save_in_insert_mode=0
 
 " CTRLP {{{
 let g:ctrlp_by_filename=1
-let g:ctrlp_working_path_mode = '0'
+let g:ctrlp_working_path_mode = 'ra'
 set wildignore+=*/target/*,*/dist/*,*/build/*,*/build/*
+function! MyCtrlP()
+    if expand('%:t') =~ '.vimrc'
+        silent! call CtrlP_WithDir('~/.vim')<CR>
+    else
+        :CtrlP
+    endif
+endfunction
 function! CtrlP_WithDir(dir)
     exe 'cd' a:dir
     :CtrlP a:dir<CR>
