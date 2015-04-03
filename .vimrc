@@ -132,14 +132,12 @@ if exists("&undodir")
     set undolevels=500
     set undoreload=500
 endif
-
 let g:strip_whitespace_on_save = 1
 " }}} SETTINGS
 
 " THEME {{{
 colorscheme darkblue
 silent! colorscheme macvim
-syntax on
 hi folded guibg=#707070
 " }}} THEME
 
@@ -165,7 +163,6 @@ function! HighlightLongLines()
 endfunction
 augroup Essentials
     au!
-    "wrap text files at col=80
     au FileType text setlocal textwidth=80
     au BufReadPost * call SetCursorToLastKnownPosition()
     au BufWinEnter * call HighlightLongLines()
