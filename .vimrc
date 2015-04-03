@@ -1,4 +1,5 @@
 set nocompatible
+
 call plug#begin('~/.vim/plugged')
 
 "Essentials
@@ -66,7 +67,7 @@ map <CR>so  :so %<CR>
 
 filetype plugin indent on
 
-".loki -~> .clj
+".loki =~ .clj
 au BufNewFile,BufRead *.loki set filetype=clojure
 
 augroup rainbowParens
@@ -88,9 +89,25 @@ function! SetCursorToLastKnownPosition()
     endif
 endfunction
 
-augroup essentials
+function! HighlightLongLines()
+    highlight ColorColumn ctermbg=magenta
+    if &ft =~ 'cpp\|c'
+        if exists('w:m2')
+            call matchdelete(w:m2)
+        endif
+        let w:m2=matchadd('ColorColumn', '\%>72v.\+', -1)
+    else
+        if exists('w:m2')
+            call matchdelete(w:m2)
+        endif
+        let w:m2=matchadd('ColorColumn', '\%>93v.\+', -1)
+    endif
+endfunction
+
+augroup Essentials
     au!
     "wrap text files at col=80
-    autocmd FileType text setlocal textwidth=80
-    autocmd BufReadPost * call SetCursorToLastKnownPosition()
+    au FileType text setlocal textwidth=80
+    au BufReadPost * call SetCursorToLastKnownPosition()
+    au BufWinEnter * call HighlightLongLines()
 augroup END
