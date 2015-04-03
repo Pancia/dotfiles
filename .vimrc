@@ -2,7 +2,7 @@ set nocompatible
 
 " PLUGINS "{{{
 call plug#begin('~/.vim/plugged')
-"Essentials
+" Essentials
 Plug 'vim-scripts/vim-auto-save'
 Plug 'bling/vim-airline'
 Plug 'christoomey/vim-tmux-navigator'
@@ -10,11 +10,11 @@ Plug 'kien/ctrlp.vim'
 Plug 'sjl/gundo.vim'
 Plug 'tpope/vim-repeat'
 Plug 'scrooloose/syntastic'
-"Movement
+" Movement
 Plug 'Lokaltog/vim-easymotion'
 Plug 'deris/vim-shot-f'
 Plug 'Shougo/vimproc.vim',     { 'do' : 'make' }
-"AutoComplete
+" AutoComplete
 Plug 'Valloric/YouCompleteMe', { 'do' : 'git submodule update --init --recursive; ./install.sh --clang-completer' }
 Plug 'godlygeek/tabular'
 Plug 'honza/vim-snippets'
@@ -30,22 +30,22 @@ Plug 'tpope/vim-fugitive'
 Plug 'tpope/vim-projectionist'
 Plug 'tpope/vim-speeddating'
 Plug 'tpope/vim-surround'
-"Clojure
+" Clojure
 Plug 'guns/vim-clojure-static',    { 'for' : 'clojure' }
 Plug 'guns/vim-clojure-highlight', { 'for' : 'clojure' }
 Plug 'guns/vim-sexp',              { 'for' : 'clojure' }
 Plug 'tpope/vim-sexp-mappings-for-regular-people', { 'for' : 'clojure' }
-"TODO: Lag caused by one of the following?
+" TODO: Lag caused by one of the following?
 Plug 'tpope/vim-leiningen',        { 'for' : 'clojure' }
 Plug 'clojure-emacs/cider-nrepl',  { 'for' : 'clojure' }
 Plug 'tpope/vim-fireplace',        { 'for' : 'clojure' }
-"Haskell
+" Haskell
 Plug 'dag/vim2hs',          { 'for' : 'haskell' }
 Plug 'eagletmt/ghcmod-vim', { 'for' : 'haskell' }
 Plug 'eagletmt/neco-ghc',   { 'for' : 'haskell' }
-"Elixir
+" Elixir
 Plug 'elixir-lang/vim-elixir', { 'for' : 'elixir' }
-"Prolog
+" Prolog
 Plug 'adimit/prolog.vim', { 'for' : 'prolog' }
 call plug#end()
 " }}} PLUGINS
@@ -144,13 +144,25 @@ hi folded guibg=#707070
 " }}} THEME
 
 " AUTOGROUPS {{{
-augroup RainbowParens
-    au!
-    au VimEnter * RainbowParenthesesToggle
-    au Syntax * RainbowParenthesesLoadRound
-    au Syntax * RainbowParenthesesLoadSquare
-    au Syntax * RainbowParenthesesLoadBraces
-augroup END
+function! SetCursorToLastKnownPosition()
+    if &filetype !~ 'git\|commit\c'
+        if line("'\"") > 1 && line("'\"") <= line("$")
+            exe "normal! g`\""
+            normal! zz
+        endif
+    endif
+endfunction
+function! HighlightLongLines()
+    highlight ColorColumn ctermbg=magenta
+    if exists('w:m2')
+        call matchdelete(w:m2)
+    endif
+    if &ft =~ 'cpp\|c'
+        let w:m2=matchadd('ColorColumn', '\%>72v.\+', -1)
+    else
+        let w:m2=matchadd('ColorColumn', '\%>93v.\+', -1)
+    endif
+endfunction
 augroup Essentials
     au!
     "wrap text files at col=80
@@ -159,37 +171,17 @@ augroup Essentials
     au BufWinEnter * call HighlightLongLines()
     au FileType vim setlocal foldmethod=marker
 augroup END
+augroup RainbowParens
+    au!
+    au VimEnter * RainbowParenthesesToggle
+    au Syntax * RainbowParenthesesLoadRound
+    au Syntax * RainbowParenthesesLoadSquare
+    au Syntax * RainbowParenthesesLoadBraces
+augroup END
 augroup Assorted
     au BufNewFile,BufRead *.loki set filetype=clojure
 augroup END
 " }}} AUTOGROUPS
-
-" HELPER FUNCTIONS {{{
-function! SetCursorToLastKnownPosition()
-    if &filetype !~ 'git\|commit\c'
-        if line("'\"") > 1 && line("'\"") <= line("$")
-            exe "normal! g`\""
-            "Center screen & unfold all
-            normal! zz
-            silent! normal! zO
-        endif
-    endif
-endfunction
-function! HighlightLongLines()
-    highlight ColorColumn ctermbg=magenta
-    if &ft =~ 'cpp\|c'
-        if exists('w:m2')
-            call matchdelete(w:m2)
-        endif
-        let w:m2=matchadd('ColorColumn', '\%>72v.\+', -1)
-    else
-        if exists('w:m2')
-            call matchdelete(w:m2)
-        endif
-        let w:m2=matchadd('ColorColumn', '\%>93v.\+', -1)
-    endif
-endfunction
-" }}} HELPER FUNCTIONS
 
 " PLUGIN CONFIG {{{
 " AUTO_SAVE {{{
@@ -261,9 +253,12 @@ let g:ycm_semantic_triggers = {'haskell' : ['.']}
 " Helps with cpp and synastic
 " - https://github.com/Valloric/YouCompleteMe#the-gycm_show_diagnostics_ui-option
 let g:ycm_show_diagnostics_ui = 0
-"Enables & configures semantic completion for c,c++...
+" Enables & configures semantic completion for c,c++...
 let g:ycm_global_ycm_extra_conf = "~/.vim/.ycm_extra_conf.py"
 let g:ycm_autoclose_preview_window_after_insertion = 1
+" TODO: NOT WORKING, Disable arrow keys
+let g:ycm_key_list_select_completion = ['<TAB>']
+let g:ycm_key_list_previous_completion = ['<S-TAB>']
 " }}} YOUCOMPLETEME
 " }}} PLUGIN CONFIG
 
