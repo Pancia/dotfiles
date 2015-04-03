@@ -24,3 +24,5 @@ if exists("&undodir")
     set undolevels=500
     set undoreload=500
 endif
+
+let g:strip_whitespace_on_save = 1
