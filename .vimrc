@@ -205,18 +205,25 @@ function! CtrlP_WithDir(dir)
     exe 'cd' a:dir
     :CtrlP a:dir<CR>
 endfunction
-map ,m,   :call MyCtrlP()<CR>
-map ,mb   :call CtrlP_WithDir('~/Bookmarks')<CR>
-map ,mdc  :call CtrlP_WithDir('~/projects/clojure/dunjeon-crawler')<CR>
-map ,mdoc :call CtrlP_WithDir('~/Documents')<CR>
-map ,mdow :call CtrlP_WithDir('~/Downloads')<CR>
-map ,mdro :call CtrlP_WithDir('~/Dropbox')<CR>
-map ,ml   :call CtrlP_WithDir('~/projects/haskell/loki-lang')<CR>
-map ,mma  :call CtrlP_WithDir('~/projects/clojure/clj-mini-apps')<CR>
-map ,mp   :call CtrlP_WithDir('~/projects')<CR>
-map ,msma :call CtrlP_WithDir('~/AndroidStudioProjects/SlugMenu')<CR>
-map ,msms :call CtrlP_WithDir('~/projects/elixir/slugmenu')<CR>
-map ,mv   :call CtrlP_WithDir('~/.vim')<CR>
+function! ListMyCtrlPShortcuts()
+    echo 'Bookmarks,Dunjeon-Crawler,DOCuments,DOWnloads,DROpbox,'
+    echo 'Loki,clj-Mini-Apps,Projects,SlugMenuApp,SlugMenuServer,'
+    echo '.Vim'
+endfunction
+nmap ,m,   :call MyCtrlP()<CR>
+nmap ,m?   :call ListMyCtrlPShortcuts()<CR>
+nmap ,mh   :call ListMyCtrlPShortcuts()<CR>
+nmap ,mb   :call CtrlP_WithDir('~/Bookmarks')<CR>
+nmap ,mdc  :call CtrlP_WithDir('~/projects/clojure/dunjeon-crawler')<CR>
+nmap ,mdoc :call CtrlP_WithDir('~/Documents')<CR>
+nmap ,mdow :call CtrlP_WithDir('~/Downloads')<CR>
+nmap ,mdro :call CtrlP_WithDir('~/Dropbox')<CR>
+nmap ,ml   :call CtrlP_WithDir('~/projects/haskell/loki-lang')<CR>
+nmap ,mma  :call CtrlP_WithDir('~/projects/clojure/clj-mini-apps')<CR>
+nmap ,mp   :call CtrlP_WithDir('~/projects')<CR>
+nmap ,msma :call CtrlP_WithDir('~/AndroidStudioProjects/SlugMenu')<CR>
+nmap ,msms :call CtrlP_WithDir('~/projects/elixir/slugmenu')<CR>
+nmap ,mv   :call CtrlP_WithDir('~/.vim')<CR>
 " }}} CTRLP
 
 " EASYMOTION {{{
