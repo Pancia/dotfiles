@@ -192,24 +192,23 @@ let g:auto_save_in_insert_mode=0
 " CTRLP {{{
 let g:ctrlp_by_filename=1
 let g:ctrlp_working_path_mode = '0'
-set wildignore+=*/target/*
-set wildignore+=*/dist/*
-set wildignore+=*/build/*
+set wildignore+=*/target/*,*/dist/*,*/build/*,*/build/*
 function! CtrlP_WithDir(dir)
     exe 'cd' a:dir
     :CtrlP a:dir<CR>
 endfunction
-map ,m,   :CtrlP<CR>
-map ,mv   :call CtrlP_WithDir('~/.vim')<CR>
-map ,mdow :call CtrlP_WithDir('~/Downloads')<CR>
-map ,mdoc :call CtrlP_WithDir('~/Documents')<CR>
-map ,mdro :call CtrlP_WithDir('~/Dropbox')<CR>
-map ,mp   :call CtrlP_WithDir('~/projects')<CR>
+map ,m,   :call MyCtrlP()<CR>
+map ,mb   :call CtrlP_WithDir('~/Bookmarks')<CR>
 map ,mdc  :call CtrlP_WithDir('~/projects/clojure/dunjeon-crawler')<CR>
-map ,mma  :call CtrlP_WithDir('~/projects/clojure/clj-mini-apps')<CR>
-map ,msms :call CtrlP_WithDir('~/projects/elixir/slugmenu')<CR>
-map ,msma :call CtrlP_WithDir('~/AndroidStudioProjects/SlugMenu')<CR>
+map ,mdoc :call CtrlP_WithDir('~/Documents')<CR>
+map ,mdow :call CtrlP_WithDir('~/Downloads')<CR>
+map ,mdro :call CtrlP_WithDir('~/Dropbox')<CR>
 map ,ml   :call CtrlP_WithDir('~/projects/haskell/loki-lang')<CR>
+map ,mma  :call CtrlP_WithDir('~/projects/clojure/clj-mini-apps')<CR>
+map ,mp   :call CtrlP_WithDir('~/projects')<CR>
+map ,msma :call CtrlP_WithDir('~/AndroidStudioProjects/SlugMenu')<CR>
+map ,msms :call CtrlP_WithDir('~/projects/elixir/slugmenu')<CR>
+map ,mv   :call CtrlP_WithDir('~/.vim')<CR>
 " }}} CTRLP
 
 " EASYMOTION {{{
