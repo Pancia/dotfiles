@@ -1,5 +1,7 @@
 setlocal omnifunc=necoghc#omnifunc
 
+setlocal nosmarttab
+
 map <CR>hsk :cd ~/haskell-projects/<CR>
 map <CR>hg  :!hoogle --count=15 "
 map <CR>hl  :GhcModCheckAndLintAsync<CR>
