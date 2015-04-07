@@ -64,6 +64,7 @@ nmap <down> <nop>
 nmap <left> <nop>
 nmap <right> <nop>
 nmap <Space> <nop>
+nmap <CR> <nop>
 " Leader mappings
 let mapleader = "<Space>"
 map s \
