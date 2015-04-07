@@ -81,9 +81,6 @@ nnoremap <c-r> :nohlsearch<CR>
 " Use BS to navigate cursor history
 nmap <BS>   <c-o>
 nmap <S-BS> <c-i>
-" Helpful mappings for folds
-nnoremap zoo zO
-nnoremap zcc zC
 " Center screen when searching
 nnoremap n nzz
 nnoremap N Nzz
