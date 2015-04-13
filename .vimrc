@@ -240,22 +240,10 @@ function! SetCursorToLastKnownPosition()
         endif
     endif
 endfunction
-function! HighlightLongLines()
-    highlight ColorColumn ctermbg=magenta
-    if exists('w:m2')
-        call matchdelete(w:m2)
-    endif
-    if &ft =~ 'cpp\|c'
-        let w:m2=matchadd('ColorColumn', '\%>72v.\+', -1)
-    else
-        let w:m2=matchadd('ColorColumn', '\%>93v.\+', -1)
-    endif
-endfunction
 augroup Essentials
     au!
     au FileType text setlocal textwidth=80
     au BufReadPost * call SetCursorToLastKnownPosition()
-    au BufWinEnter * call HighlightLongLines()
     au FileType vim setlocal foldmethod=marker
     autocmd BufEnter * silent! lcd %:p:h " Eqv to `set autochdir`
 augroup END
