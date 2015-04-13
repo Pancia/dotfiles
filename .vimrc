@@ -34,14 +34,14 @@ Plug 'honza/vim-snippets'
 Plug 'sirver/ultisnips'
 " }}} AutoComplete
 " Clojure {{{
-Plug 'guns/vim-clojure-static',    { 'for' : 'clojure' }
-Plug 'guns/vim-clojure-highlight', { 'for' : 'clojure' }
-Plug 'guns/vim-sexp',              { 'for' : 'clojure' }
-Plug 'tpope/vim-sexp-mappings-for-regular-people', { 'for' : 'clojure' }
-" TODO: Lag caused by one of the following?
-Plug 'tpope/vim-leiningen',        { 'for' : 'clojure' }
-Plug 'clojure-emacs/cider-nrepl',  { 'for' : 'clojure' }
-Plug 'tpope/vim-fireplace',        { 'for' : 'clojure' }
+Plug 'guns/vim-clojure-static'
+Plug 'guns/vim-clojure-highlight'
+Plug 'guns/vim-sexp'
+Plug 'tpope/vim-sexp-mappings-for-regular-people'
+"TODO: Lag caused by one of the following?
+Plug 'tpope/vim-leiningen'
+Plug 'clojure-emacs/cider-nrepl'
+Plug 'tpope/vim-fireplace'
 " }}} Clojure
 " Haskell {{{
 Plug 'dag/vim2hs',          { 'for' : 'haskell' }
