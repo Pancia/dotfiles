@@ -24,8 +24,6 @@ alias bashrc='vim ~/.bashrc'
 alias .bashrc='source ~/.bashrc'
 alias cat='tail -n +1' # Will show files names if # files>1
 alias ls='ls -h'
-alias mv='mv -i'
-alias cp='cp -i'
 alias clear='clear ; echo -e "\e[3J"'
 
 # Add colors!
@@ -39,13 +37,93 @@ set -o ignoreeof
 # Dont autocomplete hidden files
 bind 'set match-hidden-files off'
 
-# Move to the trash instead
-rm() {
-    local dir prefix timestamp
-    dir="$(pwd)"
-    timestamp="$(date '+%Y-%m-%d_%X')"
-    prefix="${dir//\//%}T${timestamp}_%"
-    for i in "$@"; do
-        command mv "$i" "$HOME/.Trash/${prefix}${i//\//%}"
+function _maybe_mv {
+local src="$1"
+local target="$2"
+[ -d "$target" ] && target="${target%/}/$src"
+echo "\"$target\" already exists! Do you want to..."
+select choice in "overwrite" "backup" "skip"; do
+    case $choice in
+        overwrite ) command mv "$src" "$target"
+                    break;;
+
+        backup )    mv "$target" "$target.bak"
+                    command mv "$src" "$target"
+                    break;;
+
+        skip )      break;;
+    esac
+done
+}
+
+function mv {
+local target="${@: -1}"
+if [ -d "$target" ]; then
+    local sources="${@:1:$(($#-1))}"
+    for src in $sources; do
+        if [ -e "${target%/}/$src" ]; then
+            _maybe_mv "$src" "$target"
+        else
+            command mv "$src" "$target/$src"
+        fi
     done
+else
+    local src="$1"
+    if [ -e "$target" ]; then
+        _maybe_mv "$src" "$target"
+    else
+        command mv "$src" "$target"
+    fi
+fi
+}
+
+function _maybe_cp {
+local src="$1"
+local target="$2"
+[ -d "$target" ] && target="${target%/}/$src"
+echo "\"$target\" already exists! Do you want to..."
+select choice in "overwrite" "backup" "skip"; do
+    case $choice in
+        overwrite ) command cp "$src" "$target"
+                    break;;
+
+        backup )    mv "$target" "$target.bak"
+                    command cp "$src" "$target"
+                    break;;
+
+        skip )      break;;
+    esac
+done
+}
+
+function cp {
+local target="${@: -1}"
+if [ -d "$target" ]; then
+    local sources="${@:1:$(($#-1))}"
+    for src in $sources; do
+        if [ -e "${target%/}/$src" ]; then
+            _maybe_cp "$src" "$target"
+        else
+            command cp "$src" "$target/$src"
+        fi
+    done
+else
+    local src="$1"
+    if [ -e "$target" ]; then
+        _maybe_cp "$src" "$target"
+    else
+        command cp "$src" "$target"
+    fi
+fi
+}
+
+# Move to the trash instead
+function rm {
+local dir prefix timestamp
+dir="$(pwd)"
+timestamp="$(date '+%Y-%m-%d_%X')"
+prefix="${dir//\//%}T${timestamp}<->"
+for i in "$@"; do
+    command mv "$i" "$HOME/.Trash/${prefix}${i//\//%}"
+done
 }
