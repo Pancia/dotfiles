@@ -54,6 +54,14 @@ Plug 'elixir-lang/vim-elixir', { 'for' : 'elixir' }
 " Prolog {{{
 Plug 'adimit/prolog.vim', { 'for' : 'prolog' }
 " }}} Prolog
+" JavaScript {{{
+Plug 'jelera/vim-javascript-syntax'
+" }}} JavaScript
+" Node.js {{{
+Plug 'sidorares/node-vim-debugger'
+Plug 'moll/vim-node'
+Plug 'myhere/vim-nodejs-complete'
+" }}} Node.js
 call plug#end()
 " }}} PLUGINS
 
