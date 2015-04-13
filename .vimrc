@@ -61,6 +61,7 @@ Plug 'jelera/vim-javascript-syntax'
 Plug 'sidorares/node-vim-debugger'
 Plug 'moll/vim-node'
 Plug 'myhere/vim-nodejs-complete'
+"Plug 'marijnh/tern_for_vim'
 " }}} Node.js
 call plug#end()
 " }}} PLUGINS
@@ -76,6 +77,7 @@ let g:ctrlp_by_filename=1
 let g:ctrlp_working_path_mode = 'ra'
 set wildignore+=*/target/*,*/dist/*,*/build/*,*/build/*,*.o
 set wildignore+=*/.vim/autoload/*,*/.vim/bundle/*,*/.vim/plugged/*
+set wildignore+=*/node_modules/*
 function! MyCtrlP()
     if expand('%:t') =~ '.vimrc'
         silent! call CtrlP_WithDir('~/.vim')<CR>
@@ -112,6 +114,7 @@ let g:syntastic_mode_map = {
             \ "mode": "active",
             \ }
 let g:syntastic_javascript_checkers = ['eslint']
+let g:syntastic_json_checkers = ['jsonlint']
 let g:syntastic_elixir_checkers = ['elixir']
 let g:syntastic_enable_elixir_checker = 1
 let g:syntastic_cpp_compiler = 'clang'
