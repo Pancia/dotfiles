@@ -162,9 +162,10 @@ noremap gj j
 noremap gk k
 " map Q to gQ, which is a more useful `q:`
 noremap Q gQ
-" U redoes, c-r clears search
+" U redoes
 nnoremap U <c-r>
-nnoremap <c-r> :nohlsearch<CR>
+" ctrl-e removes last search highlighting
+nnoremap <c-e> :nohlsearch<CR>
 " Use BS to navigate cursor history
 nmap <BS>   <c-o>
 nmap <S-BS> <c-i>
