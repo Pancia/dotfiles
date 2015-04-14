@@ -253,10 +253,11 @@ augroup Essentials
 augroup END
 augroup RainbowParens
     au!
-    au VimEnter * RainbowParenthesesToggle
-    au Syntax * RainbowParenthesesLoadRound
-    au Syntax * RainbowParenthesesLoadSquare
-    au Syntax * RainbowParenthesesLoadBraces
+    let rp_blacklist = ['javascript']
+    au VimEnter * if index(rp_blacklist, &ft) < 0 | RainbowParenthesesToggle
+    au Syntax * if index(rp_blacklist, &ft) < 0 | RainbowParenthesesLoadRound
+    au Syntax * if index(rp_blacklist, &ft) < 0 | RainbowParenthesesLoadSquare
+    au Syntax * if index(rp_blacklist, &ft) < 0 | RainbowParenthesesLoadBraces
 augroup END
 augroup Assorted
     au BufNewFile,BufRead *.loki set filetype=clojure
