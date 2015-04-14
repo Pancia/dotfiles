@@ -7,6 +7,10 @@ export PATH="/usr/local/heroku/bin:$PATH"
 export PATH=$HOME/.cabal/bin:$PATH
 export PATH=$HOME/loki/.cabal-sandbox/bin/:$PATH
 
+#For UniBull & Postgres DB
+export DB_NAME="pancia"
+export DB_USERNAME="pancia"
+
 # Custom Prompt
 export PS1="[\u@\w]?"
 
