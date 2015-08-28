@@ -14,19 +14,24 @@ Plug 'godlygeek/tabular'
 Plug 'kien/rainbow_parentheses.vim'
 Plug 'kshenoy/vim-signature'
 Plug 'majutsushi/tagbar'
-Plug 'mileszs/ack.vim'
 Plug 'ntpeters/vim-better-whitespace'
 Plug 'takac/vim-spotifysearch'
 Plug 'tpope/vim-dispatch'
-Plug 'tpope/vim-fugitive'
 Plug 'tpope/vim-projectionist'
 Plug 'tpope/vim-speeddating'
 Plug 'tpope/vim-surround'
+Plug 'vim-scripts/Conque-Shell'
+Plug 'vim-scripts/bufkill.vim'
 " }}} Essentials
+" {{{ Git
+Plug 'tpope/vim-fugitive'
+Plug 'rhysd/conflict-marker.vim'
+" }}}
 " Movement {{{
 Plug 'Lokaltog/vim-easymotion'
 Plug 'deris/vim-shot-f'
-Plug 'Shougo/vimproc.vim',     { 'do' : 'make' }
+Plug 'Shougo/vimproc.vim',     { 'do' : 'make -f make_mac.mak' }
+Plug 'shinokada/dragvisuals.vim'
 " }}} Movement
 " AutoComplete {{{
 Plug 'Valloric/YouCompleteMe', { 'do' : 'git submodule update --init --recursive; ./install.sh --clang-completer' }
@@ -55,37 +60,39 @@ Plug 'elixir-lang/vim-elixir', { 'for' : 'elixir' }
 Plug 'adimit/prolog.vim', { 'for' : 'prolog' }
 " }}} Prolog
 " JavaScript {{{
-Plug 'jelera/vim-javascript-syntax'
+"Plug 'jelera/vim-javascript-syntax'
+Plug 'digitaltoad/vim-jade'
+Plug 'wavded/vim-stylus'
 " }}} JavaScript
 " Node.js {{{
 Plug 'sidorares/node-vim-debugger'
 Plug 'moll/vim-node'
-Plug 'myhere/vim-nodejs-complete'
-"Plug 'marijnh/tern_for_vim'
+Plug 'marijnh/tern_for_vim'
 " }}} Node.js
+" {{{ Rust
+Plug 'rust-lang/rust.vim'
+Plug 'ebfe/vim-racer'
+" }}}
 call plug#end()
 " }}} PLUGINS
 
 " PLUGIN CONFIG {{{
+" RUST {{{
+set hidden
+let g:racer_cmd = "~/Developer/racer/target/release/racer"
+let $RUST_SRC_PATH="/Users/pancia/Developer/rustc-1.2.0/src"
+" }}}
+
 " AUTO_SAVE {{{
 let g:auto_save=1
 let g:auto_save_in_insert_mode=0
 " }}} AUTO_SAVE
 
 " CTRLP {{{
-let g:ctrlp_by_filename=1
 let g:ctrlp_working_path_mode = 'ra'
 set wildignore+=*/target/*,*/dist/*,*/build/*,*/build/*,*.o
 set wildignore+=*/.vim/autoload/*,*/.vim/bundle/*,*/.vim/plugged/*
 set wildignore+=*/node_modules/*
-function! MyCtrlP()
-    if expand('%:t') =~ '.vimrc'
-        silent! call CtrlP_WithDir('~/.vim')<CR>
-    else
-        :CtrlP
-    endif
-endfunction
-nnoremap <c-p> :call MyCtrlP()<CR>
 " }}} CTRLP
 
 " EASYMOTION {{{
@@ -95,6 +102,14 @@ map <Space>k <Plug>(easymotion-k)
 map <Space>s <Plug>(easymotion-s)
 map //       <Plug>(easymotion-sn)
 " }}} EASYMOTION
+
+" DRAGVISUALS {{{
+vmap <expr> <LEFT>  DVB_Drag('left')
+vmap <expr> <RIGHT> DVB_Drag('right')
+vmap <expr> <DOWN>  DVB_Drag('down')
+vmap <expr> <UP>    DVB_Drag('up')
+vmap <expr> D       DVB_Duplicate()
+" }}} DRAGVISUALS
 
 " AIRLINE {{{
 let g:airline#extensions#tabline#enabled=1
@@ -144,6 +159,10 @@ let g:ycm_key_list_previous_completion = ['<S-TAB>']
 " TAGBAR {{{
 let g:tagbar_left = 1
 " }}} TAGBAR
+
+" MISC {{{
+let g:strip_whitespace_on_save = 1
+" }}} MISC
 " }}} PLUGIN CONFIG
 
 " MAPPINGS {{{
@@ -168,7 +187,7 @@ noremap Q gQ
 " U redoes
 nnoremap U <c-r>
 " ctrl-e removes last search highlighting
-nnoremap <c-e> :nohlsearch<CR>
+nnoremap <c-e> /reset\.search<CR>:nohlsearch<CR>
 " Use BS to navigate cursor history
 nmap <BS>   <c-o>
 nmap <S-BS> <c-i>
@@ -194,7 +213,7 @@ map <CR>u   :GundoToggle<CR>
 map <CR>dc  :cd ~/dunjeon-crawler/<CR>
 map <CR>ss  :SpotifySearch<space>
 map <CR>tb  :TagbarToggle<CR>
-command! Bda 1,99bdelete
+command! Bda 1,999bdelete
 map <CR>bda :Bda<CR>
 "}}} MAPPINGS
 
@@ -217,8 +236,10 @@ set guifont=Menlo\ Regular:h22
 set visualbell "Dont make noise
 set foldmethod=indent
 set wildmenu "Visual autocomplete for command menu
+set wildmode=list:longest,full
 set lazyredraw "Silly macros
 set cursorline "Highlight line cursor is on
+set nofileignorecase "Dont ignore case when cmd/ex mode
 if exists("&undodir")
     set undofile
     "store undo files in .vim/undo & make the path unique
@@ -226,13 +247,12 @@ if exists("&undodir")
     set undolevels=500
     set undoreload=500
 endif
-let g:strip_whitespace_on_save = 1
 " }}} SETTINGS
 
 " THEME {{{
-colorscheme darkblue
-silent! colorscheme macvim
-hi folded guibg=#707070
+colorscheme onedark
+"silent! colorscheme macvim
+"hi folded guibg=#707070
 " }}} THEME
 
 " AUTOGROUPS {{{
@@ -241,6 +261,7 @@ function! SetCursorToLastKnownPosition()
         if line("'\"") > 1 && line("'\"") <= line("$")
             exe "normal! g`\""
             normal! zz
+            normal! zR
         endif
     endif
 endfunction
@@ -261,6 +282,7 @@ augroup RainbowParens
 augroup END
 augroup Assorted
     au BufNewFile,BufRead *.loki set filetype=clojure
+    au BufNewFile,BufRead .eslintrc set filetype=json
 augroup END
 " }}} AUTOGROUPS
 
