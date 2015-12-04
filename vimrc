@@ -89,6 +89,7 @@ let g:auto_save_in_insert_mode=0
 
 " CTRLP {{{
 let g:ctrlp_working_path_mode = 'ra'
+let g:ctrlp_user_command = ['.git/', 'git --git-dir=%s/.git ls-files -oc --exclude-standard']
 set wildignore+=*/target/*,*/dist/*,*/build/*,*/build/*,*.o
 set wildignore+=*/.vim/autoload/*,*/.vim/bundle/*,*/.vim/plugged/*
 set wildignore+=*/node_modules/*,*/resources/*/out/*,*/resources/public/js/*
