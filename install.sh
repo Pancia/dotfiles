@@ -1,5 +1,10 @@
-mv .vimrc        $HOME/.vimrc
-mv .bashrc       $HOME/.bashrc
-mv .vimperatorrc $HOME/.vimperatorrc
+cp .vimrc        $HOME/.vimrc
+cp .bashrc       $HOME/.bashrc
+cp .vimperatorrc $HOME/.vimperatorrc
 
-source $HOME/.bashrc
+mkdir -p .vim/ftplugin
+for i in $(ls ./.vim/ftplugin); do
+    ln ./.vim/ftplugin/$i $HOME/.vim/ftplugin/$i
+done
+
+exec bash
