@@ -6,5 +6,4 @@ hash rename || brew install rename
 
 hash bro || brew install bro
 
-hash port ||
-    echo "please install macports from https://www.macports.org/install.php"
+hash tree || brew install tree
