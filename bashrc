@@ -1,16 +1,16 @@
 #GLOBAL BASHRC
 
 #ensure things are installed
-source ~/cfg/bash/installs.sh
+source ~/dotfiles/bash/installs.sh
 #PATH modifications
-source ~/cfg/bash/paths.sh
+source ~/dotfiles/bash/paths.sh
 #aliases
-source ~/cfg/bash/aliases.sh
+source ~/dotfiles/bash/aliases.sh
 #bash autocomplete
-source ~/cfg/bash/autocomplete.sh
+source ~/dotfiles/bash/autocomplete.sh
 #git autocompelte
-source ~/cfg/bash/gitcomplete.sh
+source ~/dotfiles/bash/gitcomplete.sh
 #prompt modification
-source ~/cfg/bash/prompt.sh
+source ~/dotfiles/bash/prompt.sh
 #helper functions
-source ~/cfg/bash/functions.sh
+source ~/dotfiles/bash/functions.sh

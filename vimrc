@@ -207,8 +207,8 @@ map ¬ :tabn<CR>
 " Enter.+ mappings
 map <CR>pi   :PlugInstall<CR>
 map <CR>pc   :PlugInPlugClean<CR>
-map <CR>bsh  :e ~/cfg/bashrc<CR>
-map <CR>vim  :e ~/cfg/vimrc<CR>:cd ~/cfg/vim<CR>
+map <CR>bsh  :e ~/dotfiles/bashrc<CR>
+map <CR>vim  :e ~/dotfiles/vimrc<CR>:cd ~/dotfiles/vim<CR>
 map <CR>so   :so %<CR>
 map <CR>u    :GundoToggle<CR>
 map <CR>tb   :TagbarToggle<CR>
