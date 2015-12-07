@@ -5,7 +5,7 @@ cp .agignore     $HOME/.agignore
 
 mkdir -p .vim/ftplugin
 for i in $(ls ./.vim/ftplugin); do
-    ln ./.vim/ftplugin/$i $HOME/.vim/ftplugin/$i
+    ln -f ./.vim/ftplugin/$i $HOME/.vim/ftplugin/$i
 done
 
 exec bash
