@@ -1,1 +1,2 @@
-source ~/cfg/bashrc
+source ~/dotfiles/bashrc
+#cfg
