@@ -11,6 +11,8 @@ alias ls='ls -h'
 alias fw='rlwrap lein run -m clojure.main'
 alias gitroot='git rev-parse --show-toplevel'
 
+alias _gitignore_to_regex="cat .gitignore | sed 's/^\///' | tr '\n' '|'"
+alias tree='tree -I $(_gitignore_to_regex)'
 alias ag='ag --hidden'
 alias help="ag '^alias [^=]+?=' ~/dotfiles/bash/aliases.sh -o | ag -o ' [^=]+=$' | ag -o '[^=]+' | xargs"
 alias help!="ag '^alias [^=]+?=' ~/dotfiles/bash/aliases"
