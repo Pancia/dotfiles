@@ -1,2 +1,2 @@
 set nocompatible
-source $HOME/dotfiles/vimrc
+source ~/dotfiles/vimrc
