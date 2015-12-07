@@ -1,2 +1,1 @@
 source ~/dotfiles/bashrc
-#cfg
