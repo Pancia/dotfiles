@@ -16,7 +16,6 @@ __git_complete gds _git_diff
 alias gdc='git diff --staged'
 __git_complete gdc _git_diff
 alias gs='git status'
-__git_complete gs _git_status
 alias gc='git commit'
 __git_complete gc _git_commit
 alias gca='git commit --all'
