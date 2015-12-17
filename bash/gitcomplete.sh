@@ -22,7 +22,7 @@ alias gca='git commit --all'
 __git_complete gca _git_commit
 alias pull='git pull'
 __git_complete pull _git_pull
-alias push='git push'
+alias push='git push && git push --tags'
 __git_complete push _git_push
 alias show='git show'
 __git_complete show _git_show
