@@ -1,5 +1,7 @@
 source ~/.git-completion.bash
 
+alias g='git'
+__git_complete g _git
 alias ga='git add'
 __git_complete ga _git_add
 alias gaa='git add --all'
@@ -26,6 +28,10 @@ alias push='git push && git push --tags'
 __git_complete push _git_push
 alias show='git show'
 __git_complete show _git_show
+alias stash='git stash'
+__git_complete stash _git_stash
+alias save='git stash save'
+__git_complete save _git_stash
 alias gl='git log --graph --all --decorate --abbrev-commit'
 alias gt="git log --graph --abbrev-commit --decorate --date=relative --format=format:'%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(bold yellow)%d%C(reset)' --all"
 
