@@ -3,7 +3,9 @@ alias vimrc='vim ~/dotfiles/vimrc -c "cd ~/.vim"'
 alias showFiles='defaults write com.apple.finder AppleShowAllFiles YES'
 alias hideFiles='defaults write com.apple.finder AppleShowAllFiles NO'
 alias ucsc='ssh adambros@unix.ucsc.edu'
-alias todo='grep -Iir "todo" *'
+
+alias todo='ag -i todo'
+
 alias bashrc='vim ~/dotfiles/bashrc'
 alias .bashrc='source ~/dotfiles/bashrc'
 alias cat='tail -n +1' # Will show files names if # files>1
