@@ -2,6 +2,10 @@
 export CLICOLOR=1
 export LSCOLORS=GxFxCxDxBxegedabagaced
 
-#CUSTOM PROMPT
+COL_RED="$(tput setaf 1)"
+COL_BOLD="$(tput bold)"
+COL_RESET="$(tput sgr0)"
+
 GB="@\$(git branch 2>/dev/null | grep '^*' | colrm 1 2)"
-export PS1="\e[1;31m[\w$GB]\nλ? \e[0m"
+
+export PS1="$COL_RED$COL_BOLD[\w$GB]\nλ? $COL_RESET"
