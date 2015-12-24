@@ -7,3 +7,5 @@ hash rename || brew install rename
 hash bro || brew install bro
 
 hash tree || brew install tree
+
+hash planck || brew install planck
