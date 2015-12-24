@@ -1,9 +1,3 @@
-" RUST {{{
-set hidden
-let g:racer_cmd = "~/Developer/racer/target/release/racer"
-let $RUST_SRC_PATH="/Users/pancia/Developer/rustc-1.2.0/src"
-" }}}
-
 " AUTO_SAVE {{{
 let g:auto_save=1
 let g:auto_save_in_insert_mode=0
@@ -62,10 +56,6 @@ augroup syntastic_plus_autosave
 augroup END
 " }}} SYNTASTIC
 
-" ULTISNIPS {{{
-let g:UltiSnipsExpandTrigger="<ctrl><cr>"
-" }}} ULTISNIPS
-
 " YOUCOMPLETEME {{{
 let g:ycm_semantic_triggers = {'haskell' : ['.'], 'javascript' : ['.']}
 " Helps with cpp and synastic
@@ -83,6 +73,6 @@ let g:ycm_key_list_previous_completion = ['<S-TAB>']
 let g:tagbar_left = 1
 " }}} TAGBAR
 
-" MISC {{{
+" STRIP_WHITESPACE {{{
 let g:strip_whitespace_on_save = 1
-" }}} MISC
+" }}} STRIP_WHITESPACE

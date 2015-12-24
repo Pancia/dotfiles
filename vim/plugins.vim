@@ -32,8 +32,6 @@ Plug 'shinokada/dragvisuals.vim'
 " }}} Movement
 " AutoComplete {{{
 Plug 'Valloric/YouCompleteMe', { 'do' : 'git submodule update --init --recursive; ./install.sh --clang-completer' }
-Plug 'honza/vim-snippets'
-Plug 'sirver/ultisnips'
 " }}} AutoComplete
 " Clojure {{{
 Plug 'guns/vim-clojure-static'
@@ -43,9 +41,6 @@ Plug 'tpope/vim-sexp-mappings-for-regular-people'
 Plug 'tpope/vim-fireplace'
 Plug 'clojure-emacs/cider-nrepl'
 " }}} Clojure
-" Scala {{{
-Plug 'derekwyatt/vim-scala'
-" }}}
 " Haskell {{{
 Plug 'dag/vim2hs',          { 'for' : 'haskell' }
 Plug 'eagletmt/ghcmod-vim', { 'for' : 'haskell' }
@@ -67,8 +62,4 @@ Plug 'sidorares/node-vim-debugger'
 Plug 'moll/vim-node'
 Plug 'marijnh/tern_for_vim'
 " }}} Node.js
-" {{{ Rust
-Plug 'rust-lang/rust.vim'
-Plug 'ebfe/vim-racer'
-" }}}
 call plug#end()
