@@ -8,4 +8,4 @@ COL_RESET="$(tput sgr0)"
 
 GB="@\$(git branch 2>/dev/null | grep '^*' | colrm 1 2)"
 
-export PS1="$COL_RED$COL_BOLD[\w$GB]\nλ? $COL_RESET"
+export PS1="\[$COL_RED$COL_BOLD\][\w$GB]\nλ? \[$COL_RESET\]"
