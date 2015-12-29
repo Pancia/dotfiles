@@ -15,6 +15,8 @@ alias gitroot='git rev-parse --show-toplevel'
 
 alias cljs='planck'
 
+alias reset='tput reset'
+
 alias _gitignore_to_regex="(cat .gitignore 2> /dev/null || echo '') | sed 's/^\///' | tr '\n' '|'"
 alias tree='tree -I $(_gitignore_to_regex)'
 alias ag='ag --hidden'
