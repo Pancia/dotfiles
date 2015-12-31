@@ -20,5 +20,5 @@ alias reset='tput reset'
 alias _gitignore_to_regex="(cat .gitignore 2> /dev/null || echo '') | sed 's/^\///' | tr '\n' '|'"
 alias tree='tree -I $(_gitignore_to_regex)'
 alias ag='ag --hidden'
-alias help="ag '^alias [^=]+?=' ~/dotfiles/bash/aliases.sh -o | ag -o ' [^=]+=$' | ag -o '[^=]+' | xargs"
-alias help!="ag '^alias [^=]+?=' ~/dotfiles/bash/aliases"
+alias help="ag '^alias [^=]+?=' ~/dotfiles/bash/aliases.sh ~/dotfiles/bash/gitcomplete.sh -o | ag -o ' [^=]+=$' | ag -o '[^=]+' | xargs"
+alias help!="ag '^alias [^=]+?=' ~/dotfiles/bash/aliases.sh ~/dotfiles/bash/gitcomplete.sh"
