@@ -4,6 +4,8 @@
 source ~/dotfiles/bash/installs.sh
 #PATH modifications
 source ~/dotfiles/bash/paths.sh
+#exports!
+source ~/dotfiles/bash/exports.sh
 #aliases
 source ~/dotfiles/bash/aliases.sh
 #bash autocomplete
