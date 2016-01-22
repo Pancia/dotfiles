@@ -3,6 +3,7 @@ export LSCOLORS=GxFxCxDxBxegedabagaced
 
 # http://wiki.bash-hackers.org/scripting/terminalcodes#general_text_attributes
 COL_RED="$(tput setaf 1)"
+COL_PURP="$(tput setaf 5)"
 COL_BOLD="$(tput bold)"
 COL_RESET="$(tput sgr0)"
 

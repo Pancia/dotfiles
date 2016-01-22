@@ -1,3 +1,7 @@
+" AG {{{
+let g:ag_working_path_mode="r"
+" }}} AG
+
 " AUTO_SAVE {{{
 let g:auto_save=1
 let g:auto_save_in_insert_mode=0

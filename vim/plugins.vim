@@ -1,5 +1,6 @@
 call plug#begin('~/.vim/plugged')
 " Essentials {{{
+Plug 'rking/ag.vim'
 Plug 'vim-scripts/vim-auto-save'
 Plug 'bling/vim-airline'
 Plug 'christoomey/vim-tmux-navigator'

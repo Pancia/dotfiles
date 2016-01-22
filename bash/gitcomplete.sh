@@ -22,6 +22,8 @@ alias gc='git commit'
 __git_complete gc _git_commit
 alias gca='git commit --all'
 __git_complete gca _git_commit
+alias gr='git reset'
+__git_complete gr _git_reset
 alias pull='git pull'
 __git_complete pull _git_pull
 alias push='git push && git push --tags'
@@ -32,7 +34,7 @@ alias stash='git stash'
 __git_complete stash _git_stash
 alias save='git stash save'
 __git_complete save _git_stash
-alias gl='GIT_PAGER="less -p \"\(HEAD ->\"" git log --graph --all --decorate --abbrev-commit'
+alias gl='GIT_PAGER="less -p \"\(HEAD\"" git log --graph --all --decorate --abbrev-commit'
 alias gt="git log --graph --abbrev-commit --decorate --date=relative --format=format:'%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(bold yellow)%d%C(reset)' --all"
 
 alias gundo='git reset --soft HEAD~'

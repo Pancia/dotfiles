@@ -12,11 +12,6 @@ set tabstop=4 "Tab Literal(\t) == width 4
 set shiftwidth=4 "Indent Key(Tab) == width 4
 set expandtab "Use spaces, not tabs!
 set smarttab "Indent & delete by shiftwidth
-set guifont=Menlo\ Regular:h17
-let tv=$TV
-if tv == "0"
-    set lines=44 columns=86
-endif
 set visualbell "Dont make noise
 set foldmethod=indent
 set wildmenu "Visual autocomplete for command menu
@@ -27,7 +22,7 @@ set nofileignorecase "Dont ignore case when cmd/ex mode
 if exists("&undodir")
     set undofile
     "store undo files in .vim/undo & make the path unique
-    set undodir=~/.vim/undo//
+    set undodir=~/.vim/undo/
     set undolevels=500
     set undoreload=500
 endif

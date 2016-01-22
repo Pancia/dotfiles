@@ -31,10 +31,10 @@ nnoremap # #zz
 nnoremap g* g*zz
 nnoremap g# g#zz
 " alt: {j :bp, k :bn, h :tabp, l :tabn}
-map ˚ :bnext<CR>
-map ∆ :bprevious<CR>
-map ˙ :tabp<CR>
-map ¬ :tabn<CR>
+map ˚ :bnext<CR>zz
+map ∆ :bprevious<CR>zz
+map ˙ :tabp<CR>zz
+map ¬ :tabn<CR>zz
 " Enter.+ mappings
 map <CR>pi   :PlugInstall<CR>
 map <CR>pc   :PlugInPlugClean<CR>

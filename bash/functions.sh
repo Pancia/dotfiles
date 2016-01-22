@@ -4,6 +4,7 @@ dir="$(pwd)"
 timestamp="$(date '+%Y-%m-%d_%X')"
 prefix="${dir//\//%}T${timestamp}<->"
 for i in "$@"; do
-    command mv "$i" "~/.Trash/${prefix}${i//\//%}"
+    echo "moved ${i} to" ~/.Trash/${prefix}${i//\//%}
+    mv ${i} ~/.Trash/${prefix}${i//\//%}
 done
 }
