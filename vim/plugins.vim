@@ -13,12 +13,10 @@ Plug 'kien/rainbow_parentheses.vim'
 Plug 'kshenoy/vim-signature'
 Plug 'majutsushi/tagbar'
 Plug 'ntpeters/vim-better-whitespace'
-Plug 'takac/vim-spotifysearch'
 Plug 'tpope/vim-dispatch'
 Plug 'tpope/vim-projectionist'
 Plug 'tpope/vim-speeddating'
 Plug 'tpope/vim-surround'
-Plug 'vim-scripts/Conque-Shell'
 Plug 'vim-scripts/bufkill.vim'
 " }}} Essentials
 " {{{ Git
@@ -28,7 +26,7 @@ Plug 'rhysd/conflict-marker.vim'
 " Movement {{{
 Plug 'Lokaltog/vim-easymotion'
 Plug 'deris/vim-shot-f'
-Plug 'Shougo/vimproc.vim',     { 'do' : 'make -f make_mac.mak' }
+Plug 'Shougo/vimproc.vim', { 'do' : 'make -f make_mac.mak' }
 Plug 'shinokada/dragvisuals.vim'
 " }}} Movement
 " AutoComplete {{{
