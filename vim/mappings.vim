@@ -47,7 +47,3 @@ map <CR>tb   :TagbarToggle<CR>
 map <CR>bda  :bd *<CR>
 map <CR>tidy :g/^\s\+[\)\]\}]/normal kJ<CR>
 command! Tidy g/^\s\+[\)\]\}]/normal kJ<CR>
-
-"clojure midje
-command! UnFocus %s/:focused //g
-command! Focus %s/\(facts\?\)/\1 :focused/g
