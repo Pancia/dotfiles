@@ -40,6 +40,7 @@ map <CR>pi   :PlugInstall<CR>
 map <CR>pc   :PlugInPlugClean<CR>
 map <CR>bsh  :e ~/dotfiles/bashrc<CR>
 map <CR>vim  :e ~/dotfiles/vimrc<CR>:cd ~/dotfiles/vim<CR>
+map <CR>lein :e ~/.lein/profiles.clj<CR>:cd ~/.lein<CR>
 map <CR>so   :so %<CR>
 map <CR>u    :GundoToggle<CR>
 map <CR>tb   :TagbarToggle<CR>
