@@ -39,6 +39,7 @@ Plug 'guns/vim-sexp'
 Plug 'tpope/vim-sexp-mappings-for-regular-people'
 Plug 'tpope/vim-fireplace'
 Plug 'clojure-emacs/cider-nrepl'
+Plug 'venantius/vim-cljfmt'
 " }}} Clojure
 " Haskell {{{
 Plug 'dag/vim2hs',          { 'for' : 'haskell' }
