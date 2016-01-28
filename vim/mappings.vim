@@ -21,8 +21,8 @@ nnoremap U <c-r>
 " ctrl-e removes last search highlighting
 nnoremap <c-e> /reset\.search<CR>:nohlsearch<CR>
 " Use BS to navigate cursor history
-nmap <BS>   <c-o>zz
-nmap <S-BS> <c-i>zz
+noremap <BS>   <c-o>zz
+noremap <S-BS> <c-i>zz
 " Center screen when searching
 nnoremap n nzz
 nnoremap N Nzz
