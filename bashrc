@@ -16,3 +16,5 @@ source ~/dotfiles/bash/gitcomplete.sh
 source ~/dotfiles/bash/prompt.sh
 #helper functions
 source ~/dotfiles/bash/functions.sh
+#settings/bindings
+source ~/dotfiles/bash/settings.sh
