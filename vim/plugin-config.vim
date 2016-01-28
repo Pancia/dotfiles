@@ -16,6 +16,10 @@ set wildignore+=*/node_modules/*,*/resources/*/out/*,*/resources/public/js/*
 set wildignore+=*/resources/public/cards/*
 " }}} CTRLP
 
+" CLJFMT {{{
+let g:clj_fmt_autosave = 0
+" }}} CLJFMT
+
 " EASYMOTION {{{
 "map <Space>  <Plug>(easymotion-prefix)
 map <Space>j <Plug>(easymotion-j)
