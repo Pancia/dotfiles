@@ -11,7 +11,7 @@ alias gm='git merge'
 __git_complete gm _git_merge
 alias gb='git branch'
 __git_complete gb _git_branch
-alias gd='git diff'
+alias gd='git diff --color-words'
 __git_complete gd _git_diff
 alias gds='git diff --staged'
 __git_complete gds _git_diff
