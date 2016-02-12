@@ -1,15 +1,21 @@
-alias e='emacs'
-
 alias vim='TV=1 /Applications/MacVim.app/Contents/MacOS/Vim'
 alias vimrc='vim ~/dotfiles/vimrc -c "cd ~/.vim"'
+
+alias gs='git status'
+alias gds='git diff --staged'
 
 alias showFiles='defaults write com.apple.finder AppleShowAllFiles YES'
 alias hideFiles='defaults write com.apple.finder AppleShowAllFiles NO'
 
 alias todo='ag -i todo'
 
-alias bashrc='vim ~/dotfiles/bashrc'
-alias .bashrc='source ~/dotfiles/bashrc'
+alias zshrc='vim ~/dotfiles/zshrc'
+alias .zshrc='source ~/dotfiles/zshrc'
+
+alias .lein='vim ~/.lein/profiles.clj'
+alias .prof='vim ~/.lein/profiles.clj'
+alias .profile='vim ~/.lein/profiles.clj'
+
 alias cat='tail -n +1' # Will show files names if # files>1
 alias ls='ls -h'
 alias fw='rlwrap lein run -m clojure.main'
@@ -23,5 +29,5 @@ alias ag='ag --hidden'
 
 alias reset='tput reset'
 
-alias help="ag '^alias [^=]+?=' ~/dotfiles/bash/aliases.sh ~/dotfiles/bash/gitcomplete.sh -o | ag -o ' [^=]+=$' | ag -o '[^=]+' | xargs"
-alias help!="ag '^alias [^=]+?=' ~/dotfiles/bash/aliases.sh ~/dotfiles/bash/gitcomplete.sh"
+alias help!="ag '^alias [^=]+?=' ~/dotfiles/zsh/aliases.zsh ~/dotfiles/zsh/gitcomplete.sh"
+alias help="help! -o | ag -o ' [^=]+=$' | ag -o '[^=]+' | xargs"
