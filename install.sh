@@ -17,6 +17,7 @@ cp .vimperatorrc ~/.vimperatorrc
 cp .agignore     ~/.agignore
 cp .zshrc        ~/.zshrc
 cp .zshenv       ~/.zshenv
+ln -f tmux.conf  ~/.tmux.conf
 
 #vim/ftplugin
 mkdir -p ~/.vim/ftplugin
