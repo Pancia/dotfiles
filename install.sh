@@ -9,6 +9,8 @@ hash zsh || brew install zsh
 hash tmux || brew install tmux
 mkdir -p ~/.vim/undo
 
+[[ -e fonts ]] || (git clone https://github.com/powerline/fonts.git && ./fonts/install.sh)
+
 #*RC INSTALLS
 cp .vimrc        ~/.vimrc
 cp .vimperatorrc ~/.vimperatorrc
