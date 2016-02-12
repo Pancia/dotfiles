@@ -25,7 +25,7 @@ antigen bundle brew-cask
 antigen bundle osx
 
 # Load the theme.
-antigen theme robbyrussell
+antigen theme bhilburn/powerlevel9k powerlevel9k.zsh-theme
 
 # Tell antigen that you're done.
 antigen apply
