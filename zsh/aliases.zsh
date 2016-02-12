@@ -2,7 +2,8 @@ alias vim='TV=1 /Applications/MacVim.app/Contents/MacOS/Vim'
 alias vimrc='vim ~/dotfiles/vimrc -c "cd ~/.vim"'
 
 alias gs='git status'
-alias gds='git diff --staged'
+alias gd='git diff --color-words'
+alias gds='gd --staged'
 
 alias showFiles='defaults write com.apple.finder AppleShowAllFiles YES'
 alias hideFiles='defaults write com.apple.finder AppleShowAllFiles NO'
