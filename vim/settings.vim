@@ -1,4 +1,5 @@
 filetype plugin indent on
+set mouse=a
 set backspace=indent,eol,start
 set nobackup
 set noswapfile
