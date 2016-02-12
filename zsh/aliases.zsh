@@ -4,6 +4,7 @@ alias vimrc='vim ~/dotfiles/vimrc -c "cd ~/.vim"'
 alias gs='git status'
 alias gd='git diff --color-words'
 alias gds='gd --staged'
+alias gl='GIT_PAGER="less -p \"\(HEAD\"" git log --graph --all --decorate --abbrev-commit'
 
 alias showFiles='defaults write com.apple.finder AppleShowAllFiles YES'
 alias hideFiles='defaults write com.apple.finder AppleShowAllFiles NO'
