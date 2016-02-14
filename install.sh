@@ -6,8 +6,6 @@ hash bro || brew install bro
 hash tree || brew install tree
 hash planck || brew install planck
 hash zsh || brew install zsh
-hash tmux || brew install tmux
-hash reattach-to-user-namespace || brew install reattach-to-user-namespace
 mkdir -p ~/.vim/undo
 
 [[ -e fonts ]] || (git clone https://github.com/powerline/fonts.git && ./fonts/install.sh)
