@@ -11,7 +11,6 @@ antigen bundle z
 antigen bundle node
 antigen bundle npm
 antigen bundle python
-antigen bundle vi-mode
 
 antigen bundle zsh-users/zsh-syntax-highlighting
 antigen bundle zsh-users/zsh-history-substring-search
