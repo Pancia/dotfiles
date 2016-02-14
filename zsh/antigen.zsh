@@ -7,7 +7,6 @@ antigen bundle git
 antigen bundle git-flow
 antigen bundle lein
 antigen bundle command-not-found
-antigen bundle tmux
 antigen bundle z
 antigen bundle node
 antigen bundle npm
