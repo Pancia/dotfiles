@@ -21,5 +21,11 @@ for i in $(ls vim/ftplugin); do
     ln -f vim/ftplugin/$i ~/.vim/ftplugin/$i
 done
 
+#NVIM
+mkdir -p ~/.config/nvim
+for i in $(ls nvim); do
+    ln -f ./nvim/$i ~/.config/nvim/$i
+done
+
 #ENGAGE
 exec zsh
