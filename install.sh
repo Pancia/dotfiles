@@ -1,13 +1,9 @@
 #INSTALLS
-hash brew || ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
-hash ag || brew install ag
-hash rename || brew install rename
-hash bro || brew install bro
-hash tree || brew install tree
-hash planck || brew install planck
-hash zsh || brew install zsh
-mkdir -p ~/.vim/undo
+hash brew || (ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)" &&
+    brew tap homebrew/bundle &&
+    brew bundle)
 
+#FONTS
 [[ -e fonts ]] || (git clone https://github.com/powerline/fonts.git && ./fonts/install.sh)
 
 #*RC INSTALLS
@@ -18,10 +14,13 @@ cp .zshrc        ~/.zshrc
 cp .zshenv       ~/.zshenv
 ln -f tmux.conf  ~/.tmux.conf
 
-#vim/ftplugin
+#VIM
+mkdir -p ~/.vim/undo
+#.ftplugin
 mkdir -p ~/.vim/ftplugin
 for i in $(ls vim/ftplugin); do
     ln -f vim/ftplugin/$i ~/.vim/ftplugin/$i
 done
 
+#ENGAGE
 exec zsh
