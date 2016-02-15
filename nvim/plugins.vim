@@ -36,10 +36,7 @@ Plug 'deris/vim-shot-f'
 Plug 'joshdick/onedark.vim'
 " }}} Theme
 " AutoComplete {{{
-function! BuildDeoplete(info)
-    UpdateRemotePlugins
-endfunction
-Plug 'Shougo/deoplete.nvim', { 'do': function('BuildDeoplete') }
+Plug 'Valloric/YouCompleteMe', { 'do' : './install.py' }
 Plug 'ctrlpvim/ctrlp.vim'
 " }}} AutoComplete
 " Clojure {{{
