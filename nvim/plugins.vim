@@ -10,7 +10,6 @@ Plug 'rking/ag.vim'
 Plug 'vim-scripts/vim-auto-save'
 Plug 'bling/vim-airline'
 Plug 'christoomey/vim-tmux-navigator'
-Plug 'kien/ctrlp.vim'
 Plug 'sjl/gundo.vim'
 Plug 'tpope/vim-repeat'
 Plug 'scrooloose/syntastic'
@@ -41,6 +40,7 @@ function! BuildDeoplete(info)
     UpdateRemotePlugins
 endfunction
 Plug 'Shougo/deoplete.nvim', { 'do': function('BuildDeoplete') }
+Plug 'vim-ctrlspace/vim-ctrlspace'
 " }}} AutoComplete
 " Clojure {{{
 Plug 'guns/vim-clojure-static'

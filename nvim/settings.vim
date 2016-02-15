@@ -1,5 +1,9 @@
 filetype plugin indent on
 
+" CTRL_SPACE
+set hidden
+set showtabline=0
+
 set cursorline "Highlight line cursor is on
 set expandtab "Use spaces, not tabs!
 set foldmethod=indent

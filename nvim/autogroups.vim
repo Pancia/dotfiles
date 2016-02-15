@@ -25,6 +25,11 @@ augroup RainbowParens
     au Syntax * if index(rp_blacklist, &ft) < 0 | RainbowParenthesesLoadBraces
 augroup END
 
-augroup Filetypes
+augroup FileTypes
     au BufNewFile,BufRead .eslintrc set filetype=json
+augroup END
+
+augroup Terminal
+    au TermOpen * set bufhidden=hide
+    au TermOpen * redraw
 augroup END

@@ -1,5 +1,5 @@
-alias vim='TV=1 /Applications/MacVim.app/Contents/MacOS/Vim'
-alias vimrc='vim ~/dotfiles/vimrc -c "cd ~/.vim"'
+alias vim='nvim'
+alias vimrc='vim ~/dotfiles/nvim/init.vim -c "cd ~/dotfiles/nvim"'
 
 alias gs='git status'
 alias gd='git diff --color-words'
@@ -34,5 +34,5 @@ alias ag='ag --hidden'
 
 alias reset='tput reset'
 
-alias help!="ag '^alias [^=]+?=' ~/dotfiles/zsh/aliases.zsh ~/dotfiles/zsh/gitcomplete.sh"
+alias help!="ag '^alias [^=]+?=' ~/dotfiles/zsh/aliases.zsh ~/dotfiles/zsh/aliases.sh"
 alias help="help! -o | ag -o ' [^=]+=$' | ag -o '[^=]+' | xargs"
