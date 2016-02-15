@@ -40,7 +40,7 @@ function! BuildDeoplete(info)
     UpdateRemotePlugins
 endfunction
 Plug 'Shougo/deoplete.nvim', { 'do': function('BuildDeoplete') }
-Plug 'vim-ctrlspace/vim-ctrlspace'
+Plug 'ctrlpvim/ctrlp.vim'
 " }}} AutoComplete
 " Clojure {{{
 Plug 'guns/vim-clojure-static'

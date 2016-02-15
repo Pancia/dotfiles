@@ -17,13 +17,10 @@ inoremap <silent><expr> <S-Tab>
 		\ deoplete#mappings#manual_complete()
 "}}} DEOPLETE
 
-"CTRL_SPACE {{{
-if executable("ag")
-    let g:CtrlSpaceGlobCommand = 'ag -l --nocolor -g ""'
-endif
-nnoremap <silent><C-p> :CtrlSpace O<CR>
-nnoremap <C-SPACE> :CtrlSpace<CR>
-"}}} CTRL_SPACE
+" CTRLP {{{
+let g:ctrlp_working_path_mode = 'ra'
+let g:ctrlp_user_command = ['.git/', 'git --git-dir=%s/.git ls-files -oc --exclude-standard']
+" }}} CTRLP
 
 " CLJFMT {{{
 let g:clj_fmt_autosave = 0

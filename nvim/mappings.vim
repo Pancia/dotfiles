@@ -37,7 +37,7 @@ map ˙ :tabp<CR>zz
 map ¬ :tabn<CR>zz
 " Enter.+ mappings
 map <CR>pi   :PlugInstall<CR>
-map <CR>pc   :PlugInPlugClean<CR>
+map <CR>pc   :PlugClean<CR>
 map <CR>bsh  :e ~/dotfiles/bashrc<CR>
 map <CR>vim  :e ~/dotfiles/nvim/init.vim<CR>:cd ~/dotfiles/nvim<CR>
 map <CR>lein :e ~/.lein/profiles.clj<CR>:cd ~/.lein<CR>
