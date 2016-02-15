@@ -2,6 +2,8 @@ source ~/dotfiles/zsh/antigen.zsh
 source ~/dotfiles/zsh/bindings.zsh
 
 source ~/dotfiles/zsh/aliases.zsh
+source ~/dotfiles/zsh/git-aliases.zsh
+
 source ~/dotfiles/zsh/functions.zsh
 source ~/dotfiles/zsh/theme.zsh
 
