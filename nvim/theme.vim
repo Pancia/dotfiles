@@ -1,6 +1,7 @@
 syntax on
 colorscheme onedark
 
-hi folded guibg=#404040
+hi Folded guibg=#303030
+hi Folded ctermbg=240
 
 set guifont=Menlo\ Regular:h22
