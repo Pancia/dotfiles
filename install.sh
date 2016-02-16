@@ -22,9 +22,12 @@ for i in $(ls vim/ftplugin); do
 done
 
 #NVIM
-mkdir -p ~/.config/nvim
+mkdir -p ~/.config/nvim/ftplugin
 for i in $(ls nvim); do
     ln -f ./nvim/$i ~/.config/nvim/$i
+done
+for i in $(ls nvim-ftplugin); do
+    ln -f ./nvim-ftplugin/$i ~/.config/nvim/ftplugin/$i
 done
 
 #ENGAGE

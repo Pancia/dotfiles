@@ -2,8 +2,6 @@ function! SetCursorToLastKnownPosition()
     if &filetype !~ 'git\|commit\c'
         if line("'\"") > 1 && line("'\"") <= line("$")
             exe "normal! g`\""
-            normal! zz
-            normal! zR
         endif
     endif
 endfunction

@@ -14,7 +14,6 @@ let g:clojure_syntax_keywords = {
 
 let g:clojure_fuzzy_indent = 1
 let g:clojure_fuzzy_indent_patterns = ['^def', '^let', 'specification', 'behavior', 'provided', 'assertions', 'component']
-
 let g:clojure_fuzzy_indent_blacklist = ['defui']
 
 setlocal tabstop=4 "Tab Literal(\t)
