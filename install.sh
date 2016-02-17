@@ -1,7 +1,11 @@
 #INSTALLS
-hash brew || (ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)" &&
-    brew tap homebrew/bundle &&
-    brew bundle)
+#.submodules
+git pull && git submodule init &&
+    git pull --recurse-submodules &&
+    git submodule update --recursive
+#.brew
+hash brew || (ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)")
+brew bundle -v
 
 #FONTS
 [[ -e fonts ]] || (git clone https://github.com/powerline/fonts.git && ./fonts/install.sh)
