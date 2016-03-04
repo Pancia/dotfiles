@@ -30,22 +30,20 @@ nnoremap * *zz
 nnoremap # #zz
 nnoremap g* g*zz
 nnoremap g# g#zz
-" alt: {j :bp, k :bn, h :tabp, l :tabn}
-map ˚ :bnext<CR>zz
-map ∆ :bprevious<CR>zz
-map ˙ :tabp<CR>zz
-map ¬ :tabn<CR>zz
-" Enter.+ mappings
-map <CR>pi   :PlugInstall<CR>
-map <CR>pc   :PlugClean<CR>
-map <CR>bsh  :e ~/dotfiles/bashrc<CR>
-map <CR>vim  :e ~/dotfiles/nvim/init.vim<CR>:cd ~/dotfiles/nvim<CR>
-map <CR>lein :e ~/.lein/profiles.clj<CR>:cd ~/.lein<CR>
-map <CR>so   :so %<CR>
-map <CR>u    :GundoToggle<CR>
-map <CR>tb   :TagbarToggle<CR>
-map <CR>bda  :bd *<CR>
-map <CR>tidy :g/^\s\+[\)\]\}]/normal kJ<CR>
+" buffer nav
+nmap ˚ :bnext<CR>zz
+nmap ∆ :bprevious<CR>zz
+" <space>^2 mappings
+nmap <space><space>pi   :PlugInstall<CR>
+nmap <space><space>pc   :PlugClean<CR>
+nmap <space><space>zsh  :e ~/dotfiles/zsh<CR>
+nmap <space><space>vim  :e ~/dotfiles/nvim/init.vim<CR>:cd ~/dotfiles/nvim<CR>
+nmap <space><space>lein :e ~/.lein/profiles.clj<CR>:cd ~/.lein<CR>
+nmap <space><space>so   :so %<CR>
+nmap <space><space>u    :GundoToggle<CR>
+nmap <space><space>tb   :TagbarToggle<CR>
+nmap <space><space>bda  :bd *<CR>
+nmap <space><space>tidy :g/^\s\+[\)\]\}]/normal kJ<CR>
 command! Tidy g/^\s\+[\)\]\}]/normal kJ<CR>
 
 tnoremap <Esc> <C-\><C-n>
