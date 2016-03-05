@@ -31,8 +31,8 @@ nnoremap # #zz
 nnoremap g* g*zz
 nnoremap g# g#zz
 " buffer nav
-nmap <c-k> :bnext<CR>zz
-nmap <c-j> :bprevious<CR>zz
+nmap <c-k> :bnext<CR>
+nmap <c-j> :bprevious<CR>
 " <space>^2 mappings
 nmap <space><space>pi   :PlugInstall<CR>
 nmap <space><space>pc   :PlugClean<CR>
