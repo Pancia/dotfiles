@@ -5,6 +5,7 @@ git pull && git submodule init &&
     git submodule update --recursive
 #.brew
 hash brew || (ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)")
+brew update
 brew bundle -v
 pip3 install neovim-remote
 
