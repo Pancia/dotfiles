@@ -6,6 +6,7 @@ git pull && git submodule init &&
 #.brew
 hash brew || (ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)")
 brew bundle -v
+pip3 install neovim-remote
 
 #FONTS
 [[ -e fonts ]] || (git clone https://github.com/powerline/fonts.git && ./fonts/install.sh)
