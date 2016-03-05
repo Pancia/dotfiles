@@ -9,7 +9,6 @@ call plug#begin('~/.config/nvim/plugged')
 Plug 'rking/ag.vim'
 Plug 'vim-scripts/vim-auto-save'
 Plug 'bling/vim-airline'
-Plug 'christoomey/vim-tmux-navigator'
 Plug 'sjl/gundo.vim'
 Plug 'tpope/vim-repeat'
 Plug 'scrooloose/syntastic'
