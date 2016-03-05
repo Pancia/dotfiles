@@ -34,5 +34,10 @@ for i in $(ls nvim-ftplugin); do
     ln -f ./nvim-ftplugin/$i ~/.config/nvim/ftplugin/$i
 done
 
+#BIN
+for i in $(ls bin); do
+    ln -f ./bin/$i /usr/local/bin/$i
+done
+
 #ENGAGE
 exec zsh
