@@ -11,7 +11,8 @@ augroup Essentials
     au FileType text setlocal textwidth=80
     au BufReadPost * call SetCursorToLastKnownPosition()
     au FileType vim setlocal foldmethod=marker
-    autocmd BufEnter * silent! lcd %:p:h " Eqv to `set autochdir`
+    au BufEnter * silent! lcd %:p:h " Eqv to `set autochdir`
+    au FileType gitcommit 1 | startinsert
 augroup END
 
 augroup RainbowParens
