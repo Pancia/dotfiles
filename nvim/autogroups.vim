@@ -12,7 +12,6 @@ augroup Essentials
     au BufReadPost * call SetCursorToLastKnownPosition()
     au FileType vim setlocal foldmethod=marker
     au BufEnter * silent! lcd %:p:h " Eqv to `set autochdir`
-    au FileType gitcommit 1 | startinsert
 augroup END
 
 augroup RainbowParens
