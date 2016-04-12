@@ -66,6 +66,5 @@ Plug 'wavded/vim-stylus'
 " Node.js {{{
 Plug 'sidorares/node-vim-debugger'
 Plug 'moll/vim-node'
-Plug 'marijnh/tern_for_vim'
 " }}} Node.js
 call plug#end()
