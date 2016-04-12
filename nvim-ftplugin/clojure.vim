@@ -13,6 +13,6 @@ let g:clojure_syntax_keywords = {
     \ }
 
 let g:clojure_fuzzy_indent = 1
-let g:clojure_fuzzy_indent_patterns = ['.*']
-let g:clojure_fuzzy_indent_blacklist = [':require', ':import', ':use']
-let g:clojure_special_indent_words = ''
+let g:clojure_fuzzy_indent_patterns = ['^def.*', '^with.*', 'specification', 'behavior', 'assertions', 'component']
+let g:clojure_fuzzy_indent_blacklist = []
+let g:clojure_special_indent_words = 'defui'
