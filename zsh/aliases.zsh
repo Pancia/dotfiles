@@ -1,6 +1,16 @@
 alias vim='nvim'
 alias vimrc='vim ~/dotfiles/nvim/init.vim -c "cd ~/dotfiles/nvim"'
 
+alias a='fasd -a'
+alias d='fasd -d'
+alias f='fasd -f'
+alias s='fasd -si'
+alias sd='fasd -sid'
+alias sf='fasd -sif'
+alias z='fasd_cd -d'
+alias zz='fasd_cd -d -i'
+alias v='fasd -f -e nvim'
+
 alias showFiles='defaults write com.apple.finder AppleShowAllFiles YES'
 alias hideFiles='defaults write com.apple.finder AppleShowAllFiles NO'
 
