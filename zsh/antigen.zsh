@@ -7,7 +7,7 @@ antigen bundle git
 antigen bundle git-flow
 antigen bundle lein
 antigen bundle command-not-found
-antigen bundle z
+antigen bundle fasd
 antigen bundle node
 antigen bundle npm
 antigen bundle python

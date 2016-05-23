@@ -7,6 +7,7 @@ brew 'boot-clj'
 brew 'bro'
 brew 'ctags'
 brew 'elixir'
+brew 'fasd'
 brew 'git', args: ['without-completions']
 brew 'git-flow-avh'
 brew 'haskell-stack'
