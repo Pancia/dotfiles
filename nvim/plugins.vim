@@ -13,8 +13,7 @@ Plug 'sjl/gundo.vim'
 Plug 'tpope/vim-repeat'
 Plug 'scrooloose/syntastic'
 Plug 'godlygeek/tabular'
-Plug 'kien/rainbow_parentheses.vim'
-Plug 'kshenoy/vim-signature'
+"Plug 'kshenoy/vim-signature' " Marks
 Plug 'majutsushi/tagbar'
 Plug 'ntpeters/vim-better-whitespace'
 Plug 'tpope/vim-dispatch'
@@ -33,6 +32,7 @@ Plug 'deris/vim-shot-f'
 " }}} Movement
 " Theme {{{
 Plug 'joshdick/onedark.vim'
+Plug 'kien/rainbow_parentheses.vim'
 " }}} Theme
 " AutoComplete {{{
 Plug 'Valloric/YouCompleteMe', { 'do' : './install.py' }
