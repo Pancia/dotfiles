@@ -8,6 +8,7 @@ hash brew || (ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/i
 brew update
 brew bundle -v
 pip3 install neovim-remote
+pip install --upgrade neovim
 
 #FONTS
 [[ -e fonts ]] || (git clone https://github.com/powerline/fonts.git && ./fonts/install.sh)
