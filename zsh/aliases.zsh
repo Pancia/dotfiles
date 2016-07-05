@@ -23,9 +23,15 @@ alias .lein='vim ~/.lein/profiles.clj'
 alias .prof='vim ~/.lein/profiles.clj'
 alias .profile='vim ~/.lein/profiles.clj'
 
+alias lc='lein clean'
+alias ltr='rlwrap lein test-refresh'
+alias ltrc='rlwrap lein do clean, test-refresh'
+alias lr='lein repl'
+alias lrc='lein do repl, clean'
+alias 'lr:'='lein repl :connect'
+
 alias cat='tail -n +1' # Will show files names if # files>1
 alias ls='ls -h'
-alias fw='rlwrap lein run -m clojure.main'
 alias gitroot='git rev-parse --show-toplevel'
 
 alias cljs='planck'
