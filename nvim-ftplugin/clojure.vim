@@ -9,10 +9,10 @@ map gs [d
 let g:clojure_maxlines=300
 let g:clojure_align_multiline_strings=0
 let g:clojure_syntax_keywords = {
-    \ 'clojureMacro': ['defui', 'facts', 'fact', 'specification', 'behavior', 'provided', 'assertions', 'component', 'render', 'query', 'ident']
+    \ 'clojureMacro': ['defui', 'facts', 'fact', 'specification', 'behavior', 'provided', 'assertions', 'component', 'provided', 'when-mocking', 'render', 'query', 'ident', 'start', 'stop', 'defsyntax', 'defsynfn', 'synfn', 'defspawner']
     \ }
 
 let g:clojure_fuzzy_indent = 1
-let g:clojure_fuzzy_indent_patterns = ['^def.*', '^with.*', 'specification', 'behavior', 'assertions', 'component']
+let g:clojure_fuzzy_indent_patterns = ['^def.*', '^with.*', 'specification', 'behavior', 'assertions', 'component', 'provided', 'start', 'stop', 'letfn', '-tx$', 'transact!', '^check.*', '^assert.*', 'concat', '.*Exception.*', '.*Error.*', 'trace\|debug\|info\|warn\|error\|fatal', '.*->>\?$', 'either', 'synfn', 'parse.*', 'spawn-*', 'load-data.*', '!$', '^do', 'into']
 let g:clojure_fuzzy_indent_blacklist = []
-let g:clojure_special_indent_words = 'defui'
+let g:clojure_special_indent_words = 'defui,letfn'
