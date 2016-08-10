@@ -10,6 +10,17 @@ brew bundle -v
 pip3 install neovim-remote
 pip install --upgrade neovim
 
+#GIT
+#.config
+ln -f gitconfig ~/.gitconfig
+read -p 'git config user.email please: ' git_config_user_email
+git config --global user.email "$git_config_user_email"
+#.hooks
+for i in $(ls ./git/hooks/*.tmpl); do
+    echo "$i, $(basename $i .tmpl)"
+    ln -f $i /usr/local/share/git-core/templates/hooks/$(basename $i .tmpl)
+done
+
 #FONTS
 [[ -e fonts ]] || (git clone https://github.com/powerline/fonts.git && ./fonts/install.sh)
 
@@ -31,15 +42,15 @@ done
 #NVIM
 mkdir -p ~/.config/nvim/ftplugin
 for i in $(ls nvim); do
-    ln -f ./nvim/$i ~/.config/nvim/$i
+    ln -f nvim/$i ~/.config/nvim/$i
 done
 for i in $(ls nvim-ftplugin); do
-    ln -f ./nvim-ftplugin/$i ~/.config/nvim/ftplugin/$i
+    ln -f nvim-ftplugin/$i ~/.config/nvim/ftplugin/$i
 done
 
 #BIN
 for i in $(ls bin); do
-    ln -f ./bin/$i /usr/local/bin/$i
+    ln -f bin/$i /usr/local/bin/$i
 done
 
 #ENGAGE

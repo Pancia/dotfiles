@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#Put the branch/name into the template.
+branchName=$(git rev-parse --abbrev-ref HEAD | sed -e "s'^.*/''")
+#Check is not amend & we have a branchName
+if [ -z "$(head -n1 $1)" ] && [ -z "$branchName" ]; then
+    sed -i "1s/^/$branchName: /" $1
+fi
