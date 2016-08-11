@@ -7,7 +7,7 @@ map gd [<c-d>
 map gs [d
 
 let g:clojure_maxlines=300
-let g:clojure_align_multiline_strings=0
+let g:clojure_align_multiline_strings=1
 let g:clojure_syntax_keywords = {
     \ 'clojureMacro': ['defui', 'facts', 'fact', 'specification', 'behavior', 'provided', 'assertions', 'component', 'provided', 'when-mocking', 'render', 'query', 'ident', 'start', 'stop', 'defsyntax', 'defsynfn', 'synfn', 'defspawner']
     \ }
