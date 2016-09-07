@@ -21,7 +21,8 @@ let g:clj_fmt_autosave = 0
 map <Space>j <Plug>(easymotion-j)
 map <Space>k <Plug>(easymotion-k)
 map <Space>s <Plug>(easymotion-s)
-map //       <Plug>(easymotion-sn)
+map /       <Plug>(easymotion-sn)
+map ?       <Plug>(easymotion-sn)
 " }}} EASYMOTION
 
 " AIRLINE {{{
