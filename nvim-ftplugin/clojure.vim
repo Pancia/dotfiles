@@ -13,6 +13,6 @@ let g:clojure_syntax_keywords = {
     \ }
 
 let g:clojure_fuzzy_indent = 1
-let g:clojure_fuzzy_indent_patterns = ['^def.*', '^with.*', 'specification', 'behavior', 'assertions', 'component', 'provided', 'start', 'stop', 'letfn', '-tx$', 'transact!', '^check.*', '^assert.*', 'concat', '.*Exception.*', '.*Error.*', 'trace\|debug\|info\|warn\|error\|fatal', '.*->>\?$', 'either', 'synfn', 'parse.*', 'spawn-*', 'load-data.*', '!$', '^do', 'into']
+let g:clojure_fuzzy_indent_patterns = ['^def.*', '^with.*', 'specification', 'behavior', 'assertions', 'component', 'provided', 'start', 'stop', 'letfn', '-tx$', 'transact!', '^check.*', '^assert.*', 'concat', '.*Exception.*', '.*Error.*', 'trace\|debug\|info\|warn\|error\|fatal', '.*->>\?$', 'either', 'synfn', 'parse.*', 'spawn-*', 'load-data.*', '!$', '^do', 'into', '^test-.*', '\..*']
 let g:clojure_fuzzy_indent_blacklist = []
-let g:clojure_special_indent_words = 'defui,letfn'
+let g:clojure_special_indent_words = 'defui,letfn,extend-type'
