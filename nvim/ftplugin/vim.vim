@@ -1,1 +1,1 @@
-source ~/dotfiles/nvim/ftplugin/vim.vim
+setlocal keywordprg=:help
