@@ -19,7 +19,6 @@ task_gitconfig () {
     read -p 'git config user.email please: ' git_config_user_email
     git config --global user.email "$git_config_user_email"
     for i in $(ls ./git/hooks/*.tmpl); do
-        echo "$i, $(basename $i .tmpl)"
         ln -f $i /usr/local/share/git-core/templates/hooks/$(basename $i .tmpl)
     done
 }
@@ -34,16 +33,16 @@ task_rcs () {
 }
 
 task_zsh () {
-    cp .zshrc        ~/.zshrc
-    cp .zshenv       ~/.zshenv
+    cp .zshrc  ~/.zshrc
+    cp .zshenv ~/.zshenv
 }
 
 task_vim () {
-    cp .vimrc        ~/.vimrc
+    ln -f .vimrc ~/.vimrc
     mkdir -p ~/.vim/undo
     mkdir -p ~/.vim/ftplugin
     for i in $(ls vim/ftplugin); do
-        ln -f vim/ftplugin/$i ~/.vim/ftplugin/$i
+        echo "source ~/dotfiles/vim/ftplugin/$i" > ~/.vim/ftplugin/$i
     done
 }
 
@@ -51,11 +50,10 @@ task_neovim () {
     pip3 install neovim-remote
     pip install --upgrade neovim
     mkdir -p ~/.config/nvim/ftplugin
-    for i in $(ls nvim); do
-        ln -f nvim/$i ~/.config/nvim/$i
-    done
-    for i in $(ls nvim-ftplugin); do
-        ln -f nvim-ftplugin/$i ~/.config/nvim/ftplugin/$i
+    mkdir -p ~/.config/nvim/undo
+    ln -f nvim/init.vim ~/.config/nvim/init.vim
+    for i in $(ls nvim/ftplugin); do
+        echo "source ~/dotfiles/nvim/ftplugin/$i" > ~/.config/nvim/ftplugin/$i
     done
 }
 
@@ -87,6 +85,7 @@ main() {
         zsh) task_zsh ;;
         vim) task_vim ;;
         neovim) task_neovim ;;
+        nvim) task_neovim ;;
         bin) task_bin ;;
         *) task_all && exec zsh ;;
     esac
