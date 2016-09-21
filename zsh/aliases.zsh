@@ -42,5 +42,5 @@ alias ag='ag --hidden'
 
 alias reset='tput reset'
 
-alias help!="ag '^alias [^=]+?=' ~/dotfiles/zsh/aliases.zsh ~/dotfiles/zsh/aliases.sh"
+alias help!="ag '^alias [^=]+?=' ~/dotfiles/zsh/aliases.zsh"
 alias help="help! -o | ag -o ' [^=]+=$' | ag -o '[^=]+' | xargs"
