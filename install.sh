@@ -32,6 +32,11 @@ task_rcs () {
     cp .agignore     ~/.agignore
 }
 
+task_lein () {
+    mkdir -p ~/.lein
+    ln -f lein/profiles.clj ~/.lein/profiles.clj
+}
+
 task_zsh () {
     cp .zshrc  ~/.zshrc
     cp .zshenv ~/.zshenv
@@ -69,6 +74,7 @@ task_all () {
     task_gitconfig
     task_fonts
     task_rcs
+    task_lein
     task_vim
     task_neovim
     task_bin
@@ -87,6 +93,7 @@ main() {
         neovim) task_neovim ;;
         nvim) task_neovim ;;
         bin) task_bin ;;
+        lein) task_lein ;;
         *) task_all && exec zsh ;;
     esac
 }

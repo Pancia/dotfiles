@@ -7,7 +7,7 @@ export NVIM_LISTEN_ADDRESS=/tmp/nvimsocket
 
 setopt IGNORE_EOF
 
-export US_NUM_DIFFS=4
+export US_NUM_DIFFS=4 #when looking at om next errors ex-data is 4th
 export US_FRAME_LIMIT=20
 export US_QUICK_FAIL=false
 export US_FAIL_ONLY=true
