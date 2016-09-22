@@ -26,4 +26,4 @@ let g:clojure_fuzzy_indent_patterns = [
             \ 'table', 'tbody', 'td', 'textarea', 'th', 'thead', 'tr', 'ul'
             \ ]
 let g:clojure_fuzzy_indent_blacklist = []
-let g:clojure_special_indent_words = 'defui,letfn,extend-type'
+let g:clojure_special_indent_words = 'defrecord,defui,letfn,extend-type'
