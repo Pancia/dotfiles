@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -o errexit
+([[ -n "$DEBUG" ]] || [[ -n "$TRACE" ]]) && set -o xtrace
+
+brew linkapps emacs-plus

@@ -12,6 +12,7 @@ task_brew () {
     hash brew || (ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)")
     brew update
     brew bundle -v
+    ./Brewfile.after
 }
 
 task_gitconfig () {
@@ -94,6 +95,7 @@ main() {
         nvim) task_neovim ;;
         bin) task_bin ;;
         lein) task_lein ;;
+        help) echo "git brew gitconfig fonts rcs zsh vim neovim nvim bin lein" ;;
         *) task_all && exec zsh ;;
     esac
 }

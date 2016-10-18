@@ -3,12 +3,10 @@ nmap <up> <nop>
 nmap <down> <nop>
 nmap <left> <nop>
 nmap <right> <nop>
-nmap <Space> <nop>
 nmap <CR> <nop>
 " Leader mappings
 let mapleader = "<Space>"
 map s \
-map <Space><Space> \
 " Swap j,k with gj,gk
 noremap j gj
 noremap k gk

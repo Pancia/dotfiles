@@ -13,3 +13,5 @@ export US_QUICK_FAIL=false
 export US_FAIL_ONLY=true
 export US_PRINT_LEVEL=4
 export US_PRINT_LENGTH=4
+
+[ -e ~/dotfiles/extra.env.zsh ] && source ~/dotfiles/extra.env.zsh

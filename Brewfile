@@ -1,18 +1,16 @@
+tap 'caskroom/cask'
+tap 'd12frosted/emacs-plus'
 tap 'homebrew/bundle'
 tap 'homebrew/x11'
 tap 'neovim/neovim'
-tap 'rogual/neovim-dot-app'
 
 brew 'boot-clj'
 brew 'bro'
-brew 'ctags'
-brew 'elixir'
+brew 'emacs-plus'
 brew 'fasd'
 brew 'git', args: ['without-completions']
 brew 'git-flow-avh'
-brew 'haskell-stack'
 brew 'leiningen'
-brew 'macvim'
 brew 'markdown'
 brew 'nginx'
 brew 'node'
@@ -28,10 +26,7 @@ brew 'tree'
 brew 'wget'
 brew 'youtube-dl'
 brew 'zsh'
-brew 'homebrew/x11/swi-prolog'
 brew 'neovim/neovim/neovim'
-brew 'rogual/neovim-dot-app/neovim-dot-app', args: ['HEAD']
-
-tap 'caskroom/cask'
 brew 'brew-cask'
+
 cask 'karabiner'
