@@ -1,5 +1,7 @@
-alias vim='nvim'
+alias vim='TERM_TYPE=nvim nvim'
 alias vimrc='vim ~/dotfiles/nvim/init.vim -c "cd ~/dotfiles/nvim"'
+alias vims='vim -S ~/dotfiles/Session.vim'
+alias vimsession='vim -S ~/dotfiles/Session.vim'
 
 alias a='fasd -a'
 alias d='fasd -d'
