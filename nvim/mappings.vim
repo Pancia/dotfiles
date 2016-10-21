@@ -31,17 +31,5 @@ nnoremap g# g#zz
 " buffer nav
 nmap <c-k> :bnext<CR>
 nmap <c-j> :bprevious<CR>
-" <space>^2 mappings
-nmap <space><space>pi   :PlugInstall<CR>
-nmap <space><space>pc   :PlugClean<CR>
-nmap <space><space>zsh  :e ~/dotfiles/zsh<CR>
-nmap <space><space>vim  :e ~/dotfiles/nvim/init.vim<CR>:cd ~/dotfiles/nvim<CR>
-nmap <space><space>lein :e ~/.lein/profiles.clj<CR>:cd ~/.lein<CR>
-nmap <space><space>so   :so %<CR>
-nmap <space><space>u    :GundoToggle<CR>
-nmap <space><space>tb   :TagbarToggle<CR>
-nmap <space><space>bda  :bd *<CR>
-nmap <space><space>tidy :g/^\s\+[\)\]\}]/normal kJ<CR>
-command! Tidy g/^\s\+[\)\]\}]/normal kJ<CR>
-
+" terminal helpers
 tnoremap <Esc> <C-\><C-n>

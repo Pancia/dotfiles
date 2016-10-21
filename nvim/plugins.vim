@@ -7,6 +7,7 @@ call plug#begin('~/.config/nvim/plugged')
 
 " Essentials {{{
 Plug 'rking/ag.vim'
+Plug 'Shougo/vimproc.vim', {'do' : 'make'}
 Plug 'vim-scripts/vim-auto-save'
 Plug 'bling/vim-airline'
 Plug 'sjl/gundo.vim'
@@ -37,6 +38,9 @@ Plug 'kien/rainbow_parentheses.vim'
 " AutoComplete {{{
 Plug 'Valloric/YouCompleteMe', { 'do' : './install.py' }
 Plug 'ctrlpvim/ctrlp.vim'
+Plug 'Shougo/unite.vim'
+Plug 'Shougo/neoyank.vim'
+Plug 'Shougo/unite-help'
 " }}} AutoComplete
 " Clojure {{{
 Plug 'guns/vim-clojure-static'

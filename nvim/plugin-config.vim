@@ -12,6 +12,10 @@ let g:ctrlp_working_path_mode = 'ra'
 let g:ctrlp_user_command = ['.git/', 'git --git-dir=%s/.git ls-files -oc --exclude-standard']
 " }}} CTRLP
 
+" UNITE {{{
+source ~/dotfiles/nvim/unite-config.vim
+" }}} UNITE
+
 " CLJFMT {{{
 let g:clj_fmt_autosave = 0
 " }}} CLJFMT
