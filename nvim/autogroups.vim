@@ -12,6 +12,8 @@ augroup Essentials
     au BufReadPost * call SetCursorToLastKnownPosition()
     au FileType vim setlocal foldmethod=marker
     au BufEnter * silent! lcd %:p:h " Eqv to `set autochdir`
+    au FileType help map <buffer> q :q<cr>
+    au FileType man map <buffer> q :bd<cr>
 augroup END
 
 augroup RainbowParens
