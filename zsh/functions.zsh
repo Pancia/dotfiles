@@ -18,7 +18,8 @@ function lrcw {
 }
 
 function wait-for {
-    while [ ! -f "$1" ]; do; sleep 1; done; shift
-    echo "Done waiting for $1, executing: '$@'."
-    "$@"
+    while [ ! -f "$1" ]; do; sleep 1; done;
+    echo -n "Done waiting for $1"; shift
+    echo ", executing: '$@'."
+    "$@" #TODO aliases arent working
 }
