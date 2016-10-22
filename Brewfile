@@ -27,6 +27,6 @@ brew 'wget'
 brew 'youtube-dl'
 brew 'zsh'
 brew 'neovim/neovim/neovim'
-brew 'brew-cask'
 
+cask 'xquartz'
 cask 'karabiner'
