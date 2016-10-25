@@ -30,3 +30,4 @@ brew 'neovim/neovim/neovim'
 
 cask 'xquartz'
 cask 'karabiner'
+cask 'lacona'
