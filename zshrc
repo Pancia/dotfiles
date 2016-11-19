@@ -1,13 +1,13 @@
 source ~/dotfiles/zsh/antigen.zsh
 source ~/dotfiles/zsh/bindings.zsh
 
-source ~/dotfiles/zsh/aliases.zsh
-source ~/dotfiles/zsh/git-aliases.zsh
+source ~/dotfiles/zsh/aliases.zsh 
+source ~/dotfiles/zsh/git-aliases.zsh 
 
-source ~/dotfiles/zsh/functions.zsh
-source ~/dotfiles/zsh/theme.zsh
+source ~/dotfiles/zsh/functions.zsh 
+source ~/dotfiles/zsh/theme.zsh 
 
-[ -e ~/dotfiles/extra.zsh ] && source ~/dotfiles/extra.zsh
+[ -e ~/dotfiles/extra.zsh ] && source ~/dotfiles/extra.zsh 
 
 if [[ $1 == eval ]]; then
     shift

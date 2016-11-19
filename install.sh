@@ -15,6 +15,13 @@ task_brew () {
     ./Brewfile.after
 }
 
+task_installs () {
+    for i in $(ls installs); do
+        echo "installing: $i"
+        ./installs/${i}
+    done
+}
+
 task_gitconfig () {
     ln -f gitconfig ~/.gitconfig
     read -p 'git config user.email please: ' git_config_user_email
@@ -72,6 +79,7 @@ task_bin () {
 task_all () {
     task_git
     task_brew
+    task_installs
     task_gitconfig
     task_fonts
     task_rcs
@@ -86,6 +94,7 @@ main() {
     case "$1" in
         git) task_git ;;
         brew) task_brew ;;
+        installs) task_installs ;;
         gitconfig) task_gitconfig ;;
         fonts) task_fonts ;;
         rcs) task_rcs ;;
@@ -95,8 +104,9 @@ main() {
         nvim) task_neovim ;;
         bin) task_bin ;;
         lein) task_lein ;;
-        help) echo "git brew gitconfig fonts rcs zsh vim neovim nvim bin lein" ;;
-        *) task_all && exec zsh ;;
+        help) echo "git brew installs gitconfig fonts rcs zsh vim neovim nvim bin lein" ;;
+        '') task_all && exec zsh ;;
+        *) echo "Failed to recognize: '$@'" && exit 1 ;;
     esac
 }
 
