@@ -9,7 +9,7 @@ map gs [d
 let g:clojure_maxlines=300
 let g:clojure_align_multiline_strings=1
 let g:clojure_syntax_keywords = {
-            \ 'clojureMacro': ['defui', 'facts', 'fact', 'specification', 'behavior', 'provided', 'assertions', 'component', 'provided', 'when-mocking', 'render', 'query', 'ident', 'start', 'stop', 'defsyntax', 'defsynfn', 'synfn', 'defspawner']
+            \ 'clojureMacro': ['defui', 'facts', 'fact', 'specification', 'behavior', 'provided', 'assertions', 'component', 'provided', 'when-mocking', 'render', 'query', 'ident', 'start', 'stop', 'defsyntax', 'defsynfn', 'synfn', 'defspawner', 'defread', 'defmutation']
             \ }
 
 let g:clojure_fuzzy_indent = 1
@@ -23,7 +23,10 @@ let g:clojure_fuzzy_indent_patterns = [
             \ 'h1', 'h2', 'h4', 'header', 'hr', 'img', 'input', 'label', 'li', 'linearGradient',
             \ 'main', 'nav', 'node', 'ol', 'option', 'p', 'path', 'polygon',
             \ 'section', 'select', 'small', 'span', 'stop', 'strong', 'svg',
-            \ 'table', 'tbody', 'td', 'textarea', 'th', 'thead', 'tr', 'ul'
-            \ ]
+            \ 'table', 'tbody', 'td', 'textarea', 'th', 'thead', 'tr', 'ul',
+            \ 'fdef' ]
 let g:clojure_fuzzy_indent_blacklist = []
-let g:clojure_special_indent_words = 'defrecord,defui,letfn,extend-type'
+let g:clojure_special_indent_words = join([
+            \ 'defrecord', 'defui', 'reify', 'letfn', 'extend-type',
+            \ 'defprotocol',
+            \ ], ',')

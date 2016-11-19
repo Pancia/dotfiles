@@ -1,6 +1,7 @@
 *~
 .DS_Store
 .lein-repl-history
+.nrepl-history
 .nrepl-port
 .cljs_rhino_repl
 .session.vim
