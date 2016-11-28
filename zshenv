@@ -5,6 +5,9 @@ export XDG_CONFIG_HOME=~/.config
 export FEATURE_BRANCH="$(git rev-parse --abbrev-ref HEAD 2> /dev/null | sed -e 's/feature.//')"
 export NVIM_LISTEN_ADDRESS=/tmp/mynvimsocket
 
+#git (& ∴ less) doesn't show UTF-8 file properly
+export LESSCHARSET=UTF-8
+
 setopt IGNORE_EOF
 
 export US_NUM_DIFFS=4 #when looking at om next errors ex-data is 4th
