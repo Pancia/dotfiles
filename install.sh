@@ -16,7 +16,7 @@ task_brew () {
 }
 
 task_installs () {
-    for i in $(ls installs); do
+    for i in $(ls installs/*.sh); do
         echo "installing: $i"
         ./installs/${i}
     done
