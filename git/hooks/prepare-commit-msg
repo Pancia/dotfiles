@@ -4,5 +4,5 @@
 branch=$(git rev-parse --abbrev-ref HEAD)
 #Check is not amend & we have a branch with a slash (eg: feature/foo)
 if [ -z "$(head -n1 $1)" ] && [ "$(dirname $branch)" != "." ] && [ ! -z "$(basename $branch)" ]; then
-    sed -i '' "1s/^/$(basename $branch): /" $1
+    sed -i '' "1s/^/$(basename $branch) -> /" $1
 fi
