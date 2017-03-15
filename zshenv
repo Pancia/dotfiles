@@ -10,11 +10,14 @@ export LESSCHARSET=UTF-8
 
 setopt IGNORE_EOF
 
+# UNTANGLED SPEC TERMINAL REPORTING CONFIG
 export US_NUM_DIFFS=4 #when looking at om next errors ex-data is 4th
 export US_FRAME_LIMIT=20
 export US_QUICK_FAIL=false
 export US_FAIL_ONLY=true
 export US_PRINT_LEVEL=4
 export US_PRINT_LENGTH=4
+
+export BOOT_JVM_OPTIONS='-XX:-OmitStackTraceInFastThrow'
 
 [ -e ~/dotfiles/extra.env.zsh ] && source ~/dotfiles/extra.env.zsh
