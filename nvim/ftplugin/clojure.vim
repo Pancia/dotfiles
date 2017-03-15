@@ -19,14 +19,15 @@ let g:clojure_fuzzy_indent_patterns = [
             \ 'concat', '.*Exception.*', '.*Error.*', 'trace\|debug\|info\|warn\|error\|fatal',
             \ '.*->>\?$', 'either', 'synfn', 'parse.*', 'spawn-*', 'load-data.*',
             \ '!$', '^do', 'into', '^test-.*', '\..*', 'ui-*',
-            \ 'a', 'article', 'button', 'defs', 'div', 'footer', 'form',
+            \ 'a', 'article', 'button', 'code', 'defs', 'div', 'footer', 'form',
             \ 'h1', 'h2', 'h4', 'header', 'hr', 'img', 'input', 'label', 'li', 'linearGradient',
             \ 'main', 'nav', 'node', 'ol', 'option', 'p', 'path', 'polygon',
             \ 'section', 'select', 'small', 'span', 'stop', 'strong', 'svg',
             \ 'table', 'tbody', 'td', 'textarea', 'th', 'thead', 'tr', 'ul',
-            \ 'fdef' ]
+            \ 'fdef', 'reduce', 'merge',
+            \ ]
 let g:clojure_fuzzy_indent_blacklist = []
 let g:clojure_special_indent_words = join([
             \ 'defrecord', 'defui', 'reify', 'letfn', 'extend-type',
-            \ 'defprotocol',
+            \ 'defprotocol', 'defmutation',
             \ ], ',')
