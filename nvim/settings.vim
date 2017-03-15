@@ -25,3 +25,5 @@ if exists("&undodir")
     set undolevels=500
     set undoreload=500
 endif
+
+let g:terminal_scrollback_buffer_size = 10000
