@@ -9,20 +9,6 @@ function rm {
     done
 }
 
-function lrw {
-    (echo "$@"; command cat <&0) | lein repl
-}
-
-function lrcw {
-    (echo "$@"; command cat <&0) | lein do clean, repl
-}
-
-function wait-for {
-    while [ ! -f "$1" ]; do; sleep 1; done;
-    echo -n "Done waiting for $1"; shift; echo ", executing: '$@'."
-    "$@" #TODO aliases arent working
-}
-
 function _fancy-ctrl-z {
     if [[ $#BUFFER -eq 0 ]]; then
         if [[ "$(jobs | wc -l)" -gt 1 ]]; then
@@ -41,3 +27,62 @@ function _fancy-ctrl-z {
 }
 zle -N _fancy-ctrl-z
 bindkey '^Z' _fancy-ctrl-z
+
+function vim { TERM_TYPE=nvim nvim "$@" }
+function vimrc { vim ~/dotfiles/nvim/init.vim -c "cd ~/dotfiles/nvim" }
+function vims { vim -S ~/dotfiles/Session.vim "$@" }
+
+function a { fasd -a }
+function d { fasd -d }
+function f { fasd -f }
+function s { fasd -si }
+function sd { fasd -sid }
+function sf { fasd -sif }
+function z { fasd_cd -d }
+function zz { fasd_cd -d -i }
+function v { fasd -f -e nvim }
+
+function showFiles { defaults write com.apple.finder AppleShowAllFiles YES }
+function hideFiles { defaults write com.apple.finder AppleShowAllFiles NO }
+
+function todo { ag -i todo "$@" }
+
+function zshrc { vim ~/dotfiles/zshrc }
+
+function .lein { vim ~/.lein/profiles.clj }
+function .prof { vim ~/.lein/profiles.clj }
+function .profile { vim ~/.lein/profiles.clj }
+function lc { lein clean }
+function ltr { rlwrap lein test-refresh }
+function ltrc { rlwrap lein do clean, test-refresh }
+function lr { lein repl }
+function lrc { lein do clean, repl"$@" }
+function lr: { lein repl :connect }
+function _with_out { (echo "$@"; command cat <&0) }
+function lrw { (_with_out "$@") | lein repl }
+function lrcw { (_with_out "$@") | lein do repl, clean }
+function lr:w { (_with_out "$@") | lein repl :connect }
+
+function wait-for {
+    local i=0; while [ ! -f "$1" ]; do; sleep 1; ((i++)); echo -n "\rWaited: $i seconds"; done;
+    echo -n "\nDone waiting for $1"; shift; echo ", executing: '$@'."
+    "$@"
+}
+
+function cat { tail -n +1 "$@" }
+function ls { command ls -h "$@" }
+
+function gitroot { git rev-parse --show-toplevel "$@" }
+
+function cljs { planck "$@" }
+
+function _gitignore_to_regex { (cat .gitignore 2> /dev/null || echo '') | sed 's/^\///' | tr '\n' '|' }
+function tree { command tree -I $(_gitignore_to_regex) "$@" }
+
+function ag { command ag --hidden "$@" }
+
+function reset { tput reset }
+
+# FIXME !
+function help! { "ag '^function \w+' ~/dotfiles/zsh/functions.zsh" }
+function help { help! -o | ag -o ' [^=]+=$' | ag -o '[^=]+' | xargs }
