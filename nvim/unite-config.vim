@@ -11,7 +11,7 @@ nnoremap <silent> [unite]y :Unite history/yank<CR>
 nnoremap <silent> [unite]h :Unite help<CR>
 nnoremap <silent> [unite]u :GundoToggle<CR>
 nnoremap <silent> [unite]: :Unite command mapping<CR>
-nnoremap <silent> [unite]<space> :Unite menu<CR>
+nnoremap <silent> <c-space> :Unite menu<CR>
 
 autocmd FileType unite call s:unite_settings()
 function! s:unite_settings()
