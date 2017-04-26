@@ -24,7 +24,7 @@ let g:clojure_fuzzy_indent_patterns = [
             \ 'main', 'nav', 'node', 'ol', 'option', 'p', 'path', 'polygon',
             \ 'section', 'select', 'small', 'span', 'stop', 'strong', 'svg',
             \ 'table', 'tbody', 'td', 'textarea', 'th', 'thead', 'tr', 'ul',
-            \ 'fdef', 'reduce', 'merge',
+            \ 'fdef', 'reduce', 'merge', 'row', 'col', 'icon',
             \ ]
 let g:clojure_fuzzy_indent_blacklist = []
 let g:clojure_special_indent_words = join([
