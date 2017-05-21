@@ -1,3 +1,4 @@
+export SHELL=/bin/zsh
 export LEIN_SUPPRESS_USER_LEVEL_REPO_WARNINGS=1
 export EDITOR='nvim'
 export GIT_EDITOR='nvim'
