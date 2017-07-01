@@ -3,9 +3,7 @@
                   [lein-bikeshed "0.2.0"]
                   [lein-kibit "0.1.2"]
                   [lein-localrepo  "0.5.3"]
-                  [lein-pprint "1.1.1"]
-                  [untangled/lein-template "0.4.1-SNAPSHOT"]
-                  [untangled-release "0.1.1-SNAPSHOT"]]
+                  [lein-pprint "1.1.1"]]
 
         :repl-options {:timeout 120000}
 
