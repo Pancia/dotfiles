@@ -5,4 +5,4 @@
 .nrepl-port
 .cljs_rhino_repl
 .session.vim
-.smartcd_lock
+.smartcd_*_lock

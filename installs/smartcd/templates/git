@@ -1,0 +1,23 @@
+########################################################################
+# This is a smartcd template.  Edit this file to create a named
+# configuration you can copy to any number of directories.  This is
+# useful if you often use the same settings in different directories
+# but with minor differences.
+#
+# The string __PATH__ will be replaced with the directory being
+# configured when this template is installed, so you can set variables:
+#
+#    autostash PATH=__PATH__/bin:$PATH
+#
+# This template is named 'git'
+########################################################################
+
+# Enter any bash_enter commands below here: (leave this line!)
+if [[ ! $TERM_TYPE == 'nvim' ]] && [ ! -e .smartcd_git_lock ] ; then
+    touch .smartcd_git_lock
+    git fetch --all
+    git pull
+fi
+
+# Enter any bash_leave commands below here: (leave this line!)
+[[ ! $TERM_TYPE == 'nvim' ]] && [ -e .smartcd_git_lock ] && command rm .smartcd_git_lock
