@@ -27,6 +27,7 @@ augroup END
 
 augroup FileTypes
     au BufNewFile,BufRead .eslintrc set filetype=json
+    au BufNewFile,BufRead *.boot set filetype=clojure
 augroup END
 
 augroup Terminal
