@@ -12,18 +12,17 @@ antigen bundle node
 antigen bundle npm
 antigen bundle python
 
-antigen bundle zsh-users/zsh-syntax-highlighting
-antigen bundle zsh-users/zsh-history-substring-search
-
-#OSX
+# OSX
 antigen bundle brew
 antigen bundle brew-cask
 antigen bundle osx
+
+# ZSH
+antigen bundle zsh-users/zsh-syntax-highlighting
+antigen bundle zsh-users/zsh-history-substring-search
 
 # Load the theme.
 antigen theme bhilburn/powerlevel9k powerlevel9k.zsh-theme
 
 # Tell antigen that you're done.
 antigen apply
-
-source ~/.smartcd_config

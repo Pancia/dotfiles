@@ -1,0 +1,5 @@
+version='1'; created_on='Wed Jul  5 04:58:47 PDT 2017'; checksum='05280ca23aed3a244a502a812b69cb08';
+4be16020b7cd7241b75c23db9f5bd3d4fce84686 https://github.com/bhilburn/powerlevel9k.git
+d848c94804918138375041a9f800f401bec12068 https://github.com/robbyrussell/oh-my-zsh.git
+933733e86724a018cb98cb8f514fc3d323461f74 https://github.com/zsh-users/zsh-history-substring-search.git
+ad522a091429ba180c930f84b2a023b40de4dbcc https://github.com/zsh-users/zsh-syntax-highlighting.git
