@@ -30,7 +30,9 @@ bindkey '^Z' _fancy-ctrl-z
 
 function vim { TERM_TYPE=nvim nvim "$@" }
 function vimrc { vim ~/dotfiles/nvim/init.vim -c "cd ~/dotfiles/nvim" }
-function vims { vim -S ~/dotfiles/Session.vim "$@" }
+local vim_session_loc=~/dotfiles/vim_sessions
+function _vimsEdit { mkdir -p ${vim_session_loc}$(pwd) && vim ${vim_session_loc}$(pwd)/session.vim }
+function vims { ([[ "$1" == "edit" ]] && _vimsEdit) || vim -S ~/dotfiles/Session.vim "$@" }
 
 function a { fasd -a }
 function d { fasd -d }
@@ -83,5 +85,5 @@ function ag { command ag --hidden "$@" }
 
 function reset { tput reset }
 
-function help! { ag '^function [^ ]+' ~/dotfiles/zsh/functions.zsh "$@"}
+function help! { ag '^function [^_][^ ]+' ~/dotfiles/zsh/functions.zsh "$@"}
 function help { help! -o | sed 's/function //' | xargs }

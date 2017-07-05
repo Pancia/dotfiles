@@ -7,8 +7,9 @@ if expand('%') == '' && !&modified && line('$') <= 1 && getline(1) == ''
 endif
 set shortmess=aoO
 " CUSTOM SESSION PER PROJECT {{{
-if filereadable('.session.vim')
-    source .session.vim
+let s:session_loc = expand('~/dotfiles/vim_sessions') . getcwd() . '/session.vim'
+if filereadable(s:session_loc)
+    execute 'source ' . s:session_loc
 endif
 " }}}
 argglobal
