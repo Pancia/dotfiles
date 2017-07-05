@@ -83,6 +83,5 @@ function ag { command ag --hidden "$@" }
 
 function reset { tput reset }
 
-# FIXME !
-function help! { "ag '^function \w+' ~/dotfiles/zsh/functions.zsh" }
-function help { help! -o | ag -o ' [^=]+=$' | ag -o '[^=]+' | xargs }
+function help! { ag '^function [^ ]+' ~/dotfiles/zsh/functions.zsh "$@"}
+function help { help! -o | sed 's/function //' | xargs }
