@@ -1,0 +1,5 @@
+- vim use nvr so its like server emacs ... dont have to start a new one up every time
+- vims should support multiple scripts, eg `vims` `vims help` `vims list` & user defined, eg: `vims git` `vims server` `vims client`
+- remind me command
+- shada causes slowdown...
+- stop using youcompleteme, see if speedup
