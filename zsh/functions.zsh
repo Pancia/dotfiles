@@ -5,7 +5,7 @@ function rm {
     prefix="${dir//\//%}T${timestamp}<->"
     failed=false
     for f in "$@"; do
-        if [ -f $f ]; then
+        if [ -e $f ]; then
             echo "moved ${f} to" ~/.Trash/${prefix}${f//\//%}
             mv ${f} ~/.Trash/${prefix}${f//\//%}
         else
@@ -13,7 +13,7 @@ function rm {
             echo "[dotfiles/rm] file not found: $f" >&2
         fi
     done
-    $failed && exit 1
+    $failed && return 1
 }
 
 function _fancy-ctrl-z {
