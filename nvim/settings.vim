@@ -1,5 +1,7 @@
 filetype plugin indent on
 
+set mouse=a
+
 " CTRL_SPACE
 set hidden
 set showtabline=2
