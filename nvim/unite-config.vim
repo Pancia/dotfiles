@@ -6,6 +6,7 @@ nnoremap <silent> [unite]b :Unite buffer<CR>
 nnoremap <silent> [unite]t :Unite file/async:t<CR>
 nnoremap <silent> [unite]<space> :Unite source<CR>
 nnoremap <silent> [unite]s :Unite grep:.<CR>
+nnoremap <silent> [unite]r :Unite rust/doc<CR>
 let g:unite_source_history_yank_enable=1
 nnoremap <silent> [unite]y :Unite history/yank<CR>
 nnoremap <silent> [unite]h :Unite help<CR>

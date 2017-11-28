@@ -16,7 +16,7 @@ let g:ctrlp_user_command = ['.git/', 'git --git-dir=%s/.git ls-files -oc --exclu
 source ~/dotfiles/nvim/unite-config.vim
 " }}} UNITE
 
-" vimfiler {{{
+" VIMFILER {{{
 let g:vimfiler_as_default_explorer = 1
 nnoremap gy :YcmCompleter GoTo<CR>
 " }}}
@@ -79,4 +79,10 @@ let g:ycm_key_list_previous_completion = ['<S-TAB>']
 " JAVA {{{
 let g:syntastic_java_checkers=['javac']
 let g:syntastic_java_javac_config_file_enabled = 1
+
+" RUST {{{
+let g:rustfmt_autosave = 1
+let g:syntastic_rust_checkers = ['cargo']
+let g:ycm_rust_src_path = '$HOME/.rustup/toolchains/stable-x86_64-apple-darwin/lib/rustlib/src/rust/src/'
+let g:rust_doc#downloaded_rust_doc_dir = '~/.rustup/toolchains/stable-x86_64-apple-darwin'
 " }}}

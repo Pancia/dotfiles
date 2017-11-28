@@ -38,7 +38,7 @@ Plug 'joshdick/onedark.vim'
 Plug 'kien/rainbow_parentheses.vim'
 " }}} Theme
 " AutoComplete {{{
-Plug 'Valloric/YouCompleteMe', { 'do' : './install.py' }
+Plug 'Valloric/YouCompleteMe', { 'do' : './install.py --rust-completer' }
 Plug 'ctrlpvim/ctrlp.vim'
 Plug 'Shougo/unite.vim'
 Plug 'Shougo/neoyank.vim'
@@ -73,6 +73,10 @@ Plug 'wavded/vim-stylus'
 Plug 'sidorares/node-vim-debugger'
 Plug 'moll/vim-node'
 " }}} Node.js
+" Rust {{{
+Plug 'rust-lang/rust.vim'
+Plug 'rhysd/rust-doc.vim'
+" }}}
 " Java {{{
 Plug 'artur-shaik/vim-javacomplete2'
 " }}}
