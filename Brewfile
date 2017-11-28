@@ -8,6 +8,7 @@ brew 'boot-clj'
 brew 'bro'
 brew 'emacs-plus'
 brew 'fasd'
+brew 'gimp'
 brew 'git', args: ['without-completions']
 brew 'git-flow-avh'
 brew 'leiningen'
