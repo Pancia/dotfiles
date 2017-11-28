@@ -5,46 +5,46 @@ if empty(glob('~/.config/nvim/autoload/plug.vim'))
 endif
 call plug#begin('~/.config/nvim/plugged')
 
-" Essentials {{{
-Plug 'rking/ag.vim'
+" ESSENTIALS {{{
 Plug 'Shougo/vimfiler.vim'
 Plug 'romgrk/vimfiler-prompt'
 Plug 'Shougo/vimproc.vim', {'do' : 'make'}
-Plug 'vim-scripts/vim-auto-save'
 Plug 'bling/vim-airline'
-Plug 'sjl/gundo.vim'
-Plug 'tpope/vim-repeat'
-Plug 'scrooloose/syntastic'
 Plug 'godlygeek/tabular'
 "Plug 'kshenoy/vim-signature' " Marks
 Plug 'majutsushi/tagbar'
 Plug 'ntpeters/vim-better-whitespace'
+Plug 'rking/ag.vim'
+Plug 'scrooloose/syntastic'
+Plug 'sjl/gundo.vim'
 Plug 'tpope/vim-dispatch'
 Plug 'tpope/vim-projectionist'
+Plug 'tpope/vim-repeat'
 Plug 'tpope/vim-speeddating'
 Plug 'tpope/vim-surround'
 Plug 'vim-scripts/bufkill.vim'
-" }}} Essentials
-" {{{ Git
+Plug 'vim-scripts/vim-auto-save'
+" }}}
+" {{{ GIT
 Plug 'tpope/vim-fugitive'
 Plug 'rhysd/conflict-marker.vim'
 " }}}
-" Movement {{{
+" MOVEMENT {{{
 Plug 'Lokaltog/vim-easymotion'
 Plug 'deris/vim-shot-f'
-" }}} Movement
-" Theme {{{
+" }}}
+" THEME {{{
 Plug 'joshdick/onedark.vim'
 Plug 'kien/rainbow_parentheses.vim'
-" }}} Theme
-" AutoComplete {{{
+" }}}
+" AUTOCOMPLETE {{{
 Plug 'Valloric/YouCompleteMe', { 'do' : './install.py --rust-completer' }
 Plug 'ctrlpvim/ctrlp.vim'
 Plug 'Shougo/unite.vim'
 Plug 'Shougo/neoyank.vim'
 Plug 'Shougo/unite-help'
-" }}} AutoComplete
-" Clojure {{{
+" }}}
+" CLOJURE {{{
 Plug 'guns/vim-clojure-static'
 Plug 'guns/vim-clojure-highlight'
 Plug 'guns/vim-sexp'
@@ -52,32 +52,32 @@ Plug 'tpope/vim-sexp-mappings-for-regular-people'
 Plug 'tpope/vim-fireplace'
 Plug 'clojure-emacs/cider-nrepl'
 Plug 'venantius/vim-cljfmt'
-" }}} Clojure
-" Haskell {{{
+" }}}
+" HASKELL {{{
 Plug 'dag/vim2hs',          { 'for' : 'haskell' }
 Plug 'eagletmt/ghcmod-vim', { 'for' : 'haskell' }
 Plug 'eagletmt/neco-ghc',   { 'for' : 'haskell' }
-" }}} Haskell
-" Elixir {{{
+" }}}
+" ELIXIR {{{
 Plug 'elixir-lang/vim-elixir', { 'for' : 'elixir' }
-" }}} Elixir
-" Prolog {{{
+" }}}
+" PROLOG {{{
 Plug 'adimit/prolog.vim', { 'for' : 'prolog' }
-" }}} Prolog
-" JavaScript {{{
+" }}}
+" JAVASCRIPT {{{
 "Plug 'jelera/vim-javascript-syntax'
 Plug 'digitaltoad/vim-jade'
 Plug 'wavded/vim-stylus'
-" }}} JavaScript
-" Node.js {{{
+" }}}
+" NODE.JS {{{
 Plug 'sidorares/node-vim-debugger'
 Plug 'moll/vim-node'
-" }}} Node.js
-" Rust {{{
+" }}}
+" RUST {{{
 Plug 'rust-lang/rust.vim'
 Plug 'rhysd/rust-doc.vim'
 " }}}
-" Java {{{
+" JAVA {{{
 Plug 'artur-shaik/vim-javacomplete2'
 " }}}
 call plug#end()
