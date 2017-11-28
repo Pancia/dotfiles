@@ -9,7 +9,7 @@ let g:auto_save_in_insert_mode=0
 
 " CTRLP {{{
 let g:ctrlp_working_path_mode = 'ra'
-let g:ctrlp_user_command = ['.git/', 'git --git-dir=%s/.git ls-files -oc --exclude-standard']
+let g:ctrlp_user_command = [ '.git', 'cd %s && cd `git rev-parse --show-toplevel` && git ls-files -co --exclude-standard' ]
 " }}}
 
 " UNITE {{{
