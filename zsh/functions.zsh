@@ -79,6 +79,7 @@ function wait-for {
 }
 
 function cat { tail -n +1 "$@" }
+function less { command less -N "$@" }
 function ls { command ls -h "$@" }
 
 function gitroot { git rev-parse --show-toplevel "$@" }
