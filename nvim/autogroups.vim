@@ -14,6 +14,8 @@ augroup Essentials
     au BufEnter * silent! lcd %:p:h " Eqv to `set autochdir`
     au FileType help map <buffer> q :q<cr>
     au FileType man map <buffer> q :bd<cr>
+    au FileType vimfiler nmap <buffer> i :VimFilerPrompt<cr>
+    au FileType vimfiler nmap <buffer> q <Plug>(vimfiler_exit)
 augroup END
 
 augroup RainbowParens
