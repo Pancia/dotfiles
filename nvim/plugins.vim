@@ -7,6 +7,8 @@ call plug#begin('~/.config/nvim/plugged')
 
 " Essentials {{{
 Plug 'rking/ag.vim'
+Plug 'Shougo/vimfiler.vim'
+Plug 'romgrk/vimfiler-prompt'
 Plug 'Shougo/vimproc.vim', {'do' : 'make'}
 Plug 'vim-scripts/vim-auto-save'
 Plug 'bling/vim-airline'
@@ -71,4 +73,7 @@ Plug 'wavded/vim-stylus'
 Plug 'sidorares/node-vim-debugger'
 Plug 'moll/vim-node'
 " }}} Node.js
+" Java {{{
+Plug 'artur-shaik/vim-javacomplete2'
+" }}}
 call plug#end()

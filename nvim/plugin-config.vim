@@ -16,6 +16,11 @@ let g:ctrlp_user_command = ['.git/', 'git --git-dir=%s/.git ls-files -oc --exclu
 source ~/dotfiles/nvim/unite-config.vim
 " }}} UNITE
 
+" vimfiler {{{
+let g:vimfiler_as_default_explorer = 1
+nnoremap gy :YcmCompleter GoTo<CR>
+" }}}
+
 " CLJFMT {{{
 let g:clj_fmt_autosave = 0
 " }}} CLJFMT
@@ -70,3 +75,8 @@ let g:ycm_autoclose_preview_window_after_insertion = 1
 let g:ycm_key_list_select_completion = ['<TAB>']
 let g:ycm_key_list_previous_completion = ['<S-TAB>']
 " }}} YOUCOMPLETEME
+
+" JAVA {{{
+let g:syntastic_java_checkers=['javac']
+let g:syntastic_java_javac_config_file_enabled = 1
+" }}}
