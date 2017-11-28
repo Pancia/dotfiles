@@ -73,6 +73,9 @@ Plug 'wavded/vim-stylus'
 Plug 'sidorares/node-vim-debugger'
 Plug 'moll/vim-node'
 " }}}
+" LUX {{{
+Plug 'mwgkgk/lux-vim'
+" }}}
 " RUST {{{
 Plug 'rust-lang/rust.vim'
 Plug 'rhysd/rust-doc.vim'
