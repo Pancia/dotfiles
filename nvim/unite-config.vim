@@ -64,6 +64,11 @@ let g:unite_source_menu_menus._helpers.command_candidates = [
             \['> tidy', 'g/^\s\+[\)\]\}]/normal kJ'],
             \]
 
+let g:unite_source_menu_menus.plug = {}
+let g:unite_source_menu_menus.plug.command_candidates = [
+            \['PlugInstall', 'source % | PlugInstall'],
+            \]
+
 let g:unite_source_menu_menus.java = {'description' : 'JavaComplete'}
 let g:unite_source_menu_menus.java.command_candidates = [
             \[],
