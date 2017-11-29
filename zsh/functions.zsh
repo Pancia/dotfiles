@@ -93,5 +93,7 @@ function ag { command ag --hidden "$@" }
 
 function reset { tput reset }
 
+function playMusic { player-rs "$@" }
+
 function help! { ag '^function [^_][^ ]+' ~/dotfiles/zsh/functions.zsh "$@"}
 function help { help! -o | sed 's/function //' | xargs }
