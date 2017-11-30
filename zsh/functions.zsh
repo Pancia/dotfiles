@@ -78,7 +78,7 @@ function wait-for {
     "$@"
 }
 
-function cat { tail -n +1 "$@" }
+function cat { command tail -n +1 "$@" }
 function less { command less -N "$@" }
 function ls { command ls -h "$@" }
 
@@ -96,4 +96,4 @@ function reset { tput reset }
 function playMusic { player-rs "$@" }
 
 function help! { ag '^function [^_][^ ]+' ~/dotfiles/zsh/functions.zsh "$@"}
-function help { help! -o | sed 's/function //' | xargs }
+function help { if [ ! -z "$@" ]; then tldr "$@"; else help! -o | sed 's/function //' | xargs; fi }
