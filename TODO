@@ -1,5 +1,14 @@
-- vim use nvr so its like server emacs ... dont have to start a new one up every time
-- vims should support multiple scripts, eg `vims` `vims help` `vims list` & user defined, eg: `vims git` `vims server` `vims client`
-- remind me command
-- shada causes slowdown...
-- stop using youcompleteme, see if speedup
+- [ ] better syntax/format for TODO files (search online?)
+    ^-> should at least support tagging/priority & have a vim plugin
+- [ ] greeting on entering home dir (for first time?), show TODOS?
+- [ ] show todos on entering project
+    ^-> also search/grep for TODO markers
+- [ ] command for editing todos? or just have a TODO file? should it be gitignored?
+- [ ] vim use nvr so its like server emacs ... dont have to start a new one up every time
+- [ ] vims should support subcommands, eg `vims` `vims help` `vims list` `vims edit [name]` & any user defined ones, eg: `vims git` `vims server` `vims client`
+- [ ] `vims edit` template? or at least a banner with help / common patterns, eg: terminal zsh -is eval "..."
+- [ ] the `help` command should print doc(strings), so you know wtf it is
+- [ ] the `help` command should tell you how to use it and any variants/subcommands
+- [ ] remind me command
+- [ ] shada (neovim cache/save thingy?) causes slowdown...
+- [ ] stop using youcompleteme, see if speedup
