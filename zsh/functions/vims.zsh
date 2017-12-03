@@ -1,3 +1,7 @@
+VIMS_EDIT_TEMPLATE='"VIMS SNIPPETS:
+"terminal zsh -is eval "..."
+'
+
 local vims_sessions_root=~/dotfiles/nvim/sessions
 local vim_base_session=~/dotfiles/nvim/Session.vim
 
@@ -8,6 +12,7 @@ function __vimsLoc { echo "${vims_sessions_root}$(pwd)/$(__vimsType $1).vim" }
 function _vimsEdit {
     local session_location="$(__vimsLoc $1)"
     mkdir -p "$(dirname $session_location)"
+    [[ ! -f $session_location ]] && echo "$VIMS_EDIT_TEMPLATE" > "$session_location"
     vim "$session_location"
 }
 
