@@ -1,29 +1,32 @@
 local vims_sessions_root=~/dotfiles/nvim/sessions
 local vim_base_session=~/dotfiles/nvim/Session.vim
 
-function __vimsLoc { echo "${vims_sessions_root}$(pwd)/${1:-session}.vim" }
+function __vimsType { echo "${1:-default}" }
+
+function __vimsLoc { echo "${vims_sessions_root}$(pwd)/$(__vimsType $1).vim" }
 
 function _vimsEdit {
-    mkdir -p "${vim_session_loc}$(pwd)"
-    vim `__vimsLoc ${1:-session}`
+    local session_location="$(__vimsLoc $1)"
+    mkdir -p "$(dirname $session_location)"
+    vim "$session_location"
 }
 
 function _vimsOpen {
-    if [ $# > 1 ]; then
+    if [[ $# > 1 ]]; then
         echo "[VIMS]: CAN ONLY OPEN ONE SESSION"
-        exit 2
+        return 2
     fi
-    local session_type=${1-session}
+    local session_type="$(__vimsType $1)"
     if [ ! -f `__vimsLoc $session_type` ]; then
         echo "[VIMS]: FILE NOT FOUND '`__vimsLoc $session_type`'"
-        exit 2
+        return 2
     fi
     vim --cmd "let g:vims_session_type='$session_type'" \
         --cmd "let g:vims_sessions_root='$vims_sessions_root'" \
         -S "$vim_base_session" "${@:2}"
 }
 
-function __vimsList { find "$vims_sessions_root$(pwd)" -type f -maxdepth 1 }
+function __vimsList { find "$vims_sessions_root$(pwd)" -type f -maxdepth 1}
 
 function _vimsShow { for i in `__vimsList`; do echo "===> $i <==="; cat $i; done }
 
