@@ -5,5 +5,4 @@
 .nrepl-port
 .cljs_rhino_repl
 .session.vim
-.smartcd_*_lock
 .syntastic_javac_config
