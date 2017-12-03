@@ -1,3 +1,8 @@
+local functions_dir=`dirname $0`/functions
+for f in $(ls $functions_dir); do
+    source $functions_dir/$f
+done
+
 function rm {
     local dir prefix timestamp failed
     dir="$(pwd)"
@@ -37,9 +42,6 @@ bindkey '^Z' _fancy-ctrl-z
 
 function vim { TERM_TYPE=nvim nvim "$@" }
 function vimrc { vim ~/dotfiles/nvim/init.vim -c "cd ~/dotfiles/nvim" }
-local vim_session_loc=~/dotfiles/vim_sessions
-function _vimsEdit { mkdir -p ${vim_session_loc}$(pwd) && vim ${vim_session_loc}$(pwd)/session.vim }
-function vims { ([[ "$1" == "edit" ]] && _vimsEdit) || vim -S ~/dotfiles/Session.vim "$@" }
 
 function a { fasd -a }
 function d { fasd -d }
@@ -86,7 +88,7 @@ function gitroot { git rev-parse --show-toplevel "$@" }
 
 function cljs { planck "$@" }
 
-function _gitignore_to_regex { (cat .gitignore 2> /dev/null || echo '') | sed 's/^\///' | tr '\n' '|' | sed 's/\|*$//' }
+function _gitignore_to_regex { (cat .gitignore 2> /dev/null || echo '') | sed 's#^/##' | tr '\n' '|' | sed 's/\|*$//' }
 function tree { command tree -I "$(_gitignore_to_regex)" "$@" }
 
 function ag { command ag --hidden "$@" }
@@ -94,6 +96,3 @@ function ag { command ag --hidden "$@" }
 function reset { tput reset }
 
 function playMusic { player-rs "$@" }
-
-function help! { ag '^function [^_][^ ]+' ~/dotfiles/zsh/functions.zsh "$@"}
-function help { if [ ! -z "$@" ]; then tldr "$@"; else help! -o | sed 's/function //' | xargs; fi }
