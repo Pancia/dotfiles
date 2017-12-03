@@ -3,6 +3,7 @@
 - show todos on entering project
     also search/grep for TODO markers
 - vim use nvr so its like server emacs ... dont have to start a new one up every time
+- create cd wrapper (like smartcd/vims)
 - show `vims list` on entering a project that has vims entries
 - `vims edit` template? or at least a banner with help / common patterns, eg: terminal zsh -is eval "..."
 - shada (neovim cache/save thingy?) causes slowdown...
