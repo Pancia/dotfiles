@@ -88,7 +88,7 @@ function gitroot { git rev-parse --show-toplevel "$@" }
 
 function cljs { planck "$@" }
 
-function _gitignore_to_regex { (cat .gitignore 2> /dev/null || echo '') | sed 's#^/##' | tr '\n' '|' | sed 's/\|*$//' }
+function _gitignore_to_regex { (command cat .gitignore .ignore 2> /dev/null || echo '') | sed 's#^/##' | tr '\n' '|' | sed 's/\|*$//' }
 function tree { command tree -I "$(_gitignore_to_regex)" "$@" }
 
 function ag { command ag --hidden "$@" }

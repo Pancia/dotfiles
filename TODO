@@ -3,12 +3,7 @@
 - show todos on entering project
     also search/grep for TODO markers
 - vim use nvr so its like server emacs ... dont have to start a new one up every time
-- vims should support subcommands, eg `vims` `vims help` `vims list` `vims edit [name]` & any user defined ones, eg: `vims git` `vims server` `vims client`
 - show `vims list` on entering a project that has vims entries
 - `vims edit` template? or at least a banner with help / common patterns, eg: terminal zsh -is eval "..."
-- the `help` command should print doc(strings), so you know wtf it is
-- the `help` command should tell you how to use it and any variants/subcommands
 - shada (neovim cache/save thingy?) causes slowdown...
 - stop using youcompleteme, see if speedup
-- _gitignore_to_regex should use .ignore
-- _gitignore_to_regex should remove trailing slashes when joining lines
