@@ -1,1 +1,4 @@
-sudo launchctl submit -l disable_osx_startup_chime -- sudo nvram SystemAudioVolume=%80
+PLIST=disable_osx_startup_chime.plist
+
+ln -f $PLIST ~/Library/LaunchAgents/$PLIST
+sudo launchctl load -w ~/Library/LaunchAgents/$PLIST
