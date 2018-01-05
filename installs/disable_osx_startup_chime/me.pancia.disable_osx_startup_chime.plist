@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+    <dict>
+        <key>RunAtLoad</key><true/>
+        <key>Label</key>
+        <string>me.pancia.disable_osx_startup_chime</string>
+        <key>ProgramArguments</key>
+        <array>
+            <string>/Users/pancia/dotfiles/installs/disable_osx_startup_chime/disable_osx_startup_chime.cmd.sh</string>
+        </array>
+        <!-- For debugging purposes -->
+        <!--
+        <key>StandardErrorPath</key>
+        <string>/tmp/me.pancia.disable_osx_startup_chime.err</string>
+        <key>StandardOutPath</key>
+        <string>/tmp/me.pancia.disable_osx_startup_chime.out</string>
+        -->
+    </dict>
+</plist>
