@@ -16,6 +16,7 @@ augroup Essentials
     au FileType man map <buffer> q :bd<cr>
     au FileType vimfiler nmap <buffer> i :VimFilerPrompt<cr>
     au FileType vimfiler nmap <buffer> q <Plug>(vimfiler_exit)
+    au BufNewFile,BufRead TODL setlocal formatoptions-=cro
 augroup END
 
 augroup RainbowParens
