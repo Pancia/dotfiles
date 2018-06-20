@@ -3,7 +3,6 @@ source ~/dotfiles/antigen/antigen.zsh
 antigen use oh-my-zsh
 
 # Bundles from the default repo (robbyrussell's oh-my-zsh).
-antigen bundle fasd
 antigen bundle git
 antigen bundle git-flow
 antigen bundle lein
@@ -14,7 +13,6 @@ antigen bundle python
 # OSX
 antigen bundle brew
 antigen bundle brew-cask
-antigen bundle osx
 
 # ZSH
 antigen bundle zsh-users/zsh-syntax-highlighting
