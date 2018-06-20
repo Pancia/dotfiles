@@ -17,4 +17,6 @@ setopt IGNORE_EOF
 
 export BOOT_JVM_OPTIONS='-XX:-OmitStackTraceInFastThrow'
 
+export PATH="$HOME/.jenv/shims:$PATH"
+
 [ -e ~/dotfiles/extra.env.zsh ] && source ~/dotfiles/extra.env.zsh
