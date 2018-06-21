@@ -1,0 +1,3 @@
+#!/usr/bin/env zsh
+BIN=1 source ~/dotfiles/zsh/functions/smartcd.zsh
+_smartcd "$@"
