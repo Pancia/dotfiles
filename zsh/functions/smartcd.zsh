@@ -3,6 +3,8 @@ trap '[ "$?" -ne 77 ] || exit 77' ERR
 
 local smartcd_public_root=~/dotfiles/smartcd
 local smartcd_private_root=~/.smartcd
+local smartcd_global_public_root=$smartcd_public_root/.__smartcdGlobal
+local smartcd_global_private_root=$smartcd_private_root/.__smartcdGlobal
 
 local SMARTCD_EDIT_TEMPLATE="#########################################
 ######## HELLO FROM SMARTCD EDIT ########
@@ -14,19 +16,25 @@ function __smartcdRoot {
         public) echo $smartcd_public_root ;;
         private) echo $smartcd_private_root ;;
         *) echo $smartcd_public_root ;;
-    esac;
-    }
-
-function __smartcdType {
-    echo "$1"
+    esac
 }
 
+function __smartcdType { echo "$1" }
+
 function __smartcdLoc {
-    echo "$(__smartcdRoot $2)${3:-`pwd`}/$(__smartcdType $1).zsh"
+    if [[ "$1" == "global" ]]; then
+        case $3 in
+            public) echo $smartcd_global_public_root.$2.zsh ;;
+            private) echo $smartcd_global_private_root.$2.zsh ;;
+            *) echo $smartcd_global_public_root.$2.zsh ;;
+        esac
+    else
+        echo "$(__smartcdRoot $2)${3:-`pwd`}/$(__smartcdType $1).zsh"
+    fi
 }
 
 function _smartcdEdit {
-    [[ "$1" =~ "enter|leave" ]] || exit 1
+    [[ "$1" =~ "enter|leave|global" ]] || exit 1
     local script_loc="$(__smartcdLoc $@)"
     mkdir -p "$(dirname $script_loc)"
     [[ ! -f $script_loc ]] && echo "$SMARTCD_EDIT_TEMPLATE" > "$script_loc"
@@ -78,6 +86,14 @@ function __smartcdExecute {
     ([ -e $prv_script ] && $SHELL $prv_script)
 }
 
+function __smartcdGlobalExec {
+    local dir="$(__smartcdNextDir $@)"
+    local pub_global="$(__smartcdLoc global $1 public)"
+    ([ -e $pub_global ] && $SHELL $pub_global $dir)
+    local prv_global="$(__smartcdLoc global $1 private)"
+    ([ -e $prv_global ] && $SHELL $prv_global $dir)
+}
+
 function _smartcd_cd {
     local enter_wd="$1"
     local leave_wd="$2"
@@ -96,6 +112,7 @@ function _smartcd_cd {
     for i in $(seq $max_N -1 1); do
         if [ -n "${leave[i]}" ]; then
             __smartcdExecute leave $cwd ${leave[i]}
+            __smartcdGlobalExec leave $cwd ${leave[i]}
             cwd="$(__smartcdNextDir leave $cwd ${leave[i]})"
         fi
     done
@@ -103,6 +120,7 @@ function _smartcd_cd {
     for i in $(seq 1 $max_N); do
         if [ -n "${enter[i]}" ]; then
             __smartcdExecute enter $cwd ${enter[i]}
+            __smartcdGlobalExec enter $cwd ${enter[i]}
             cwd="$(__smartcdNextDir enter $cwd ${enter[i]})"
         fi
     done
