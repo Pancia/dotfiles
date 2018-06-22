@@ -1,8 +1,6 @@
-- better syntax/format for TODO files (search online?)
-    should at least support tagging/priority & have a vim plugin
-- create cd wrapper (like smartcd/vims)
-    - show todos on entering project also search/grep for TODO markers
-    - show `vims list` on entering a project that has vims entries
-- vim use nvr so its like server emacs ... dont have to start a new one up every time
-- shada (neovim cache/save thingy?) causes slowdown...
-- stop using youcompleteme, see if speedup
+- fix fasd_cd, is not init when using brew
+- yadm dotfiles manager - https://thelocehiliosan.github.io/yadm/docs/overview
+- karabiner installs, move to karabiner-elements ??
+- #vim - use nvr so its like server emacs ... dont have to start a new one up every time
+- #vim - shada (neovim cache/save thingy?) causes slowdown...
+- #vim - stop using youcompleteme, see if speedup

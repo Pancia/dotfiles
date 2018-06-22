@@ -1,4 +1,6 @@
 function cache {
+    #This function has to be in zshenv because of what zsh loads for scripts
+    #see wiki/zsh
     local cache_root="$HOME/.cache/dot-cache"
 
     case "$1" in

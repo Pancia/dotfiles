@@ -31,7 +31,7 @@ function _vimsOpen {
         -S "$vim_base_session" "${@:2}"
 }
 
-function __vimsList { find "$vims_sessions_root$(pwd)" -type f -maxdepth 1}
+function __vimsList { find "$vims_sessions_root$(pwd)" -type f -maxdepth 1 }
 
 function _vimsShow { for i in `__vimsList`; do echo "===> $i <==="; cat $i; done }
 
