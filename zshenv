@@ -13,7 +13,7 @@ function cache {
 
             local SEC_TO_MIN=60
             local delta=$(($now-$last))
-            interval=$(($interval*SEC_TO_MIN))
+            interval=$(($interval*$SEC_TO_MIN))
             if [ $delta -ge $interval ]; then
                 local script="$(cat /dev/stdin)"
                 zsh -c "$script"
