@@ -1,7 +1,7 @@
 local smartcd_public_root=~/dotfiles/smartcd
 local smartcd_private_root=~/.smartcd
-local smartcd_global_public_root=$smartcd_public_root/.__smartcdGlobal
-local smartcd_global_private_root=$smartcd_private_root/.__smartcdGlobal
+local smartcd_global_public_root=$smartcd_public_root/smartcdGlobal
+local smartcd_global_private_root=$smartcd_private_root/smartcdGlobal
 
 local SMARTCD_EDIT_TEMPLATE="#########################################
 ######## HELLO FROM SMARTCD EDIT ########
