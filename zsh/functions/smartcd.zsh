@@ -3,10 +3,7 @@ local smartcd_private_root=~/.smartcd
 local smartcd_global_public_root=$smartcd_public_root/smartcdGlobal
 local smartcd_global_private_root=$smartcd_private_root/smartcdGlobal
 
-local SMARTCD_EDIT_TEMPLATE="#########################################
-######## HELLO FROM SMARTCD EDIT ########
-#########################################
-"
+local SMARTCD_EDIT_TEMPLATE=""
 
 function __smartcdRoot {
     case $1 in
