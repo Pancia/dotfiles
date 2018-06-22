@@ -43,15 +43,15 @@ bindkey '^Z' _fancy-ctrl-z
 function vim { TERM_TYPE=nvim nvim "$@" }
 function vimrc { vim ~/dotfiles/nvim/init.vim -c "cd ~/dotfiles/nvim" }
 
-function a { fasd -a }
-function d { fasd -d }
-function f { fasd -f }
-function s { fasd -si }
-function sd { fasd -sid }
-function sf { fasd -sif }
-function z { fasd_cd -d }
-function zz { fasd_cd -d -i }
-function v { fasd -f -e nvim }
+function a { fasd -a "$@" }
+function d { fasd -d "$@" }
+function f { fasd -f "$@" }
+function s { fasd -si "$@" }
+function sd { fasd -sid "$@" }
+function sf { fasd -sif "$@" }
+function z { fasd_cd -d "$@" }
+function zz { fasd_cd -d -i "$@" }
+function v { fasd -f -e nvim "$@" }
 
 function showFiles { defaults write com.apple.finder AppleShowAllFiles YES }
 function hideFiles { defaults write com.apple.finder AppleShowAllFiles NO }
