@@ -1,6 +1,3 @@
-set -E
-trap '[ "$?" -ne 77 ] || exit 77' ERR
-
 local smartcd_public_root=~/dotfiles/smartcd
 local smartcd_private_root=~/.smartcd
 local smartcd_global_public_root=$smartcd_public_root/.__smartcdGlobal
@@ -34,7 +31,10 @@ function __smartcdLoc {
 }
 
 function _smartcdEdit {
-    [[ "$1" =~ "enter|leave|global" ]] || exit 1
+    [[ "$1" =~ "enter|leave|global" ]] ||
+        (>&2 echo "first arg should be enter leave or global" && exit 1)
+    [[ "$1" =~ "global" ]] && [[ "$2" =~ "enter|leave" ]] ||
+        (>&2 echo "when global, second arg should be enter or leave" && exit 1)
     local script_loc="$(__smartcdLoc $@)"
     mkdir -p "$(dirname $script_loc)"
     [[ ! -f $script_loc ]] && echo "$SMARTCD_EDIT_TEMPLATE" > "$script_loc"
@@ -111,16 +111,16 @@ function _smartcd_cd {
     local cwd="${leave_wd:-/}"
     for i in $(seq $max_N -1 1); do
         if [ -n "${leave[i]}" ]; then
-            __smartcdExecute leave $cwd ${leave[i]}
             __smartcdGlobalExec leave $cwd ${leave[i]}
+            __smartcdExecute leave $cwd ${leave[i]}
             cwd="$(__smartcdNextDir leave $cwd ${leave[i]})"
         fi
     done
 
     for i in $(seq 1 $max_N); do
         if [ -n "${enter[i]}" ]; then
-            __smartcdExecute enter $cwd ${enter[i]}
             __smartcdGlobalExec enter $cwd ${enter[i]}
+            __smartcdExecute enter $cwd ${enter[i]}
             cwd="$(__smartcdNextDir enter $cwd ${enter[i]})"
         fi
     done
