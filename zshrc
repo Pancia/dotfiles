@@ -26,6 +26,7 @@ function ZSHRC {
 local ZSH_PROF_LOG="/tmp/zsh-profiling.$$.log"
 local ZPROF_LOG="/tmp/zprof.$$.log"
 function PROF_GO {
+    trap "
     # set the trace prompt to include seconds, nanoseconds, script name and line number
     zmodload zsh/datetime
     setopt promptsubst prompt_subst
@@ -33,21 +34,24 @@ function PROF_GO {
     # save file stderr to file descriptor 3 and redirect stderr (including trace output)
     exec 3>&2 2>$ZSH_PROF_LOG
     setopt xtrace
-
+    " EXIT
     zmodload zsh/zprof
 }
 
 function PROF_NO {
+    trap '
     unsetopt xtrace
     # restore stderr to the value saved in FD 3
     exec 2>&3 3>&-
+    ' EXIT
     zprof > $ZPROF_LOG
 }
 
 [[ 1 == $PROF ]] &&
     PROF_GO
-ZSHRC
+ZSHRC; local X=$?
 [[ 1 == $PROF ]] &&
     PROF_NO &&
     export PROF=0 &&
     less $ZSH_PROF_LOG $ZPROF_LOG
+exit $X
