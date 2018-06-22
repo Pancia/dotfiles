@@ -13,6 +13,7 @@ function PROF_GO {
 
 source ~/dotfiles/zsh/antigen.zsh
 source ~/dotfiles/zsh/bindings.zsh
+source ~/dotfiles/zsh/config.zsh
 
 source ~/dotfiles/zsh/git-fns.zsh
 
