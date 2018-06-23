@@ -10,4 +10,9 @@
 - #smartcd - lock based on pid lock files, check if pid still exists before trusting
 - #shell #vim - try out xiki
 - #shell - try out elvish
-- $shell - learn basic awk
+- #shell - learn basic awk
+- #shell #fasd - way to teach or search fs for files?
+- #yt-dl
+    echo *.part
+    echo "rename 's/\[.*?\] ?//g' \[*\]*"
+    echo "rename 's/\.mp4-//g' *"

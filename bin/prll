@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+import sys
+import multiprocessing as mlt
+from subprocess import call
+
+def call_argv1(line):
+    call([sys.argv[1]] + line.split(" "))
+
+pool = mlt.Pool(processes=mlt.cpu_count()*2)
+for result in pool.imap(call_argv1, sys.stdin):
+    pass
