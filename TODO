@@ -1,5 +1,13 @@
-- yadm dotfiles manager - https://thelocehiliosan.github.io/yadm/docs/overview
-- karabiner installs, move to karabiner-elements ??
+- #meta - install.sh -> install
+- #meta - install script use some conf-file or data ?
+    - or scan all .* files & link to right place somehow? (maybe directive on first line?)
+- #installs - karabiner installs, move to karabiner-elements ??
 - #vim - use nvr so its like server emacs ... dont have to start a new one up every time
 - #vim - shada (neovim cache/save thingy?) causes slowdown...
 - #vim - stop using youcompleteme, see if speedup
+- #smartcd - handle pushd popd AUTO_CD
+- #smartcd - hot code reload for _smartcd_cd ? bin/cd ?
+- #smartcd - lock based on pid lock files, check if pid still exists before trusting
+- #shell #vim - try out xiki
+- #shell - try out elvish
+- $shell - learn basic awk
