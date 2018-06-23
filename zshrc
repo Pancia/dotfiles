@@ -53,5 +53,5 @@ ZSHRC; local X=$?
 [[ 1 == $PROF ]] &&
     PROF_NO &&
     export PROF=0 &&
-    less $ZSH_PROF_LOG $ZPROF_LOG
+    echo $$
 [ $X ] || exit $X
