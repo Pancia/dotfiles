@@ -79,17 +79,17 @@ function __smartcdNextDir {
 function __smartcdExecute {
     local dir="$(__smartcdNextDir $@)"
     local pub_script="$(__smartcdLoc $1 public $dir)"
-    ([ -e $pub_script ] && cd $dir && $SHELL $pub_script)
+    ([ -e $pub_script ] && cd $dir && $SHELL $pub_script &)
     local prv_script="$(__smartcdLoc $1 private $dir)"
-    ([ -e $prv_script ] && cd $dir && $SHELL $prv_script)
+    ([ -e $prv_script ] && cd $dir && $SHELL $prv_script &)
 }
 
 function __smartcdGlobalExec {
     local dir="$(__smartcdNextDir $@)"
     local pub_global="$(__smartcdLoc global $1 public)"
-    ([ -e $pub_global ] && cd $dir && $SHELL $pub_global $dir)
+    ([ -e $pub_global ] && cd $dir && $SHELL $pub_global $dir &)
     local prv_global="$(__smartcdLoc global $1 private)"
-    ([ -e $prv_global ] && cd $dir && $SHELL $prv_global $dir)
+    ([ -e $prv_global ] && cd $dir && $SHELL $prv_global $dir &)
 }
 
 function _smartcd_cd {
