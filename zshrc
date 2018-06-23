@@ -54,4 +54,4 @@ ZSHRC; local X=$?
     PROF_NO &&
     export PROF=0 &&
     less $ZSH_PROF_LOG $ZPROF_LOG
-exit $X
+[ $X ] || exit $X
