@@ -1,12 +1,7 @@
 #!/usr/bin/env zsh
-echo "FIXME, should check/deal with .part files"
-echo "FIXME, should remove redundant .mp4-"
-echo "FIXME, should remove [*][*] at the start, or ideally before youtube-dl writes the file"
-exit 2
-
-(echo -e "$(cat ~/.yt-dl/*)" && cat) | prll yt-dl
-
-#rename 's/\[.*?\] ?//g' \[*\]* # if no part
-#rename 's/\.mp4-//g' * # if no part
-
-#echo *.part #should fail?
+((find ~/.dlv -type f | xargs cat) && cat) | prll yt-dl "$@"
+if [[ -n `ls ~/.dlv` ]] || [[ -n `ls *.part` ]]; then
+    >&2 echo '[WARNING] INCOMPLETE DOWNLOADS:'
+    >&2 cat ~/.dlv/*
+    >&2 find . -name '*.part'
+fi

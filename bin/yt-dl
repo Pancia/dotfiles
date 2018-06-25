@@ -1,6 +1,17 @@
 #!/usr/bin/env zsh
+[[ -z "$@" ]] && exit 0
+local DL_DB="$HOME/.dlv"
 local file="$(md5 <<< $@)"
-[[ ! -e $HOME/.yt-dl ]] && mkdir $HOME/.yt-dl
-echo "$@" > "$HOME/.yt-dl/$file"
-youtube-dl --newline --no-warnings "$@"
-rm "$HOME/.yt-dl/$file"
+[[ ! -e "$DL_DB" ]] && mkdir "$DL_DB"
+echo "$@" > "$DL_DB/$file"
+youtube-dl --newline --no-warnings "$@" &
+local pid=$!
+trap "kill -9 $pid; exit 1" INT
+wait $pid
+local filename=`youtube-dl --get-filename "$@" 2> /dev/null`
+if [[ -e "$filename.part" ]]; then
+    >&2 echo $filename was not completely downloaded!
+    exit 2
+fi
+rename 's/(^(\[.*?\])+ *|\.mp4-)//g' "$filename"
+rm "$DL_DB/$file"
