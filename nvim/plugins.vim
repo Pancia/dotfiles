@@ -38,7 +38,7 @@ Plug 'joshdick/onedark.vim'
 Plug 'kien/rainbow_parentheses.vim'
 " }}}
 " AUTOCOMPLETE {{{
-Plug 'Valloric/YouCompleteMe', { 'do' : './install.py --rust-completer' }
+Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
 Plug 'ctrlpvim/ctrlp.vim'
 Plug 'Shougo/unite.vim'
 Plug 'Shougo/neoyank.vim'

@@ -64,16 +64,13 @@ let g:rbpt_colorpairs = [
     \ ]
 " }}}
 
-" YOUCOMPLETEME {{{
-let g:ycm_semantic_triggers = {'haskell' : ['.'], 'javascript' : ['.']}
-" Helps with cpp and synastic
-" - https://github.com/Valloric/YouCompleteMe#the-gycm_show_diagnostics_ui-option
-let g:ycm_show_diagnostics_ui = 0
-" Enables & configures semantic completion for c,c++...
-let g:ycm_autoclose_preview_window_after_insertion = 1
-" TODO: NOT WORKING, Disable arrow keys
-let g:ycm_key_list_select_completion = ['<TAB>']
-let g:ycm_key_list_previous_completion = ['<S-TAB>']
+" DEOPLETE {{{
+" https://github.com/Shougo/deoplete.nvim/wiki/Completion-Sources
+let g:deoplete#enable_at_startup = 1
+" https://github.com/Shougo/deoplete.nvim/blob/master/doc/deoplete.txt
+inoremap <expr> <Tab> pumvisible() ? "\<C-n>" : "\<Tab>"
+inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
+
 " }}}
 
 " JAVA {{{
