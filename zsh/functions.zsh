@@ -1,4 +1,4 @@
-local functions_dir=`dirname $0`/functions
+local functions_dir=`dirname $0`/fns
 for f in $(ls $functions_dir); do
     source $functions_dir/$f
 done
@@ -135,4 +135,3 @@ vims list 2> /dev/null
 EOC
 }
 chpwd
-
