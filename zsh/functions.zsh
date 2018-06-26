@@ -77,7 +77,7 @@ function lr:w { (_with_out "$@") | lein repl :connect }
 function gradle { ([[ -e ./gradlew ]] && echo "USING GRADLE WRAPPER gradlew" && ./gradlew "$@") || command gradle "$@" }
 
 function wait-for {
-    local i=0; while [ ! -f "$1" ]; do; sleep 1; ((i++)); echo -n "\rWaited: $i seconds"; done;
+    local i=0; while [ ! -e "$1" ]; do; sleep 1; ((i++)); echo -n "\rWaited: $i seconds"; done;
     echo -n "\nDone waiting for $1"; shift; echo ", executing: '$@'."
     "$@"
 }
