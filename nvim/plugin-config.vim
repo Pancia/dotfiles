@@ -74,9 +74,13 @@ inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
 
 " }}}
 
-" JAVA {{{
-let g:syntastic_java_checkers=['javac']
-let g:syntastic_java_javac_config_file_enabled = 1
+" ANDROID/JAVA {{{
+let g:android_sdk_path = '/Users/Anthony/Library/Android/sdk'
+call deoplete#custom#option('omni_patterns', {
+            \ 'java': '[^. *\t]\.\w*',
+            \ 'kotlin': '[^. *\t]\.\w*',
+            \})
+"}}}
 
 " RUST {{{
 let g:rustfmt_autosave = 1

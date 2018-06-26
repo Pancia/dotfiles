@@ -80,7 +80,9 @@ Plug 'mwgkgk/lux-vim'
 Plug 'rust-lang/rust.vim'
 Plug 'rhysd/rust-doc.vim'
 " }}}
-" JAVA {{{
+" ANDROID/KOTLIN/JAVA {{{
+Plug 'udalov/kotlin-vim'
+Plug 'hsanson/vim-android'
 Plug 'artur-shaik/vim-javacomplete2'
 " }}}
 call plug#end()

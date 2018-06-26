@@ -10,6 +10,9 @@ export NVIM_LISTEN_ADDRESS=/tmp/mynvimsocket
 export PATH="$HOME/.cargo/bin:$PATH"
 export RUST_SRC_PATH="$HOME/.rustup/toolchains/stable-x86_64-apple-darwin/lib/rustlib/src/rust/src/:$PATH"
 
+#android - gradle
+export GRADLE_HOME="/usr/local/opt/gradle/libexec"
+
 #git (& ∴ less) doesn't show UTF-8 file properly
 export LESSCHARSET=UTF-8
 
