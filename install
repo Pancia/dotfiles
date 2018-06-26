@@ -71,6 +71,7 @@ task_all () {
 }
 
 main() {
+    [[ ! "$(pwd)" == "$HOME/dotfiles" ]] && (echo 'CANNOT EXECUTE outside of dotfiles root'; exit 2)
     case "$1" in
         bin) task_bin ;;
         brew) task_brew ;;
@@ -85,5 +86,4 @@ main() {
         *) echo "Failed to recognize: '$@'" && exit 1 ;;
     esac
 }
-
 main "$@"
