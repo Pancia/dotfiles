@@ -1,2 +1,2 @@
 #[.zshrc]
-source ~/dotfiles/zshrc
+source ~/dotfiles/zsh/zshrc

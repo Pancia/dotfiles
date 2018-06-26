@@ -3,17 +3,17 @@
     <dict>
         <key>RunAtLoad</key><true/>
         <key>Label</key>
-        <string>me.pancia.disable_osx_startup_chime</string>
+        <string>me.pancia.osx_startup_chime_disable</string>
         <key>ProgramArguments</key>
         <array>
-            <string>/Users/pancia/dotfiles/installs/disable_osx_startup_chime/disable_osx_startup_chime.cmd.sh</string>
+            <string>/opt/dotfiles/osx_startup_chime_disable/disable_startup_chime.sh</string>
         </array>
         <!-- For debugging purposes -->
         <!--
         <key>StandardErrorPath</key>
-        <string>/tmp/me.pancia.disable_osx_startup_chime.err</string>
+        <string>/tmp/me.pancia.osx_startup_chime_disable.err</string>
         <key>StandardOutPath</key>
-        <string>/tmp/me.pancia.disable_osx_startup_chime.out</string>
+        <string>/tmp/me.pancia.osx_startup_chime_disable.out</string>
         -->
     </dict>
 </plist>

@@ -12,13 +12,15 @@ task_brew () {
     hash brew || (ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)")
     brew update
     brew bundle -v
-    ./Brewfile.after
 }
 
-task_installs () {
-    for i in $(ls installs); do
-        echo "installing: $i"
-        ./installs/${i}/${i}.sh
+task_opt () {
+    sudo mkdir -p /opt/dotfiles
+    sudo chown $USER /opt/dotfiles
+    ln -Ffs opt /opt/dotfiles
+    for i in $(ls opt); do
+        echo "installing opt: ${i}"
+        zsh -c "cd opt/${i}; ./${i}"
     done
 }
 
@@ -26,7 +28,7 @@ task_gitconfig () {
     read -p 'git config user.email please: ' git_config_user_email
     git config --global user.email "$git_config_user_email"
     for i in $(ls ./git/hooks/*.tmpl); do
-        ln -f $i /usr/local/share/git-core/templates/hooks/$(basename $i .tmpl)
+        ln -f "$i" "/usr/local/share/git-core/templates/hooks/$(basename $i .tmpl)"
     done
 }
 
@@ -37,15 +39,7 @@ task_fonts () {
 task_rcs () {
     for rc in $(ls rcs); do
         local rc_dest="$(head -n 1 rcs/$rc | sed -E 's/^[#";]\[(.*)\]$/\1/' )"
-        ln -f rcs/$rc ${HOME}/$rc_dest
-    done
-}
-
-task_vim () {
-    mkdir -p ~/.vim/undo
-    mkdir -p ~/.vim/ftplugin
-    for i in $(ls vim/ftplugin); do
-        echo "source ~/dotfiles/vim/ftplugin/$i" > ~/.vim/ftplugin/$i
+        ln -f "rcs/$rc" "${HOME}/$rc_dest"
     done
 }
 
@@ -55,24 +49,23 @@ task_neovim () {
     mkdir -p ~/.config/nvim/ftplugin
     mkdir -p ~/.config/nvim/undo
     for i in $(ls nvim/ftplugin); do
-        echo "source ~/dotfiles/nvim/ftplugin/$i" > ~/.config/nvim/ftplugin/$i
+        echo "source ~/dotfiles/nvim/ftplugin/$i" > "~/.config/nvim/ftplugin/$i"
     done
 }
 
 task_bin () {
     for i in $(ls bin); do
-        ln -f bin/$i /usr/local/bin/$i
+        ln -f "bin/$i" "/usr/local/bin/$i"
     done
 }
 
 task_all () {
     task_init_dotfiles
     task_brew
-    task_installs
+    task_opt
     task_gitconfig
     task_fonts
     task_rcs
-    task_vim
     task_neovim
     task_bin
 }
@@ -84,11 +77,10 @@ main() {
         fonts) task_fonts ;;
         gitconfig|git) task_gitconfig ;;
         init) task_init_dotfiles ;;
-        installs) task_installs ;;
-        neovim|nvim) task_neovim ;;
+        opt) task_opt ;;
+        neovim|nvim|vim) task_neovim ;;
         rcs) task_rcs ;;
-        vim) task_vim ;;
-        help) echo "bin brew fonts gitconfig init installs neovim rcs vim" ;;
+        help) echo "bin brew fonts gitconfig init opt neovim rcs" ;;
         '') task_all && exec zsh ;;
         *) echo "Failed to recognize: '$@'" && exit 1 ;;
     esac
