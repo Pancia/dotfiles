@@ -2,7 +2,7 @@
 set -o errexit
 ([[ -n "$DEBUG" ]] || [[ -n "$TRACE" ]]) && set -o xtrace
 
-task_git () {
+task_init_dotfiles () {
     git pull && git submodule init &&
         git pull --recurse-submodules &&
         git submodule update --recursive
@@ -66,7 +66,7 @@ task_bin () {
 }
 
 task_all () {
-    task_git
+    task_init_dotfiles
     task_brew
     task_installs
     task_gitconfig
@@ -79,17 +79,16 @@ task_all () {
 
 main() {
     case "$1" in
-        git) task_git ;;
+        bin) task_bin ;;
         brew) task_brew ;;
-        installs) task_installs ;;
-        gitconfig) task_gitconfig ;;
         fonts) task_fonts ;;
+        gitconfig|git) task_gitconfig ;;
+        init) task_init_dotfiles ;;
+        installs) task_installs ;;
+        neovim|nvim) task_neovim ;;
         rcs) task_rcs ;;
         vim) task_vim ;;
-        neovim) task_neovim ;;
-        nvim) task_neovim ;;
-        bin) task_bin ;;
-        help) echo "git brew installs gitconfig fonts rcs vim neovim nvim bin" ;;
+        help) echo "bin brew fonts gitconfig init installs neovim rcs vim" ;;
         '') task_all && exec zsh ;;
         *) echo "Failed to recognize: '$@'" && exit 1 ;;
     esac

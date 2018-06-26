@@ -1,9 +1,9 @@
 #[.gitconfig]
 [core]
-	excludesfile = ~/dotfiles/gitignore_global
+    excludesfile = ~/dotfiles/git/gitignore_global
     hooksPath = ~/dotfiles/git/hooks
 [push]
-	default = simple
+    default = simple
 [color "diff"]
     meta = yellow bold
     frag = magenta bold
