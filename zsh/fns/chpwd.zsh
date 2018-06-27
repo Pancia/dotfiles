@@ -11,18 +11,22 @@ function cache {
             local delta=$(($now-$last))
             interval=$(($interval*$SEC_TO_MIN))
             if [ $delta -ge $interval ]; then
-                local script="$(cat /dev/stdin)"
-                zsh -c "$script"
+                eval "$(echo ${@:3} | tr ' ' ';')"
                 mkdir -p "$(dirname $stamp_file)" && echo "$now" > $stamp_file
             fi
             ;;
     esac
 }
 
-function chpwd {
-    cache chpwd 15 <<EOC
-[[ -f TODO ]] && echo "TODOS:" && cat TODO
-vims list 2> /dev/null
-EOC
+function showTodos {
+    [[ -f TODO ]] && echo "&> TODOS:" && cat TODO
 }
-chpwd
+function listVims {
+    local VIMS="$(vims list)"
+    [[ -n "$VIMS" ]] &&
+        echo "&> VIMS:" && echo "$VIMS"
+}
+
+function chpwd {
+    cache chpwd 15 showTodos listVims
+}

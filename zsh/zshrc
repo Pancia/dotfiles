@@ -12,6 +12,8 @@ function ZSHRC {
         }
         zle -N zle-line-init
     fi
+
+    chpwd # Best to check, new shell (new term window or `zsh`) does not trigger chpwd
 }
 
 local ZSH_PROF_LOG="/tmp/zsh-profiling.$$.log"
