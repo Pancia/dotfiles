@@ -1,5 +1,3 @@
 - #installs - karabiner installs, move to karabiner-elements ??
 - #vim - use nvr so its like server emacs ... dont have to start a new one up every time
 - #vim - shada (neovim cache/save thingy?) causes slowdown...
-- #shell - try out elvish
-- #shell - learn basic awk
