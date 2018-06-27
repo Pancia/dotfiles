@@ -7,4 +7,3 @@ function _gitignore_to_regex {
         | sed 's/\|*$//'
 }
 function tree { command tree -I "$(_gitignore_to_regex)" "$@" }
-function ag { command ag --hidden "$@" }

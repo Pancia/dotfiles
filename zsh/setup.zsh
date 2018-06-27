@@ -1,3 +1,5 @@
+unsetopt AUTO_CD
+
 # bind UP and DOWN arrow keys
 zmodload zsh/terminfo
 bindkey "$terminfo[kcuu1]" history-substring-search-up

@@ -1,1 +1,0 @@
-unsetopt AUTO_CD
