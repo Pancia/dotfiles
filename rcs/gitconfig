@@ -10,3 +10,6 @@
     old = red reverse
     new = green reverse
     whitespace = white reverse
+[user]
+    name = Anthony D'Ambrosio
+	email = anthony.dayzerostudio@gmail.com
