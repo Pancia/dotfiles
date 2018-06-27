@@ -2,8 +2,8 @@ VIMS_EDIT_TEMPLATE='"VIMS SNIPPETS:
 "terminal zsh -is eval "..."
 '
 
-local VIMS_SESSIONS_ROOT=~/dotfiles/nvim/sessions
-local VIM_BASE_SESSION=~/dotfiles/nvim/Session.vim
+export VIMS_SESSIONS_ROOT=~/dotfiles/nvim/sessions
+export VIM_BASE_SESSION=~/dotfiles/nvim/Session.vim
 
 function __vimsType { echo "${1:-default}" }
 
