@@ -1,8 +1,7 @@
 function _help {
     ag '^function [^_][^ ]+' \
         --nofilename --nobreak \
-        ~/dotfiles/zsh/functions.zsh \
-        ~/dotfiles/zsh/functions/*.zsh \
+        ~/dotfiles/zsh/**/*.zsh \
         "$@" \
         | sort
 }
