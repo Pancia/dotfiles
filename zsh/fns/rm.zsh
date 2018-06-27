@@ -1,9 +1,4 @@
 function rm {
-    >&2 echo "[dotfiles/rm] AVOID USING, USE \`trash\` INSTEAD"
-    command rm "$@"
-}
-
-function trash {
     local dir prefix timestamp failed
     dir="$(pwd)"
     timestamp="$(date '+%Y-%m-%d_%X')"
@@ -17,7 +12,7 @@ function trash {
             mv "${f}" "${dest}"
         else
             failed=true
-            >&2 echo "[dotfiles/trash] file not found: $f"
+            >&2 echo "[dotfiles/rm] file not found: $f"
         fi
     done
     $failed && return 1
