@@ -2,12 +2,12 @@ VIMS_EDIT_TEMPLATE='"VIMS SNIPPETS:
 "terminal zsh -is eval "..."
 '
 
-local vims_sessions_root=~/dotfiles/nvim/sessions
-local vim_base_session=~/dotfiles/nvim/Session.vim
+local VIMS_SESSIONS_ROOT=~/dotfiles/nvim/sessions
+local VIM_BASE_SESSION=~/dotfiles/nvim/Session.vim
 
 function __vimsType { echo "${1:-default}" }
 
-function __vimsLoc { echo "${vims_sessions_root}$(pwd)/$(__vimsType $1).vim" }
+function __vimsLoc { echo "${VIMS_SESSIONS_ROOT}$(pwd)/$(__vimsType $1).vim" }
 
 function _vimsEdit {
     local session_location="$(__vimsLoc $1)"
@@ -27,11 +27,11 @@ function _vimsOpen {
         return 2
     fi
     vim --cmd "let g:vims_session_type='$session_type'" \
-        --cmd "let g:vims_sessions_root='$vims_sessions_root'" \
-        -S "$vim_base_session" "${@:2}"
+        --cmd "let g:vims_sessions_root='$VIMS_SESSIONS_ROOT'" \
+        -S "${VIM_BASE_SESSION}" "${@:2}"
 }
 
-function __vimsList { find "$vims_sessions_root$(pwd)" -type f -maxdepth 1 }
+function __vimsList { local MYDIR="${VIMS_SESSIONS_ROOT}$(pwd)"; [[ -d "$MYDIR" ]] && ls "$MYDIR" }
 
 function _vimsShow { for i in `__vimsList`; do echo "===> $i <==="; cat $i; done }
 
