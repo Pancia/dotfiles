@@ -20,6 +20,13 @@ function searchcmd {
     command searchcmd "$@"
 }
 
+function _man_builtin {
+    if [[ "$(whence -w $1 | cut -d' ' -f2)" =~ 'builtin|reserved' ]]; then
+        echo "MAN ZSHBUILTINS"
+        man zshbuiltins | less -p "^[ ]+$1[- A-z]*\["
+    fi
+}
+
 function help {
     __DOC="help [cmd]"
 
@@ -29,8 +36,16 @@ function help {
         _helpHelp
     elif [[ -n "$1" ]]; then
         which "$1"
+        _man_builtin "$1"
         __try tldr "$1"
     else
         _help -o | sed 's/^function //' | paste - - - | column -t
     fi
+}
+
+function man {
+    case "$(whence -w $1 | cut -d' ' -f2)" in
+        builtin|reserved) _man_builtin "$@";;
+        *) command -p man "$@";;
+    esac
 }
