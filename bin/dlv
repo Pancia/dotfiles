@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
 ((find ~/.dlv -type f | xargs cat) && cat) | prll yt-dl "$@"
-if [[ -n `ls ~/.dlv` ]] || [[ -n `ls *.part` ]]; then
+if [[ -n `ls ~/.dlv` ]] || [[ -n `find . -name '*.part'` ]]; then
     >&2 echo '[WARNING] INCOMPLETE DOWNLOADS:'
     >&2 cat ~/.dlv/*
     >&2 find . -name '*.part'
