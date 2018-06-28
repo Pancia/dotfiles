@@ -1,0 +1,8 @@
+#[.fasdrc]
+current() {
+    for f in $(tree -fi . | sed 's/^\.\//'); do
+        printf '%s/%s|1\n' "$(pwd)" "$f"
+    done
+}
+
+export _FASD_BACKENDS='current native'
