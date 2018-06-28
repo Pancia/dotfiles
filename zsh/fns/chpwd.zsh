@@ -15,7 +15,7 @@ function _cache {
 }
 
 function cache {
-    local cache_root="$HOME/.cache/dot-cache"
+    local cache_root="$HOME/.cache/dotfiles/cache/"
     case "$1" in
         clear|purge) shift; [ -d "$cache_root" ] && command rm -r "$cache_root" ;;
         global) shift; _cache "$cache_root/$2.glock" "$@" ;;

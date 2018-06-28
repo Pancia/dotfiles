@@ -1,1 +1,3 @@
 - #installs - karabiner installs, move to karabiner-elements ??
+- #rm - enable undo, store file names in a .hist
+- #fasd - add backends, debug with: _FASD_SINK="$HOME/.fasd.log"
