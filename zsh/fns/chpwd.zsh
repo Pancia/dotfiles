@@ -1,19 +1,25 @@
+function _cache {
+    local lock_file="$1"
+    local interval="$2"
+    local CMD="${@:3}"
+
+    local now=$(date +%s 2>/dev/null)
+    local last=$(cat "$lock_file" 2>/dev/null || echo '0')
+    local SEC_TO_MIN=60
+    local delta=$(($now-$last))
+    local interval=$(($interval*$SEC_TO_MIN))
+    if [ $delta -ge $interval ]; then
+        (eval "$CMD" &)
+        mkdir -p "$(dirname $lock_file)" && echo "$now" > "$lock_file"
+    fi
+}
+
 function cache {
     local cache_root="$HOME/.cache/dot-cache"
     case "$1" in
-        clear|purge) [ -d "$cache_root" ] && command rm -r "$cache_root" ;;
-        *)
-            local lock_file="$cache_root/`pwd`/$2.lock"
-            local now=$(date +%s 2>/dev/null)
-            local last=$(cat $lock_file 2>/dev/null || echo '0')
-            local SEC_TO_MIN=60
-            local delta=$(($now-$last))
-            local interval=$(($1*$SEC_TO_MIN))
-            if [ $delta -ge $interval ]; then
-                (eval "${@:2}" &)
-                mkdir -p "$(dirname $lock_file)" && echo "$now" > "$lock_file"
-            fi
-            ;;
+        clear|purge) shift; [ -d "$cache_root" ] && command rm -r "$cache_root" ;;
+        global) shift; _cache "$cache_root/$2.glock" "$@" ;;
+        *) _cache "$cache_root/`pwd`/$2.lock" "$@" ;;
     esac
 }
 
@@ -37,5 +43,5 @@ function checkWifiTODL {
 function chpwd {
     cache 15 showTodos
     cache 5 listVims
-    cache 5 checkWifiTODL
+    cache global 5 checkWifiTODL
 }
