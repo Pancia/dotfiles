@@ -1,4 +1,5 @@
-unsetopt AUTO_CD
+# disable ctrl-d exiting shell
+setopt IGNORE_EOF
 
 # bind UP and DOWN arrow keys
 zmodload zsh/terminfo
