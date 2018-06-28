@@ -13,6 +13,8 @@ function ZSHRC {
         zle -N zle-line-init
     fi
 
+    [ -e ~/dotfiles/extra.zsh ] && source ~/dotfiles/extra.zsh
+
     chpwd # Best to check, new shell (new term window or `zsh`) does not trigger chpwd
 }
 
