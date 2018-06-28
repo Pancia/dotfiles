@@ -1,7 +1,7 @@
 function cache {
     local cache_root="$HOME/.cache/dot-cache"
     case "$1" in
-        clear|purge) command rm -r $cache_root ;;
+        clear|purge) [ -d "$cache_root" ] && command rm -r "$cache_root" ;;
         *)
             local stamp_file="$cache_root/`pwd`/cache.$1.date"
             local interval="$2"
