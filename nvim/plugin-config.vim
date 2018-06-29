@@ -71,15 +71,16 @@ let g:deoplete#enable_smart_case = 1
 " https://github.com/Shougo/deoplete.nvim/blob/master/doc/deoplete.txt
 inoremap <expr> <Tab> pumvisible() ? "\<C-n>" : "\<Tab>"
 inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
-
-" }}}
-
-" ANDROID/JAVA {{{
-let g:android_sdk_path = '/Users/Anthony/Library/Android/sdk'
+let g:deoplete#keyword_patterns = {}
+let g:deoplete#keyword_patterns.clojure = '[\w!$%&*+/:<=>?@\^_~\-\.#]*'
 call deoplete#custom#option('omni_patterns', {
             \ 'java': '[^. *\t]\.\w*',
             \ 'kotlin': '[^. *\t]\.\w*',
             \})
+" }}}
+
+" ANDROID/JAVA {{{
+let g:android_sdk_path = '/Users/Anthony/Library/Android/sdk'
 "}}}
 
 " RUST {{{

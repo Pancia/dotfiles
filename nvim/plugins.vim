@@ -6,15 +6,15 @@ endif
 call plug#begin('~/.config/nvim/plugged')
 
 " ESSENTIALS {{{
+"Plug 'kshenoy/vim-signature' " Marks
 Plug 'Shougo/vimfiler.vim'
-Plug 'romgrk/vimfiler-prompt'
 Plug 'Shougo/vimproc.vim', {'do' : 'make'}
 Plug 'bling/vim-airline'
 Plug 'godlygeek/tabular'
-"Plug 'kshenoy/vim-signature' " Marks
 Plug 'majutsushi/tagbar'
 Plug 'ntpeters/vim-better-whitespace'
 Plug 'rking/ag.vim'
+Plug 'romgrk/vimfiler-prompt'
 Plug 'scrooloose/syntastic'
 Plug 'sjl/gundo.vim'
 Plug 'tpope/vim-dispatch'
@@ -43,6 +43,10 @@ Plug 'ctrlpvim/ctrlp.vim'
 Plug 'Shougo/unite.vim'
 Plug 'Shougo/neoyank.vim'
 Plug 'Shougo/unite-help'
+Plug 'zchee/deoplete-zsh'
+Plug 'Shougo/neco-vim'
+Plug 'clojure-vim/async-clj-omni'
+Plug 'Shougo/neco-syntax'
 " }}}
 " CLOJURE {{{
 Plug 'guns/vim-clojure-static'
