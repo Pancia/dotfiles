@@ -1,2 +1,4 @@
 - #installs - karabiner installs, move to karabiner-elements ??
 - #rm - enable undo, store file names in a .hist
+- #antigen - install using brew
+- #zsh-unit - brew install zunit-zsh/zunit/zunit # https://zunit.xyz/docs/getting-started/project-setup/
