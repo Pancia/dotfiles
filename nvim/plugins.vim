@@ -25,6 +25,11 @@ Plug 'tpope/vim-surround'
 Plug 'vim-scripts/bufkill.vim'
 Plug 'vim-scripts/vim-auto-save'
 " }}}
+" WIKI {{{
+Plug 'gokcehan/vim-opex'
+let g:vimwiki_map_prefix = ','
+Plug 'vimwiki/vimwiki'
+" }}}
 " {{{ GIT
 Plug 'tpope/vim-fugitive'
 Plug 'rhysd/conflict-marker.vim'
