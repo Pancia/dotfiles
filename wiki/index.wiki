@@ -1,0 +1,6 @@
+= Dotfiles Wiki =
+    * [[Todos]]
+    * [[Vim]]
+    * [[Zsh]]
+== Other Wikis: ==
+    * [[wiki1:index|~/dotfiles/wiki]]

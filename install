@@ -48,9 +48,6 @@ task_neovim () {
     pip install --upgrade neovim
     mkdir -p ~/.config/nvim/ftplugin
     mkdir -p ~/.config/nvim/undo
-    for i in $(ls nvim/ftplugin); do
-        echo "source ~/dotfiles/nvim/ftplugin/$i" > "~/.config/nvim/ftplugin/$i"
-    done
 }
 
 task_bin () {

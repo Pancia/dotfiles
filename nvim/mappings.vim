@@ -4,6 +4,8 @@ nmap <down> <nop>
 nmap <left> <nop>
 nmap <right> <nop>
 nmap <CR> <nop>
+" Map Y to y$, makes way more sense
+map Y y$
 " Leader mappings
 let mapleader = "<Space>"
 map s \

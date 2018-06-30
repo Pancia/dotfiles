@@ -1,0 +1,35 @@
+* Dotfiles
+    - [ ] karabiner transfer installs/k*/karabiner.json to karabiner-elements (how ??)
+    - [ ] antigen install using brew
+    - [ ] brew install zunit-zsh/zunit/zunit # https://zunit.xyz/docs/getting-started/project-setup/
+    - [ ] vim-opex, output to a quickbuf? Unite?
+    - [ ] zsh, set term title to sync with nvim term
+{{{zsh
+echo -en "\e]0;string\a" #-- Set icon name and window title to string
+echo -en "\e]1;string\a" #-- Set icon name to string
+echo -en "\e]2;string\a" #-- Set window title to string
+
+# in $HOME/.zshrc
+precmd () { print -Pn "\e]0;$TITLE\a" }
+title() { export TITLE="$*" }
+
+# in $HOME/.zprofile
+case $TERM in
+    xterm*)
+        precmd () {print -Pn "\e]0;string\a"}
+        ;;
+esac
+}}}
+    * Wiki
+        - [ ] Simplify zsh.wiki table
+        - [ ] Play nice with vim-repeat?
+    * Vim
+        - [ ] load/cp ftplugins from dotfiles/nvim/ftplugins, remove from dot install
+        - [X] ctrl-b map to :CtrlPBuffer
+        - [X] add dotfiles/wiki to g:vimwiki_list :vimwiki:
+        - [X] organize plugins, add conf sys folder
+        - [ ] vim-plug lazy load plugins `vim --startuptime`
+        - [ ] ag edit file in the search quickbuf, ala Emacs Helm
+        - [ ] conf mappings (remove <Space>) :vimwiki:
+        - [ ] unite, ag, search default to zO open folds at cursor
+        - [ ] https://github.com/brettanomyces/nvim-terminus

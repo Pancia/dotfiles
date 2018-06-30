@@ -1,0 +1,3 @@
+== TIL ==
+    - :sort /pattern/r
+    - http://learnvimscriptthehardway.stevelosh.com/
