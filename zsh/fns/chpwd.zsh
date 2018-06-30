@@ -34,9 +34,10 @@ function listVims {
 
 function checkWifiTODL {
     local wifi_name="$(networksetup -getairportnetwork en1 | awk -F':' '{print $2}')"
-    if [[ -e "~/TODL_${wifi_name}.wiki" ]]; then
+    local todl_file="~/Dropbox/TODL_${wifi_name}.wiki"
+    if [[ -e $todl_file ]]; then
         echo "&> TODL:"
-        cat "~/TODL_${wifi_name}.wiki"
+        cat $todl_file
     fi
 }
 
