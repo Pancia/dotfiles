@@ -20,7 +20,6 @@ function searchcmd {
 
 function _man_builtin {
     if [[ "$(whence -w $1 | cut -d' ' -f2)" =~ 'builtin|reserved' ]]; then
-        echo "MAN ZSHALL"
         man zshall | less -p "^[ ]+$1[- A-z]*\["
     fi
 }

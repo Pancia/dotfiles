@@ -1,4 +1,6 @@
 export SHELL=/bin/zsh
+export PATH="$HOME/dotfiles/bin:$PATH"
+
 #git (& ∴ less) doesn't show UTF-8 file properly
 export LESSCHARSET=UTF-8
 

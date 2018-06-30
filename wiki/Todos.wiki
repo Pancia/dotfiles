@@ -3,7 +3,9 @@
     - [ ] antigen install using brew
     - [ ] brew install zunit-zsh/zunit/zunit # https://zunit.xyz/docs/getting-started/project-setup/
     - [ ] vim-opex, output to a quickbuf? Unite?
-    - [ ] zsh, set term title to sync with nvim term
+    * Zsh
+        - [ ] zcompile my .zsh files? (PROF obv)
+        - [ ] zsh, set term title to sync with nvim term
 {{{zsh
 echo -en "\e]0;string\a" #-- Set icon name and window title to string
 echo -en "\e]1;string\a" #-- Set icon name to string
@@ -21,8 +23,8 @@ case $TERM in
 esac
 }}}
     * Wiki
-        - [ ] Simplify zsh.wiki table
-        - [ ] Play nice with vim-repeat?
+        - [ ] simplify zsh.wiki table
+        - [ ] play nice with vim-repeat & undo
     * Vim
         - [ ] load/cp ftplugins from dotfiles/nvim/ftplugins, remove from dot install
         - [X] ctrl-b map to :CtrlPBuffer

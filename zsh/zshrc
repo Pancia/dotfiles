@@ -1,4 +1,14 @@
 function ZSHRC {
+    for rc in $(ls $HOME/dotfiles/rcs); do
+        local rc_dest="$(head -n 1 $HOME/dotfiles/rcs/$rc | sed -E 's/^[#";]\[(.*)\]$/\1/' )"
+        if [[ ! -f "$HOME/$rc_dest" ]] \
+            || [[ "$(ls -i $HOME/$rc_dest | cut -d' ' -f1)" \
+               != "$(ls -i $HOME/dotfiles/rcs/$rc | cut -d' ' -f1)" ]] ; then
+            mkdir -p "$(basename $rc_dest)"
+            ln -f "$HOME/dotfiles/rcs/$rc" "${HOME}/$rc_dest"
+        fi
+    done
+
     source ~/dotfiles/zsh/init.zsh
 
     if [[ $1 == eval ]]; then

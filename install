@@ -14,14 +14,8 @@ task_brew () {
     brew bundle -v
 }
 
-task_opt () {
-    sudo mkdir -p /opt/dotfiles
-    sudo chown $USER /opt/dotfiles
-    ln -Ffs opt /opt/dotfiles
-    for i in $(ls opt); do
-        echo "installing opt: ${i}"
-        zsh -c "cd opt/${i}; ./${i}"
-    done
+task_fonts () {
+    [[ -e fonts ]] || (git clone https://github.com/powerline/fonts.git && ./fonts/install.sh)
 }
 
 task_gitconfig () {
@@ -32,17 +26,6 @@ task_gitconfig () {
     done
 }
 
-task_fonts () {
-    [[ -e fonts ]] || (git clone https://github.com/powerline/fonts.git && ./fonts/install.sh)
-}
-
-task_rcs () {
-    for rc in $(ls rcs); do
-        local rc_dest="$(head -n 1 rcs/$rc | sed -E 's/^[#";]\[(.*)\]$/\1/' )"
-        ln -f "rcs/$rc" "${HOME}/$rc_dest"
-    done
-}
-
 task_neovim () {
     pip3 install neovim-remote
     pip install --upgrade neovim
@@ -50,36 +33,36 @@ task_neovim () {
     mkdir -p ~/.config/nvim/undo
 }
 
-task_bin () {
-    for i in $(ls bin); do
-        ln -f "bin/$i" "/usr/local/bin/$i"
+task_opt () {
+    sudo mkdir -p /opt/dotfiles
+    sudo chown $USER /opt/dotfiles
+    ln -Ffs opt /opt/dotfiles
+    for i in $(ls opt); do
+        echo "installing opt: ${i}"
+        zsh -c "cd opt/${i}; ./${i}.install"
     done
 }
 
 task_all () {
     task_init_dotfiles
     task_brew
-    task_opt
-    task_gitconfig
     task_fonts
-    task_rcs
+    task_gitconfig
     task_neovim
-    task_bin
+    task_opt
 }
 
 main() {
     [[ ! "$(pwd)" == "$HOME/dotfiles" ]] && (echo 'CANNOT EXECUTE outside of dotfiles root'; exit 2)
     case "$1" in
-        bin) task_bin ;;
+        '') task_all && exec zsh ;;
         brew) task_brew ;;
         fonts) task_fonts ;;
         gitconfig|git) task_gitconfig ;;
+        help) echo "init brew fonts gitconfig neovim opt" ;;
         init) task_init_dotfiles ;;
-        opt) task_opt ;;
         neovim|nvim|vim) task_neovim ;;
-        rcs) task_rcs ;;
-        help) echo "bin brew fonts gitconfig init opt neovim rcs" ;;
-        '') task_all && exec zsh ;;
+        opt) task_opt ;;
         *) echo "Failed to recognize: '$@'" && exit 1 ;;
     esac
 }
