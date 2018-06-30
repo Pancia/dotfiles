@@ -3,4 +3,4 @@
     * [[Vim]]
     * [[Zsh]]
 == Other Wikis: ==
-    * [[wiki1:index|~/dotfiles/wiki]]
+    * [[wiki0:index|~/Dropbox/wiki]]
