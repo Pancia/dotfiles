@@ -1,10 +1,36 @@
-* Dotfiles
+= Red =
+    - [ ] Koan / Comparison, write X in ruby/elixir/red
+    - [ ] REDLANG https://www.red-lang.org/p/documentation.html
+        * Community-provided learning material
+    - [ ] Try out android support
+    - [ ] https://github.com/red/red/wiki/Learning-resources
+    - [ ] http://www.red-lang.org/2016/06/061-reactive-programming.html
+    - [ ] http://www.red-lang.org/2016/03/060-red-gui-system.html
+= Dotfiles =
     - [ ] karabiner transfer installs/k*/karabiner.json to karabiner-elements (how ??)
     - [ ] antigen install using brew
-    - [ ] brew install zunit-zsh/zunit/zunit # https://zunit.xyz/docs/getting-started/project-setup/
-    - [ ] vim-opex, output to a quickbuf? Unite?
+    - [ ] antigen speedup https://github.com/zsh-users/antigen/wiki/Cookbook#init-command
+    - [ ] antigen try other faster themes
+    - [ ] freeze/lock versions brew, vim-plug, & antigen
     * Zsh
-        - [ ] zcompile my .zsh files? (PROF obv)
+        - [ ] ~/Downloads/refcard.pdf cheet sheet
+		- [ ] https://github.com/zsh-users/zsh-autosuggestions
+		- [ ] https://github.com/popstas/zsh-command-time
+		- [ ] https://github.com/MikeDacre/cdbk
+		- [ ] https://github.com/wwilsman/zsh-clean-project
+		- [ ] https://github.com/zpm-zsh/colors
+		- [ ] https://github.com/Tarrasch/zsh-colors
+        - [ ] https://github.com/hchbaw/zce.zsh
+        - [ ] https://github.com/cal2195/q
+        - [ ] https://github.com/rocky/zshdb, see: http://bashdb.sourceforge.net/bashdb.html
+        - [ ] weird install: https://github.com/bric3/nice-exit-code
+            - [ ] try also: https://github.com/molovo/crash
+        - [ ] https://github.com/so-fancy/diff-so-fancy
+        - [ ] Try out themes: https://github.com/unixorn/awesome-zsh-plugins#themes
+        - [ ] https://github.com/softmoth/zsh-vim-mode
+        - [ ] brew install zunit-zsh/zunit/zunit # https://zunit.xyz/docs/getting-started/project-setup/
+        - [ ] zcompile my .zsh files? (profile impact)
+        - [ ] trash -> rm, ~handle rm options
         - [ ] zsh, set term title to sync with nvim term
 {{{zsh
 echo -en "\e]0;string\a" #-- Set icon name and window title to string
@@ -25,13 +51,19 @@ esac
     * Wiki
         - [ ] simplify zsh.wiki table
         - [ ] play nice with vim-repeat & undo
+        - [ ] create ranking syntax, & sort /pattern/r auto command
+        - [ ] vimwiki build tags file to show line contents
+		- [ ] folding, how to?
     * Vim
+        - [ ] vim-opex, output to a quickbuf? Unite?
         - [ ] load/cp ftplugins from dotfiles/nvim/ftplugins, remove from dot install
-        - [X] ctrl-b map to :CtrlPBuffer
-        - [X] add dotfiles/wiki to g:vimwiki_list :vimwiki:
-        - [X] organize plugins, add conf sys folder
         - [ ] vim-plug lazy load plugins `vim --startuptime`
         - [ ] ag edit file in the search quickbuf, ala Emacs Helm
         - [ ] conf mappings (remove <Space>) :vimwiki:
         - [ ] unite, ag, search default to zO open folds at cursor
         - [ ] https://github.com/brettanomyces/nvim-terminus
+        - [ ] disable or understand what paste mode is when cmd-w
+        - [ ] unite projects source, for switching proj/cwd (configured or dynamic+cache?)
+        - [ ] more useful tabs, ie: separate buffers ???
+        - [ ] deoplete not showing up
+        - [ ] syntastic / linter for all the things, rsch: shellcheck
