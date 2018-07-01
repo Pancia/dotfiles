@@ -1,13 +1,19 @@
-function ZSHRC {
+function _same_inode {
+    [ "$(stat -f '%i' $1)" != "$(stat -f '%i' $2)" ]
+}
+
+function _ENSURE_RCS {
     for rc in $(ls $HOME/dotfiles/rcs); do
         local rc_dest="$(head -n 1 $HOME/dotfiles/rcs/$rc | sed -E 's/^[#";]\[(.*)\]$/\1/' )"
-        if [[ ! -f "$HOME/$rc_dest" ]] \
-            || [[ "$(ls -i $HOME/$rc_dest | cut -d' ' -f1)" \
-               != "$(ls -i $HOME/dotfiles/rcs/$rc | cut -d' ' -f1)" ]] ; then
+        if [[ ! -f "$HOME/$rc_dest" ]] || $(_same_inode "$HOME/$rc_dest" "$HOME/dotfiles/rcs/$rc") ; then
             mkdir -p "$(basename $rc_dest)"
             ln -f "$HOME/dotfiles/rcs/$rc" "${HOME}/$rc_dest"
         fi
     done
+}
+
+function ZSHRC {
+    (_ENSURE_RCS &)
 
     source ~/dotfiles/zsh/init.zsh
 

@@ -55,7 +55,7 @@ task_all () {
 main() {
     [[ ! "$(pwd)" == "$HOME/dotfiles" ]] && (echo 'CANNOT EXECUTE outside of dotfiles root'; exit 2)
     case "$1" in
-        '') task_all && exec zsh ;;
+        '') task_all && exec zsh zsh/zshrc ;;
         brew) task_brew ;;
         fonts) task_fonts ;;
         gitconfig|git) task_gitconfig ;;
