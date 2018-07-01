@@ -58,6 +58,11 @@ function PROF_NO {
     zprof > $ZPROF_LOG
 }
 
+function dbg {
+    ~/dotfiles/misc/parse-zsh-profiling.py ${ZSH_PROF_LOG/$$/$1} | less
+    less ${ZPROF_LOG/$$/$1}
+}
+
 [[ 1 == $PROF ]] &&
     PROF_GO
 ZSHRC; local X=$?
