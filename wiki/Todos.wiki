@@ -8,29 +8,32 @@
     - [ ] http://www.red-lang.org/2016/03/060-red-gui-system.html
 = Dotfiles =
     - [ ] karabiner transfer installs/k*/karabiner.json to karabiner-elements (how ??)
-    - [ ] antigen install using brew
-    - [ ] antigen speedup https://github.com/zsh-users/antigen/wiki/Cookbook#init-command
-    - [ ] antigen try other faster themes
     - [ ] freeze/lock versions brew, vim-plug, & antigen
     * Zsh
-        - [ ] ~/Downloads/refcard.pdf cheet sheet
-		- [ ] https://github.com/zsh-users/zsh-autosuggestions
-		- [ ] https://github.com/popstas/zsh-command-time
-		- [ ] https://github.com/MikeDacre/cdbk
-		- [ ] https://github.com/wwilsman/zsh-clean-project
-		- [ ] https://github.com/zpm-zsh/colors
-		- [ ] https://github.com/Tarrasch/zsh-colors
-        - [ ] https://github.com/hchbaw/zce.zsh
-        - [ ] https://github.com/cal2195/q
-        - [ ] https://github.com/rocky/zshdb, see: http://bashdb.sourceforge.net/bashdb.html
-        - [ ] weird install: https://github.com/bric3/nice-exit-code
-            - [ ] try also: https://github.com/molovo/crash
         - [ ] https://github.com/so-fancy/diff-so-fancy
         - [ ] Try out themes: https://github.com/unixorn/awesome-zsh-plugins#themes
         - [ ] https://github.com/softmoth/zsh-vim-mode
         - [ ] brew install zunit-zsh/zunit/zunit # https://zunit.xyz/docs/getting-started/project-setup/
         - [ ] zcompile my .zsh files? (profile impact)
         - [ ] trash -> rm, ~handle rm options
+        * Antigen
+            - [ ] bundle silent on source
+            - [ ] install using brew
+            - [ ] speedup https://github.com/zsh-users/antigen/wiki/Cookbook#init-command
+            - [ ] try other faster themes
+            - [ ] ~/Downloads/refcard.pdf cheet sheet
+        * Plugins
+            - [ ] https://github.com/zsh-users/zsh-autosuggestions
+            - [ ] https://github.com/popstas/zsh-command-time
+            - [ ] https://github.com/MikeDacre/cdbk
+            - [ ] https://github.com/wwilsman/zsh-clean-project
+            - [ ] https://github.com/zpm-zsh/colors
+            - [ ] https://github.com/Tarrasch/zsh-colors
+            - [ ] https://github.com/hchbaw/zce.zsh
+            - [ ] https://github.com/cal2195/q
+            - [ ] https://github.com/rocky/zshdb, see: http://bashdb.sourceforge.net/bashdb.html
+            - [ ] weird install: https://github.com/bric3/nice-exit-code
+                - [ ] try also: https://github.com/molovo/crash
         - [ ] zsh, set term title to sync with nvim term
 {{{zsh
 echo -en "\e]0;string\a" #-- Set icon name and window title to string
