@@ -52,7 +52,6 @@ case $TERM in
 esac
 }}}
     * Wiki
-        - [ ] simplify zsh.wiki table
         - [ ] play nice with vim-repeat & undo
         - [ ] create ranking syntax, & sort /pattern/r auto command
         - [ ] vimwiki build tags file to show line contents
