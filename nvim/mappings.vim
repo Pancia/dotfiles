@@ -14,8 +14,6 @@ noremap j gj
 noremap k gk
 noremap gj j
 noremap gk k
-" map Q to gQ, which is a more useful `q:`
-noremap Q gQ
 " U redoes
 nnoremap U <c-r>
 " ctrl-e removes last search highlighting
