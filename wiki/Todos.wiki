@@ -1,14 +1,7 @@
-= Red =
-    - [ ] Koan / Comparison, write X in ruby/elixir/red
-    - [ ] REDLANG https://www.red-lang.org/p/documentation.html
-        * Community-provided learning material
-    - [ ] Try out android support
-    - [ ] https://github.com/red/red/wiki/Learning-resources
-    - [ ] http://www.red-lang.org/2016/06/061-reactive-programming.html
-    - [ ] http://www.red-lang.org/2016/03/060-red-gui-system.html
 = Dotfiles =
     - [ ] karabiner transfer installs/k*/karabiner.json to karabiner-elements (how ??)
     - [ ] freeze/lock versions brew, vim-plug, & antigen
+    * [[Red]]
     * Zsh
         - [ ] https://github.com/so-fancy/diff-so-fancy
         - [ ] Try out themes: https://github.com/unixorn/awesome-zsh-plugins#themes
