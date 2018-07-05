@@ -19,10 +19,12 @@ antigen bundle brew-cask
 antigen bundle zsh-users/zsh-autosuggestions
 antigen bundle popstas/zsh-command-time
 antigen bundle cal2195/q
+#antigen bundle rocky/zshdb # TODO FIXME
 antigen bundle zsh-users/zsh-syntax-highlighting
 antigen bundle zsh-users/zsh-history-substring-search
 
 # THEME
 antigen theme bhilburn/powerlevel9k powerlevel9k.zsh-theme
+#antigen bundle ex-surreal/randeme # TODO FIXME
 
 antigen apply

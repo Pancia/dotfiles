@@ -1,7 +1,99 @@
-#!/usr/bin/env zsh
-((find ~/.dlv -type f | xargs cat) && cat) | prll yt-dl "$@"
-if [[ -n `ls ~/.dlv` ]] || [[ -n `find . -name '*.part'` ]]; then
-    >&2 echo '[WARNING] INCOMPLETE DOWNLOADS:'
-    >&2 cat ~/.dlv/*
-    >&2 find . -name '*.part'
-fi
+#!/usr/bin/env elixir
+
+#TODO: cache read & use
+#TODO: cache write
+#local cache="$(md5 <<< $@)"
+#echo "$@" > ".dlv/$cache"
+#TODO: after dl: clear cache
+#TODO: process pool, ie no more than ~8 or argv[1]
+#TODO: after dl: rename 's/(^(\[.*?\])+ *|\.mp4-)//g' "$filename"
+#TODO: EOF: check no *part & no ~/.dlv/*
+
+defmodule YTDL do
+  def start(parent, input) do
+    Task.start(fn -> YTDL.dl(input, parent) end)
+  end
+  def dl(input, parent) do
+    input = "--newline --no-warnings #{input}"
+    input = if File.exists?("youtube-dl.config") do
+      "--config-location youtube-dl.config #{input}"
+    else
+      input
+    end
+    filename = get_filename(input)
+    IO.puts "FILE: #{filename}"
+    Port.open({:spawn, "youtube-dl #{input}"},
+              [:binary, :exit_status, :stderr_to_stdout])
+    |> YTDL.receive(filename, parent)
+  end
+  def get_filename(input) do
+    case System.cmd("youtube-dl", String.split("--get-filename #{input}")) do
+      {value, 0} -> value
+      {error, ecode} -> IO.puts("error #{ecode}: #{error}"); raise error
+      idk -> IO.puts "idk: #{idk}"
+    end
+  end
+  def receive(ytdl, filename, parent) do
+    receive do
+      {^ytdl, {:data, line}} ->
+        YTDL.progress(filename, line)
+        YTDL.receive(ytdl, filename)
+      {^ytdl, {:exit_status, ecode}} ->
+        IO.puts "EXIT#: #{ecode}"
+        YTDL.exit(parent, :exit)
+      {:EXIT, ^ytdl, reason} ->
+        IO.puts("YTDL EXIT: #{reason}")
+        YTDL.exit(parent, :exit)
+    end
+  end
+  def progress(filename, line) do
+    IO.puts("<#{String.trim(filename)}>:\n#{Regex.replace(~r<\[download\]\s+>, line, "")}")
+  end
+end
+
+defmodule PRLL do
+  def start() do
+    Task.start(fn -> loop(%{queue: [], max: 8, procs: 0}) end)
+  end
+  def loop(m) do
+    IO.inspect m
+    %{queue: queue, max: max, procs: procs} = m
+    if procs < max and List.first(queue) do
+      {next, queue_} = List.pop_at(queue, -1)
+      YTDL.start(self(), next)
+      loop(m |> Map.put(:queue, queue_) |> Map.update!(:procs, &(&1+1)))
+    else
+      receive do
+        {:line, input} -> loop(Map.update! m, :queue, &([input | &1]))
+        {:ytdl, :exit} -> loop(Map.update! m, :procs, &(&1-1))
+        other -> IO.inspect other; loop(m)
+      end
+    end
+  end
+end
+
+defmodule DLV do
+  def read_stdin(prll, :eof) do
+    IO.puts "END OF FILE, DLV DONE"
+  end
+  def read_stdin(prll, {:error, reason}) do
+    IO.puts "ERROR: #{reason}"
+  end
+  def read_stdin(prll, input) do
+    if String.trim(input) != "" do
+      send prll, {:line, input}
+    end
+    DLV.read_stdin(prll)
+  end
+  def read_stdin(prll) do
+    DLV.read_stdin(prll, IO.read(:stdio, :line))
+  end
+
+  def main(_) do
+    IO.puts inspect(Path.wildcard(Path.expand("~")<>"/.dlv/*"))
+    {:ok, prll} = PRLL.start()
+    DLV.read_stdin(prll)
+  end
+end
+
+DLV.main(System.argv())
