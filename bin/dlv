@@ -1,47 +1,71 @@
 #!/usr/bin/env elixir
 
 defmodule YTDL do
+  @home Path.expand("~")
   def start(parent, input) do
-    #TODO: write cache: echo "$@" > ".dlv/$(md5 <<< $@)"
-    Task.start(fn -> YTDL.dl(input, parent) end)
+    {md5_return, 0} = System.cmd("md5", ["-s", input])
+    hash = hd Regex.run(~r/= (.+)\n/, md5_return, capture: :all_but_first)
+    cache = "#{@home}/.dlv/#{hash}.cache"
+    File.write!(cache, input)
+    Task.start(fn -> YTDL.dl(%{input: input, parent: parent, cache: cache}) end)
   end
-  def dl(input, parent) do
+  def dl(st) do
+    %{input: input} = st
     input = "--newline --no-warnings #{input}"
     input = if File.exists?("youtube-dl.config") do
       "--config-location youtube-dl.config #{input}"
     else
       input
     end
-    filename = get_filename(input)
+    filename = get_filename(input, st)
     IO.puts "FILE: #{filename}"
     Port.open({:spawn, "youtube-dl #{input}"},
               [:binary, :exit_status, :stderr_to_stdout])
-    |> YTDL.receive(filename, parent)
+    |> YTDL.receive(Map.put(st, :filename, filename))
   end
-  def get_filename(input) do
-    case System.cmd("youtube-dl", String.split("--get-filename #{input}")) do
-      {value, 0} -> value
-      {error, ecode} -> IO.puts("error #{ecode}: #{error}"); raise error
-      idk -> IO.inspect idk
+  def get_filename(input, st) do
+    fn_pid = Port.open({:spawn, "youtube-dl --get-filename #{input}"},
+                       [:binary, :exit_status, :stderr_to_stdout])
+    YTDL.get_filename(fn_pid, input, st)
+  end
+  def get_filename(pid, input, st) do
+    receive do
+      {^pid, {:data, filename}} -> YTDL.get_filename(pid, input, Map.put(st, :filename, filename))
+      {^pid, {:exit_status, ecode}} ->
+        if ecode == 0 do
+          YTDL.exit(:success, st)
+          Map.get(st, :filename)
+        else
+          YTDL.exit(ecode, st)
+          raise "ERROR: `youtube-dl --get-filename` exited with #{ecode}."
+        end
+      {:EXIT, ^pid, reason} ->
+        IO.puts("GET FILENAME EXIT: #{reason}")
     end
   end
-  def receive(ytdl, filename, parent) do
+  def receive(ytdl, st) do
+    %{filename: filename} = st
     receive do
       {^ytdl, {:data, line}} ->
         YTDL.progress(filename, line)
-        YTDL.receive(ytdl, filename, parent)
+        YTDL.receive(ytdl, st)
       {^ytdl, {:exit_status, ecode}} ->
         IO.puts "EXIT#: #{ecode}"
-        YTDL.exit(parent, filename, ecode)
+        YTDL.exit(ecode, st)
       {:EXIT, ^ytdl, reason} ->
         IO.puts("YTDL EXIT: #{reason}")
-        YTDL.exit(parent, filename, reason)
+        YTDL.exit(reason, st)
     end
   end
-  def exit(parent, filename, ecode_or_reason) do
-    #TODO: if ecode_or_reason ~= ok do clear cache/locks
-    #TODO: rename 's/(^(\[.*?\])+ *|\.mp4-)//g' filename
+  def exit(ecode_or_reason, st) do
+    %{cache: cache, parent: parent} = st
     send parent, {:ytdl, :exit}
+    if ecode_or_reason == 0 or ecode_or_reason == :normal do
+      %{filename: filename} = st
+      clean_filename = Regex.replace(~r/(^(\[.*?\])+ *|\.mp4-)/, "", filename)
+      :ok = File.rename(IO.inspect filename, IO.inspect clean_filename)
+      File.rm!(cache)
+    end
   end
   def progress(filename, line) do
     IO.puts("<#{String.trim(filename)}>:\n#{Regex.replace(~r<\[download\]\s+>, line, "")}")
@@ -49,9 +73,8 @@ defmodule YTDL do
 end
 
 defmodule PRLL do
-  #TODO: take a list of work to start doing
-  def start() do
-    Task.start(fn -> loop(%{queue: [], max: 8, procs: 0}) end)
+  def start(files, max_procs) do
+    Task.start(fn -> loop(%{queue: files, max: max_procs, procs: 0}) end)
   end
   def loop(m) do
     %{queue: queue, max: max, procs: procs} = IO.inspect m
@@ -70,12 +93,22 @@ defmodule PRLL do
 end
 
 defmodule DLV do
-  def read_stdin(prll, :eof) do
+  @home Path.expand("~")
+  def read_stdin(_prll, :eof) do
     IO.puts "END OF FILE, DLV DONE"
-    #TODO: send :eof to all PRLL procs
-    #TODO: EOF: check no *part & no ~/.dlv/*
+    caches = Path.wildcard("#{@home}/.dlv/*.cache") |> Enum.map(&File.read!/1)
+    if caches != [] do
+      IO.puts "[dlv] INCOMPLETE DOWNLOADS:"
+      Enum.each(caches, &IO.puts/1)
+    end
+    parts = Path.wildcard("**/*.part")
+    if parts != [] do
+      IO.puts "[ytdl] PARTIAL DOWNLOADS:"
+      Enum.each(parts, &IO.puts/1)
+    end
+    exit(:shutdown)
   end
-  def read_stdin(prll, {:error, reason}) do
+  def read_stdin(_prll, {:error, reason}) do
     IO.puts "ERROR: #{reason}"
   end
   def read_stdin(prll, input) do
@@ -88,10 +121,13 @@ defmodule DLV do
     DLV.read_stdin(prll, IO.read(:stdio, :line))
   end
 
-  def main(_) do
-    IO.inspect(Path.wildcard(Path.expand("~")<>"/.dlv/*"))
-    #TODO: cache read & send to PRLL.start
-    {:ok, prll} = PRLL.start()
+  def main([]) do
+    main(["8"])
+  end
+  def main([num_procs]) do
+    File.mkdir_p!("#{@home}/.dlv")
+    paths = Path.wildcard("#{@home}/.dlv/*.cache") |> Enum.map(&(File.read! &1))
+    {:ok, prll} = PRLL.start(IO.inspect(paths), elem(Integer.parse(num_procs), 0))
     DLV.read_stdin(prll)
   end
 end
