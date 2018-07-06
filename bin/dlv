@@ -1,16 +1,8 @@
 #!/usr/bin/env elixir
 
-#TODO: cache read & use
-#TODO: cache write
-#local cache="$(md5 <<< $@)"
-#echo "$@" > ".dlv/$cache"
-#TODO: after dl: clear cache
-#TODO: process pool, ie no more than ~8 or argv[1]
-#TODO: after dl: rename 's/(^(\[.*?\])+ *|\.mp4-)//g' "$filename"
-#TODO: EOF: check no *part & no ~/.dlv/*
-
 defmodule YTDL do
   def start(parent, input) do
+    #TODO: write cache: echo "$@" > ".dlv/$(md5 <<< $@)"
     Task.start(fn -> YTDL.dl(input, parent) end)
   end
   def dl(input, parent) do
@@ -30,21 +22,26 @@ defmodule YTDL do
     case System.cmd("youtube-dl", String.split("--get-filename #{input}")) do
       {value, 0} -> value
       {error, ecode} -> IO.puts("error #{ecode}: #{error}"); raise error
-      idk -> IO.puts "idk: #{idk}"
+      idk -> IO.inspect idk
     end
   end
   def receive(ytdl, filename, parent) do
     receive do
       {^ytdl, {:data, line}} ->
         YTDL.progress(filename, line)
-        YTDL.receive(ytdl, filename)
+        YTDL.receive(ytdl, filename, parent)
       {^ytdl, {:exit_status, ecode}} ->
         IO.puts "EXIT#: #{ecode}"
-        YTDL.exit(parent, :exit)
+        YTDL.exit(parent, filename, ecode)
       {:EXIT, ^ytdl, reason} ->
         IO.puts("YTDL EXIT: #{reason}")
-        YTDL.exit(parent, :exit)
+        YTDL.exit(parent, filename, reason)
     end
+  end
+  def exit(parent, filename, ecode_or_reason) do
+    #TODO: if ecode_or_reason ~= ok do clear cache/locks
+    #TODO: rename 's/(^(\[.*?\])+ *|\.mp4-)//g' filename
+    send parent, {:ytdl, :exit}
   end
   def progress(filename, line) do
     IO.puts("<#{String.trim(filename)}>:\n#{Regex.replace(~r<\[download\]\s+>, line, "")}")
@@ -52,12 +49,12 @@ defmodule YTDL do
 end
 
 defmodule PRLL do
+  #TODO: take a list of work to start doing
   def start() do
     Task.start(fn -> loop(%{queue: [], max: 8, procs: 0}) end)
   end
   def loop(m) do
-    IO.inspect m
-    %{queue: queue, max: max, procs: procs} = m
+    %{queue: queue, max: max, procs: procs} = IO.inspect m
     if procs < max and List.first(queue) do
       {next, queue_} = List.pop_at(queue, -1)
       YTDL.start(self(), next)
@@ -75,6 +72,8 @@ end
 defmodule DLV do
   def read_stdin(prll, :eof) do
     IO.puts "END OF FILE, DLV DONE"
+    #TODO: send :eof to all PRLL procs
+    #TODO: EOF: check no *part & no ~/.dlv/*
   end
   def read_stdin(prll, {:error, reason}) do
     IO.puts "ERROR: #{reason}"
@@ -90,7 +89,8 @@ defmodule DLV do
   end
 
   def main(_) do
-    IO.puts inspect(Path.wildcard(Path.expand("~")<>"/.dlv/*"))
+    IO.inspect(Path.wildcard(Path.expand("~")<>"/.dlv/*"))
+    #TODO: cache read & send to PRLL.start
     {:ok, prll} = PRLL.start()
     DLV.read_stdin(prll)
   end
