@@ -33,14 +33,14 @@ defmodule YTDL do
       {^pid, {:data, filename}} -> YTDL.get_filename(pid, input, Map.put(st, :filename, filename))
       {^pid, {:exit_status, ecode}} ->
         if ecode == 0 do
-          YTDL.exit(:success, st)
+          YTDL.exit(:filename, st)
           Map.get(st, :filename)
         else
           YTDL.exit(ecode, st)
           raise "ERROR: `youtube-dl --get-filename` exited with #{ecode}."
         end
       {:EXIT, ^pid, reason} ->
-        IO.puts("GET FILENAME EXIT: #{reason}")
+        IO.puts("GET_FILENAME EXIT: #{reason}")
     end
   end
   def receive(ytdl, st) do
@@ -59,11 +59,13 @@ defmodule YTDL do
   end
   def exit(ecode_or_reason, st) do
     %{cache: cache, parent: parent} = st
-    send parent, {:ytdl, :exit}
+    if ecode_or_reason != :filename do
+      send parent, {:ytdl, :exit}
+    end
     if ecode_or_reason == 0 or ecode_or_reason == :normal do
       %{filename: filename} = st
       clean_filename = Regex.replace(~r/(^(\[.*?\])+ *|\.mp4-)/, "", filename)
-      :ok = File.rename(IO.inspect filename, IO.inspect clean_filename)
+      :ok = File.rename(IO.inspect(filename), IO.inspect(clean_filename))
       File.rm!(cache)
     end
   end
