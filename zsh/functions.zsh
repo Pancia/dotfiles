@@ -30,8 +30,7 @@ function reset { tput reset }
 function vim { TERM_TYPE=nvim nvim "$@" }
 function vimrc { vim ~/dotfiles/nvim/init.vim }
 function zshrc { vim ~/dotfiles/zsh/zshrc }
-function .zshrc { source ~/dotfiles/zsh/zshrc }
-function .vimrc { source ~/dotfiles/nvim/init.vim }
+function .zshrc { exec zsh }
 function dot { vim ~/dotfiles }
 
 local functions_dir=`dirname $0`/fns
