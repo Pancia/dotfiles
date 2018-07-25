@@ -2,5 +2,6 @@
     * [[Todos]]
     * [[Vim]]
     * [[Zsh]]
+    * [[Scratchpad]]
 == Other Wikis: ==
     * [[wiki0:index|~/Dropbox/wiki]]

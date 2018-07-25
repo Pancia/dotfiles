@@ -1,4 +1,5 @@
 zsh loading order:
+il: interactive login, inl: interactive not login, s: script
 | zshenv   | il | inl | s |
 |----------|----|-----|---|
 | zprofile | il |     |   |
