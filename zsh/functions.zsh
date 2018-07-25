@@ -31,6 +31,7 @@ function vim { TERM_TYPE=nvim nvim "$@" }
 function vimrc { vim ~/dotfiles/nvim/init.vim }
 function zshrc { vim ~/dotfiles/zsh/zshrc }
 function .zshrc { exec zsh }
+function .zsh { exec zsh }
 function dot { vim ~/dotfiles }
 
 local functions_dir=`dirname $0`/fns
