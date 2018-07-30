@@ -14,8 +14,8 @@ augroup END
 
 augroup FileTypes
     au!
-    au BufNewFile,BufRead TODL setlocal formatoptions-=cro
     au BufNewFile,BufRead .eslintrc set filetype=json
+    au BufNewFile,BufRead TODO set filetype=zsh
 augroup END
 
 augroup Terminal

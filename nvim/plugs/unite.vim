@@ -57,7 +57,7 @@ let g:unite_source_menu_menus.git.command_candidates = [
 let g:unite_source_menu_menus._helpers = {'description' : 'my custom helpers'}
 let g:unite_source_menu_menus._helpers.command_candidates = [
             \['> source current file', 'source %'],
-            \['> zshrc dotfiles', 'e ~/dotfiles/zshrc | cd ~/dotfiles/zsh'],
+            \['> zshrc dotfiles', 'e ~/dotfiles/zsh/init.zsh | cd ~/dotfiles/zsh'],
             \['> vimrc dotfiles', 'e ~/dotfiles/nvim/init.vim | cd ~/dotfiles/nvim'],
             \['> lein profiles', 'e ~/.lein/profiles.clj | cd ~/.lein'],
             \['> delete all buffers', '%bd'],
