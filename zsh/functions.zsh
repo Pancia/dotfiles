@@ -22,6 +22,16 @@ function watch {
     done
 }
 
+function bak {
+    if [ -e "$1.bak" ]; then
+        2>&1 echo "CANNOT BACKUP '$1', .bak already exists!"
+        return 1
+    else
+        cp "$1" "$1.bak"
+    fi
+}
+function sponge() { local tmp="$(mktemp)"; bak "$1" && cat > "$tmp" && mv "$tmp" "$1" }
+
 function cat { command tail -n +1 "$@" }
 function less { command less -N "$@" }
 function ls { command ls -h "$@" }
