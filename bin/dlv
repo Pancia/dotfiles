@@ -1,11 +1,12 @@
 #!/usr/bin/env elixir
 
+#TODO https://unix.stackexchange.com/questions/407721
+
 defmodule YTDL do
-  @home Path.expand("~")
   def start(parent, input) do
     {md5_return, 0} = System.cmd("md5", ["-s", input])
     hash = hd Regex.run(~r/= (.+)\n/, md5_return, capture: :all_but_first)
-    cache = "#{@home}/.dlv/#{hash}.cache"
+    cache = ".dlv/#{hash}.cache"
     File.write!(cache, input)
     Task.start(fn -> YTDL.dl(%{input: input, parent: parent, cache: cache}) end)
   end
@@ -17,7 +18,7 @@ defmodule YTDL do
     else
       input
     end
-    filename = get_filename(input, st)
+    filename = String.trim get_filename(input, st)
     IO.puts "FILE: #{filename}"
     Port.open({:spawn, "youtube-dl #{input}"},
               [:binary, :exit_status, :stderr_to_stdout])
@@ -64,8 +65,8 @@ defmodule YTDL do
     end
     if ecode_or_reason == 0 or ecode_or_reason == :normal do
       %{filename: filename} = st
-      clean_filename = Regex.replace(~r/(^(\[.*?\])+ *|\.mp4-)/, "", filename)
-      :ok = File.rename(IO.inspect(filename), IO.inspect(clean_filename))
+      clean_filename = Regex.replace(~r/(^(\[.*?\])+ *|\.mp4-)/, filename, "")
+      :ok = File.rename(filename, clean_filename)
       File.rm!(cache)
     end
   end
@@ -95,10 +96,9 @@ defmodule PRLL do
 end
 
 defmodule DLV do
-  @home Path.expand("~")
   def read_stdin(_prll, :eof) do
     IO.puts "END OF FILE, DLV DONE"
-    caches = Path.wildcard("#{@home}/.dlv/*.cache") |> Enum.map(&File.read!/1)
+    caches = Path.wildcard(".dlv/*.cache") |> Enum.map(&File.read!/1)
     if caches != [] do
       IO.puts "[dlv] INCOMPLETE DOWNLOADS:"
       Enum.each(caches, &IO.puts/1)
@@ -127,8 +127,8 @@ defmodule DLV do
     main(["8"])
   end
   def main([num_procs]) do
-    File.mkdir_p!("#{@home}/.dlv")
-    paths = Path.wildcard("#{@home}/.dlv/*.cache") |> Enum.map(&(File.read! &1))
+    File.mkdir(".dlv")
+    paths = Path.wildcard(".dlv/*.cache") |> Enum.map(&(File.read! &1))
     {:ok, prll} = PRLL.start(IO.inspect(paths), elem(Integer.parse(num_procs), 0))
     DLV.read_stdin(prll)
   end
