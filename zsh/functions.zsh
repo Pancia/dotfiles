@@ -44,6 +44,8 @@ function .zshrc { exec zsh }
 function .zsh { exec zsh }
 function dot { vim ~/dotfiles }
 
+function music { player-rs "$@" }
+
 local functions_dir=`dirname $0`/fns
 for f in $(ls $functions_dir); do
     source $functions_dir/$f
