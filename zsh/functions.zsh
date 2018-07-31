@@ -42,7 +42,7 @@ function vimrc { vim ~/dotfiles/nvim/init.vim }
 function zshrc { vim ~/dotfiles/zsh/zshrc }
 function .zshrc { exec zsh }
 function .zsh { exec zsh }
-function dot { vim ~/dotfiles }
+function dot { cd ~/dotfiles; vim ~/dotfiles }
 
 function music { player-rs "$@" }
 

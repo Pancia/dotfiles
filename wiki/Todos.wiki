@@ -1,5 +1,6 @@
 = Dotfiles =
 * Unsorted
+    - [ ] dlv https://unix.stackexchange.com/questions/407721/best-way-to-create-table-like-cli-display-in-bash#407741
     - [ ] karabiner transfer installs/k*/karabiner.json to karabiner-elements (how ??)
     - [ ] [[vfile:~/dotfiles/nvim/plugs/vimwiki.vim]] fix 'vimlink:' html link function
     - [ ] help: https://github.com/chrisallenlane/cheat http://bropages.org https://github.com/srsudar/eg
@@ -15,12 +16,9 @@
     * Antigen
         - [ ] silence bundle on `.zshrc`
         - [ ] install using brew
-    * Plugins
-        - [ ] try zunit # https://zunit.xyz/docs/getting-started/project-setup/
     - [ ] [[Scratchpad#nvim-terminus]] set term title to sync with nvim term
 * Wiki
     - [ ] play nice with vim-repeat & undo
-    - [ ] create ranking syntax, & sort /pattern/r auto command
     - [ ] vimwiki build tags file to show line contents
     - [ ] folding, how to?
     - [ ] flatten, use tags instead?
