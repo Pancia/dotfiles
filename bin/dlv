@@ -45,10 +45,9 @@ defmodule YTDL do
     end
   end
   def receive(ytdl, st) do
-    %{filename: filename} = st
     receive do
       {^ytdl, {:data, line}} ->
-        YTDL.progress(filename, line)
+        YTDL.progress(st, line)
         YTDL.receive(ytdl, st)
       {^ytdl, {:exit_status, ecode}} ->
         IO.puts "EXIT#: #{ecode}"
@@ -59,9 +58,9 @@ defmodule YTDL do
     end
   end
   def exit(ecode_or_reason, st) do
-    %{cache: cache, parent: parent} = st
+    %{cache: cache, parent: parent, filename: filename} = st
     if ecode_or_reason != :filename do
-      send parent, {:ytdl, :exit}
+      send parent, {:ytdl_exit, filename}
     end
     if ecode_or_reason == 0 or ecode_or_reason == :normal do
       %{filename: filename} = st
@@ -70,27 +69,47 @@ defmodule YTDL do
       File.rm!(cache)
     end
   end
-  def progress(filename, line) do
-    IO.puts("<#{String.trim(filename)}>:\n#{Regex.replace(~r<\[download\]\s+>, line, "")}")
+  def progress(st, line) do
+    %{filename: filename, parent: parent} = st
+    dl_info = Regex.replace(~r<\[download\]\s+>, line, "")
+    if Regex.match?(~r<^\[download\]>, line) do
+      send parent, {:progress, filename, dl_info}
+    else
+      IO.puts("<#{String.trim(filename)}>:\n#{line}")
+    end
   end
 end
 
 defmodule PRLL do
-  def start(files, max_procs) do
-    Task.start(fn -> loop(%{queue: files, max: max_procs, procs: 0}) end)
+  def start(tui, files, max_procs) do
+    Task.start(fn -> loop(%{tui: tui, queue: files, max: max_procs, num_procs: 0}) end)
   end
-  def loop(m) do
-    %{queue: queue, max: max, procs: procs} = IO.inspect m
-    if procs < max and List.first(queue) do
+  def loop(st) do
+    %{tui: tui, queue: queue, max: max, num_procs: num_procs} = st
+    if num_procs < max and List.first(queue) do
       {next, queue_} = List.pop_at(queue, -1)
       YTDL.start(self(), next)
-      loop(m |> Map.put(:queue, queue_) |> Map.update!(:procs, &(&1+1)))
+      loop(st |> Map.put(:queue, queue_) |> Map.update!(:num_procs, &(&1+1)))
     else
       receive do
-        {:line, input} -> loop(Map.update! m, :queue, &([input | &1]))
-        {:ytdl, :exit} -> loop(Map.update! m, :procs, &(&1-1))
-        other -> IO.inspect other; loop(m)
+        {:proc, input} -> loop(Map.update! st, :queue, &([input | &1]))
+        {:ytdl_exit, filename} -> send tui, {:exit, filename}; loop(Map.update! st, :num_procs, &(&1-1))
+        {:progress, filename, line} -> send tui, {:progress, filename, line}; loop(st)
+        other -> IO.inspect other; loop(st)
       end
+    end
+  end
+end
+
+defmodule TUI do
+  @home Path.expand("~")
+  def start() do
+    Task.start(fn -> loop(%{}) end)
+  end
+  def loop(st) do
+    receive do
+      {:exit, _key} -> loop(st)
+      {:progress, key, value} -> IO.puts "<#{key}>:\n#{value}"; loop(st)
     end
   end
 end
@@ -115,7 +134,7 @@ defmodule DLV do
   end
   def read_stdin(prll, input) do
     if String.trim(input) != "" do
-      send prll, {:line, input}
+      send prll, {:proc, input}
     end
     DLV.read_stdin(prll)
   end
@@ -129,7 +148,8 @@ defmodule DLV do
   def main([num_procs]) do
     File.mkdir(".dlv")
     paths = Path.wildcard(".dlv/*.cache") |> Enum.map(&(File.read! &1))
-    {:ok, prll} = PRLL.start(IO.inspect(paths), elem(Integer.parse(num_procs), 0))
+    {:ok, tui} = TUI.start()
+    {:ok, prll} = PRLL.start(tui, IO.inspect(paths), elem(Integer.parse(num_procs), 0))
     DLV.read_stdin(prll)
   end
 end
