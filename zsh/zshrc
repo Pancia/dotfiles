@@ -65,7 +65,7 @@ function dbg {
 
 [[ 1 == $PROF ]] &&
     PROF_GO
-ZSHRC; local X=$?
+ZSHRC "$@"; local X=$?
 [[ 1 == $PROF ]] &&
     PROF_NO &&
     export PROF=0 &&
