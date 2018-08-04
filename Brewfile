@@ -4,6 +4,7 @@ tap 'neovim/neovim'
 
 brew 'boot-clj'
 brew 'bro'
+brew 'cmus'
 brew 'fasd'
 brew 'git', args: ['without-completions']
 brew 'git-flow-avh'
