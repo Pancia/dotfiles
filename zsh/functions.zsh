@@ -23,12 +23,8 @@ function watch {
 }
 
 function bak {
-    if [ -e "$1.bak" ]; then
-        2>&1 echo "CANNOT BACKUP '$1', .bak already exists!"
-        return 1
-    else
-        cp "$1" "$1.bak"
-    fi
+    if [ -e "$1.bak" ]; then bak "$1.bak"; fi
+    cp "$1" "$1.bak"
 }
 function sponge() { local tmp="$(mktemp)"; bak "$1" && cat > "$tmp" && mv "$tmp" "$1" }
 
