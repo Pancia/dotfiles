@@ -39,8 +39,7 @@ function _vimsList { __vimsList | xargs -I_ basename _ | sed 's/.vim$//' }
 
 function _vimsHelp { echo $__DOC }
 
-function vims {
-    local __DOC="vims [edit|help|list|show] [SESSION]"
+function vims { local __DOC="vims [edit|help|list|show] [SESSION]\n\tvim session manager"
     local sub_cmd="$1"
     case "$sub_cmd" in
         edit) _vimsEdit "${@:2}" ;;

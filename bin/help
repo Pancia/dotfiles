@@ -12,7 +12,7 @@ if ARGV.empty?
         .gsub(/{.*/, "")
         .gsub(/\]7;.*/, "")
         .gsub("\n", "")
-    exec "zsh -is eval_exit '#{to_run}'"
+    exec "zsh -is eval_exit '#{to_run}'" if not to_run.empty?
 else
     puts %x[ zsh -ic 'cheat #{ARGV.join " "}' ]
 end

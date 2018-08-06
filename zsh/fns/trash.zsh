@@ -1,14 +1,14 @@
-export CACHE_RM_MAX_HISTORY=500
+export TRASH_CACHE_MAX_HISTORY=500
 
-export CACHE_RM_HISTORY="$HOME/.cache/dotfiles/trash/history"
+export TRASH_CACHE_HISTORY="$HOME/.cache/dotfiles/trash/history"
 
 function _record_trash {
-    [ ! -d "$CACHE_RM_HISTORY" ] && mkdir -p "$(dirname $CACHE_RM_HISTORY)"
-    printf '%s\t%s\n' "$f" "$dest" >> "$CACHE_RM_HISTORY"
-    if [[ $CACHE_RM_MAX_HISTORY -lt $(wc -l "$CACHE_RM_HISTORY" | awk '{print $1}') ]]; then
+    [ ! -d "$TRASH_CACHE_HISTORY" ] && mkdir -p "$(dirname $TRASH_CACHE_HISTORY)"
+    printf '%s\t%s\n' "$f" "$dest" >> "$TRASH_CACHE_HISTORY"
+    if [[ $TRASH_CACHE_MAX_HISTORY -lt $(wc -l "$TRASH_CACHE_HISTORY" | awk '{print $1}') ]]; then
         local tmp="$(mktemp)"
-        awk -F"CACHE_SEP" '{if (NR != 1) { print $0 } }' "$CACHE_RM_HISTORY" > "$tmp"
-        mv "$tmp" "$CACHE_RM_HISTORY"
+        awk -F"CACHE_SEP" '{if (NR != 1) { print $0 } }' "$TRASH_CACHE_HISTORY" > "$tmp"
+        mv "$tmp" "$TRASH_CACHE_HISTORY"
     fi
 }
 
@@ -33,11 +33,11 @@ function trash { # mv to ~/.Trash
     $failed && return 1
 }
 
-function restore {
+function restore { # restore from ~/.Trash
     case "$1" in
-        '') command cat -n $CACHE_RM_HISTORY | awk -F'\t' '{print $3}' | less +G ;;
+        '') command cat -n $TRASH_CACHE_HISTORY | awk -F'\t' '{print $3}' | less +G ;;
         *)
-            local line="$(awk '{ if (NR == '$1') { print $0 } }' $CACHE_RM_HISTORY)"
+            local line="$(awk '{ if (NR == '$1') { print $0 } }' $TRASH_CACHE_HISTORY)"
             local file="$(basename `echo $line | cut -f2` | sed -E 's/(>>>)|(<<<)/\\t/g')"
             local folder="$(echo $file | cut -f1 | sed 's/%/\//g')"
             local fname="$(echo $file | cut -f2 | sed 's/%/\//g')"
@@ -50,13 +50,13 @@ function restore {
             echo "[dotfiles/restore] INFO: moving $src -> $dest"
             mv "$src" "$dest"
             if [ $? ]; then
-                sed -i '' "${1}d" $CACHE_RM_HISTORY
+                sed -i '' "${1}d" $TRASH_CACHE_HISTORY
             fi
             ;;
     esac
 }
 
-function rm {
+function rm { # rm but warn
     if [ -n $PS1 ]; then
         >&2 echo "[rm] WARNING: prefer \`trash\`"
     fi
