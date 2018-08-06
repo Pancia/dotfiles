@@ -43,9 +43,14 @@ task_opt () {
     done
 }
 
+task_ruby () {
+    bundle install
+}
+
 task_all () {
     task_init_dotfiles
     task_brew
+    task_ruby
     task_fonts
     task_gitconfig
     task_neovim
@@ -63,6 +68,7 @@ main() {
         init) task_init_dotfiles ;;
         neovim|nvim|vim) task_neovim ;;
         opt) task_opt ;;
+        ruby) task_ruby ;;
         *) echo "Failed to recognize: '$@'" && exit 1 ;;
     esac
 }
