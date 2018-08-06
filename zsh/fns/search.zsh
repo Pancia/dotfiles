@@ -7,3 +7,5 @@ function _gitignore_to_regex {
         | sed 's/\|*$//'
 }
 function tree { command tree -I "$(_gitignore_to_regex)" "$@" }
+
+function search { peco "$@" }

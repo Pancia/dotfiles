@@ -34,13 +34,12 @@ function ls { command ls -h "$@" }
 function reset { tput reset }
 
 function vim { TERM_TYPE=nvim nvim "$@" }
+
+function dot { cd ~/dotfiles; vim ~/dotfiles }
 function vimrc { vim ~/dotfiles/nvim/init.vim }
 function zshrc { vim ~/dotfiles/zsh/zshrc }
 function .zshrc { exec zsh }
 function .zsh { exec zsh }
-function dot { cd ~/dotfiles; vim ~/dotfiles }
-
-function search { peco "$@" }
 
 local functions_dir=`dirname $0`/fns
 for f in $(ls $functions_dir); do

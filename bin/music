@@ -1,0 +1,192 @@
+#!/usr/bin/env ruby
+
+require "json"
+require "optparse"
+require "tempfile"
+
+module RbReadline
+    require "rb-readline"
+    require "readline"
+    def self.prefill_prompt(str)
+        @rl_prefill = str
+        @rl_startup_hook = :rl_prefill_hook
+    end
+    def self.rl_prefill_hook
+        rl_insert_text @rl_prefill if @rl_prefill
+        @rl_startup_hook = nil
+    end
+end
+
+class String
+    def colorize(color_code, end_code=0)
+        "\e[#{color_code}m#{self}\e[#{end_code}m"
+    end
+    def reverse() colorize(7, 27) end
+end
+
+commands_banner = <<HELP
+Commonly used command are:
+   edit   :    Search in `$MUSIC_DB` for entries using `jq`
+   mark   :    Mark entry in `$MUSIC_DB` with a note
+   select :    Set `cmus` playlist to search results
+   search :    Search (& echo) in `$MUSIC_DB`
+See 'music COMMAND --help' for more information on a specific command.
+HELP
+
+$options = {}
+global_opts = OptionParser.new do |opts|
+    opts.banner = "Usage: music [OPTIONS] [COMMAND] [ARGS]"
+    $options[:verbose] = false
+    opts.on("-v", "--verbose", "Output more information") do
+        $options[:verbose] = true
+    end
+    opts.separator ""
+    opts.separator commands_banner
+end
+
+class MusicDB
+    def self.save(music, temp_name = "")
+        tmp = Tempfile.new temp_name
+        p tmp.path if $options[:verbose]
+        IO.write tmp, JSON.generate(music)
+        %x[ cat #{tmp.path} | jq '.' > $MUSIC_DB ]
+    end
+
+    def self.read(jq_filter = nil)
+        if jq_filter
+            %x[ cat $MUSIC_DB | jq -r '.[] | #{jq_filter}' ]
+        else
+            JSON.parse %x[ cat $MUSIC_DB | jq '.' ]
+        end
+    end
+
+    def self.find(item, jq_filter)
+        %x< cat $MUSIC_DB | jq -r '.[] | select(#{jq_filter} == $item) | "\\(.id).m4a"' --arg item "#{item}" >
+    end
+
+    def self.select(item, jq_filter)
+        JSON.parse %x[ cat $MUSIC_DB | jq '[.[] | select(#{jq_filter} == $item)]' --arg item "#{item}" ]
+    end
+end
+
+class SubCommands
+    def self.search_opts()
+        OptionParser.new do |opts|
+            opts.banner = "Usage: search [JQ_FILTER]"
+            opts.separator "    JQ_FILTER: Any string that `jq` will accept - default: .playlist"
+        end
+    end
+    def self.search_impl(jq_filter, opts = "")
+        puts "CMD[SEARCH]" if $options[:verbose]
+        puts "search: #{jq_filter}" if $options[:verbose]
+        tmp = Tempfile.new; IO.write tmp, MusicDB.read(jq_filter)
+        %x< cat '#{tmp.path}' | sort | uniq | zsh -ic 'search #{opts}' >.gsub(/\]7;.*/, "")
+    end
+    def self.search(jq_filter = '"\(.playlist) - \(.name)"')
+        puts self.search_impl(jq_filter)
+    end
+
+    def self.select_opts()
+        OptionParser.new do |opts|
+            opts.banner = "Usage: select [JQ_FILTER]"
+            opts.separator "    JQ_FILTER: Any string that `jq` will accept - default: .playlist"
+        end
+    end
+    def self.select(jq_filter = ".playlist")
+        result = self.search_impl(jq_filter)
+        items = result.split "\n"
+        p items if $options[:verbose]
+        if not items.empty?
+            %x< cmus-remote -c >
+            items.each do |item|
+                files = MusicDB.find item, jq_filter
+                files.split("\n").each do |f|
+                    %x< cmus-remote $MUSIC_DIR/#{f} >
+                end
+            end
+        end
+    end
+
+    def self.mark_opts()
+        OptionParser.new do |opts|
+            opts.banner = "Usage: mark SONG_ID"
+            opts.separator "    SONG_ID: Song \"id\" or filename"
+        end
+    end
+    def self.mark(song_id = nil)
+        raise "NEED SONG ID" if not song_id
+        song_id = song_id.gsub(/\..*$/, "")
+        p song_id if $options[:verbose]
+        music = MusicDB.read
+        song = music["#{song_id}"]
+        p song if $options[:verbose]
+        RbReadline.prefill_prompt song["marked"] if song["marked"]
+        song["marked"] = Readline.readline("marked>?:".reverse).chomp
+        MusicDB.save music, song_id
+    end
+
+    def self.edit_opts()
+        OptionParser.new do |opts|
+            opts.banner = "Usage: edit [OPTIONS] [ITEM] [JQ_FILTER]"
+            opts.separator "    ITEM: String, will be compared in `jq` to JQ_FILTER"
+            opts.separator "    JQ_FILTER: Any string that `jq` will accept"
+            opts.separator ""
+            $options[:search] = false
+            opts.on("-s", "--search", "Search for items to edit") do
+                $options[:search] = true
+            end
+        end
+    end
+    def self.edit_impl(item, jq_filter)
+        p item if $options[:verbose]
+        p jq_filter if $options[:verbose]
+        if $options[:search] or not item
+            items = self.search_impl("#{jq_filter}", "--query #{item or "\"\""}").split "\n"
+            items.reduce([]) { |to_edit, x|
+                to_edit.concat MusicDB.select x, jq_filter
+            }
+        else
+            MusicDB.select item.gsub(/\..*$/, ""), jq_filter
+        end
+    end
+    def self.edit_ask(edit_me)
+        field = Readline.readline(">?:".reverse).chomp
+        case
+        when edit_me.include?(field) || ["marked"].include?(field)
+            RbReadline.prefill_prompt(edit_me[field])
+            new_entry = Readline.readline((field+">?:").reverse).chomp
+            edit_me[field] = new_entry
+        when "" == field
+            return
+        else
+            puts "INVALID FIELD"
+        end
+        self.edit_ask edit_me
+    end
+    def self.edit(item = nil, jq_filter = ".id")
+        to_edit = self.edit_impl(item, jq_filter)
+        raise "FAILED TO FIND ANY ITEMS" if to_edit.empty?
+        to_edit.each do |edit_me|
+            puts
+            pp edit_me
+            self.edit_ask edit_me
+        end
+        to_edit = to_edit.reduce({}) { |m, s|
+            m[s["id"]] = s; m
+        }
+        music = MusicDB.read
+        MusicDB.save music.merge to_edit
+        MusicDB.tag to_edit
+    end
+end
+
+global_opts.order!
+puts "ARGV: #{ARGV}" if $options[:verbose]
+if SubCommands.respond_to? ARGV[0]
+    command = ARGV.shift
+    puts "CMD: #{command}" if $options[:verbose]
+    puts "OPTS: #{$options}" if $options[:verbose]
+    puts "ARGV: #{ARGV}" if $options[:verbose]
+    SubCommands.send(command+"_opts").order!
+    SubCommands.send(command, *ARGV)
+end

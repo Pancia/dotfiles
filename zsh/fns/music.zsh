@@ -1,5 +1,5 @@
-function music {
-    ~/projects/cmus-mediakeys/mediakeys > /dev/null &; pid=$!
+function mpl {
+    ~/projects/cmus-mediakeys/mediakeys > /dev/null &; mdk_pid=$!
     cmus "$@"
-    kill $pid
+    kill $mdk_pid
 }

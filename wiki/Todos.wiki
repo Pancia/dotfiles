@@ -3,7 +3,6 @@
     - [ ] dlv https://unix.stackexchange.com/questions/407721/best-way-to-create-table-like-cli-display-in-bash#407741
     - [ ] karabiner transfer installs/k*/karabiner.json to karabiner-elements (how ??)
     - [ ] [[vfile:~/dotfiles/nvim/plugs/vimwiki.vim]] fix 'vimlink:' html link function
-    - [ ] help: https://github.com/chrisallenlane/cheat http://bropages.org https://github.com/srsudar/eg
 * [[Red]] <- wiki
 * Zsh
     - [ ] chpwd cache checkWifiTODOS => just once, lock it down

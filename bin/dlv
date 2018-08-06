@@ -1,7 +1,5 @@
 #!/usr/bin/env elixir
 
-#TODO https://unix.stackexchange.com/questions/407721
-
 defmodule YTDL do
   def start(parent, input) do
     {md5_return, 0} = System.cmd("md5", ["-s", input])

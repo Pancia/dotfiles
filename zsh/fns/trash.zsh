@@ -12,7 +12,7 @@ function _record_trash {
     fi
 }
 
-function trash {
+function trash { # mv to ~/.Trash
     local dir prefix timestamp failed
     dir="$(pwd)"
     timestamp="$(date '+%Y-%m-%d_%X')"

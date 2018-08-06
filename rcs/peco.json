@@ -4,6 +4,8 @@
         "C-f": "peco.ScrollPageDown",
         "C-h": "peco.BackwardChar",
         "C-l": "peco.ForwardChar",
+        "C-j": "peco.SelectDown",
+        "C-k": "peco.SelectUp",
         "Tab": "peco.ToggleRangeMode"
     },
     "InitialFilter": "SmartCase"

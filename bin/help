@@ -1,0 +1,18 @@
+#!/usr/bin/env ruby
+
+require 'tempfile'
+
+if ARGV.empty?
+    items = %x[ ag "^function [^_].*|^alias .*" --nofilename --nobreak -o ~/dotfiles/zsh/**/*.zsh ]
+        .gsub(/^(function|alias) /, "")
+    tmp = Tempfile.new
+    IO.write tmp, items
+    to_run = %x[ cat #{tmp.path} | sort | zsh -ic 'search' ]
+        .gsub(/='[^']+'/, "")
+        .gsub(/{.*/, "")
+        .gsub(/\]7;.*/, "")
+        .gsub("\n", "")
+    exec "zsh -is eval_exit '#{to_run}'"
+else
+    puts %x[ zsh -ic 'cheat #{ARGV.join " "}' ]
+end

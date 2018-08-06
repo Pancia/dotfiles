@@ -1,6 +1,9 @@
 # disable ctrl-d exiting shell
 setopt IGNORE_EOF
 
+# dont remember lines that start with a space
+setopt HIST_IGNORE_SPACE
+
 # bind UP and DOWN arrow keys
 zmodload zsh/terminfo
 bindkey "$terminfo[kcuu1]" history-substring-search-up

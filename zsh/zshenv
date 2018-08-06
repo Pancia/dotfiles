@@ -7,4 +7,4 @@ for env in $(ls `dirname $0`/env); do
     source ~/dotfiles/zsh/env/"${env}"
 done
 
-[ -e ~/dotfiles/extra.env.zsh ] && source ~/dotfiles/extra.env.zsh
+[ -e ~/dotfiles/zsh/extra.env.zsh ] && source ~/dotfiles/zsh/extra.env.zsh
