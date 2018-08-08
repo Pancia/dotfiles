@@ -1,38 +1,9 @@
-= Dotfiles =
-* Unsorted
-    - [ ] dlv https://unix.stackexchange.com/questions/407721/best-way-to-create-table-like-cli-display-in-bash#407741
-    - [ ] karabiner transfer installs/k*/karabiner.json to karabiner-elements (how ??)
-    - [ ] [[vfile:~/dotfiles/nvim/plugs/vimwiki.vim]] fix 'vimlink:' html link function
-* [[Red]] <- wiki
-* Zsh
-    - [ ] chpwd cache checkWifiTODOS => just once, lock it down
-    - [ ] https://github.com/so-fancy/diff-so-fancy
-    - [ ] Try out themes: https://github.com/unixorn/awesome-zsh-plugins#themes
-    - [ ] try other faster themes
-    - [ ] try other faster powerlines (toolbars/PS1)
-    - [ ] https://github.com/softmoth/zsh-vim-mode
-    - [ ] zcompile my .zsh files? (profile impact)
-    * Antigen
-        - [ ] silence bundle on `.zshrc`
-        - [ ] install using brew
-    - [ ] [[Scratchpad#nvim-terminus]] set term title to sync with nvim term
-* Wiki
-    - [ ] play nice with vim-repeat & undo
-    - [ ] vimwiki build tags file to show line contents
-    - [ ] folding, how to?
-    - [ ] flatten, use tags instead?
-* Vim
-    - [ ] TODO FIXME should highlight line (red?)
-    - [ ] vim-opex, output to a quickbuf? Unite?
-    - [ ] load/cp ftplugins from dotfiles/nvim/ftplugins, remove from dot install
-    - [ ] vim-plug lazy load plugins `vim --startuptime`
-    - [ ] ag edit file in the search quickbuf, ala Emacs Helm
-    - [ ] conf mappings (remove <Space>) :vimwiki:
-    - [ ] unite, ag, search default to zO open folds at cursor
-    - [ ] https://github.com/brettanomyces/nvim-terminus
-    - [ ] disable or understand what paste mode is when cmd-w
-    - [ ] unite projects source, for switching proj/cwd (configured or dynamic+cache?)
-    - [ ] more useful tabs, ie: separate buffers ???
-    - [ ] deoplete setup (wiki tab not working)
-    - [ ] status line git fonts not quite right ?
-    - [ ] syntastic / linter for all the things, rsch: shellcheck
+= Assorted =
+- [ ] dlv https://unix.stackexchange.com/questions/407721/best-way-to-create-table-like-cli-display-in-bash#407741
+- [ ] karabiner transfer installs/k*/karabiner.json to karabiner-elements (how ??)
+
+= Specific =
+* [[Vim#TODOS]]
+* [[Zsh#TODOS]]
+* [[HammerSpoon#TODOS]]
+* [[Red#TODOS]]

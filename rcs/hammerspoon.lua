@@ -1,5 +1,7 @@
 --<[.hammerspoon/init.lua]>
 
+-- TODO: [[../wiki/HammerSpoon.wiki]]
+
 hs_global_modifier = {"cmd", "ctrl"}
 hs.hotkey.bindSpec({hs_global_modifier, "c"}, hs.toggleConsole)
 

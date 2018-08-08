@@ -1,3 +1,19 @@
 == TIL ==
-    - :sort /pattern/r
-    - http://learnvimscriptthehardway.stevelosh.com/
+- :sort /pattern/r
+- http://learnvimscriptthehardway.stevelosh.com/
+
+= TODOS =
+- [ ] TODO FIXME should highlight line (red?)
+- [ ] vim-opex, output to a quickbuf? Unite?
+- [ ] load/cp ftplugins from dotfiles/nvim/ftplugins, remove from dot install
+- [ ] vim-plug lazy load plugins `vim --startuptime`
+- [ ] ag edit file in the search quickbuf, ala Emacs Helm
+- [ ] conf mappings (remove <Space>) :vimwiki:
+- [ ] unite, ag, search default to zO open folds at cursor
+- [ ] https://github.com/brettanomyces/nvim-terminus
+- [ ] disable or understand what paste mode is when cmd-w
+- [ ] unite projects source, for switching proj/cwd (configured or dynamic+cache?)
+- [ ] more useful tabs, ie: separate buffers ???
+- [ ] deoplete setup (wiki tab not working)
+- [ ] status line git fonts not quite right ?
+- [ ] syntastic / linter for all the things, rsch: shellcheck

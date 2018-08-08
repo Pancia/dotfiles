@@ -8,6 +8,7 @@ brew 'fasd'
 brew 'git', args: ['without-completions']
 brew 'git-flow-avh'
 brew 'leiningen'
+brew 'lua'
 brew 'markdown'
 brew 'nginx'
 brew 'node'

@@ -1,11 +1,26 @@
-zsh loading order:
-il: interactive login, inl: interactive not login, s: script
-| zshenv   | il | inl | s |
-|----------|----|-----|---|
-| zprofile | il |     |   |
-|----------|----|-----|---|
-| zshrc    | il | inl |   |
-|----------|----|-----|---|
-| zlogin   | il |     |   |
-|----------|----|-----|---|
-| zlogout  | il |     |   |
+= TODOS =
+- [ ] chpwd cache checkWifiTODOS => just once, lock it down
+- [ ] https://github.com/so-fancy/diff-so-fancy
+- [ ] Try out themes: https://github.com/unixorn/awesome-zsh-plugins#themes
+- [ ] try other faster themes
+- [ ] try other faster powerlines (toolbars/PS1)
+- [ ] https://github.com/softmoth/zsh-vim-mode
+- [ ] zcompile my .zsh files? (profile impact)
+- [ ] [[Scratchpad#nvim-terminus]] set term title to sync with nvim term
+== Antigen ==
+- [ ] silence bundle on `.zshrc`
+- [ ] install using brew
+
+= TIL =
+* zsh loading order:
+| file     | Interactive Login | Interactive Not Login | Script |
+|----------|-------------------|-----------------------|--------|
+| zshenv   | il                | inl                   | s      |
+|----------|-------------------|-----------------------|--------|
+| zprofile | il                |                       |        |
+|----------|-------------------|-----------------------|--------|
+| zshrc    | il                | inl                   |        |
+|----------|-------------------|-----------------------|--------|
+| zlogin   | il                |                       |        |
+|----------|-------------------|-----------------------|--------|
+| zlogout  | il                |                       |        |
