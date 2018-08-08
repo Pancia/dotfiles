@@ -19,4 +19,4 @@ function man {
     esac
 }
 
-alias '?'='help'
+alias '?'='help' # search local functions/aliases or use cheat.sh

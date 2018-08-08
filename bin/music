@@ -1,8 +1,12 @@
 #!/usr/bin/env ruby
 
+#TODO: jq_filter as an opt arg -f "" OR --jq=""
+#TODO: mark: pp data before asking
+
 require "json"
 require "optparse"
 require "tempfile"
+require "shellwords"
 
 module RbReadline
     require "rb-readline"
@@ -44,6 +48,10 @@ global_opts = OptionParser.new do |opts|
     opts.separator commands_banner
 end
 
+def hash_diff(x, y)
+    Hash[*(x.size > y.size ? x.to_a - y.to_a : y.to_a - x.to_a).flatten]
+end
+
 class MusicDB
     def self.save(music, temp_name = "")
         tmp = Tempfile.new temp_name
@@ -67,9 +75,69 @@ class MusicDB
     def self.select(item, jq_filter)
         JSON.parse %x[ cat $MUSIC_DB | jq '[.[] | select(#{jq_filter} == $item)]' --arg item "#{item}" ]
     end
+
+    @meta_to_db = {"artist"=>"artist", "title"=>"name", "album"=>"playlist"}
+
+    def self.metadata(item)
+        JSON.parse(%x[ ffprobe -v quiet -print_format json -show_format \
+                       $MUSIC_DIR/#{item["id"]}.m4a || echo '{}' ]
+                  )["format"]["tags"]
+    end
+
+    def self.parse_tags(item)
+        m = self.metadata(item)
+        m == {} ? {} : m
+            .map {|k, v| [@meta_to_db[k], v] }.to_h
+            .select {|k,_| @meta_to_db.values.include? k}
+    end
+    def self.tag(items)
+        items.each do |i|
+            file_tags = self.parse_tags i
+            item = i.select {|k,_| @meta_to_db.values.include? k}
+            diff = hash_diff item, file_tags
+            if not diff.empty?
+                meta_str = diff.keys
+                    .map {|k| [" -metadata ", @meta_to_db.invert[k], "=", "#{item[k].shellescape}", " "]}
+                    .join ""
+                if $options[:dry_run]
+                    puts meta_str
+                else
+                    puts meta_str if $options[:verbose]
+                    file = i["id"]+".m4a"
+                    tmp = i["id"]+".tmp.m4a"
+                    log = i["id"]+".log.m4a"
+                    puts %x[ ffmpeg -i $MUSIC_DIR/#{file} #{meta_str} $MUSIC_DIR/#{tmp} 2>&1 | tee -a $MUSIC_DIR/#{log} && mv $MUSIC_DIR/#{tmp} $MUSIC_DIR/#{file} ]
+                end
+            end
+        end
+    end
 end
 
 class SubCommands
+    def self.tag_opts()
+        OptionParser.new do |opts|
+            opts.banner = "Usage: tag [ITEM] [JQ_FILTER]"
+            opts.separator "    ITEM: String, will be compared in `jq` to JQ_FILTER"
+            opts.separator "    JQ_FILTER: Any string that `jq` will accept"
+            opts.on("-n", "--dry-run", "Do not tag, just print") {
+                $options[:dry_run] = true
+            }
+        end
+    end
+    def self.tag(item, jq_filter = ".id")
+        MusicDB.tag MusicDB.select(item.gsub(/\..*$/, ""), jq_filter)
+    end
+
+    def self.meta_opts() OptionParser.new end
+    def self.meta(item, jq_filter = ".id")
+        MusicDB.select(item.gsub(/\..*$/, ""), jq_filter).each {|x| p MusicDB.metadata x}
+    end
+
+    def self.show_opts() OptionParser.new end
+    def self.show(item, jq_filter = ".id")
+        MusicDB.select(item.gsub(/\..*$/, ""), jq_filter).each { |x| pp x }
+    end
+
     def self.search_opts()
         OptionParser.new do |opts|
             opts.banner = "Usage: search [JQ_FILTER]"
@@ -131,7 +199,6 @@ class SubCommands
             opts.separator "    ITEM: String, will be compared in `jq` to JQ_FILTER"
             opts.separator "    JQ_FILTER: Any string that `jq` will accept"
             opts.separator ""
-            $options[:search] = false
             opts.on("-s", "--search", "Search for items to edit") do
                 $options[:search] = true
             end
@@ -177,6 +244,11 @@ class SubCommands
         music = MusicDB.read
         MusicDB.save music.merge to_edit
         MusicDB.tag to_edit
+    end
+
+    def self.cruft_opts() OptionParser.new end
+    def self.cruft()
+        puts %x[ find $MUSIC_DIR -type f -not -name '.*' -not -regex '[\/0-9A-Za-z\-]*\.m4a' ]
     end
 end
 

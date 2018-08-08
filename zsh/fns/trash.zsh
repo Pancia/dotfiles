@@ -7,7 +7,7 @@ function _record_trash {
     printf '%s\t%s\n' "$f" "$dest" >> "$TRASH_CACHE_HISTORY"
     if [[ $TRASH_CACHE_MAX_HISTORY -lt $(wc -l "$TRASH_CACHE_HISTORY" | awk '{print $1}') ]]; then
         local tmp="$(mktemp)"
-        awk -F"CACHE_SEP" '{if (NR != 1) { print $0 } }' "$TRASH_CACHE_HISTORY" > "$tmp"
+        awk -F'\t' '{if (NR != 1) { print $0 } }' "$TRASH_CACHE_HISTORY" > "$tmp"
         mv "$tmp" "$TRASH_CACHE_HISTORY"
     fi
 }
@@ -35,9 +35,14 @@ function trash { # mv to ~/.Trash
 
 function restore { # restore from ~/.Trash
     case "$1" in
-        '') command cat -n $TRASH_CACHE_HISTORY | awk -F'\t' '{print $3}' | less +G ;;
+        '') selected=$(mktemp)
+            command cat -n $TRASH_CACHE_HISTORY | awk -F'\t' '{print $1"\t"$3}' | tail -r \
+                | search --on-cancel error > $selected && restore $selected
+            ;;
         *)
-            local line="$(awk '{ if (NR == '$1') { print $0 } }' $TRASH_CACHE_HISTORY)"
+            line_num="$(cat $1 | cut -f1)"
+            [ -z "$line_num" ] && >&2 echo "[ERROR][restore]: Must select a line" && return 1
+            local line="$(awk "{ if (NR == $line_num) { print \$0 } }" $TRASH_CACHE_HISTORY)"
             local file="$(basename `echo $line | cut -f2` | sed -E 's/(>>>)|(<<<)/\\t/g')"
             local folder="$(echo $file | cut -f1 | sed 's/%/\//g')"
             local fname="$(echo $file | cut -f2 | sed 's/%/\//g')"
@@ -48,10 +53,8 @@ function restore { # restore from ~/.Trash
                 local dest="$folder/$fname"
             fi
             echo "[dotfiles/restore] INFO: moving $src -> $dest"
-            mv "$src" "$dest"
-            if [ $? ]; then
-                sed -i '' "${1}d" $TRASH_CACHE_HISTORY
-            fi
+            mv "$src" "$dest" \
+                && sed -i '' "${line_num}d" $TRASH_CACHE_HISTORY
             ;;
     esac
 }
