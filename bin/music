@@ -128,8 +128,8 @@ class SubCommands
         MusicDB.tag MusicDB.select(item.gsub(/\..*$/, ""), jq_filter)
     end
 
-    def self.meta_opts() OptionParser.new end
-    def self.meta(item, jq_filter = ".id")
+    def self.probe_opts() OptionParser.new end
+    def self.probe(item, jq_filter = ".id")
         MusicDB.select(item.gsub(/\..*$/, ""), jq_filter).each {|x| p MusicDB.metadata x}
     end
 
@@ -186,8 +186,9 @@ class SubCommands
         song_id = song_id.gsub(/\..*$/, "")
         p song_id if $options[:verbose]
         music = MusicDB.read
-        song = music["#{song_id}"]
+        song = music[song_id]
         p song if $options[:verbose]
+        puts "#{song["playlist"]} | #{song["artist"]} - #{song["name"]}" if not $options [:verbose]
         RbReadline.prefill_prompt song["marked"] if song["marked"]
         song["marked"] = Readline.readline("marked>?:".reverse).chomp
         MusicDB.save music, song_id
