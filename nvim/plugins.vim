@@ -114,4 +114,9 @@ Plug 'hsanson/vim-android'
 Plug 'artur-shaik/vim-javacomplete2'
 " }}}
 
+" LUA {{{
+Plug 'xolox/vim-misc'
+Plug 'xolox/vim-lua-ftplugin'
+" }}}
+
 call plug#end()
