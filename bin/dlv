@@ -105,10 +105,24 @@ defmodule TUI do
     Task.start(fn -> loop(%{}) end)
   end
   def loop(st) do
-    receive do
-      {:exit, _key} -> loop(st)
-      {:progress, key, value} -> IO.puts "<#{key}>:\n#{value}"; loop(st)
+    st = receive do
+      {:exit, key} -> Map.delete st, key
+      {:progress, key, value} -> Map.put st, key, value
+    after
+      100 -> TUI.display st; st
     end
+    loop st
+  end
+  def display(st) do
+    IO.write "\e[s\e[0H"
+    Enum.each(st, fn {k,v} ->
+      IO.write "\e[2K"
+      IO.write "\e[1B\e[2K"
+      IO.write "\e[1B\e[2K"
+      IO.write "\e[2A"
+      IO.write "<#{k}>:\n#{v}"
+    end)
+    IO.write "\e[99H\e[u"
   end
 end
 
