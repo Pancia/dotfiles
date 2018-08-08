@@ -1,2 +1,2 @@
-#[.zshenv]
+#<[.zshenv]>
 source ~/dotfiles/zsh/zshenv

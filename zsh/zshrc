@@ -4,7 +4,7 @@ function _same_inode {
 
 function _ENSURE_RCS {
     for rc in $(ls $HOME/dotfiles/rcs); do
-        local rc_dest="$(head -n 1 $HOME/dotfiles/rcs/$rc | sed -E 's/[#";]\[(.*)\]/\1/' )"
+        local rc_dest="$(head -n 1 $HOME/dotfiles/rcs/$rc | sed -E 's/.*<\[(.*)\]>.*/\1/' )"
         if [[ ! -f "$HOME/$rc_dest" ]] || $(_same_inode "$HOME/$rc_dest" "$HOME/dotfiles/rcs/$rc") ; then
             mkdir -p "$(dirname $HOME/$rc_dest)"
             ln -f "$HOME/dotfiles/rcs/$rc" "$HOME/$rc_dest"

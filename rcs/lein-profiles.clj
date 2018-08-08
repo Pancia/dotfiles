@@ -1,4 +1,4 @@
-;[.lein/profiles.clj]
+;<[.lein/profiles.clj]>
 {:user {:plugins [[cider/cider-nrepl "0.12.0"]
                   [lein-ancient "0.6.8"]
                   [lein-bikeshed "0.2.0"]

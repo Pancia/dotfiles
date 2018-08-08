@@ -1,4 +1,4 @@
-{"__rc_loc": "#[.config/peco/config.json]",
+{"__rc_loc": "<[.config/peco/config.json]>",
     "Keymap": {
         "C-b": "peco.ScrollPageUp",
         "C-f": "peco.ScrollPageDown",

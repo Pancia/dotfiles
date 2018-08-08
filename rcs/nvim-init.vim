@@ -1,2 +1,2 @@
-"[.config/nvim/init.vim]
+"<[.config/nvim/init.vim]>
 source ~/dotfiles/nvim/init.vim

@@ -1,4 +1,4 @@
-#[.fasdrc]
+#<[.fasdrc]>
 current() {
     for f in $(tree -fi . | sed 's/^\.\//'); do
         printf '%s/%s|1\n' "$(pwd)" "$f"
