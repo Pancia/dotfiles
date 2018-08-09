@@ -28,23 +28,14 @@ function showTodos {
     [[ -f TODO.zsh ]] && echo "&> TODO.zsh:" && cat TODO.zsh
     [[ -f TODO.wiki ]] && echo "&> TODO.wiki:" && cat TODO.wiki
 }
+
 function listVims {
     local VIMS="$(vims list)"
     [[ -n "$VIMS" ]] &&
         echo "&> VIMS:" && echo "$VIMS"
 }
 
-function checkWifiTODL {
-    local wifi_name="$(networksetup -getairportnetwork en1 | awk -F':' '{print $2}')"
-    local todl_file="~/Dropbox/TODL_${wifi_name}.wiki"
-    if [[ -e $todl_file ]]; then
-        echo "&> TODL:"
-        cat $todl_file
-    fi
-}
-
 function chpwd {
     cache 15 showTodos
     cache 5 listVims
-    cache global 5 checkWifiTODL
 }

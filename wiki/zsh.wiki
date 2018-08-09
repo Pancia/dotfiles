@@ -1,5 +1,4 @@
 = TODOS =
-- [ ] chpwd cache checkWifiTODOS => just once, lock it down
 - [ ] https://github.com/so-fancy/diff-so-fancy
 - [ ] Try out themes: https://github.com/unixorn/awesome-zsh-plugins#themes
 - [ ] try other faster themes

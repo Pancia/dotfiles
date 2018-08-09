@@ -1,5 +1,4 @@
 = Assorted =
-- [ ] dlv https://unix.stackexchange.com/questions/407721/best-way-to-create-table-like-cli-display-in-bash#407741
 - [ ] karabiner transfer installs/k*/karabiner.json to karabiner-elements (how ??)
 
 = Specific =
