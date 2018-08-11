@@ -2,11 +2,14 @@
     "Keymap": {
         "C-b": "peco.ScrollPageUp",
         "C-f": "peco.ScrollPageDown",
+        "C-u": "peco.ScrollPageUp",
+        "C-d": "peco.ScrollPageDown",
         "C-h": "peco.BackwardChar",
         "C-l": "peco.ForwardChar",
         "C-j": "peco.SelectDown",
         "C-k": "peco.SelectUp",
         "Tab": "peco.ToggleRangeMode"
     },
-    "InitialFilter": "SmartCase"
+    "InitialFilter": "SmartCase",
+    "StickySelection": true
 }
