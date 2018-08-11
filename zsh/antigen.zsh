@@ -9,6 +9,7 @@ antigen bundle git-flow
 antigen bundle lein
 antigen bundle node
 antigen bundle npm
+antigen bundle osx
 antigen bundle python
 
 # OSX
