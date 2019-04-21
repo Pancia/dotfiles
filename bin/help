@@ -16,5 +16,5 @@ if ARGV.empty?
 else
     tmp = Tempfile.new
     %x[ zsh -ic 'cheat #{ARGV.join " "} > #{tmp.path}' ]
-    exec %x[ less -n #{tmp.path} ]
+    exec %[ less -n #{tmp.path} ]
 end
