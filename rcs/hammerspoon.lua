@@ -78,8 +78,8 @@ Install:andUse("FadeLogo", {
 lotus = function(sounds, options)
     c = 1
     getAwarenessSound = function()
-        soundName = sounds[c][1]
-        volume = sounds[c][2] or 1
+        soundName = sounds[c].name
+        volume = sounds[c].volume or 1
         sound =  hs.sound.getByName(soundName):volume(volume)
         c = (c % #sounds) + 1
         return sound
@@ -100,13 +100,13 @@ lotus = function(sounds, options)
             end
         end
 
-        counter = (counter - 1) % interval
+        counter = (counter - 1) % options.triggerEvery
     end)
 end
 
-sounds = {{"gong",.5},
-          {"bowl",1},
-          {"bowl",1}}
+sounds = {{name = "gong", volume = .5},
+          {name = "bowl"},
+          {name = "bowl"}}
 lotus(sounds, {
     triggerEvery = 20, -- minutes
     notifOptions = false,
