@@ -89,7 +89,8 @@ lotus = function(sounds, options)
     menubar = hs.menubar.new()
     menubar:setTitle("lotus:" .. counter)
     getAwarenessSound():play()
-    timer = hs.timer.doEvery(options.interval or 60, function()
+    interval = options.interval or 60
+    timer = hs.timer.doEvery(interval, function()
         menubar:setTitle("lotus:" .. counter)
 
         if counter == 0 then
@@ -99,7 +100,7 @@ lotus = function(sounds, options)
             end
         end
 
-        counter = (counter - 1) % options.interval
+        counter = (counter - 1) % interval
     end)
 end
 
