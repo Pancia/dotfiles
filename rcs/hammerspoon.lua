@@ -9,6 +9,7 @@ hs.loadSpoon("SpoonInstall")
 spoon.SpoonInstall.use_syncinstall = true
 Install=spoon.SpoonInstall
 
+-- ie: <cmd-ctrl-r>
 Install:andUse("ReloadConfiguration", {
     hotkeys = {
         reloadConfiguration = {hs_global_modifier, "r"}
@@ -72,4 +73,40 @@ Install:andUse("FadeLogo", {
         default_run = 1.0,
     },
     start = true
+})
+
+lotus = function(sounds, options)
+    c = 1
+    getAwarenessSound = function()
+        soundName = sounds[c][1]
+        volume = sounds[c][2] or 1
+        sound =  hs.sound.getByName(soundName):volume(volume)
+        c = (c % #sounds) + 1
+        return sound
+    end
+
+    counter = options.triggerEvery
+    menubar = hs.menubar.new()
+    menubar:setTitle("lotus:" .. counter)
+    getAwarenessSound():play()
+    timer = hs.timer.doEvery(options.interval or 60, function()
+        menubar:setTitle("lotus:" .. counter)
+
+        if counter == 0 then
+            getAwarenessSound():play()
+            if options.notifOptions then
+                hs.notify.new(nil, options.notifOptions):send()
+            end
+        end
+
+        counter = (counter - 1) % options.interval
+    end)
+end
+
+sounds = {{"gong",.5},
+          {"bowl",1},
+          {"bowl",1}}
+lotus(sounds, {
+    triggerEvery = 20, -- minutes
+    notifOptions = false,
 })
