@@ -1,0 +1,3 @@
+#!/bin/sh
+
+[ -e ./dev/git-hooks/pre-commit ] && exec ./dev/git-hooks/pre-commit
