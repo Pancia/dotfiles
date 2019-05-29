@@ -9,6 +9,11 @@ hs.loadSpoon("SpoonInstall")
 spoon.SpoonInstall.use_syncinstall = true
 Install=spoon.SpoonInstall
 
+Install.repos.pancia = {
+    url = "https://github.com/pancia/dotfiles/tree/master/spoons/lotus",
+    desc = "My own personal spoon repo (under my dotfiles)",
+}
+
 -- ie: <cmd-ctrl-r>
 Install:andUse("ReloadConfiguration", {
     hotkeys = {
@@ -17,7 +22,6 @@ Install:andUse("ReloadConfiguration", {
 })
 
 Install:andUse("TextClipboardHistory", {
-    -- config = { show_in_menubar = false, },
     hotkeys = {
         toggle_clipboard = {hs_global_modifier, "p"}
     }, start = true,
@@ -75,39 +79,13 @@ Install:andUse("FadeLogo", {
     start = true
 })
 
-lotus = function(sounds, options)
-    c = 1
-    getAwarenessSound = function()
-        soundName = sounds[c].name
-        volume = sounds[c].volume or 1
-        sound =  hs.sound.getByName(soundName):volume(volume)
-        c = (c % #sounds) + 1
-        return sound
-    end
-
-    counter = options.triggerEvery
-    menubar = hs.menubar.new()
-    menubar:setTitle("lotus:" .. counter)
-    getAwarenessSound():play()
-    interval = options.interval or 60
-    timer = hs.timer.doEvery(interval, function()
-        menubar:setTitle("lotus:" .. counter)
-
-        if counter == 0 then
-            getAwarenessSound():play()
-            if options.notifOptions then
-                hs.notify.new(nil, options.notifOptions):send()
-            end
-        end
-
-        counter = (counter - 1) % options.triggerEvery
-    end)
-end
-
-sounds = {{name = "gong", volume = .5},
-          {name = "bowl"},
-          {name = "bowl"}}
-lotus(sounds, {
-    triggerEvery = 20, -- minutes
-    notifOptions = false,
+Install:andUse("Lotus", {
+    config = {
+        sounds = {{name = "gong", volume = .5},
+                  {name = "bowl"},
+                  {name = "bowl"}},
+        triggerEvery = 20, -- minutes
+        notifOptions = false,
+    },
+    start = true
 })
