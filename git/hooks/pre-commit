@@ -1,3 +1,5 @@
 #!/bin/sh
 
-[ -e ./dev/git-hooks/pre-commit ] && exec ./dev/git-hooks/pre-commit
+[[ -f ./dev/git-hooks/pre-commit ]] && exec ./dev/git-hooks/pre-commit
+
+exit 0
