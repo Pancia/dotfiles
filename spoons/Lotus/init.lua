@@ -42,12 +42,12 @@ function obj:start()
 
         if obj._timerCounter == 0 then
             obj:playAwarenessSound()
-            if options.notifOptions then
-                hs.notify.new(nil, options.notifOptions):send()
+            if obj.notifOptions then
+                hs.notify.new(nil, obj.notifOptions):send()
             end
         end
 
-        obj._timerCounter = (obj._timerCounter - 1) % options.triggerEvery
+        obj._timerCounter = (obj._timerCounter - 1) % obj.triggerEvery
     end)
 
     return self

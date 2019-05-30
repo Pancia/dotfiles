@@ -9,11 +9,6 @@ hs.loadSpoon("SpoonInstall")
 spoon.SpoonInstall.use_syncinstall = true
 Install=spoon.SpoonInstall
 
-Install.repos.pancia = {
-    url = "https://github.com/pancia/dotfiles/tree/master/spoons/lotus",
-    desc = "My own personal spoon repo (under my dotfiles)",
-}
-
 -- ie: <cmd-ctrl-r>
 Install:andUse("ReloadConfiguration", {
     hotkeys = {
@@ -79,7 +74,32 @@ Install:andUse("FadeLogo", {
     start = true
 })
 
-Install:andUse("Lotus", {
+local function _x(cmd, errfmt, ...)
+   local output, status = hs.execute(cmd)
+   if status then
+      return string.gsub(output, "\n*$", "")
+   else
+      print(string.format(errfmt, ...))
+      return nil
+   end
+end
+
+localRepo = "~/dotfiles/Spoons/"
+localInstall = function(name, conf)
+    spoonDir = localRepo .. name
+    if hs.fs.attributes(spoonDir) then
+        outdir = hs.configdir.."/Spoons/"..name..".spoon"
+        _x("rm -r "..outdir
+        , "failed to clear '%s'", outdir)
+        _x("mkdir -p "..outdir
+        , "failed to make dir '%s'", outdir)
+        _x("cp "..spoonDir.."/* "..outdir
+        , "failed to copy '%s' local spoon to '%s'", spoonDir, outdir)
+        hs.spoons.use(name, conf)
+    end
+end
+
+localInstall("Lotus", {
     config = {
         sounds = {{name = "gong", volume = .5},
                   {name = "bowl"},
@@ -87,5 +107,5 @@ Install:andUse("Lotus", {
         triggerEvery = 20, -- minutes
         notifOptions = false,
     },
-    start = true
+    start = true,
 })
