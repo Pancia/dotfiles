@@ -31,30 +31,63 @@ function obj:init()
     obj._soundIdx = 1
 end
 
+function renderMenu()
+    return {
+        {title = (obj._stopped and "start" or "stop")
+        , fn = function()
+            if obj._stopped then
+                obj._lotusTimer:start():setNextTrigger(0)
+            else
+                obj._lotusTimer:stop()
+                obj._menubar:setTitle("lotus:stopped")
+            end
+            obj._stopped = not obj._stopped
+        end},
+        {title = "pause for an hour"
+        , checked = obj._paused
+        , fn = function()
+            if obj._paused then
+                obj._pauseTimer:stop()
+                obj._lotusTimer:start():setNextTrigger(0)
+            else
+                obj._lotusTimer:stop()
+                obj._pauseTimer = hs.timer.doAfter(60*60, function()
+                    obj._lotusTimer:start():setNextTrigger(0)
+                end)
+                obj._menubar:setTitle("lotus:paused")
+            end
+            obj._paused = not obj._paused
+        end},
+    }
+end
+
+function lotusBlock()
+    obj._menubar:setTitle("lotus:" .. obj._timerCounter)
+    if obj._timerCounter == 0 then
+        obj:playAwarenessSound()
+        if obj.notifOptions then
+            hs.notify.new(nil, obj.notifOptions):send()
+        end
+    end
+    obj._timerCounter = (obj._timerCounter - 1) % obj.triggerEvery
+end
+
 function obj:start()
     obj._timerCounter = obj.triggerEvery
-    obj._menubar = hs.menubar.new()
+
+    obj._stopped = false
+    obj._paused = false
+    obj._menubar = hs.menubar.new():setMenu(renderMenu)
     obj._menubar:setTitle("lotus:" .. obj._timerCounter)
 
     obj:playAwarenessSound()
-    obj._timer = hs.timer.doEvery(obj.interval, function()
-        obj._menubar:setTitle("lotus:" .. obj._timerCounter)
-
-        if obj._timerCounter == 0 then
-            obj:playAwarenessSound()
-            if obj.notifOptions then
-                hs.notify.new(nil, obj.notifOptions):send()
-            end
-        end
-
-        obj._timerCounter = (obj._timerCounter - 1) % obj.triggerEvery
-    end)
+    obj._lotusTimer = hs.timer.doEvery(obj.interval, lotusBlock)
 
     return self
 end
 
 function obj:stop()
-    obj._timer:stop()
+    obj._lotusTimer:stop()
     obj._menubar:delete()
     return self
 end

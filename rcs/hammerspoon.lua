@@ -84,7 +84,7 @@ local function _x(cmd, errfmt, ...)
    end
 end
 
-localRepo = "~/dotfiles/Spoons/"
+localRepo = "~/dotfiles/spoons/"
 localInstall = function(name, conf)
     spoonDir = localRepo .. name
     if hs.fs.attributes(spoonDir) then
