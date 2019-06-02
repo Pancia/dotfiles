@@ -22,7 +22,7 @@ function obj:playAwarenessSound()
     volume = obj.sounds[obj._soundIdx].volume or 1
     sound = hs.sound.getByName(soundName):volume(volume)
     obj._soundIdx = (obj._soundIdx % #obj.sounds) + 1
-    obj._menubar:setTitle("lotus:" .. soundName)
+    renderMenuBar(soundName)
     sound:play()
     return self
 end
@@ -31,15 +31,20 @@ function obj:init()
     obj._soundIdx = 1
 end
 
+function renderMenuBar(text)
+    text = text or obj._timerCounter
+    obj._menubar:setTitle("lotus:" .. text)
+end
+
 function renderMenu()
     return {
         {title = (obj._stopped and "start" or "stop")
         , fn = function()
             if obj._stopped then
-                obj._lotusTimer:start():setNextTrigger(0)
+                renderMenuBar()
             else
                 obj._lotusTimer:stop()
-                obj._menubar:setTitle("lotus:stopped")
+                renderMenuBar("stopped")
             end
             obj._stopped = not obj._stopped
         end},
@@ -48,13 +53,13 @@ function renderMenu()
         , fn = function()
             if obj._paused then
                 obj._pauseTimer:stop()
-                obj._lotusTimer:start():setNextTrigger(0)
+                renderMenuBar()
             else
                 obj._lotusTimer:stop()
                 obj._pauseTimer = hs.timer.doAfter(60*60, function()
-                    obj._lotusTimer:start():setNextTrigger(0)
+                    renderMenuBar()
                 end)
-                obj._menubar:setTitle("lotus:paused")
+                renderMenuBar("paused")
             end
             obj._paused = not obj._paused
         end},
@@ -62,7 +67,7 @@ function renderMenu()
 end
 
 function lotusBlock()
-    obj._menubar:setTitle("lotus:" .. obj._timerCounter)
+    renderMenuBar()
     if obj._timerCounter == 0 then
         obj:playAwarenessSound()
         if obj.notifOptions then
@@ -78,7 +83,7 @@ function obj:start()
     obj._stopped = false
     obj._paused = false
     obj._menubar = hs.menubar.new():setMenu(renderMenu)
-    obj._menubar:setTitle("lotus:" .. obj._timerCounter)
+    renderMenuBar()
 
     obj:playAwarenessSound()
     obj._lotusTimer = hs.timer.doEvery(obj.interval, lotusBlock)
