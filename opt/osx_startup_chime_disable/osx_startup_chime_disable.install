@@ -6,3 +6,5 @@ sudo launchctl unload -w /Library/LaunchDaemons/$PLIST 2> /dev/null
 sudo ln -f $PL /Library/LaunchDaemons/$PLIST
 sudo chown root:wheel /Library/LaunchDaemons/$PLIST
 sudo launchctl load -w /Library/LaunchDaemons/$PLIST
+
+sudo nvram SystemAudioVolume=%80
