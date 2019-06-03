@@ -32,6 +32,7 @@ end
 
 function obj:init()
     obj._soundIdx = 1
+    obj._paused = false
 end
 
 function renderMenuBar(text)
@@ -42,16 +43,17 @@ end
 
 function renderMenu()
     return {
-        {title = (obj._stopped and "start" or "stop")
+        {title = (obj._paused and "resume" or "pause")
         , fn = function()
-            if obj._stopped then
+            if obj._paused then
                 obj._lotusTimer:start()
                 renderMenuBar()
             else
                 obj._lotusTimer:stop()
+                obj._pauseTimer:stop()
                 renderMenuBar("||")
             end
-            obj._stopped = not obj._stopped
+            obj._paused = not obj._paused
         end},
         {title = "pause for an hour"
         , checked = obj._paused
@@ -85,9 +87,6 @@ end
 
 function obj:start()
     obj._timerCounter = obj.triggerEvery
-
-    obj._stopped = false
-    obj._paused = false
     obj._menubar = hs.menubar.new():setMenu(renderMenu)
     renderMenuBar()
 
