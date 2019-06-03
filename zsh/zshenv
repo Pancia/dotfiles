@@ -5,5 +5,3 @@ export LESSCHARSET=UTF-8 # git (& => less) otherwise doesn't show UTF-8 file pro
 for env in $(ls ~/dotfiles/zsh/env); do
     source "$HOME/dotfiles/zsh/env/${env}"
 done
-
-[ -e ~/dotfiles/zsh/extra.env.zsh ] && source ~/dotfiles/zsh/extra.env.zsh
