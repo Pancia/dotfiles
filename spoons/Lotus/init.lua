@@ -19,12 +19,14 @@ obj.triggerEvery = 20 -- minutes
 obj.notifOptions = nil
 
 function obj:playAwarenessSound()
-    soundName = obj.sounds[obj._soundIdx].name
-    volume = obj.sounds[obj._soundIdx].volume or 1
-    sound = hs.sound.getByName(soundName):volume(volume)
+    sound = obj.sounds[obj._soundIdx]
+    volume = sound.volume or 1
+    s = sound.name
+        and hs.sound.getByName(sound.name)
+        or hs.sound.getByFile(obj.spoonPath.."/"..sound.path)
+    s:volume(volume):play()
+    renderMenuBar(sound.name)
     obj._soundIdx = (obj._soundIdx % #obj.sounds) + 1
-    renderMenuBar(soundName)
-    sound:play()
     return self
 end
 
@@ -34,7 +36,6 @@ end
 
 function renderMenuBar(text)
     text = text or obj._timerCounter
-    print(obj.spoonPath)
     obj._menubar:setIcon(obj.spoonPath.."/lotus-flower.png")
     obj._menubar:setTitle(text)
 end
