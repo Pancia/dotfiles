@@ -16,6 +16,7 @@ augroup FileTypes
     au!
     au BufNewFile,BufRead .eslintrc set filetype=json
     au BufNewFile,BufRead TODO set filetype=zsh
+    au BufNewFile,BufRead svelte set filetype=html
 augroup END
 
 augroup Terminal

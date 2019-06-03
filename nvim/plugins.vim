@@ -119,4 +119,8 @@ Plug 'xolox/vim-misc'
 Plug 'xolox/vim-lua-ftplugin'
 " }}}
 
+" RUBY {{{
+Plug 'slim-template/vim-slim'
+" }}}
+
 call plug#end()
