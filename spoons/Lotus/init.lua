@@ -5,6 +5,7 @@ obj.version = "1.0"
 obj.author = "Anthony D'Ambrosio <anthony.dayzerostudio@gmail.com>"
 obj.homepage = "https://github.com/pancia/dotfiles/tree/master/spoons/lotus"
 obj.license = "MIT - https://opensource.org/licenses/MIT"
+obj.attributions = "Lotus icon made by: https://www.flaticon.com/free-icon/lotus-flower_1152062"
 
 local function script_path()
     local str = debug.getinfo(2, "S").source:sub(2)
@@ -33,7 +34,9 @@ end
 
 function renderMenuBar(text)
     text = text or obj._timerCounter
-    obj._menubar:setTitle("lotus:" .. text)
+    print(obj.spoonPath)
+    obj._menubar:setIcon(obj.spoonPath.."/lotus-flower.png")
+    obj._menubar:setTitle(text)
 end
 
 function renderMenu()
