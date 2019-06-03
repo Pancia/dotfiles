@@ -45,10 +45,11 @@ function renderMenu()
         {title = (obj._stopped and "start" or "stop")
         , fn = function()
             if obj._stopped then
+                obj._lotusTimer:start()
                 renderMenuBar()
             else
                 obj._lotusTimer:stop()
-                renderMenuBar("stopped")
+                renderMenuBar("||")
             end
             obj._stopped = not obj._stopped
         end},
@@ -57,13 +58,14 @@ function renderMenu()
         , fn = function()
             if obj._paused then
                 obj._pauseTimer:stop()
+                obj._lotusTimer:start()
                 renderMenuBar()
             else
                 obj._lotusTimer:stop()
+                renderMenuBar("||1h")
                 obj._pauseTimer = hs.timer.doAfter(60*60, function()
                     renderMenuBar()
                 end)
-                renderMenuBar("paused")
             end
             obj._paused = not obj._paused
         end},
