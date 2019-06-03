@@ -1,8 +1,9 @@
 = Assorted =
 - [ ] karabiner transfer installs/k*/karabiner.json to karabiner-elements (how ??)
+- [ ] http://zzamboni.org/post/my-elvish-configuration-with-commentary/
+- [ ] https://github.com/danistefanovic/build-your-own-x
 
 = Specific =
 * [[Vim#TODOS]]
 * [[Zsh#TODOS]]
 * [[HammerSpoon#TODOS]]
-* [[Red#TODOS]]

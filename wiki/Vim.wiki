@@ -3,8 +3,9 @@
 - http://learnvimscriptthehardway.stevelosh.com/
 
 = TODOS =
-- [ ] TODO FIXME should highlight line (red?)
-- [ ] vim-opex, output to a quickbuf? Unite?
+- [ ] look into completion manager https://github.com/ncm2/ncm2
+- [ ] TODO FIXME should mark/highlight line (red?)
+- [ ] [[vim-opex]], output to a quickbuf? Unite?
 - [ ] load/cp ftplugins from dotfiles/nvim/ftplugins, remove from dot install
 - [ ] vim-plug lazy load plugins `vim --startuptime`
 - [ ] ag edit file in the search quickbuf, ala Emacs Helm

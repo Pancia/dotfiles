@@ -3,7 +3,6 @@
     * [[Vim]]
     * [[Zsh]]
     * [[HammerSpoon]]
-    * [[Red]]
     * [[Scratchpad]]
 == Other Wikis: ==
     * [[wiki0:index|~/Dropbox/wiki]]
