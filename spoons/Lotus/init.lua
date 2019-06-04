@@ -60,7 +60,6 @@ function renderMenu()
             obj._paused = not obj._paused
         end},
         {title = "pause for an hour"
-        , checked = obj._paused
         , fn = function()
             if obj._paused then
                 obj._pauseTimer:stop()
