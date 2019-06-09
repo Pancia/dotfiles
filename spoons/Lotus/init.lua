@@ -69,6 +69,7 @@ function renderMenu()
                 obj._lotusTimer:stop()
                 renderMenuBar("||1h")
                 obj._pauseTimer = hs.timer.doAfter(60*60, function()
+                    obj._lotusTimer:start()
                     renderMenuBar()
                 end)
             end
