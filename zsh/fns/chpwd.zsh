@@ -24,9 +24,8 @@ function cache {
 }
 
 function showTodos {
-    [[ -f TODO ]] && echo "&> TODO:" && cat TODO
-    [[ -f TODO.zsh ]] && echo "&> TODO.zsh:" && cat TODO.zsh
     [[ -f TODO.wiki ]] && echo "&> TODO.wiki:" && cat TODO.wiki
+    [[ -f wiki/TODO.wiki ]] && echo "&> wiki/TODO.wiki:" && cat wiki/TODO.wiki
 }
 
 function listVims {

@@ -1,7 +1,12 @@
 = Assorted =
 - [ ] karabiner transfer installs/k*/karabiner.json to karabiner-elements (how ??)
-- [ ] http://zzamboni.org/post/my-elvish-configuration-with-commentary/
 - [ ] https://github.com/danistefanovic/build-your-own-x
+
+= Spoons =
+== Lotus ==
+- [ ] show which alarm is next / counting down
+- [ ] allow per sound notification options
+- [ ] ? snooze until: open a time picker dialog
 
 = Specific =
 * [[Vim#TODOS]]
