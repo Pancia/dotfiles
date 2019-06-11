@@ -37,7 +37,7 @@ function _vimsShow { for i in `__vimsList`; do echo "===> $i <==="; cat $i; done
 
 function _vimsList { __vimsList | xargs -I_ basename _ | sed 's/.vim$//' }
 
-function _vimsHelp { echo $__DOC }
+function _vimsHelp { echo $__DOC; echo; tree $VIMS_SESSIONS_ROOT }
 
 function vims { local __DOC="vims [edit|help|list|show] [SESSION]\n\tvim session manager"
     local sub_cmd="$1"
