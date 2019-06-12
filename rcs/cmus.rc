@@ -2,3 +2,4 @@
 set format_playlist= %-15l | %-15%a . %t%= %y %d %{?X!=0?%3X ?    }
 set lib_sort=album
 shell /Users/pancia/.config/cmus/cmus-osx/media-keys.py &
+set status_display_program=/Users/pancia/.config/cmus/cmus-osx/notify.py
