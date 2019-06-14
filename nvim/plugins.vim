@@ -28,13 +28,13 @@ Plug 'Shougo/vimproc.vim', {'do' : 'make'}
 " }}}
 
 " SHELL {{{
-Plug 'huiyiqun/elvish.vim'
+Plug 'huiyiqun/elvish.vim', {'for': 'elvish'}
 " }}}
 
 " WIKI {{{
 Plug 'gokcehan/vim-opex'
 let g:vimwiki_map_prefix = ','
-Plug 'vimwiki/vimwiki'
+Plug 'vimwiki/vimwiki', {'for': 'vimwiki'}
 " }}}
 
 " {{{ GIT
@@ -53,7 +53,7 @@ Plug 'kien/rainbow_parentheses.vim'
 " }}}
 
 " AUTOCOMPLETE {{{
-Plug 'clojure-vim/async-clj-omni'
+Plug 'clojure-vim/async-clj-omni', {'for': 'clojure'}
 Plug 'ctrlpvim/ctrlp.vim'
 Plug 'zchee/deoplete-zsh'
 Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
@@ -65,13 +65,13 @@ Plug 'Shougo/unite.vim'
 " }}}
 
 " CLOJURE {{{
-Plug 'clojure-emacs/cider-nrepl'
-Plug 'venantius/vim-cljfmt'
-Plug 'guns/vim-clojure-highlight'
-Plug 'guns/vim-clojure-static'
-Plug 'tpope/vim-fireplace'
-Plug 'guns/vim-sexp'
-Plug 'tpope/vim-sexp-mappings-for-regular-people'
+Plug 'clojure-emacs/cider-nrepl', {'for': 'clojure'}
+Plug 'venantius/vim-cljfmt', {'for': 'clojure'}
+Plug 'guns/vim-clojure-highlight', {'for': 'clojure'}
+Plug 'guns/vim-clojure-static', {'for': 'clojure'}
+Plug 'tpope/vim-fireplace', {'for': 'clojure'}
+Plug 'guns/vim-sexp', {'for': 'clojure'}
+Plug 'tpope/vim-sexp-mappings-for-regular-people', {'for': 'clojure'}
 " }}}
 
 " HASKELL {{{
@@ -89,38 +89,38 @@ Plug 'adimit/prolog.vim', { 'for' : 'prolog' }
 " }}}
 
 " JAVASCRIPT {{{
-Plug 'wavded/vim-stylus'
-Plug 'digitaltoad/vim-jade'
+Plug 'wavded/vim-stylus', {'for': 'javascript'}
+Plug 'digitaltoad/vim-jade', {'for': 'javascript'}
 "Plug 'jelera/vim-javascript-syntax'
 " }}}
 
 " NODE.JS {{{
-Plug 'sidorares/node-vim-debugger'
-Plug 'moll/vim-node'
+Plug 'sidorares/node-vim-debugger', {'for': 'javascript'}
+Plug 'moll/vim-node', {'for': 'javascript'}
 " }}}
 
 " LUX {{{
-Plug 'mwgkgk/lux-vim'
+Plug 'mwgkgk/lux-vim', {'for': 'lux'}
 " }}}
 
 " RUST {{{
-Plug 'rust-lang/rust.vim'
-Plug 'rhysd/rust-doc.vim'
+Plug 'rust-lang/rust.vim', {'for': 'rust'}
+Plug 'rhysd/rust-doc.vim', {'for': 'rust'}
 " }}}
 
 " ANDROID/KOTLIN/JAVA {{{
-Plug 'udalov/kotlin-vim'
-Plug 'hsanson/vim-android'
-Plug 'artur-shaik/vim-javacomplete2'
+Plug 'udalov/kotlin-vim', {'for': 'kotlin'}
+Plug 'hsanson/vim-android', {'for': 'kotlin'}
+Plug 'artur-shaik/vim-javacomplete2', {'for': 'kotlin'}
 " }}}
 
 " LUA {{{
-Plug 'xolox/vim-misc'
-Plug 'xolox/vim-lua-ftplugin'
+Plug 'xolox/vim-misc', {'for': 'lua'}
+Plug 'xolox/vim-lua-ftplugin', {'for': 'lua'}
 " }}}
 
 " RUBY {{{
-Plug 'slim-template/vim-slim'
+Plug 'slim-template/vim-slim', {'for': 'ruby'}
 " }}}
 
 call plug#end()
