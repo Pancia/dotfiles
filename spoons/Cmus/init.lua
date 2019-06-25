@@ -18,10 +18,21 @@ function isActive()
     return status
 end
 
+function notify()
+    res, status = cmusRemote("--raw status")
+    if status then
+        artist = string.match(res, "tag artist ([^\n]+)")
+        album = string.match(res, "tag album ([^\n]+)")
+        title = string.match(res, "tag title ([^\n]+)")
+        hs.notify.show(title, artist, album)
+    end
+end
+
 function obj:start()
     obj._prev = hs.hotkey.bind({}, "f7", function()
         if isActive() then
             cmusRemote("--prev")
+            notify()
         end
     end)
     obj._seekBack = hs.hotkey.bind("shift", "f7", function()
@@ -37,6 +48,7 @@ function obj:start()
     obj._next = hs.hotkey.bind({}, "f9", function()
         if isActive() then
             cmusRemote("--next")
+            notify()
         end
     end)
     obj._seekNext = hs.hotkey.bind("shift", "f9", function()
