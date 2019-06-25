@@ -60,6 +60,14 @@ function obj:start()
             output:setVolume(output:volume() + 10)
         end
     end)
+    obj._osxVolumeDown = hs.hotkey.bind("cmd", "f19", function()
+        output = hs.audiodevice.defaultOutputDevice()
+        output:setVolume(output:volume() - 5)
+    end)
+    obj._osxVolumeUp = hs.hotkey.bind("cmd", "f20", function()
+        output = hs.audiodevice.defaultOutputDevice()
+        output:setVolume(output:volume() + 5)
+    end)
     return self
 end
 
