@@ -1,4 +1,4 @@
-let g:android_sdk_path = '/Users/Anthony/Library/Android/sdk'
+let g:android_sdk_path = '/Users/pancia/Library/Android/sdk'
 
 augroup JAVA
     au!
