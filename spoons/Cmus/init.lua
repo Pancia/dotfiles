@@ -62,6 +62,7 @@ function obj:start()
         else
             output = hs.audiodevice.defaultOutputDevice()
             output:setVolume(output:volume() - 10)
+            hs.sound.getByName("Pop"):play()
         end
     end)
     obj._volumeUp = hs.hotkey.bind({}, "f20", function()
@@ -70,15 +71,18 @@ function obj:start()
         else
             output = hs.audiodevice.defaultOutputDevice()
             output:setVolume(output:volume() + 10)
+            hs.sound.getByName("Pop"):play()
         end
     end)
     obj._osxVolumeDown = hs.hotkey.bind("cmd", "f19", function()
         output = hs.audiodevice.defaultOutputDevice()
         output:setVolume(output:volume() - 5)
+        hs.sound.getByName("Pop"):play()
     end)
     obj._osxVolumeUp = hs.hotkey.bind("cmd", "f20", function()
         output = hs.audiodevice.defaultOutputDevice()
         output:setVolume(output:volume() + 5)
+        hs.sound.getByName("Pop"):play()
     end)
     return self
 end
