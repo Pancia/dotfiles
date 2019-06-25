@@ -109,3 +109,8 @@ localInstall("Lotus", {
     },
     start = true,
 })
+
+localInstall("Cmus", {
+    config = {},
+    start = true,
+})

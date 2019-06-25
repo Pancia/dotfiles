@@ -54,6 +54,7 @@ function renderMenu()
                 renderMenuBar()
             else
                 obj._lotusTimer:stop()
+                --TODO: FIXME: crashes if _pauseTimer wasnt initialized
                 obj._pauseTimer:stop()
                 renderMenuBar("||")
             end
