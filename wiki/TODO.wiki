@@ -2,6 +2,9 @@
 - [ ] karabiner transfer installs/k*/karabiner.json to karabiner-elements (how ??)
 - [ ] https://github.com/danistefanovic/build-your-own-x
 
+= cmus =
+- [ ] https://github.com/cmus/cmus/wiki/cmus_edit_tags
+
 = Spoons =
 == Lotus ==
 - [ ] show which alarm is next / counting down
