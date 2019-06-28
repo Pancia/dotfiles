@@ -18,6 +18,11 @@ function isActive()
     return status
 end
 
+function isPlaying()
+    cmusStatus = hs.execute("cmus-remote --raw status", true)
+    return string.match(cmusStatus, "status playing")
+end
+
 function notify()
     res, status = cmusRemote("--raw status")
     if status then
@@ -57,20 +62,20 @@ function obj:start()
         end
     end)
     obj._volumeDown = hs.hotkey.bind({}, "f19", function()
-        if isActive() then
-            cmusRemote("--volume -10")
+        if isActive() and isPlaying() then
+            cmusRemote("--volume -5")
         else
             output = hs.audiodevice.defaultOutputDevice()
-            output:setVolume(output:volume() - 10)
+            output:setVolume(output:volume() - 5)
             hs.sound.getByName("Pop"):play()
         end
     end)
     obj._volumeUp = hs.hotkey.bind({}, "f20", function()
-        if isActive() then
-            cmusRemote("--volume +10")
+        if isActive() and isPlaying() then
+            cmusRemote("--volume +5")
         else
             output = hs.audiodevice.defaultOutputDevice()
-            output:setVolume(output:volume() + 10)
+            output:setVolume(output:volume() + 5)
             hs.sound.getByName("Pop"):play()
         end
     end)
