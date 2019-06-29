@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+uuid=$(
+cmus-remote --raw status \
+    | ag 'file ' \
+    | sed 's/file //' \
+    | xargs basename \
+    | sed 's/\..*$//')
+
+text="${1:-marked invalid by cmus user}"
+music mark --song-id "$uuid" --text "$text"
+
+mkdir -p ~/.log/cmrk/
+echo "['$uuid', '$text']" | tee -a ~/.log/cmrk/mark.log
