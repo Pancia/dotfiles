@@ -8,6 +8,7 @@ cmus-remote --raw status \
     | sed 's/\..*$//')
 
 text="${1:-marked invalid by cmus user}"
+
 music mark --song-id "$uuid" --text "$text"
 
 mkdir -p ~/.log/cmrk/
