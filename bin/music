@@ -4,6 +4,7 @@ require "json"
 require "optparse"
 require "tempfile"
 require "shellwords"
+require "pp"
 
 module RbReadline
     require "rb-readline"
