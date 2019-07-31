@@ -7,7 +7,7 @@ cmus-remote --raw status \
     | xargs basename \
     | sed 's/\..*$//')
 
-text="${1:-marked invalid by cmus user}"
+text="${@:-marked invalid by cmus user}"
 
 music mark --song-id "$uuid" --text "$text"
 
