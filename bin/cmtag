@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+uuid=$(
+cmus-remote --raw status \
+    | ag 'file ' \
+    | sed 's/file //' \
+    | xargs basename \
+    | sed 's/\..*$//')
+
+music tag --song-id "$uuid" -- $@ 2>&1 | tee -a ~/.log/cmtag/log
+
+mkdir -p ~/.log/cmtag/
+echo "['$uuid', '$@']" | tee -a ~/.log/cmtag/tag.log

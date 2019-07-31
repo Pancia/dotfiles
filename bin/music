@@ -103,9 +103,9 @@ class MusicDB
 end
 
 class MusicCMDs
-    def self.tag_opts()
+    def self.mtag_opts()
         OptionParser.new do |opts|
-            opts.banner = "Usage: tag [OPTS] ITEM"
+            opts.banner = "Usage: mtag [OPTS] ITEM"
             opts.info = "Tag the file with metadata (uses ffmpeg)"
             opts.separator "    ITEM: String, will be compared in `jq` to FILTER"
             opts.separator ""
@@ -118,7 +118,7 @@ class MusicCMDs
             }
         end
     end
-    def self.tag(item)
+    def self.mtag(item)
         MusicDB.tag MusicDB.select(item.gsub(/\..*$/, ""), $options[:filter])
     end
 
@@ -202,10 +202,44 @@ class MusicCMDs
         end
     end
 
+    def self.tag_opts()
+        OptionParser.new do |opts|
+            opts.banner = "Usage: tag [-s SONG_ID] TAGS*"
+            opts.info = "Tag SONG_ID with TAGS"
+            opts.separator "    SONG_ID: Song \"id\" or filename"
+            opts.separator "    TAGS format: <tag>[,\s*<tag>]*"
+            opts.separator ""
+            $options[:song_id] = nil
+            opts.on("-s", "--song-id SONG_ID", "Apply the mark to SONG_ID") { |id|
+                $options[:song_id] = id
+            }
+        end
+    end
+    def self.tag(*tag_args)
+        song_id = $options[:song_id]
+        raise "NEED SONG ID" if not song_id
+        raise "NEED TAGS" if not tag_args
+
+        song_id = song_id.gsub(/\..*$/, "")
+        p song_id if $options[:verbose]
+        music = MusicDB.read
+        song = music[song_id]
+        p song if $options[:verbose]
+        puts "#{song["playlist"]} | #{song["artist"]} - #{song["name"]}" if not $options[:verbose]
+
+        p $options if $options[:verbose]
+        tags = tag_args.map {|s| s.gsub(/^,/, "").gsub(/,$/, "")}
+        p tags if $options[:verbose]
+        (song["tags"] ||= []).concat(tags)
+        song["tags"] = song["tags"].uniq
+        p song["tags"]
+        MusicDB.save music, song_id
+    end
+
     def self.mark_opts()
         OptionParser.new do |opts|
             opts.banner = "Usage: mark [-s SONG_ID] [-t TEXT]"
-            opts.info = "Mark the item with TEXT or user supplied from stdin"
+            opts.info = "Mark SONG_ID with TEXT or user supplied from stdin"
             opts.separator "    SONG_ID: Song \"id\" or filename"
             opts.separator "    TEXT: string to mark SONG_ID with"
             opts.separator ""
