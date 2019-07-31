@@ -114,3 +114,25 @@ localInstall("Cmus", {
     config = {},
     start = true,
 })
+
+ytdl = function(requestType, path, headers, body)
+    print("requestType: "..requestType)
+    print("path: "..path)
+    print("headers: "..hs.inspect(headers))
+
+    assert(headers["Host"] == "localhost:5555", "expected 'Host' in headers to be 'localhost:5555'")
+    assert(requestType == "POST", "expected a POST request")
+
+    print(hs.inspect(body))
+
+    dlDir = "~/Downloads/ytdl/"
+    fmtString = "%(title)s__#__%(id)s.%(ext)s."
+    cmd = "youtube-dl -o '"..dlDir..fmtString.."' -f 140 "..path:gsub("^/", "").." 2>&1"
+    print("cmd: "..cmd)
+    local output, status = hs.execute(cmd, true)
+    print("status", status)
+    print("output", output)
+
+    return "ytdl: ok", 200, {["Access-Control-Allow-Origin"] = "https://www.youtube.com"}
+end
+hs.httpserver.new():setCallback(ytdl):setPort(5555):start()
