@@ -8,7 +8,6 @@
 = Spoons =
 == Lotus ==
 - [ ] allow per sound notification options
-- [ ] full screen reminder / overlay
 - [ ] ? snooze until: open a time picker dialog
 
 = Specific =
