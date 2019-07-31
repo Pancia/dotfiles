@@ -29,8 +29,8 @@ function obj:playAwarenessSound()
         and hs.sound.getByName(sound.name)
         or hs.sound.getByFile(obj.spoonPath.."/"..sound.path)
     obj.lastPlayedSound = s:volume(volume):play()
-    renderMenuBar(sound.name)
     obj._soundIdx = (obj._soundIdx % #obj.sounds) + 1
+    renderMenuBar()
     return self
 end
 
@@ -48,9 +48,15 @@ function obj:init()
 end
 
 function renderMenuBar(text)
-    text = text or obj._timerCounter
+    sound = obj.sounds[obj._soundIdx]
     obj._menubar:setIcon(obj.spoonPath.."/lotus-flower.png")
-    obj._menubar:setTitle(text)
+    soundTitle = sound.name or sound.path
+    if text then
+        title = text
+    else
+        title = obj._timerCounter .. "#" .. soundTitle
+    end
+    obj._menubar:setTitle(title)
 end
 
 function renderMenu()
@@ -70,12 +76,15 @@ function renderMenu()
             end
             obj._paused = not obj._paused
         end},
-        {title = "pause for an hour"
+        {title = (obj._paused and "restart" or "pause for an hour")
         , fn = function()
             if obj._paused then
-                obj._pauseTimer:stop()
-                obj._lotusTimer:start()
-                renderMenuBar()
+                if obj._pauseTimer then
+                    obj._pauseTimer:stop()
+                end
+                obj:stop()
+                obj:init()
+                obj:start()
             else
                 obj.stopAwarenessSound()
                 obj._lotusTimer:stop()
