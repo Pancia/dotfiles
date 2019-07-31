@@ -28,9 +28,17 @@ function obj:playAwarenessSound()
     s = sound.name
         and hs.sound.getByName(sound.name)
         or hs.sound.getByFile(obj.spoonPath.."/"..sound.path)
-    s:volume(volume):play()
+    obj.lastPlayedSound = s:volume(volume):play()
     renderMenuBar(sound.name)
     obj._soundIdx = (obj._soundIdx % #obj.sounds) + 1
+    return self
+end
+
+function obj:stopAwarenessSound()
+    if obj.lastPlayedSound then
+        obj.lastPlayedSound:stop()
+        obj.lastPlayedSound = nil
+    end
     return self
 end
 
@@ -53,6 +61,7 @@ function renderMenu()
                 obj._lotusTimer:start()
                 renderMenuBar()
             else
+                obj.stopAwarenessSound()
                 obj._lotusTimer:stop()
                 if obj._pauseTimer then
                     obj._pauseTimer:stop()
@@ -68,6 +77,7 @@ function renderMenu()
                 obj._lotusTimer:start()
                 renderMenuBar()
             else
+                obj.stopAwarenessSound()
                 obj._lotusTimer:stop()
                 renderMenuBar("||1h")
                 obj._pauseTimer = hs.timer.doAfter(60*60, function()
