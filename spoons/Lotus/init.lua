@@ -94,8 +94,8 @@ function renderMenu()
                     obj._lotusTimer:start()
                     renderMenuBar()
                 end)
+                obj._paused = not obj._paused
             end
-            obj._paused = not obj._paused
         end},
     }
 end
