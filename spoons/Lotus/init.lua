@@ -103,8 +103,8 @@ end
 function lotusBlock()
     renderMenuBar()
     if obj._timerCounter == 0 then
-        obj:playAwarenessSound()
         sound = obj.sounds[obj._soundIdx]
+        obj:playAwarenessSound()
         if sound.alert then
             hs.dialog.textPrompt("Lotus Alert!", sound.alert, "", "OK")
         end
