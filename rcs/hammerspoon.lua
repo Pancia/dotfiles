@@ -126,7 +126,7 @@ ytdl = function(requestType, path, headers, body)
     print(hs.inspect(body))
 
     dlDir = "~/Downloads/ytdl/"
-    fmtString = "%(title)s__#__%(id)s.%(ext)s."
+    fmtString = "%(title)s__#__%(id)s.%(ext)s"
     cmd = "youtube-dl -o '"..dlDir..fmtString.."' -f 140 "..path:gsub("^/", "").." 2>&1"
     print("cmd: "..cmd)
     local output, status = hs.execute(cmd, true)
