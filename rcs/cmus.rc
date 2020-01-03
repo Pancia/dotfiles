@@ -1,4 +1,5 @@
 #<[.config/cmus/rc]>
 set format_playlist= %-15l | %-15%a . %t%= %y %d %{?X!=0?%3X ?    }
 set lib_sort=album
+set softvol=true
 view 2
