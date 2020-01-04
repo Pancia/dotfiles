@@ -23,9 +23,9 @@ obj.triggerEvery = 20 -- minutes
 obj.notifOptions = nil
 
 function obj:playAwarenessSound()
-    sound = obj.sounds[obj._soundIdx]
-    volume = sound.volume or 1
-    s = sound.name
+    local sound = obj.sounds[obj._soundIdx]
+    local volume = sound.volume or 1
+    local s = sound.name
         and hs.sound.getByName(sound.name)
         or hs.sound.getByFile(obj.spoonPath.."/"..sound.path)
     obj.lastPlayedSound = s:volume(volume):play()
@@ -48,14 +48,10 @@ function obj:init()
 end
 
 function renderMenuBar(text)
-    sound = obj.sounds[obj._soundIdx]
+    local sound = obj.sounds[obj._soundIdx]
     obj._menubar:setIcon(obj.spoonPath.."/lotus-flower.png")
-    soundTitle = sound.name or sound.path
-    if text then
-        title = text
-    else
-        title = obj._timerCounter .. "#" .. soundTitle
-    end
+    local soundTitle = sound.name or sound.path
+    local title = text or obj._timerCounter .. "#" .. soundTitle
     obj._menubar:setTitle(title)
 end
 
@@ -103,7 +99,7 @@ end
 function lotusBlock()
     renderMenuBar()
     if obj._timerCounter == 0 then
-        sound = obj.sounds[obj._soundIdx]
+        local sound = obj.sounds[obj._soundIdx]
         obj:playAwarenessSound()
         if sound.alert then
             hs.dialog.textPrompt("Lotus Alert!", sound.alert, "", "OK")
