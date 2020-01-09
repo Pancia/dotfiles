@@ -115,23 +115,31 @@ localInstall("Cmus", {
 })
 
 ytdl = function(requestType, path, headers, body)
-    print("requestType: "..requestType)
-    print("path: "..path)
-    print("headers: "..hs.inspect(headers))
+    hs.printf("requestType: %s", requestType)
+    hs.printf("path: %s", path)
+    hs.printf("headers: %s", hs.inspect(headers))
 
-    assert(headers["Host"] == "localhost:5555", "expected 'Host' in headers to be 'localhost:5555'")
-    assert(requestType == "POST", "expected a POST request")
+    local ACAO = {["Access-Control-Allow-Origin"] = "https://www.youtube.com"}
 
-    print(hs.inspect(body))
+    if (requestType ~= "POST") then
+        hs.printf("expected a POST request")
+        return "expected a POST request", 400, ACAO
+    end
+    if (headers["Host"] ~= "localhost:5555") then
+        hs.printf("expected 'Host' in headers to be 'localhost:5555'")
+        return "expected 'Host' in headers to be 'localhost:5555'", 400, ACAO
+    end
+
+    hs.printf("body: %s", hs.inspect(body))
 
     dlDir = "~/Downloads/ytdl/"
     fmtString = "%(title)s__#__%(id)s.%(ext)s"
     cmd = "youtube-dl -o '"..dlDir..fmtString.."' -f 140 "..path:gsub("^/", "").." 2>&1"
-    print("cmd: "..cmd)
+    hs.printf("cmd: %s", cmd)
     local output, status = hs.execute(cmd, true)
-    print("status", status)
-    print("output", output)
+    hs.printf("status: %s", status)
+    hs.printf("output: %s", output)
 
-    return "ytdl: ok", 200, {["Access-Control-Allow-Origin"] = "https://www.youtube.com"}
+    return 'ytdl ok', 200, ACAO
 end
 hs.httpserver.new():setCallback(ytdl):setPort(5555):start()
