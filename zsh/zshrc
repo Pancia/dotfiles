@@ -79,8 +79,8 @@ function PROF_NO {
 }
 
 function dbg {
-    ~/dotfiles/misc/parse-zsh-profiling.py ${ZSH_PROF_LOG/$$/$1} | less
-    less ${ZPROF_LOG/$$/$1}
+    ~/dotfiles/misc/parse-zsh-profiling.py ${ZSH_PROF_LOG/$$/$1} | command less
+    command less ${ZPROF_LOG/$$/$1}
 }
 
 [[ 1 == $PROF ]] &&
@@ -89,5 +89,6 @@ ZSHRC "$@"; local X=$?
 [[ 1 == $PROF ]] &&
     PROF_NO &&
     export PROF=0 &&
-    echo $$
+    export PROF_PROC=$$ &&
+    echo $PROF_PROC
 [ $X ] || exit $X
