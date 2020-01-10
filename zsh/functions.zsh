@@ -28,8 +28,8 @@ function bak {
 }
 function sponge() { local tmp="$(mktemp)"; bak "$1" && cat > "$tmp" && mv "$tmp" "$1" }
 
-function cat { command tail -n +1 "$@" }
-function less { command less -N "$@" }
+function cat { bat "$@" }
+function less { bat "$@" }
 function ls { command ls -h "$@" }
 function reset { tput reset }
 

@@ -2,6 +2,7 @@ tap 'caskroom/cask'
 tap 'homebrew/bundle'
 tap 'neovim/neovim'
 
+brew 'bat'
 brew 'boot-clj'
 brew 'cmus'
 brew 'fasd'
