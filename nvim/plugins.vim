@@ -115,8 +115,8 @@ Plug 'artur-shaik/vim-javacomplete2', {'for': 'kotlin'}
 " }}}
 
 " LUA {{{
-Plug 'xolox/vim-misc', {'for': 'lua'}
-Plug 'xolox/vim-lua-ftplugin', {'for': 'lua'}
+"Plug 'xolox/vim-misc', {'for': 'lua'}
+"Plug 'xolox/vim-lua-ftplugin', {'for': 'lua'}
 " }}}
 
 " RUBY {{{
