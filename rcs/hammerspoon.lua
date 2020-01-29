@@ -140,6 +140,10 @@ ytdl = function(requestType, path, headers, body)
     hs.printf("status: %s", status)
     hs.printf("output: %s", output)
 
-    return 'ytdl ok', 200, ACAO
+    if status then
+        return 'ytdl ok', 200, ACAO
+    else
+        return 'ytdl failed', 500, ACAO
+    end
 end
 hs.httpserver.new():setCallback(ytdl):setPort(5555):start()
