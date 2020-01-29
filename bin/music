@@ -7,386 +7,442 @@ require "shellwords"
 require "pp"
 
 module RbReadline
-    require "rb-readline"
-    require "readline"
-    def self.prefill_prompt(str)
-        @rl_prefill = str
-        @rl_startup_hook = :rl_prefill_hook
-    end
-    def self.rl_prefill_hook
-        rl_insert_text @rl_prefill if @rl_prefill
-        @rl_startup_hook = nil
-    end
+  require "rb-readline"
+  require "readline"
+  def self.prefill_prompt(str)
+    @rl_prefill = str
+    @rl_startup_hook = :rl_prefill_hook
+  end
+  def self.rl_prefill_hook
+    rl_insert_text @rl_prefill if @rl_prefill
+    @rl_startup_hook = nil
+  end
 end
 
 class OptionParser
-    def info
-        @info
-    end
-    def info=(str)
-        @info = str
-        top.append(">>> "+str, nil, nil)
-        top.append("", nil, nil)
-    end
+  def info
+    @info
+  end
+  def info=(str)
+    @info = str
+    top.append(">>> "+str, nil, nil)
+    top.append("", nil, nil)
+  end
 end
 
 class String
-    def colorize(color_code, end_code=0)
-        "\e[#{color_code}m#{self}\e[#{end_code}m"
-    end
-    def reverse() colorize(7, 27) end
+  def colorize(color_code, end_code=0)
+    "\e[#{color_code}m#{self}\e[#{end_code}m"
+  end
+  def reverse() colorize(7, 27) end
 end
 
 def hash_diff(x, y)
-    Hash[*(x.size > y.size ? x.to_a - y.to_a : y.to_a - x.to_a).flatten]
+  Hash[*(x.size > y.size ? x.to_a - y.to_a : y.to_a - x.to_a).flatten]
+end
+
+def execute(cmd)
+  puts cmd if $options[:dry_run] or $options[:verbose]
+  system(cmd) if not $options[:dry_run]
 end
 
 class MusicDB
-    def self.save(music, temp_name = "")
-        tmp = Tempfile.new temp_name
-        p tmp.path if $options[:verbose]
-        IO.write tmp, JSON.generate(music)
-        %x[ cat #{tmp.path} | jq '.' > $MUSIC_DB ]
-    end
+  def self.save(music, temp_name = "")
+    tmp = Tempfile.new temp_name
+    p tmp.path if $options[:verbose]
+    IO.write tmp, JSON.generate(music)
+    %x[ cat #{tmp.path} | jq '.' > $MUSIC_DB ]
+  end
 
-    def self.read(filter = nil)
-        if filter
-            %x[ cat $MUSIC_DB | jq -r '.[] | #{filter}' ]
+  def self.append(song)
+    puts "MusicDB.append: #{song}" if $options[:verbose]
+    db = MusicDB.read
+    db[song[:id]] = song
+    MusicDB.save db, song[:id]
+  end
+
+  def self.read(filter = nil)
+    if filter
+      %x[ cat $MUSIC_DB | jq -r '.[] | #{filter}' ]
+    else
+      JSON.parse %x[ cat $MUSIC_DB | jq '.' ]
+    end
+  end
+
+  def self.find(item, filter)
+    %x< cat $MUSIC_DB | jq -r '.[] | select(#{filter} == $item) | "\\(.id).m4a"' --arg item "#{item}" >
+  end
+
+  def self.select(item, filter)
+    JSON.parse %x[ cat $MUSIC_DB | jq '[.[] | select(#{filter} == $item)]' --arg item "#{item}" ]
+  end
+
+  @meta_to_db = {"artist"=>"artist", "title"=>"name", "album"=>"playlist"}
+
+  def self.metadata(item)
+    metadata = JSON.parse(%x[ ffprobe -v quiet -print_format json -show_format $MUSIC_DIR/#{item["id"]}.m4a])
+    fmt = metadata.fetch("format", nil)
+    return {} if not fmt
+    return fmt["tags"]
+  end
+
+  def self.parse_tags(item)
+    m = self.metadata(item)
+    m == {} ? {} : m
+      .map {|k, v| [@meta_to_db[k], v] }.to_h
+      .select {|k,_| @meta_to_db.values.include? k}
+  end
+  def self.tag(items)
+    items.each do |i|
+      file_tags = self.parse_tags i
+      item = i.select {|k,_| @meta_to_db.values.include? k}
+      diff = hash_diff item, file_tags
+      if not diff.empty?
+        meta_str = diff.keys
+          .map {|k| [" -metadata ", @meta_to_db.invert[k], "=", "#{item[k].shellescape}", " "]}
+          .join ""
+        if $options[:dry_run]
+          puts meta_str
         else
-            JSON.parse %x[ cat $MUSIC_DB | jq '.' ]
+          puts meta_str if $options[:verbose]
+          file = i["id"]+".m4a"
+          tmp = i["id"]+".tmp.m4a"
+          log = i["id"]+".log.m4a"
+          system("ffmpeg -i $MUSIC_DIR/#{file} #{meta_str} $MUSIC_DIR/#{tmp} 2>&1 | tee -a $MUSIC_DIR/#{log} && mv $MUSIC_DIR/#{tmp} $MUSIC_DIR/#{file}")
         end
+      end
     end
-
-    def self.find(item, filter)
-        %x< cat $MUSIC_DB | jq -r '.[] | select(#{filter} == $item) | "\\(.id).m4a"' --arg item "#{item}" >
-    end
-
-    def self.select(item, filter)
-        JSON.parse %x[ cat $MUSIC_DB | jq '[.[] | select(#{filter} == $item)]' --arg item "#{item}" ]
-    end
-
-    @meta_to_db = {"artist"=>"artist", "title"=>"name", "album"=>"playlist"}
-
-    def self.metadata(item)
-        JSON.parse(%x[ ffprobe -v quiet -print_format json -show_format \
-                       $MUSIC_DIR/#{item["id"]}.m4a || echo '{}' ]
-                  )["format"]["tags"]
-    end
-
-    def self.parse_tags(item)
-        m = self.metadata(item)
-        m == {} ? {} : m
-            .map {|k, v| [@meta_to_db[k], v] }.to_h
-            .select {|k,_| @meta_to_db.values.include? k}
-    end
-    def self.tag(items)
-        items.each do |i|
-            file_tags = self.parse_tags i
-            item = i.select {|k,_| @meta_to_db.values.include? k}
-            diff = hash_diff item, file_tags
-            if not diff.empty?
-                meta_str = diff.keys
-                    .map {|k| [" -metadata ", @meta_to_db.invert[k], "=", "#{item[k].shellescape}", " "]}
-                    .join ""
-                if $options[:dry_run]
-                    puts meta_str
-                else
-                    puts meta_str if $options[:verbose]
-                    file = i["id"]+".m4a"
-                    tmp = i["id"]+".tmp.m4a"
-                    log = i["id"]+".log.m4a"
-                    puts %x[ ffmpeg -i $MUSIC_DIR/#{file} #{meta_str} $MUSIC_DIR/#{tmp} 2>&1 | tee -a $MUSIC_DIR/#{log} && mv $MUSIC_DIR/#{tmp} $MUSIC_DIR/#{file} ]
-                end
-            end
-        end
-    end
+  end
 end
 
 class MusicCMDs
-    def self.mtag_opts()
-        OptionParser.new do |opts|
-            opts.banner = "Usage: mtag [OPTS] ITEM"
-            opts.info = "Tag the file with metadata (uses ffmpeg)"
-            opts.separator "    ITEM: String, will be compared in `jq` to FILTER"
-            opts.separator ""
-            opts.on("-n", "--dry-run", "Do not tag, just print") {
-                $options[:dry_run] = true
-            }
-            $options[:filter] = ".id"
-            opts.on("-f", "--filter FILTER", "Any string that `jq` will accept") { |jqf|
-                $options[:filter] = jqf
-            }
-        end
+  def self.mtag_opts()
+    OptionParser.new do |opts|
+      opts.banner = "Usage: mtag [OPTS] ITEM"
+      opts.info = "Tag the file with metadata (uses ffmpeg)"
+      opts.separator "    ITEM: String, will be compared in `jq` to FILTER"
+      opts.separator ""
+      opts.on("-n", "--dry-run", "Do not tag, just print") {
+        $options[:dry_run] = true
+      }
+      $options[:filter] = ".id"
+      opts.on("-f", "--filter FILTER", "Any string that `jq` will accept") { |jqf|
+        $options[:filter] = jqf
+      }
     end
-    def self.mtag(item)
-        MusicDB.tag MusicDB.select(item.gsub(/\..*$/, ""), $options[:filter])
-    end
+  end
+  def self.mtag(item)
+    MusicDB.tag MusicDB.select(item.gsub(/\..*$/, ""), $options[:filter])
+  end
 
-    def self.probe_opts()
-        OptionParser.new do |opts|
-            opts.banner = "Usage: probe [OPTS] ITEM"
-            opts.info = "Probe the file for its current metadata (uses: ffprobe)"
-            opts.separator "    ITEM: String, will be compared in `jq` to FILTER"
-            opts.separator ""
-            $options[:filter] = ".id"
-            opts.on("-f", "--filter FILTER", "Any string that `jq` will accept") { |jqf|
-                $options[:filter] = jqf
-            }
-        end
+  def self.probe_opts()
+    OptionParser.new do |opts|
+      opts.banner = "Usage: probe [OPTS] ITEM"
+      opts.info = "Probe the file for its current metadata (uses: ffprobe)"
+      opts.separator "    ITEM: String, will be compared in `jq` to FILTER"
+      opts.separator ""
+      $options[:filter] = ".id"
+      opts.on("-f", "--filter FILTER", "Any string that `jq` will accept") { |jqf|
+        $options[:filter] = jqf
+      }
     end
-    def self.probe(item)
-        MusicDB.select(item.gsub(/\..*$/, ""), $options[:filter]).each {|x| p MusicDB.metadata x}
-    end
+  end
+  def self.probe(item)
+    MusicDB.select(item.gsub(/\..*$/, ""), $options[:filter]).each {|x| p MusicDB.metadata x}
+  end
 
-    def self.show_opts()
-        OptionParser.new do |opts|
-            opts.banner = "Usage: show [OPTS] ITEM"
-            opts.info = "Show the items info wrt the music db"
-            opts.separator "    ITEM: String, will be compared in `jq` to FILTER"
-            opts.separator ""
-            $options[:filter] = ".id"
-            opts.on("-f", "--filter FILTER", "Any string that `jq` will accept -- default: '.id'") { |jqf|
-                $options[:filter] = jqf
-            }
-        end
+  def self.show_opts()
+    OptionParser.new do |opts|
+      opts.banner = "Usage: show [OPTS] ITEM"
+      opts.info = "Show the items info wrt the music db"
+      opts.separator "    ITEM: String, will be compared in `jq` to FILTER"
+      opts.separator ""
+      $options[:filter] = ".id"
+      opts.on("-f", "--filter FILTER", "Any string that `jq` will accept -- default: '.id'") { |jqf|
+        $options[:filter] = jqf
+      }
     end
-    def self.show(item)
-        MusicDB.select(item.gsub(/\..*$/, ""), $options[:filter]).each { |x| pp x }
-    end
+  end
+  def self.show(item)
+    MusicDB.select(item.gsub(/\..*$/, ""), $options[:filter]).each { |x| pp x }
+  end
 
-    def self.search_opts()
-        OptionParser.new do |opts|
-            opts.banner = "Usage: search [OPTS]"
-            opts.info = "Search the music db, only prints selected"
-            $options[:filter] = '"\(.playlist) - \(.name)"'
-            opts.on("-f", "--filter FILTER", "Any string that `jq` will accept -- default: '\(.playlist) - \(.name)'") { |jqf|
-                $options[:filter] = jqf
-            }
-        end
+  def self.search_opts()
+    OptionParser.new do |opts|
+      opts.banner = "Usage: search [OPTS]"
+      opts.info = "Search the music db, only prints selected"
+      $options[:filter] = '"\(.playlist) - \(.name)"'
+      opts.on("-f", "--filter FILTER", "Any string that `jq` will accept -- default: '\(.playlist) - \(.name)'") { |jqf|
+        $options[:filter] = jqf
+      }
     end
-    def self.search_impl(opts = "")
-        puts "CMD[SEARCH]" if $options[:verbose]
-        puts "search: #{$options[:filter]}" if $options[:verbose]
-        tmp = Tempfile.new; IO.write tmp, MusicDB.read($options[:filter])
-        %x< cat '#{tmp.path}' | sort | uniq | zsh -ic 'search #{opts}' >.gsub(/\]7;.*/, "")
-    end
-    def self.search()
-        puts self.search_impl()
-    end
+  end
+  def self.search_impl(opts = "")
+    puts "CMD[SEARCH]" if $options[:verbose]
+    puts "search: #{$options[:filter]}" if $options[:verbose]
+    tmp = Tempfile.new; IO.write tmp, MusicDB.read($options[:filter])
+    %x< cat '#{tmp.path}' | sort | uniq | zsh -ic 'search #{opts}' >.gsub(/\]7;.*/, "")
+  end
+  def self.search()
+    puts self.search_impl()
+  end
 
-    def self.select_opts()
-        OptionParser.new do |opts|
-            opts.banner = "Usage: select [OPTS]"
-            opts.info = "Select items to set as the playlist using `cmus-remote`"
-            $options[:filter] = ".playlist"
-            opts.on("-f", "--filter FILTER", "Any string that `jq` will accept -- default: .playlist") { |jqf|
-                $options[:filter] = jqf
-            }
-            opts.on("-t", "--filter-by-tags", "Filter by tags") {
-                $options[:filter] = "select(.tags) | .tags | .[]"
-            }
-        end
+  def self.select_opts()
+    OptionParser.new do |opts|
+      opts.banner = "Usage: select [OPTS]"
+      opts.info = "Select items to set as the playlist using `cmus-remote`"
+      $options[:filter] = ".playlist"
+      opts.on("-f", "--filter FILTER", "Any string that `jq` will accept -- default: .playlist") { |jqf|
+        $options[:filter] = jqf
+      }
+      opts.on("-t", "--filter-by-tags", "Filter by tags") {
+        $options[:filter] = "select(.tags) | .tags | .[]"
+      }
     end
-    def self.select()
-        result = self.search_impl()
-        items = result.split "\n"
-        p "items: #{items}" if $options[:verbose]
-        if not items.empty?
-            %x< cmus-remote -c >
-            items.each do |item|
-                files = MusicDB.find item, $options[:filter]
-                files.split("\n").each do |f|
-                    %x< cmus-remote $MUSIC_DIR/#{f} >
-                end
-            end
+  end
+  def self.select()
+    result = self.search_impl()
+    items = result.split "\n"
+    p "items: #{items}" if $options[:verbose]
+    if not items.empty?
+      %x< cmus-remote -c >
+      items.each do |item|
+        files = MusicDB.find item, $options[:filter]
+        files.split("\n").each do |f|
+          %x< cmus-remote $MUSIC_DIR/#{f} >
         end
+      end
     end
+  end
 
-    def self.tag_opts()
-        OptionParser.new do |opts|
-            opts.banner = "Usage: tag [-s SONG_ID] TAGS*"
-            opts.info = "Tag SONG_ID with TAGS"
-            opts.separator "    SONG_ID: Song \"id\" or filename"
-            opts.separator "    TAGS format: <tag>[,\s*<tag>]*"
-            opts.separator ""
-            $options[:song_id] = nil
-            opts.on("-s", "--song-id SONG_ID", "Apply the mark to SONG_ID") { |id|
-                $options[:song_id] = id
-            }
-        end
+  def self.tag_opts()
+    OptionParser.new do |opts|
+      opts.banner = "Usage: tag [-s SONG_ID] TAGS*"
+      opts.info = "Tag SONG_ID with TAGS"
+      opts.separator "    SONG_ID: Song \"id\" or filename"
+      opts.separator "    TAGS format: <tag>[,\s*<tag>]*"
+      opts.separator ""
+      $options[:song_id] = nil
+      opts.on("-s", "--song-id SONG_ID", "Apply the mark to SONG_ID") { |id|
+        $options[:song_id] = id
+      }
     end
-    def self.tag(*tag_args)
-        song_id = $options[:song_id]
-        raise "NEED SONG ID" if not song_id
-        raise "NEED TAGS" if not tag_args
+  end
+  def self.tag(*tag_args)
+    song_id = $options[:song_id]
+    raise "NEED SONG ID" if not song_id
+    raise "NEED TAGS" if not tag_args
 
-        song_id = song_id.gsub(/\..*$/, "")
-        p song_id if $options[:verbose]
-        music = MusicDB.read
-        song = music[song_id]
-        p song if $options[:verbose]
-        puts "#{song["playlist"]} | #{song["artist"]} - #{song["name"]}" if not $options[:verbose]
+    song_id = song_id.gsub(/\..*$/, "")
+    p song_id if $options[:verbose]
+    music = MusicDB.read
+    song = music[song_id]
+    p song if $options[:verbose]
+    puts "#{song["playlist"]} | #{song["artist"]} - #{song["name"]}" if not $options[:verbose]
 
-        p $options if $options[:verbose]
-        tags = tag_args.map {|s| s.gsub(/^,/, "").gsub(/,$/, "")}
-        p tags if $options[:verbose]
-        (song["tags"] ||= []).concat(tags)
-        song["tags"] = song["tags"].uniq
-        p song["tags"]
-        MusicDB.save music, song_id
-    end
+    p $options if $options[:verbose]
+    tags = tag_args.map {|s| s.gsub(/^,/, "").gsub(/,$/, "")}
+    p tags if $options[:verbose]
+    (song["tags"] ||= []).concat(tags)
+    song["tags"] = song["tags"].uniq
+    p song["tags"]
+    MusicDB.save music, song_id
+  end
 
-    def self.mark_opts()
-        OptionParser.new do |opts|
-            opts.banner = "Usage: mark [-s SONG_ID] [-t TEXT]"
-            opts.info = "Mark SONG_ID with TEXT or user supplied from stdin"
-            opts.separator "    SONG_ID: Song \"id\" or filename"
-            opts.separator "    TEXT: string to mark SONG_ID with"
-            opts.separator ""
-            $options[:song_id] = nil
-            opts.on("-s", "--song-id SONG_ID", "Apply the mark to SONG_ID") { |id|
-                $options[:song_id] = id
-            }
-            $options[:text] = nil
-            opts.on("-t", "--text TEXT", "Mark it with the supplied TEXT") { |text|
-                $options[:text] = text
-            }
-        end
+  def self.mark_opts()
+    OptionParser.new do |opts|
+      opts.banner = "Usage: mark [-s SONG_ID] [-t TEXT]"
+      opts.info = "Mark SONG_ID with TEXT or user supplied from stdin"
+      opts.separator "    SONG_ID: Song \"id\" or filename"
+      opts.separator "    TEXT: string to mark SONG_ID with"
+      opts.separator ""
+      $options[:song_id] = nil
+      opts.on("-s", "--song-id SONG_ID", "Apply the mark to SONG_ID") { |id|
+        $options[:song_id] = id
+      }
+      $options[:text] = nil
+      opts.on("-t", "--text TEXT", "Mark it with the supplied TEXT") { |text|
+        $options[:text] = text
+      }
     end
-    def self.mark()
-        song_id = $options[:song_id]
-        raise "NEED SONG ID" if not song_id
-        song_id = song_id.gsub(/\..*$/, "")
-        p song_id if $options[:verbose]
-        music = MusicDB.read
-        song = music[song_id]
-        p song if $options[:verbose]
-        puts "#{song["playlist"]} | #{song["artist"]} - #{song["name"]}" if not $options[:verbose]
+  end
+  def self.mark()
+    song_id = $options[:song_id]
+    raise "NEED SONG ID" if not song_id
+    song_id = song_id.gsub(/\..*$/, "")
+    p song_id if $options[:verbose]
+    music = MusicDB.read
+    song = music[song_id]
+    p song if $options[:verbose]
+    puts "#{song["playlist"]} | #{song["artist"]} - #{song["name"]}" if not $options[:verbose]
 
-        p $options if $options[:verbose]
-        song["marked"] =
-            if $options[:text] then
-                $options[:text]
-            else
-                RbReadline.prefill_prompt song["marked"] if song["marked"]
-                Readline.readline("marked>?:".reverse).chomp
-            end
-        MusicDB.save music, song_id
-    end
+    p $options if $options[:verbose]
+    song["marked"] =
+      if $options[:text] then
+        $options[:text]
+      else
+        RbReadline.prefill_prompt song["marked"] if song["marked"]
+        Readline.readline("marked>?:".reverse).chomp
+      end
+    MusicDB.save music, song_id
+  end
 
-    def self.edit_opts()
-        OptionParser.new do |opts|
-            opts.banner = "Usage: edit [OPTS] ITEM"
-            opts.info = "Edit the item interactively"
-            opts.separator "    ITEM: String, will be compared in `jq` to FILTER"
-            opts.separator ""
-            $options[:filter] = ".playlist"
-            opts.on("-f", "--filter FILTER", "Any string that `jq` will accept -- default: .playlist") { |jqf|
-                $options[:filter] = jqf
-            }
-            opts.on("-s", "--search", "Search for items to edit") {
-                $options[:search] = true
-            }
-        end
+  def self.edit_opts()
+    OptionParser.new do |opts|
+      opts.banner = "Usage: edit [OPTS] ITEM"
+      opts.info = "Edit the item interactively"
+      opts.separator "    ITEM: String, will be compared in `jq` to FILTER"
+      opts.separator ""
+      $options[:filter] = ".playlist"
+      opts.on("-f", "--filter FILTER", "Any string that `jq` will accept -- default: .playlist") { |jqf|
+        $options[:filter] = jqf
+      }
+      opts.on("-s", "--search", "Search for items to edit") {
+        $options[:search] = true
+      }
     end
-    def self.edit_impl(item)
-        p item if $options[:verbose]
-        p $options[:filter] if $options[:verbose]
-        if $options[:search] or not item
-            items = self.search_impl("--query #{item or "\"\""}").split "\n"
-            items.reduce([]) { |to_edit, x|
-                to_edit.concat MusicDB.select x, $options[:filter]
-            }
-        else
-            MusicDB.select item.gsub(/\..*$/, ""), $options[:filter]
-        end
+  end
+  def self.edit_impl(item)
+    p item if $options[:verbose]
+    p $options[:filter] if $options[:verbose]
+    if $options[:search] or not item
+      items = self.search_impl("--query #{item or "\"\""}").split "\n"
+      items.reduce([]) { |to_edit, x|
+        to_edit.concat MusicDB.select x, $options[:filter]
+      }
+    else
+      MusicDB.select item.gsub(/\..*$/, ""), $options[:filter]
     end
-    def self.edit_ask(edit_me)
-        field = Readline.readline(">?:".reverse).chomp
-        case
-        when edit_me.include?(field) || ["marked"].include?(field)
-            RbReadline.prefill_prompt(edit_me[field])
-            new_entry = Readline.readline((field+">?:").reverse).chomp
-            edit_me[field] = new_entry
-        when "" == field
-            return
-        else
-            puts "INVALID FIELD"
-        end
-        self.edit_ask edit_me
+  end
+  def self.edit_ask(edit_me)
+    field = Readline.readline(">?:".reverse).chomp
+    case
+    when edit_me.include?(field) || ["marked"].include?(field)
+      RbReadline.prefill_prompt(edit_me[field])
+      new_entry = Readline.readline((field+">?:").reverse).chomp
+      edit_me[field] = new_entry
+    when "" == field
+      return
+    else
+      puts "INVALID FIELD"
     end
-    def self.edit(item = nil)
-        to_edit = self.edit_impl(item)
-        raise "FAILED TO FIND ANY ITEMS" if to_edit.empty?
-        to_edit.each do |edit_me|
-            puts
-            pp edit_me
-            self.edit_ask edit_me
-        end
-        to_edit = to_edit.reduce({}) { |m, s|
-            m[s["id"]] = s; m
-        }
-        music = MusicDB.read
-        MusicDB.save music.merge to_edit
-        MusicDB.tag to_edit
+    self.edit_ask edit_me
+  end
+  def self.edit(item = nil)
+    to_edit = self.edit_impl(item)
+    raise "FAILED TO FIND ANY ITEMS" if to_edit.empty?
+    to_edit.each do |edit_me|
+      puts
+      pp edit_me
+      self.edit_ask edit_me
     end
+    to_edit = to_edit.reduce({}) { |m, s|
+      m[s["id"]] = s; m
+    }
+    music = MusicDB.read
+    MusicDB.save music.merge to_edit
+    MusicDB.tag to_edit
+  end
 
-    def self.cruft_opts()
-        OptionParser.new do |opts|
-            opts.banner = "Usage: cruft"
-            opts.info = "Print any non db/music files present in the $MUSIC_DIR"
-        end
+  def self.cruft_opts()
+    OptionParser.new do |opts|
+      opts.banner = "Usage: cruft"
+      opts.info = "Print any non db/music files present in the $MUSIC_DIR"
     end
-    def self.cruft()
-        puts %x[ find $MUSIC_DIR -type f -not -name '.*' -not -regex '[\/0-9A-Za-z\-]*\.m4a' ]
-    end
+  end
+  def self.cruft()
+    puts %x[ find $MUSIC_DIR -type f -not -name '.*' -not -regex '[\/0-9A-Za-z\-]*\.m4a' ]
+  end
 
-    def self.help_opts()
-        OptionParser.new do |opts|
-            opts.info = "Show the help, or inquire about a command"
-        end
+  def self.import_opts()
+    OptionParser.new do |opts|
+      opts.banner = "Usage: import FILES"
+      opts.info = "Imports files into $MUSIC_DB & $MUSIC_DIR"
+      $options[:playlist] = nil
+      opts.on("", "--playlist PLAYLIST_NAME", "String to use as FILES's PLAYLIST metadata") { |pl|
+        $options[:playlist] = pl
+      }
     end
-    def self.help(cmd = nil)
-        p cmd if $options[:verbose]
-        if not $options[:helped]
-            if not cmd
-                puts $global_opts
-            else
-                puts MusicCMDs.send(cmd+"_opts")
-            end
-        end
+  end
+  def self.import(*files)
+    num_files = files.count
+    files.each_with_index { |f, idx|
+      puts ">>> ##{idx+1}/#{num_files} => #{f}".reverse
+      sanitized = %x[basename #{Shellwords.escape f}].gsub(/[^\w\-\#\.\(\)\&\[\]\,\;\'\" ]/, "")
+      playlist = $options[:playlist] || %x[dirname #{Shellwords.escape f}].gsub(/\_/, " ").strip
+      yt_id = sanitized[/(.*)__#__([^\.]+)\.m4a/, 2]
+      title = sanitized[/(.*)__#__([^\.]+)\.m4a/, 1]
+      RbReadline.prefill_prompt title
+      artist = Readline.readline("artist>?:".reverse).chomp
+      RbReadline.prefill_prompt title
+      name = Readline.readline("name>?:".reverse).chomp
+      uuid = %x[uuidgen].strip
+      song = {:from => :ytdl,
+              :id => uuid,
+              :playlist => playlist,
+              :url => yt_id,
+              :artist => artist,
+              :name => name}
+      p song if $options[:dry_run] or $options[:verbose]
+      MusicDB.append song if not $options[:dry_run]
+      execute("mv #{Shellwords.escape f} $MUSIC_DIR/#{uuid}.m4a")
+      MusicDB.tag([{"id" => uuid,
+                    "artist" => artist,
+                    "name" => name,
+                    "playlist" => playlist}])
+    }
+  end
+
+  def self.help_opts()
+    OptionParser.new do |opts|
+      opts.info = "Show the help, or inquire about a command"
     end
+  end
+  def self.help(cmd = nil)
+    p cmd if $options[:verbose]
+    if not $options[:helped]
+      if not cmd
+        puts $global_opts
+      else
+        puts MusicCMDs.send(cmd+"_opts")
+      end
+    end
+  end
 end
 
 $options = {}
 $global_opts = OptionParser.new do |opts|
-    opts.banner = "Usage: music [OPTS] COMMAND [ARGS]"
-    opts.on("-h", "--help", "Print this help document") do
-        puts opts if not $options[:helped]
-        $options[:helped] = true
-    end
-    $options[:verbose] = false
-    opts.on("-v", "--verbose", "Print more, for debugging") do
-        $options[:verbose] = true
-    end
-    opts.separator ""
-    opts.separator "COMMANDs:"
-    opts.separator (MusicCMDs.methods - Object.methods)
-        .keep_if {|m| not m.to_s.include? "_" and m}
-        .map {|m| [m, MusicCMDs.send(m.to_s+"_opts").info]}
-        .keep_if {|_,i| i}
-        .sort.map {|m,i| "\t"+m.to_s+"\t:\t"+i }
-        .join "\n"
-    opts.separator ""
-    opts.separator "See `music COMMAND --help` or `music help COMMAND` for more information on a specific command."
+  opts.banner = "Usage: music [OPTS] COMMAND [ARGS]"
+  opts.on("-h", "--help", "Print this help document") do
+    puts opts if not $options[:helped]
+    $options[:helped] = true
+  end
+  $options[:verbose] = false
+  opts.on("-v", "--verbose", "Print more, for debugging") do
+    $options[:verbose] = true
+  end
+  $options[:dry_run] = false
+  opts.on("-n", "--dry-run", "Dry Run / Simulation, prints commands instead of executing.") do
+    $options[:dry_run] = true
+  end
+  opts.separator ""
+  opts.separator "COMMANDs:"
+  opts.separator (MusicCMDs.methods - Object.methods)
+    .keep_if {|m| not m.to_s.include? "_" and m}
+    .map {|m| [m, MusicCMDs.send(m.to_s+"_opts").info]}
+    .keep_if {|_,i| i}
+    .sort.map {|m,i| "\t"+m.to_s+"\t:\t"+i }
+    .join "\n"
+  opts.separator ""
+  opts.separator "See `music COMMAND --help` or `music help COMMAND` for more information on a specific command."
 end
 
 $global_opts.order!
 if ARGV[0] and MusicCMDs.respond_to? ARGV[0]
-    puts "ARGV: #{ARGV}" if $options[:verbose]
-    command = ARGV.shift
-    MusicCMDs.send(command+"_opts").order!
-    puts "OPTS: #{$options}" if $options[:verbose]
-    puts "send(#{command}, *#{ARGV})" if $options[:verbose]
+  puts "ARGV: #{ARGV}" if $options[:verbose]
+  command = ARGV.shift
+  MusicCMDs.send(command+"_opts").order!
+  puts "OPTS: #{$options}" if $options[:verbose]
+  puts "send(#{command}, *#{ARGV})" if $options[:verbose]
     MusicCMDs.send(command, *ARGV)
 end
