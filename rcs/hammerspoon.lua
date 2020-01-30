@@ -100,22 +100,33 @@ localInstall = function(name, conf)
 end
 
 localInstall("Lotus", {
+    start = true,
     config = {
-        sounds = {{path = "gong.wav", volume = .5, alert = "Take a break!"},
-                  {path = "bowl.wav", alert = "Quick Stretch!"}},
-        triggerEvery = 30, -- in minutes if interval is 60 (seconds)
+        sounds = {
+            {path = "gong.wav", volume = .5, alert = "Take a break!"},
+            {path = "bowl.wav", alert = "Quick Stretch!"}
+        },
+        interval = 60, -- every minute
+        triggerEvery = 30, -- minutes (interval * triggerEvery)
         notifOptions = false,
     },
-    start = true,
 })
 
 localInstall("Cmus", {
-    config = {},
     start = true,
+    config = {},
 })
 
 localInstall("Watch", {
-    config = {scripts = {{command = "~/dotfiles/misc/ytdl/ytdl.watch.sh", interval = 15, triggerEvery = 4},
-                         {command = "~/dotfiles/extra.watch.sh", interval = 60, triggerEvery = 60}}},
     start = true,
+    config = {
+        scripts = {
+            {command = "~/dotfiles/misc/watch/ytdl/ytdl.watch.sh"
+            , interval = 15, triggerEvery = 4}, -- 4 x minute
+            {command = "~/dotfiles/misc/watch/disable_osx_startup_chime.watch.sh"
+            , interval = 60, triggerEvery = 60}, -- every hour
+            {command = "~/dotfiles/misc/watch/extra.watch.sh"
+            , interval = 60, triggerEvery = 60 * 3} -- every 3rd hour
+        }
+    },
 })
