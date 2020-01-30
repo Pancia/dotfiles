@@ -115,7 +115,7 @@ localInstall("Cmus", {
 })
 
 localInstall("Watch", {
-    config = {scripts = {{command = "~/dotfiles/misc/ytdl/ytdl.watch.sh"},
-                         {command = "~/dotfiles/extra.watch.sh"}}},
+    config = {scripts = {{command = "~/dotfiles/misc/ytdl/ytdl.watch.sh", interval = 15, triggerEvery = 4},
+                         {command = "~/dotfiles/extra.watch.sh", interval = 60, triggerEvery = 60}}},
     start = true,
 })
