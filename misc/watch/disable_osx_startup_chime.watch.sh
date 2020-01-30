@@ -7,8 +7,9 @@ function disable_osx_startup_chime() {
         echo "$(date '+%x %X') -> $sysAudVol_binary" >> $logDir/log
         #TODO: add to sudoers on install ? with args?
         #   $(whoami) ALL=(ALL) NOPASSWD: /usr/sbin/nvram SystemAudioVolume=%80
-        echo "SystemAudioVolume = '$sysAudVol_binary'"
+        echo "SystemAudioVolume: '$sysAudVol_binary'"
         sudo nvram SystemAudioVolume=%80
+        echo "SystemAudioVolume = '$(nvram SystemAudioVolume | cut -d$'\t' -f2 | xxd)'"
         exit 80
     fi
 }
