@@ -33,7 +33,9 @@ end
 function obj:start()
     hs.fnutils.ieach(obj.scripts, function(script)
         script._timerCounter = 0
-        watchBlock(script)()
+        if script.runOnStart == true then
+            watchBlock(script)()
+        end
         script._timerCounter = script.triggerEvery
         script._watchTimer = hs.timer.doEvery(script.interval, watchBlock(script))
     end)
