@@ -41,6 +41,15 @@ function zshrc { vim ~/dotfiles/zsh/zshrc }
 function .zshrc { exec zsh }
 function .zsh { exec zsh }
 
+function meditate {
+    local T="$((60*${1:-5}))"
+    echo "sleeping for $T seconds"
+    cmus-remote --stop
+    sleep $T
+    echo "wakeup!"
+    cmus-remote --play
+}
+
 local functions_dir=`dirname $0`/fns
 for f in $(ls $functions_dir); do
     source $functions_dir/$f
