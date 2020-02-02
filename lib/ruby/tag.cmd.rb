@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
 require "optparse"
-require_relative 'music_db.rb'
+require 'music_db.rb'
 
 module MusicCMD
 
@@ -37,7 +37,7 @@ module MusicCMD
     (song["tags"] ||= []).concat(tags)
     song["tags"] = song["tags"].uniq
     p song["tags"]
-    MusicDB.save music, song_id
+    MusicDB.save music, song_id if not $options[:dry_run]
   end
 
 end

@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
 require "optparse"
-require_relative 'music_db.rb'
+require 'music_db.rb'
 
 module MusicCMD
 
@@ -38,7 +38,7 @@ module MusicCMD
     field = Readline.readline(">?:".reverse).chomp
     case
     when edit_me.include?(field) || ["marked"].include?(field)
-      RbReadline.prefill_prompt(edit_me[field])
+      RbReadline.prefill_prompt(edit_me[field].to_s)
       new_entry = Readline.readline((field+">?:").reverse).chomp
       edit_me[field] = new_entry
     when "" == field
