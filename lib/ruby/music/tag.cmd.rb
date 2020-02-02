@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
 require "optparse"
-require 'music_db.rb'
+require 'music/music_db.rb'
 
 module MusicCMD
 

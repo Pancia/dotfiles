@@ -46,7 +46,8 @@ def execute(cmd)
   system(cmd) if not $options[:dry_run]
 end
 
-Dir["./lib/ruby/*.cmd.rb"].each {|file| require file }
+Dir["/Users/#{%x[whoami].strip}/dotfiles/lib/ruby/music/*.cmd.rb"]
+  .each { |file| require file }
 
 class MusicCMDs extend MusicCMD
   def self.help_opts()
