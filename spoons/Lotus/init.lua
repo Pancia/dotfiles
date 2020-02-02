@@ -32,7 +32,6 @@ function obj:playAwarenessSound()
     obj.lastPlayedSound = s:volume(volume):play()
     obj._soundIdx = (obj._soundIdx % #obj.sounds) + 1
     hs.execute("mkdir -p $(dirname "..obj.logFile..") && echo $(date +%T) -- '"..(sound.name or sound.path).."' >> "..obj.logFile)
-    hs.printf("out=%s,status=%s,type=%s", out, status, tipe)
     renderMenuBar()
     return self
 end
