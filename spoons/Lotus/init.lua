@@ -52,7 +52,7 @@ end
 function renderMenuBar(text)
     local sound = obj.sounds[obj._soundIdx]
     obj._menubar:setIcon(obj.spoonPath.."/lotus-flower.png")
-    local soundTitle = sound.name or sound.path
+    local soundTitle = sound.name or sound.path:match("[^/]+$"):match("[^.]+")
     local title = text or obj._timerCounter .. "#" .. soundTitle
     obj._menubar:setTitle(title)
 end
