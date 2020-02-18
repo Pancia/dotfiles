@@ -33,6 +33,9 @@ function less { bat "$@" }
 function ls { command ls -h "$@" }
 function reset { tput reset }
 
+alias l="ls -l"
+alias ll="ls -al"
+
 function vim { TERM_TYPE=nvim nvim "$@" }
 
 function dot { cd ~/dotfiles; vim ~/dotfiles }
