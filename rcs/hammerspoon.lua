@@ -122,12 +122,17 @@ localInstall("Watch", {
     config = {
         scripts = {
             {command = "~/dotfiles/misc/watch/disable_osx_startup_chime.watch.sh"
-            , interval = 60, triggerEvery = 60 -- every hour
-            , runOnStart = true},
+            , triggerEvery = 60 -- every hour
+            , delayStart = 0 -- run immediately on start
+            , interval = 60},
             {command = "~/dotfiles/misc/watch/ytdl/ytdl.watch.sh"
-            , interval = 60, triggerEvery = 15}, -- every 15 minutes
+            , triggerEvery = 15 -- every 15 minutes
+            , delayStart = 5 -- delay 5 minutes from start
+            , interval = 60},
             {command = "~/dotfiles/misc/watch/extra.watch.sh"
-            , interval = 60, triggerEvery = 60 * 3} -- every 3rd hour
+            , triggerEvery = 60 * 3 -- every 3rd hour
+            , delayStart = 15 -- delay 15 minutes from start
+            , interval = 60},
         }
     },
 })

@@ -17,33 +17,53 @@ obj.scripts = {}
 function obj:init()
 end
 
-function watchBlock(script)
-    return function()
-        if script._timerCounter == 0 then
-            cmd = script.command
-            local output, status, exit_type, exit_code = hs.execute(cmd, true)
-            if exit_code ~= 0 then
-                hs.printf("Watch(%s) -> %s:\n%s", cmd, exit_code, output)
-            end
-        end
-        script._timerCounter = (script._timerCounter - 1) % script.triggerEvery
+function runScriptCmd(script)
+    cmd = script.command
+    local output, status, exit_type, exit_code = hs.execute(cmd, true)
+    if exit_code ~= 0 then
+        hs.printf("Watch(%s) -> %s:\n%s", cmd, exit_code, output)
     end
+end
+
+function scriptBlock(script)
+    if script._timerCounter == 0 then
+        runScriptCmd(script)
+    end
+    script._timerCounter = (script._timerCounter - 1) % script.triggerEvery
+end
+
+function startScriptTimer(script)
+    script._timerCounter = 0
+    script._timerCounter = script.triggerEvery
+    script._watchTimer = hs.timer.doEvery(script.interval, function()
+        scriptBlock(script)
+    end)
 end
 
 function obj:start()
     hs.fnutils.ieach(obj.scripts, function(script)
-        script._timerCounter = 0
-        if script.runOnStart == true then
-            watchBlock(script)()
+        if type(script.delayStart) == "number" then
+            if script.delayStart == 0 then
+                runScriptCmd(script)
+                startScriptTimer(script)
+            else
+                script._delayedStartTimer = hs.timer.doAfter(script.interval * script.delayStart, function()
+                    startScriptTimer(script)
+                    runScriptCmd(script)
+                end)
+            end
+        else
+            startScriptTimer(script)
         end
-        script._timerCounter = script.triggerEvery
-        script._watchTimer = hs.timer.doEvery(script.interval, watchBlock(script))
     end)
     return self
 end
 
 function obj:stop()
-    obj._watchTimer:stop()
+    hs.fnutils.ieach(obj.scripts, function(script)
+        script._watchTimer:stop()
+        script._delayedStartTimer:stop()
+    end)
     return self
 end
 
