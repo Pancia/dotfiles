@@ -57,18 +57,23 @@ function renderMenuBar(text)
     obj._menubar:setTitle(title)
 end
 
+function resumeTimer()
+    obj._lotusTimer = obj._lotusTimer:start()
+    renderMenuBar()
+end
+
 function renderMenu()
     return {
         {title = (obj._paused and "resume" or "pause")
         , fn = function()
             if obj._paused then
-                obj._lotusTimer:start()
-                renderMenuBar()
+                resumeTimer()
             else
                 obj.stopAwarenessSound()
-                obj._lotusTimer:stop()
+                obj._lotusTimer = obj._lotusTimer:stop()
                 if obj._pauseTimer then
                     obj._pauseTimer:stop()
+                    obj._pauseTimer = nil
                 end
                 renderMenuBar("||")
             end
@@ -77,19 +82,14 @@ function renderMenu()
         {title = (obj._paused and "restart" or "pause for an hour")
         , fn = function()
             if obj._paused then
-                if obj._pauseTimer then
-                    obj._pauseTimer:stop()
-                end
-                obj:stop()
-                obj:init()
-                obj:start()
+                obj:stop() obj:init() obj:start()
             else
                 obj.stopAwarenessSound()
-                obj._lotusTimer:stop()
+                obj._lotusTimer = obj._lotusTimer:stop()
                 renderMenuBar("||1h")
                 obj._pauseTimer = hs.timer.doAfter(60*60, function()
                     obj._pauseTimer = nil
-                    obj._lotusTimer:start()
+                    obj._lotusTimer = obj._lotusTimer:start()
                     renderMenuBar()
                 end)
                 obj._paused = not obj._paused
@@ -104,7 +104,9 @@ function lotusBlock()
         local sound = obj.sounds[obj._soundIdx]
         obj:playAwarenessSound()
         if sound.alert then
-            hs.dialog.textPrompt("Lotus Alert!", sound.alert, "", "OK")
+            obj._lotusTimer = obj._lotusTimer:stop()
+            desktop = hs.screen.mainScreen():frame()
+            hs.dialog.alert(desktop.w / 2, desktop.h / 2 - 50, resumeTimer, "Lotus Alert!", sound.alert, "OK")
         end
         if obj.notifOptions then
             hs.notify.new(nil, obj.notifOptions):send()
@@ -125,6 +127,10 @@ function obj:start()
 end
 
 function obj:stop()
+    if obj._pauseTimer then
+        obj._pauseTimer:stop()
+        obj._pauseTimer = nil
+    end
     obj._lotusTimer:stop()
     obj._menubar:delete()
     return self
