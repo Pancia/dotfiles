@@ -103,8 +103,8 @@ localInstall("Lotus", {
     start = true,
     config = {
         sounds = {
-            {path = "gong.wav", volume = .5, alert = "Take a break!"},
-            {path = "bowl.wav", alert = "Quick Stretch!"}
+            {path = "gong.wav", volume = .5, notif = {title = "Take a break!", withdrawAfter = 0}},
+            {path = "bowl.wav", notif = {title = "Quick Stretch!", withdrawAfter = 0}}
         },
         interval = 60, -- every minute
         triggerEvery = 30, -- minutes (interval * triggerEvery)

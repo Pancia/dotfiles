@@ -104,12 +104,20 @@ function lotusBlock()
         local sound = obj.sounds[obj._soundIdx]
         obj:playAwarenessSound()
         if sound.alert then
-            obj._lotusTimer = obj._lotusTimer:stop()
-            desktop = hs.screen.mainScreen():frame()
-            hs.dialog.alert(desktop.w / 2, desktop.h / 2 - 50, resumeTimer, "Lotus Alert!", sound.alert, "OK")
+            --"Lotus Alert!", "OK"
         end
-        if obj.notifOptions then
-            hs.notify.new(nil, obj.notifOptions):send()
+        if sound.notif then
+            obj._lotusTimer = obj._lotusTimer:stop()
+            notif = hs.notify.new(resumeTimer, sound.notif):send()
+            clearCheck = hs.timer.doEvery(1, function()
+                if not hs.fnutils.contains(hs.notify.deliveredNotifications(), notif) then
+                    if notif:activationType() == hs.notify.activationTypes.none then
+                        resumeTimer()
+                    end
+                    clearCheck:stop()
+                    clearCheck = nil
+                end
+            end)
         end
     end
     obj._timerCounter = (obj._timerCounter - 1) % obj.triggerEvery
