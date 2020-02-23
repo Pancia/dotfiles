@@ -123,4 +123,8 @@ Plug 'artur-shaik/vim-javacomplete2', {'for': 'kotlin'}
 Plug 'slim-template/vim-slim', {'for': 'ruby'}
 " }}}
 
+" GDScript {{{
+Plug 'calviken/vim-gdscript3'
+" }}}
+
 call plug#end()
