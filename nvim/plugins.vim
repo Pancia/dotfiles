@@ -27,10 +27,6 @@ Plug 'Shougo/vimfiler.vim'
 Plug 'Shougo/vimproc.vim', {'do' : 'make'}
 " }}}
 
-" SHELL {{{
-Plug 'huiyiqun/elvish.vim', {'for': 'elvish'}
-" }}}
-
 " WIKI {{{
 Plug 'gokcehan/vim-opex'
 let g:vimwiki_map_prefix = ','
