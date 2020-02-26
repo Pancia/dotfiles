@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     mindful-yt
-// @version  1.1
+// @version  2
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @grant    none
 // ==/UserScript==
