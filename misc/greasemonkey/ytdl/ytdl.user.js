@@ -36,12 +36,12 @@ function waitForElementToBeLoaded(selector, callback) {
 }
 
 waitForElementToBeLoaded(".ytd-masthead", () => {
-    setTimeout(() => {
+    waitForElementToBeLoaded("#avatar-btn", () => {
         $(".ytd-masthead > #end")
             .before($("<a>YTDL</a>")
                 .css({"color": "red"
                     , "font-size": "16px"
                     , "cursor": "pointer"})
                 .click(() => YTDL()))
-    }, 500)
+    })
 })
