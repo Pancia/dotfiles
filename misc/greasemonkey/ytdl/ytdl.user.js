@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     YTDL
-// @version  1
+// @version  2
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @grant    none
 // ==/UserScript==
