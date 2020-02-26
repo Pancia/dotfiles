@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     mindful-yt
-// @version  2
+// @version  3
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @grant    none
 // ==/UserScript==
@@ -106,6 +106,7 @@ function MAIN() {
     showOverlay(mindfulnessReminderText, "body");
     dismissWaitTimer = setInterval(() => {
         $("#mindful-yt-dismiss").text(`Wait ${waitFor}s`);
+        if (document.visibilityState !== 'visible') { return; }
         if (waitFor-- == 0) {
             $("#mindful-yt-dismiss")
                 .text(`DISMISS`)
