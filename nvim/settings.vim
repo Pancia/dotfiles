@@ -1,6 +1,7 @@
 filetype plugin indent on
 
-set mouse=a
+" !: Fixes cmd-c on osx terminal
+set mouse=
 
 " CTRL_SPACE
 set hidden
