@@ -1,5 +1,6 @@
 #<[.config/cmus/rc]>
-set format_playlist= %-15l | %-15%a . %t%= %y %d %{?X!=0?%3X ?    }
+set format_playlist= %-15{album} | %-15%{artist} > %{title}%= %{duration} .
+set format_current= %{album} | %{artist} > %{title}
 set lib_sort=album
 set softvol=true
 set start_view=sorted
