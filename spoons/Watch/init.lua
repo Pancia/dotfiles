@@ -13,30 +13,66 @@ end
 obj.spoonPath = script_path()
 
 obj.scripts = {}
+obj.interval = 60
 
 function obj:init()
 end
 
 function runScriptCmd(script)
     cmd = script.command
+    local now = hs.execute("date +%X_%x")
     local output, status, exit_type, exit_code = hs.execute(cmd, true)
-    if exit_code ~= 0 then
-        hs.printf("Watch(%s) -> %s:\n%s", cmd, exit_code, output)
-    end
-end
-
-function scriptBlock(script)
-    if script._timerCounter == 0 then
-        runScriptCmd(script)
-    end
-    script._timerCounter = (script._timerCounter - 1) % script.triggerEvery
+    hs.execute("mkdir -p "..obj.logDir)
+    local logFile = io.open(obj.logDir.."/"..script.name, "a")
+    logFile:write(string.format("`%s` @ [%s] => %s {\n%s\n}\n", cmd, now:gsub("\n$", ""), exit_code, output))
+    logFile:close()
 end
 
 function startScriptTimer(script)
-    script._timerCounter = 0
-    script._timerCounter = script.triggerEvery
-    script._watchTimer = hs.timer.doEvery(script.interval, function()
-        scriptBlock(script)
+    script._timer = hs.timer.doEvery(obj.interval * script.triggerEvery, function()
+        runScriptCmd(script)
+    end)
+end
+
+function renderMenuBar()
+    -- obj._menubar:setIcon(obj.spoonPath.."/lotus-flower.png")
+    obj._menubar:setTitle("Watch")
+end
+
+function scriptTitle(script)
+    local timer = script._delayedStartTimer or script._timer
+    local next = timer:nextTrigger()
+    return math.floor(next) .. " -> " .. script.command
+end
+
+function scriptToHtml(script)
+    local logFile = io.open(obj.logDir.."/"..script.name, "r")
+    local log = logFile:read("*all")
+    logFile:close()
+    return "<html>"
+        .. "<script>window.onload = () => window.scrollTo(0,document.body.scrollHeight);</script>"
+        .. "<body style='background-color:rgba(240, 240, 240, 1)'>"
+        .. "<pre>" .. log .. "</pre>"
+        .. "</body>"
+        .. "</html>"
+end
+
+function renderMenu()
+    return hs.fnutils.map(obj.scripts, function(script)
+        return {title = scriptTitle(script)
+                , fn = function()
+                    local frame = hs.screen.primaryScreen():fullFrame()
+                    webviewRect = hs.geometry.rect(
+                        frame["x"] + (frame["w"] / 3),
+                        frame["y"] + (frame["h"] / 4),
+                        frame["w"] / 3,
+                        frame["h"] / 2)
+                    hs.webview.newBrowser(webviewRect)
+                        :html(scriptToHtml(script))
+                        :bringToFront(true)
+                        :shadow(true)
+                        :show()
+                end}
     end)
 end
 
@@ -47,7 +83,8 @@ function obj:start()
                 runScriptCmd(script)
                 startScriptTimer(script)
             else
-                script._delayedStartTimer = hs.timer.doAfter(script.interval * script.delayStart, function()
+                script._delayedStartTimer = hs.timer.doAfter(obj.interval * script.delayStart, function()
+                    script._delayedStartTimer = nil
                     startScriptTimer(script)
                     runScriptCmd(script)
                 end)
@@ -56,12 +93,15 @@ function obj:start()
             startScriptTimer(script)
         end
     end)
+    local menu = renderMenu()
+    obj._menubar = hs.menubar.new():setMenu(renderMenu)
+    renderMenuBar()
     return self
 end
 
 function obj:stop()
     hs.fnutils.ieach(obj.scripts, function(script)
-        script._watchTimer:stop()
+        script._timer:stop()
         script._delayedStartTimer:stop()
     end)
     return self

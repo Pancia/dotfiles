@@ -103,9 +103,6 @@ function lotusBlock()
     if obj._timerCounter == 0 then
         local sound = obj.sounds[obj._soundIdx]
         obj:playAwarenessSound()
-        if sound.alert then
-            --"Lotus Alert!", "OK"
-        end
         if sound.notif then
             obj._lotusTimer = obj._lotusTimer:stop()
             notif = hs.notify.new(resumeTimer, sound.notif):send()

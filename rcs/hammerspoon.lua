@@ -120,19 +120,21 @@ localInstall("Cmus", {
 localInstall("Watch", {
     start = true,
     config = {
+        logDir = os.getenv("HOME").."/.log/watch/",
         scripts = {
-            {command = "~/dotfiles/misc/watch/disable_osx_startup_chime.watch.sh"
+            {name = "disable_osx_startup_chime"
+            , command = "~/dotfiles/misc/watch/disable_osx_startup_chime.watch.sh"
             , triggerEvery = 60 -- every hour
-            , delayStart = 0 -- run immediately on start
-            , interval = 60},
-            {command = "~/dotfiles/misc/watch/ytdl/ytdl.watch.sh"
+            , delayStart = 0}, -- run immediately on start
+            {name = "ytdl"
+            , command = "~/dotfiles/misc/watch/ytdl/ytdl.watch.sh"
             , triggerEvery = 15 -- every 15 minutes
-            , delayStart = 5 -- delay 5 minutes from start
-            , interval = 60},
-            {command = "~/dotfiles/misc/watch/extra.watch.sh"
+            , delayStart = 5}, -- delay 5 minutes from start
+            {name = "extra"
+            , command = "~/dotfiles/misc/watch/extra.watch.sh"
             , triggerEvery = 60 * 3 -- every 3rd hour
-            , delayStart = 15 -- delay 15 minutes from start
-            , interval = 60},
+            , delayStart = 15}, -- delay 15 minutes from start
         }
     },
 })
+
