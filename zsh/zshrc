@@ -12,11 +12,23 @@ function _ENSURE_RCS {
     done
 }
 
+function _EXEC_INIT_CMDS {
+    for argsFile in $(ls $ZSH_INIT_CMD_DIR); do
+        local CMD="$HOME/dotfiles/bin/$argsFile"
+        if [[ ! -x $CMD ]]; then break; fi
+        (trap : INT; $CMD $(command cat $ZSH_INIT_CMD_DIR/$argsFile))
+        command rm $ZSH_INIT_CMD_DIR/$argsFile
+    done
+}
+
+export ZSH_INIT_CMD_DIR="$HOME/.init-zsh-cmds"; mkdir -p $ZSH_INIT_CMD_DIR
 function ZSHRC {
     (_ENSURE_RCS &)
 
     source ~/dotfiles/zsh/init.zsh
     [ -e ~/dotfiles/zsh/extra.zsh ] && source ~/dotfiles/zsh/extra.zsh
+
+    _EXEC_INIT_CMDS
 
     if [[ $1 == prompt ]]; then
         shift

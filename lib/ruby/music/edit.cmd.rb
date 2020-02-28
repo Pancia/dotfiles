@@ -62,7 +62,7 @@ module MusicCMD
     }
     music = MusicDB.read
     MusicDB.save music.merge to_edit
-    MusicDB.tag to_edit
+    MusicDB.tag to_edit.values
   end
 
 end
