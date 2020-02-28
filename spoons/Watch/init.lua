@@ -5,6 +5,9 @@ obj.version = "1.0"
 obj.author = "Anthony D'Ambrosio <anthony.dayzerostudio@gmail.com>"
 obj.homepage = "https://github.com/pancia/dotfiles/tree/master/spoons/watch"
 obj.license = "MIT - https://opensource.org/licenses/MIT"
+obj.attributions = {
+    "Watch icon made by: https://www.flaticon.com/free-icon/clock_2088617",
+}
 
 local function script_path()
     local str = debug.getinfo(2, "S").source:sub(2)
@@ -35,8 +38,7 @@ function startScriptTimer(script)
 end
 
 function renderMenuBar()
-    -- obj._menubar:setIcon(obj.spoonPath.."/lotus-flower.png")
-    obj._menubar:setTitle("Watch")
+    obj._menubar:setIcon(obj.spoonPath.."/watch.png")
 end
 
 function scriptTitle(script)
