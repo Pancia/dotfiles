@@ -24,10 +24,12 @@ end
 function runScriptCmd(script)
     cmd = script.command
     local now = hs.execute("date +%X_%x")
-    local output, status, exit_type, exit_code = hs.execute(cmd, true)
     hs.execute("mkdir -p "..obj.logDir)
-    local logFile = io.open(obj.logDir.."/"..script.name, "a")
-    logFile:write(string.format("`%s` @ [%s] => %s {\n%s\n}\n", cmd, now:gsub("\n$", ""), exit_code, output))
+    local logFileLoc = obj.logDir.."/"..script.name
+    local logFile = io.open(logFileLoc, "a")
+    logFile:write(string.format("`%s` @ [%s]: {\n", cmd, now:gsub("\n$", "")))
+    local _, _, _, exit_code = hs.execute(cmd.." | tee -a "..logFileLoc, true)
+    logFile:write(string.format("\n} -> %s\n", exit_code))
     logFile:close()
 end
 
