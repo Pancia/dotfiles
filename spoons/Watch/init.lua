@@ -23,14 +23,9 @@ end
 
 function runScriptCmd(script)
     cmd = script.command
-    local now = hs.execute("date +%X_%x")
     hs.execute("mkdir -p "..obj.logDir)
     local logFileLoc = obj.logDir.."/"..script.name
-    local logFile = io.open(logFileLoc, "a")
-    logFile:write(string.format("`%s` @ [%s]: {\n", cmd, now:gsub("\n$", "")))
-    local _, _, _, exit_code = hs.execute(cmd.." | tee -a "..logFileLoc, true)
-    logFile:write(string.format("\n} -> %s\n", exit_code))
-    logFile:close()
+    hs.execute(cmd.." | tee -a "..logFileLoc.." &", true)
 end
 
 function startScriptTimer(script)
@@ -49,30 +44,10 @@ function scriptTitle(script)
     return math.floor(next) .. " -> " .. script.command
 end
 
-function scriptToHtml(script)
-    local logFile = io.open(obj.logDir.."/"..script.name, "r")
-    local log = logFile:read("*all")
-    logFile:close()
-    return "<html>"
-        .. "<script>window.onload = () => window.scrollTo(0,document.body.scrollHeight);</script>"
-        .. "<body style='background-color:rgba(240, 240, 240, 1)'>"
-        .. "<pre>" .. log .. "</pre>"
-        .. "</body>"
-        .. "</html>"
-end
-
 function viewScriptLogFile(script)
-    local frame = hs.screen.primaryScreen():fullFrame()
-    webviewRect = hs.geometry.rect(
-        frame["x"] + (frame["w"] / 3),
-        frame["y"] + (frame["h"] / 4),
-        frame["w"] / 3,
-        frame["h"] / 2)
-    hs.webview.newBrowser(webviewRect)
-        :html(scriptToHtml(script))
-        :bringToFront(true)
-        :shadow(true)
-        :show()
+    local logFileLoc = obj.logDir.."/"..script.name
+    hs.execute("echo '-f "..logFileLoc.."' > $HOME/.init-zsh-cmds/viewLog", true)
+    hs.execute("open -a Terminal $HOME", true)
 end
 
 function renderMenu()
@@ -85,8 +60,8 @@ function renderMenu()
             end},
             {title = "-> Execute now!"
             , fn = function()
-                runScriptCmd(script)
                 viewScriptLogFile(script)
+                runScriptCmd(script)
             end},
             {title = "-"},
         }
