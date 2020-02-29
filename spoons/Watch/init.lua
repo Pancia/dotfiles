@@ -59,22 +59,35 @@ function scriptToHtml(script)
         .. "</html>"
 end
 
+function viewScriptLogFile(script)
+    local frame = hs.screen.primaryScreen():fullFrame()
+    webviewRect = hs.geometry.rect(
+        frame["x"] + (frame["w"] / 3),
+        frame["y"] + (frame["h"] / 4),
+        frame["w"] / 3,
+        frame["h"] / 2)
+    hs.webview.newBrowser(webviewRect)
+        :html(scriptToHtml(script))
+        :bringToFront(true)
+        :shadow(true)
+        :show()
+end
+
 function renderMenu()
-    return hs.fnutils.map(obj.scripts, function(script)
-        return {title = scriptTitle(script)
-                , fn = function()
-                    local frame = hs.screen.primaryScreen():fullFrame()
-                    webviewRect = hs.geometry.rect(
-                        frame["x"] + (frame["w"] / 3),
-                        frame["y"] + (frame["h"] / 4),
-                        frame["w"] / 3,
-                        frame["h"] / 2)
-                    hs.webview.newBrowser(webviewRect)
-                        :html(scriptToHtml(script))
-                        :bringToFront(true)
-                        :shadow(true)
-                        :show()
-                end}
+    return hs.fnutils.mapCat(obj.scripts, function(script)
+        return {
+            {title = scriptTitle(script)},
+            {title = "-> View Log File"
+            , fn = function()
+                viewScriptLogFile(script)
+            end},
+            {title = "-> Execute now!"
+            , fn = function()
+                runScriptCmd(script)
+                viewScriptLogFile(script)
+            end},
+            {title = "-"},
+        }
     end)
 end
 
