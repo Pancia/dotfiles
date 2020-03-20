@@ -60,7 +60,8 @@ function renderMenuBar()
             title = "||"
         end
     else
-        title = math.max(math.ceil(nextTrigger), 0) .. "->" .. soundTitle
+        _, refreshRate = userIntervalToSeconds(obj.interval)
+        title = math.max(math.ceil(nextTrigger / refreshRate), 0) .. "->" .. soundTitle
     end
     obj._menubar:setTitle(title)
 end
