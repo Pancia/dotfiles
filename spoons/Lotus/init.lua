@@ -18,10 +18,8 @@ end
 obj.spoonPath = script_path()
 
 obj.sounds = nil
-obj.interval = 60 -- seconds
-obj.triggerEvery = 20 -- minutes
+obj.interval = { minutes = 30 }
 obj.notifOptions = nil
-obj.logFile = "$HOME/.log/lotus/log"
 
 function obj:playAwarenessSound()
     local sound = obj.sounds[obj._soundIdx]
@@ -31,8 +29,8 @@ function obj:playAwarenessSound()
         or hs.sound.getByFile(obj.spoonPath.."/"..sound.path)
     obj.lastPlayedSound = s:volume(volume):play()
     obj._soundIdx = (obj._soundIdx % #obj.sounds) + 1
-    hs.execute("mkdir -p $(dirname "..obj.logFile..") && echo $(date +%T) -- '"..(sound.name or sound.path).."' >> "..obj.logFile)
-    renderMenuBar()
+    hs.execute("mkdir -p "..obj.logDir)
+    hs.execute("echo $(date +%T) -- '"..(sound.name or sound.path).."' >> "..obj.logDir.."/log")
     return self
 end
 
@@ -49,84 +47,98 @@ function obj:init()
     obj._paused = false
 end
 
-function renderMenuBar(text)
+function renderMenuBar()
     local sound = obj.sounds[obj._soundIdx]
     obj._menubar:setIcon(obj.spoonPath.."/lotus-flower.png")
     local soundTitle = sound.name or sound.path:match("[^/]+$"):match("[^.]+")
-    local title = text or obj._timerCounter .. "->" .. soundTitle
+    local nextTrigger = obj._lotusTimer:nextTrigger()
+    local title
+    if obj._paused then
+        if obj._pauseTimer then
+            title = "|| " .. math.ceil(obj._pauseTimer:nextTrigger() / 60)
+        else
+            title = "||"
+        end
+    else
+        title = math.max(math.ceil(nextTrigger), 0) .. "->" .. soundTitle
+    end
     obj._menubar:setTitle(title)
 end
 
 function resumeTimer()
     obj._lotusTimer = obj._lotusTimer:start()
-    renderMenuBar()
 end
 
 function renderMenu()
-    return {
-        {title = (obj._paused and "resume" or "pause")
-        , fn = function()
-            if obj._paused then
+    if obj._paused then
+        return {
+            {title = "resume"
+            , fn = function()
                 resumeTimer()
-            else
+                obj._paused = false
+            end},
+        }
+    else
+        return {
+            {title = "pause"
+            , fn = function()
                 obj.stopAwarenessSound()
                 obj._lotusTimer = obj._lotusTimer:stop()
                 if obj._pauseTimer then
                     obj._pauseTimer:stop()
                     obj._pauseTimer = nil
                 end
-                renderMenuBar("||")
-            end
-            obj._paused = not obj._paused
-        end},
-        {title = (obj._paused and "restart" or "pause for an hour")
-        , fn = function()
-            if obj._paused then
-                obj:stop() obj:init() obj:start()
-            else
+                obj._paused = true
+            end},
+            {title = "pause for an hour"
+            , fn = function()
                 obj.stopAwarenessSound()
                 obj._lotusTimer = obj._lotusTimer:stop()
-                renderMenuBar("||1h")
                 obj._pauseTimer = hs.timer.doAfter(60*60, function()
                     obj._pauseTimer = nil
                     obj._lotusTimer = obj._lotusTimer:start()
-                    renderMenuBar()
                 end)
-                obj._paused = not obj._paused
-            end
-        end},
-    }
+                obj._paused = true
+            end},
+        }
+    end
 end
 
 function lotusBlock()
-    renderMenuBar()
-    if obj._timerCounter == 0 then
-        local sound = obj.sounds[obj._soundIdx]
-        obj:playAwarenessSound()
-        if sound.notif then
-            obj._lotusTimer = obj._lotusTimer:stop()
-            notif = hs.notify.new(resumeTimer, sound.notif):send()
-            clearCheck = hs.timer.doEvery(1, function()
-                if not hs.fnutils.contains(hs.notify.deliveredNotifications(), notif) then
-                    if notif:activationType() == hs.notify.activationTypes.none then
-                        resumeTimer()
-                    end
-                    clearCheck:stop()
-                    clearCheck = nil
+    local sound = obj.sounds[obj._soundIdx]
+    obj:playAwarenessSound()
+    if sound.notif then
+        obj._lotusTimer = obj._lotusTimer:stop()
+        obj._notif = hs.notify.new(resumeTimer, sound.notif):send()
+        clearCheck = hs.timer.doEvery(1, function()
+            if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
+                if obj._notif:activationType() == hs.notify.activationTypes.none then
+                    resumeTimer()
                 end
-            end)
-        end
+                clearCheck:stop()
+                clearCheck = nil
+            end
+        end)
     end
-    obj._timerCounter = (obj._timerCounter - 1) % obj.triggerEvery
+end
+
+function userIntervalToSeconds(x)
+    if x.minutes then
+        return x.minutes * 60, 60
+    else
+        return x.seconds, 1
+    end
 end
 
 function obj:start()
-    obj._timerCounter = obj.triggerEvery
     obj._menubar = hs.menubar.new():setMenu(renderMenu)
-    renderMenuBar()
 
+    interval, refreshRate = userIntervalToSeconds(obj.interval)
+    obj._lotusTimer = hs.timer.doEvery(interval, lotusBlock)
     obj:playAwarenessSound()
-    obj._lotusTimer = hs.timer.doEvery(obj.interval, lotusBlock)
+
+    renderMenuBar()
+    obj._menuRefreshTimer = hs.timer.doEvery(refreshRate, renderMenuBar)
 
     return self
 end
@@ -136,7 +148,11 @@ function obj:stop()
         obj._pauseTimer:stop()
         obj._pauseTimer = nil
     end
+    if obj._notif then
+        obj._notif:withdraw()
+    end
     obj._lotusTimer:stop()
+    obj._menuRefreshTimer:stop()
     obj._menubar:delete()
     return self
 end

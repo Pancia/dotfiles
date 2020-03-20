@@ -102,12 +102,12 @@ end
 localInstall("Lotus", {
     start = true,
     config = {
+        logDir = os.getenv("HOME").."/.log/lotus/",
         sounds = {
             {name = "long", path = "gong.wav", volume = .5, notif = {title = "Take a break!", withdrawAfter = 0}},
             {name = "short", path = "bowl.wav", notif = {title = "Quick Stretch!", withdrawAfter = 0}}
         },
-        interval = 60, -- every minute
-        triggerEvery = 30, -- minutes (interval * triggerEvery)
+        interval = { seconds = 9 },
         notifOptions = false,
     },
 })
