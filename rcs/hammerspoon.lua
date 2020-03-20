@@ -107,7 +107,7 @@ localInstall("Lotus", {
             {name = "long", path = "gong.wav", volume = .5, notif = {title = "Take a break!", withdrawAfter = 0}},
             {name = "short", path = "bowl.wav", notif = {title = "Quick Stretch!", withdrawAfter = 0}}
         },
-        interval = { seconds = 9 },
+        interval = { minutes = 30 },
         notifOptions = false,
     },
 })
