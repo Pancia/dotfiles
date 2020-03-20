@@ -65,16 +65,16 @@ function renderMenuBar()
     obj._menubar:setTitle(title)
 end
 
-function resumeTimer()
+function restartTimer()
     obj._lotusTimer = obj._lotusTimer:start()
 end
 
 function renderMenu()
     if obj._paused then
         return {
-            {title = "resume"
+            {title = "restart"
             , fn = function()
-                resumeTimer()
+                restartTimer()
                 obj._paused = false
             end},
         }
@@ -109,11 +109,11 @@ function lotusBlock()
     obj:playAwarenessSound()
     if sound.notif then
         obj._lotusTimer = obj._lotusTimer:stop()
-        obj._notif = hs.notify.new(resumeTimer, sound.notif):send()
+        obj._notif = hs.notify.new(restartTimer, sound.notif):send()
         clearCheck = hs.timer.doEvery(1, function()
             if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
                 if obj._notif:activationType() == hs.notify.activationTypes.none then
-                    resumeTimer()
+                    restartTimer()
                 end
                 clearCheck:stop()
                 clearCheck = nil
