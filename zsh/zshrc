@@ -16,8 +16,9 @@ function _EXEC_INIT_CMDS {
     for argsFile in $(ls $ZSH_INIT_CMD_DIR); do
         local CMD="$HOME/dotfiles/bin/$argsFile"
         if [[ ! -x $CMD ]]; then break; fi
-        (trap : INT; $CMD $(command cat $ZSH_INIT_CMD_DIR/$argsFile))
+        local ARGS=$(command cat $ZSH_INIT_CMD_DIR/$argsFile)
         command rm $ZSH_INIT_CMD_DIR/$argsFile
+        $CMD $ARGS
     done
 }
 
