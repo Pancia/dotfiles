@@ -1,0 +1,53 @@
+<html>
+    <head>
+        <style>
+input, button { font-size: 64; }
+input { grid-area: dur; width: 200px; }
+.inc { grid-area: inc; }
+.fin { grid-area: fin; }
+#container {
+    height: 100%;
+    display: grid;
+    grid-template-areas:
+        '. .   .'
+        '. dur .'
+        '. inc .'
+        '. fin .'
+        '. .   .';
+    grid-template-columns: 1fr 6fr 1fr;
+    grid-template-rows: 2fr 1fr 1fr 1fr 2fr;
+    place-items: center;
+}
+        </style>
+
+        <script type="text/javascript">
+var duration = 0;
+window.onload = function() {
+    document.getElementById("duration").value = duration;
+};
+function update(num) {
+    duration += num;
+    document.getElementById("duration").value = duration;
+}
+function submit() {
+    webkit.messageHandlers.durationPicker.postMessage(duration);
+}
+        </script>
+    </head>
+
+    <body>
+        <div id="container">
+            <input id="duration" type="number" disabled=true/>
+            <div class="inc">
+                <button onclick="update(1);">1</button>
+                <button onclick="update(5);">5</button>
+                <button onclick="update(15);">15</button>
+                <button onclick="update(30);">30</button>
+            </div>
+            <div class="fin">
+                <button onclick="update(-duration);">CLEAR</button>
+                <button onclick="submit();">SUBMIT</button>
+            </div>
+        </div>
+    </body>
+</html

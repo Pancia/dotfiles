@@ -48,10 +48,6 @@ function obj:init()
 end
 
 function renderMenuBar()
-    local sound = obj.sounds[obj._soundIdx]
-    obj._menubar:setIcon(obj.spoonPath.."/lotus-flower.png")
-    local soundTitle = sound.name or sound.path:match("[^/]+$"):match("[^.]+")
-    local nextTrigger = obj._lotusTimer:nextTrigger()
     local title
     if obj._paused then
         if obj._pauseTimer then
@@ -60,6 +56,10 @@ function renderMenuBar()
             title = "||"
         end
     else
+        local sound = obj.sounds[obj._soundIdx]
+        obj._menubar:setIcon(obj.spoonPath.."/lotus-flower.png")
+        local soundTitle = sound.name or sound.path:match("[^/]+$"):match("[^.]+")
+        local nextTrigger = obj._lotusTimer:nextTrigger()
         _, refreshRate = userIntervalToSeconds(obj.interval)
         title = math.max(math.ceil(nextTrigger / refreshRate), 0) .. "->" .. soundTitle
     end
@@ -77,6 +77,7 @@ function renderMenu()
             , fn = function()
                 restartTimer()
                 obj._paused = false
+                obj._menuRefreshTimer:fire()
             end},
         }
     else
@@ -90,16 +91,42 @@ function renderMenu()
                     obj._pauseTimer = nil
                 end
                 obj._paused = true
+                obj._menuRefreshTimer:fire()
             end},
-            {title = "pause for an hour"
+            {title = "pause for >?"
             , fn = function()
                 obj.stopAwarenessSound()
                 obj._lotusTimer = obj._lotusTimer:stop()
-                obj._pauseTimer = hs.timer.doAfter(60*60, function()
-                    obj._pauseTimer = nil
-                    obj._lotusTimer = obj._lotusTimer:start()
+                local frame = hs.screen.primaryScreen():fullFrame()
+                local rect = hs.geometry.rect(
+                    frame["x"] + (3 * frame["w"] / 8),
+                    frame["y"] + 3 * (frame["h"] / 8),
+                    2 * frame["w"] / 8,
+                    2 * frame["h"] / 8)
+                local uc = hs.webview.usercontent.new("durationPicker")
+                local browser
+                uc:setCallback(function(response)
+                    local duration = response.body
+                    browser:delete()
+                    obj._pauseTimer = hs.timer.doAfter(60*duration, function()
+                        obj._pauseTimer = nil
+                        obj._lotusTimer = obj._lotusTimer:start()
+                    end)
+                    obj._menuRefreshTimer:fire()
                 end)
+                browser = hs.webview.newBrowser(rect, {developerExtrasEnabled = true}, uc)
+                local f = io.open(obj.spoonPath.."/durationPicker.html")
+                local html = ""
+                for each in f:lines() do
+                    html = html .. each
+                end
+                browser:html(html):bringToFront():show()
                 obj._paused = true
+                if obj._pauseTimer then
+                    obj._pauseTimer:stop()
+                    obj._pauseTimer = nil
+                end
+                obj._menuRefreshTimer:fire()
             end},
         }
     end
