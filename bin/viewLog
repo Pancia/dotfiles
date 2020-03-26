@@ -1,2 +1,2 @@
 #!/usr/bin/env zsh
-tail "$@"
+bat --pager='less +G' "$@"

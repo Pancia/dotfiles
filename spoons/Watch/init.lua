@@ -46,7 +46,7 @@ end
 
 function viewScriptLogFile(script)
     local logFileLoc = obj.logDir.."/"..script.name
-    hs.execute("echo '-f "..logFileLoc.."' > $HOME/.init-zsh-cmds/viewLog", true)
+    hs.execute("echo '"..logFileLoc.."' > $HOME/.init-zsh-cmds/viewLog", true)
     hs.execute("open -a Terminal $HOME", true)
 end
 
