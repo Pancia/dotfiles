@@ -5,10 +5,6 @@
 = cmus =
 - [ ] https://github.com/cmus/cmus/wiki/cmus_edit_tags
 
-= Spoons =
-== Lotus ==
-- [ ] ? snooze until: open a time picker dialog
-
 = Specific =
 * [[Vim#TODOS]]
 * [[Zsh#TODOS]]
