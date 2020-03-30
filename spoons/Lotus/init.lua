@@ -128,6 +128,26 @@ function renderMenu()
                 end
                 obj._menuRefreshTimer:fire()
             end},
+            {title = "restart"
+            , fn = function()
+                obj.stopAwarenessSound()
+                obj._soundIdx = 1
+                obj._lotusTimer:fire()
+                obj._lotusTimer = obj._lotusTimer:stop()
+                if obj._pauseTimer then
+                    obj._pauseTimer:stop()
+                    obj._pauseTimer = nil
+                end
+                restartTimer()
+                obj._paused = false
+                obj._menuRefreshTimer:fire()
+            end},
+            {title = "view log"
+            , fn = function()
+                local logFileLoc = obj.logDir.."/log"
+                hs.execute("echo '"..logFileLoc.."' > $HOME/.init-zsh-cmds/viewLog", true)
+                hs.execute("open -a Terminal $HOME", true)
+            end},
         }
     end
 end
