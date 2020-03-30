@@ -18,7 +18,7 @@ function _EXEC_INIT_CMDS {
         if [[ ! -x $CMD ]]; then break; fi
         local ARGS=$(command cat $ZSH_INIT_CMD_DIR/$argsFile)
         command rm $ZSH_INIT_CMD_DIR/$argsFile
-        $CMD $ARGS
+        (zsh -ic "$CMD $ARGS")
     done
 }
 
