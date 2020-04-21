@@ -1,0 +1,56 @@
+"<[.config/ideavim/ideavimrc]>
+
+" NOTE: run `:actionlist` to see all `:action`s
+
+let mapleader = "s"
+
+nmap (         :action :cursive.actions.paredit/backward-up<cr>
+nmap )         :action :cursive.actions.paredit/forward-up<cr>
+nmap <leader>o :action :cursive.actions.paredit/raise<cr>
+nmap <leader>O :action :cursive.actions.paredit/raise<cr>
+nmap >f        :action :cursive.actions.paredit/move-form-down<cr>
+nmap <f        :action :cursive.actions.paredit/move-form-up<cr>
+nmap >e        :action :cursive.actions.paredit/move-form-down<cr>
+nmap <e        :action :cursive.actions.paredit/move-form-up<cr>
+nmap <leader>@ :action :cursive.actions.paredit/splice<cr>
+nmap <(        :action :cursive.actions.paredit/slurp-backwards<cr>
+nmap <)        :action :cursive.actions.paredit/barf-forwards<cr>
+nmap >(        :action :cursive.actions.paredit/barf-backwards<cr>
+nmap >)        :action :cursive.actions.paredit/slurp-forwards<cr>
+nmap <leader>w :action :cursive.actions.paredit/wrap-paren<cr>:action :cursive.actions.paredit/backward-up<cr>
+nmap <leader>W :action :cursive.actions.paredit/wrap-paren<cr>:action :cursive.actions.paredit/forward-up<cr>
+nmap <leader>i :action :cursive.actions.paredit/wrap-paren<cr>:action :cursive.actions.paredit/backward-up<cr>
+nmap <leader>I :action :cursive.actions.paredit/wrap-paren<cr>:action :cursive.actions.paredit/forward-up<cr>
+nmap <leader>{ :action :cursive.actions.paredit/wrap-curly<cr>:action :cursive.actions.paredit/backward-up<cr>
+nmap <leader>} :action :cursive.actions.paredit/wrap-curly<cr>:action :cursive.actions.paredit/forward-up<cr>
+nmap <leader>[ :action :cursive.actions.paredit/wrap-square<cr>:action :cursive.actions.paredit/backward-up<cr>
+nmap <leader>] :action :cursive.actions.paredit/wrap-square<cr>:action :cursive.actions.paredit/forward-up<cr>
+nmap <leader>" :action :cursive.actions.paredit/wrap-quotes<cr>
+
+nmap == :action ReformatCode<cr>
+nmap [[ :action MethodUp<cr>
+nmap ]] :action MethodDown<cr>
+
+" :cursive.repl.actions/clear-repl
+" :cursive.repl.actions/clojure-repl-commands-group
+" :cursive.repl.actions/clojure-repl-group
+" :cursive.repl.actions/interrupt
+" :cursive.repl.actions/jump-to-output
+" :cursive.repl.actions/jump-to-repl                 <M-\>
+" :cursive.repl.actions/load-file                    <C-C>
+" :cursive.repl.actions/macroexpansion               <M-S-\>
+" :cursive.repl.actions/next-history-item            <M-Down>
+" :cursive.repl.actions/prev-history-item            <M-Up>
+" :cursive.repl.actions/print-exception
+" :cursive.repl.actions/run-last-sexp                <C-C>
+" :cursive.repl.actions/run-top-sexp                 <C-C>
+" :cursive.repl.actions/search-history               <M-A-E>
+" :cursive.repl.actions/switch-namespace             <C-C>
+" :cursive.repl.actions/sync-files                   <C-C>
+" :cursive.repl.actions/toggle-repl-editor-type
+" :cursive.repl.commands/add-new
+" :cursive.repl.commands/edit
+" :cursive.testing.actions/remove-test-markers
+" :cursive.testing.actions/rerun-last-test
+" :cursive.testing.actions/run-ns-tests
+" :cursive.testing.actions/run-single-test
