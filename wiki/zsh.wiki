@@ -1,9 +1,4 @@
 = TODOS =
-- [ ] https://github.com/so-fancy/diff-so-fancy
-- [ ] Try out themes: https://github.com/unixorn/awesome-zsh-plugins#themes
-- [ ] try other faster themes
-- [ ] try other faster powerlines (toolbars/PS1)
-- [ ] https://github.com/softmoth/zsh-vim-mode
 - [ ] zcompile my .zsh files? (profile impact)
 - [ ] [[Scratchpad#nvim-terminus]] set term title to sync with nvim term
 == Antigen ==

@@ -1,5 +1,4 @@
 = TODOS =
-- [ ] http://www.hammerspoon.org/docs/hs.styledtext.html
 
 = Learn =
 - https://learnxinyminutes.com/docs/lua/
