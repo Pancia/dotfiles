@@ -68,6 +68,7 @@ end
 
 function restartTimer()
     obj._lotusTimer = obj._lotusTimer:start()
+    obj._menuRefreshTimer:fire()
 end
 
 function renderMenu()
@@ -77,7 +78,6 @@ function renderMenu()
             , fn = function()
                 restartTimer()
                 obj._paused = false
-                obj._menuRefreshTimer:fire()
             end},
         }
     else
