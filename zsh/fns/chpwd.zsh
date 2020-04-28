@@ -17,6 +17,7 @@ function _cache {
 function cache {
     local cache_root="$HOME/.cache/dotfiles/cache/"
     case "$1" in
+        help|-h|--help) echo "cache [clear|purge|global] [CACHE_NAME]" ;;
         clear|purge) shift; [ -d "$cache_root" ] && command rm -r "$cache_root" ;;
         global) shift; _cache "$cache_root/$2.glock" "$@" ;;
         *) _cache "$cache_root/`pwd`/$2.lock" "$@" ;;
@@ -28,6 +29,12 @@ function showTodos {
     [[ -f wiki/TODO.wiki ]] && echo "&> wiki/TODO.wiki:" && cat wiki/TODO.wiki
 }
 
+function showCmds {
+    local CMDS=$(cmds list)
+    [[ -n "$CMDS" ]] &&
+        echo "Available CMDS: $CMDS"
+}
+
 function listVims {
     local VIMS="$(vims list)"
     [[ -n "$VIMS" ]] &&
@@ -36,5 +43,6 @@ function listVims {
 
 function chpwd {
     cache 15 showTodos
+    cache 15 showCmds
     cache 5 listVims
 }

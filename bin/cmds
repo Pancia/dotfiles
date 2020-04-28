@@ -1,0 +1,105 @@
+#!/usr/bin/env ruby
+
+require "optparse"
+
+$cmds_base_dir = "/Users/#{%x[whoami].strip}/dotfiles/cmds/"
+$cmds_file = "/Users/#{%x[whoami].strip}/dotfiles/cmds/#{%x[pwd].strip}/cmds.rb"
+
+class OptionParser
+  def info
+    @info
+  end
+  def info=(str)
+    @info = str
+    top.append(">>> "+str, nil, nil)
+    top.append("", nil, nil)
+  end
+end
+
+module CMD end
+class CMDS extend CMD
+  def self.help_opts()
+    OptionParser.new do |opts|
+      opts.info = "Show this help"
+    end
+  end
+  def self.help(cmd = nil)
+    p cmd if $options[:verbose]
+    if not $options[:helped]
+      if not cmd
+        puts $global_opts
+      else
+        puts CMDS.send(cmd+"_opts")
+      end
+    end
+  end
+  def self.list_opts()
+    OptionParser.new do |opts|
+      opts.info = "List available commands at the current working directory."
+    end
+  end
+  def self.list()
+    p (CMDS.methods - Object.methods).keep_if {|m| not m.to_s.include? "_" and not $global_cmds.include? m }.map{|m|m.to_s}
+  end
+  def self.edit_opts()
+    OptionParser.new do |opts|
+      opts.info = "Edit cmds.rb file, with template default."
+    end
+  end
+  def self.edit()
+    if not File.file? $cmds_file
+      system("mkdir -p $(dirname #{$cmds_file})")
+      system("cp #{$cmds_base_dir}template.rb #{$cmds_file}")
+    end
+    system("$EDITOR #{$cmds_file}")
+  end
+  def self.trash_opts()
+    OptionParser.new do |opts|
+      opts.info = "Move cmds.rb file to trash."
+    end
+  end
+  def self.trash()
+    if File.exists? $cmds_file
+      system("zsh -ic 'trash #{$cmds_file}'")
+    end
+  end
+end
+
+$global_cmds = (CMDS.methods - Object.methods).keep_if {|m| not m.to_s.include? "_"}
+
+require $cmds_file if File.file? $cmds_file
+
+$options = {}
+$global_opts = OptionParser.new do |opts|
+  opts.banner = "Usage: cmds [OPTS] COMMAND [ARGS]"
+  opts.on("-h", "--help", "Print this help document") do
+    puts opts if not $options[:helped]
+    $options[:helped] = true
+  end
+  opts.separator ""
+  opts.separator "global CMDS:"
+  opts.separator $global_cmds
+    .keep_if {|m| not m.to_s.include? "_" and m}
+    .map {|m| [m, CMDS.send(m.to_s+"_opts").info]}
+    .keep_if {|_,i| i}
+    .sort.map {|m,i| "\t"+m.to_s+"\t:\t"+i }
+    .join "\n"
+  opts.separator ""
+  opts.separator "local CMDS:"
+  opts.separator (CMDS.methods - Object.methods)
+    .keep_if {|m| not m.to_s.include? "_" and m}
+    .keep_if {|m| not $global_cmds.include? m }
+    .map {|m| [m, CMDS.send(m.to_s+"_opts").info]}
+    .keep_if {|_,i| i}
+    .sort.map {|m,i| "\t"+m.to_s+"\t:\t"+i }
+    .join "\n"
+end
+
+$global_opts.order!
+if ARGV[0] and CMDS.respond_to? ARGV[0]
+  command = ARGV.shift
+  CMDS.send(command+"_opts").order!
+  CMDS.send(command, *ARGV)
+else
+  CMDS.help()
+end
