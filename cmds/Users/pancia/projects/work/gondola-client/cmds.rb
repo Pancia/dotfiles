@@ -20,7 +20,7 @@ module CMD
         clj \
         -J-Ddev -J-Dtest \
         -J-Denvironment=clearfork-dev \
-        -J-Dconfig=config/dev-tony.edn \
+        -J-Dconfig=config/dev-anthony.edn \
         -J-Dguardrails.enabled=true \
         -J-Dallow.mocked.connection=true \
         -J-Dclojure.server.jvm="{:port 5678 :accept clojure.core.server/io-prepl}" \

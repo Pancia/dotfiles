@@ -11,3 +11,5 @@ call deoplete#custom#option('omni_patterns', {
             \ 'java': '[^. *\t]\.\w*',
             \ 'kotlin': '[^. *\t]\.\w*',
             \})
+" https://github.com/Shougo/deoplete.nvim/issues/115
+autocmd InsertLeave,CompleteDone * if pumvisible() == 0 && bufname('') !~ 'conjure.cljc' | silent! pclose | endif
