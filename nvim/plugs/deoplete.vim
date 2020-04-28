@@ -13,3 +13,9 @@ call deoplete#custom#option('omni_patterns', {
             \})
 " https://github.com/Shougo/deoplete.nvim/issues/115
 autocmd InsertLeave,CompleteDone * if pumvisible() == 0 && bufname('') !~ 'conjure.cljc' | silent! pclose | endif
+
+" USE FLOAT PREVIEW INSTEAD
+set completeopt-=preview
+let g:float_preview#docked = 0
+let g:float_preview#max_width = 120
+let g:float_preview#max_height = 60
