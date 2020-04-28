@@ -61,11 +61,12 @@ Plug 'Shougo/unite.vim'
 " }}}
 
 " CLOJURE {{{
-Plug 'clojure-emacs/cider-nrepl', {'for': 'clojure'}
+"Plug 'clojure-emacs/cider-nrepl', {'for': 'clojure'}
+"Plug 'tpope/vim-fireplace', {'for': 'clojure'}
+Plug 'Olical/conjure', {'for': 'clojure', 'tag': 'v2.1.2', 'do': 'bin/compile' }
 Plug 'venantius/vim-cljfmt', {'for': 'clojure'}
 Plug 'guns/vim-clojure-highlight', {'for': 'clojure'}
 Plug 'guns/vim-clojure-static', {'for': 'clojure'}
-Plug 'tpope/vim-fireplace', {'for': 'clojure'}
 Plug 'guns/vim-sexp', {'for': 'clojure'}
 Plug 'tpope/vim-sexp-mappings-for-regular-people', {'for': 'clojure'}
 " }}}

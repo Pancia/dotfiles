@@ -57,11 +57,9 @@ let g:unite_source_menu_menus.git.command_candidates = [
 let g:unite_source_menu_menus._helpers = {'description' : 'my custom helpers'}
 let g:unite_source_menu_menus._helpers.command_candidates = [
             \['> source current file', 'source %'],
-            \['> zshrc dotfiles', 'e ~/dotfiles/zsh/init.zsh | cd ~/dotfiles/zsh'],
             \['> vimrc dotfiles', 'e ~/dotfiles/nvim/init.vim | cd ~/dotfiles/nvim'],
-            \['> lein profiles', 'e ~/.lein/profiles.clj | cd ~/.lein'],
+            \['> zshrc dotfiles', 'e ~/dotfiles/zsh/init.zsh | cd ~/dotfiles/zsh'],
             \['> delete all buffers', '%bd'],
-            \['> tidy', 'g/^\s\+[\)\]\}]/normal kJ'],
             \]
 
 let g:unite_source_menu_menus.wiki = {'description' : 'Vimwiki helpers'}
@@ -88,77 +86,10 @@ let g:unite_source_menu_menus.wiki.command_candidates = [
 let g:unite_source_menu_menus.plug = {}
 let g:unite_source_menu_menus.plug.command_candidates = [
             \['PlugInstall', 'source % | PlugInstall'],
+            \['PlugClean', 'source % | PlugClean'],
             \]
 
-let g:unite_source_menu_menus.java = {'description' : 'JavaComplete'}
-let g:unite_source_menu_menus.java.command_candidates = [
-            \[],
+let g:unite_source_menu_menus.fulcro = {'description' : 'Fulcro Project Commands'}
+let g:unite_source_menu_menus.fulcro.command_candidates = [
+            \['restart', "ConjureEval (require '[development :as dev])(dev/restart)"],
             \]
-
-"JCimportsSort
-"JCimportsRemoveUnused
-"JCimportsAddMissing
-"JCimportAddSmart
-"JCimportAdd
-
-"TODO
-"To enable smart (trying to guess import option) inserting class imports with F4, add:
-"
-"nmap <F4> <Plug>(JavaComplete-Imports-AddSmart)
-"
-"imap <F4> <Plug>(JavaComplete-Imports-AddSmart)
-"
-"To enable usual (will ask for import option) inserting class imports with F5, add:
-"
-"nmap <F5> <Plug>(JavaComplete-Imports-Add)
-"
-"imap <F5> <Plug>(JavaComplete-Imports-Add)
-"
-"To add all missing imports with F6:
-"
-"nmap <F6> <Plug>(JavaComplete-Imports-AddMissing)
-"
-"imap <F6> <Plug>(JavaComplete-Imports-AddMissing)
-"
-"To remove all unused imports with F7:
-"
-"nmap <F7> <Plug>(JavaComplete-Imports-RemoveUnused)
-"
-"imap <F7> <Plug>(JavaComplete-Imports-RemoveUnused)
-"
-"Default mappings:
-
-" nmap <leader>jI <Plug>(JavaComplete-Imports-AddMissing)
-" nmap <leader>jR <Plug>(JavaComplete-Imports-RemoveUnused)
-" nmap <leader>ji <Plug>(JavaComplete-Imports-AddSmart)
-" nmap <leader>jii <Plug>(JavaComplete-Imports-Add)
-
-" imap <C-j>I <Plug>(JavaComplete-Imports-AddMissing)
-" imap <C-j>R <Plug>(JavaComplete-Imports-RemoveUnused)
-" imap <C-j>i <Plug>(JavaComplete-Imports-AddSmart)
-" imap <C-j>ii <Plug>(JavaComplete-Imports-Add)
-
-" nmap <leader>jM <Plug>(JavaComplete-Generate-AbstractMethods)
-
-" imap <C-j>jM <Plug>(JavaComplete-Generate-AbstractMethods)
-
-" nmap <leader>jA <Plug>(JavaComplete-Generate-Accessors)
-" nmap <leader>js <Plug>(JavaComplete-Generate-AccessorSetter)
-" nmap <leader>jg <Plug>(JavaComplete-Generate-AccessorGetter)
-" nmap <leader>ja <Plug>(JavaComplete-Generate-AccessorSetterGetter)
-" nmap <leader>jts <Plug>(JavaComplete-Generate-ToString)
-" nmap <leader>jeq <Plug>(JavaComplete-Generate-EqualsAndHashCode)
-" nmap <leader>jc <Plug>(JavaComplete-Generate-Constructor)
-" nmap <leader>jcc <Plug>(JavaComplete-Generate-DefaultConstructor)
-
-" imap <C-j>s <Plug>(JavaComplete-Generate-AccessorSetter)
-" imap <C-j>g <Plug>(JavaComplete-Generate-AccessorGetter)
-" imap <C-j>a <Plug>(JavaComplete-Generate-AccessorSetterGetter)
-
-" vmap <leader>js <Plug>(JavaComplete-Generate-AccessorSetter)
-" vmap <leader>jg <Plug>(JavaComplete-Generate-AccessorGetter)
-" vmap <leader>ja <Plug>(JavaComplete-Generate-AccessorSetterGetter)
-
-" nmap <silent> <buffer> <leader>jn <Plug>(JavaComplete-Generate-NewClass)
-" nmap <silent> <buffer> <leader>jN <Plug>(JavaComplete-Generate-ClassInFile)
-
