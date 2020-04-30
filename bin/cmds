@@ -39,7 +39,14 @@ class CMDS extend CMD
     end
   end
   def self.list()
-    p (CMDS.methods - Object.methods).keep_if {|m| not m.to_s.include? "_" and not $global_cmds.include? m }.map{|m|m.to_s}
+    commands = (CMDS.methods - Object.methods)
+      .keep_if {|m| not m.to_s.include? "_" and not $global_cmds.include? m }
+      .map{|m|m.to_s}
+    if not commands.empty?
+      p commands
+    else
+      exit 1
+    end
   end
   def self.edit_opts()
     OptionParser.new do |opts|
