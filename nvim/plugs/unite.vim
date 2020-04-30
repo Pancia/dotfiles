@@ -1,16 +1,14 @@
 nnoremap [unite] <nop>
 nmap <space><space> [unite]
-nnoremap <silent> [unite]f :Unite file_rec/neovim<CR>
-nnoremap <silent> [unite]p :CtrlP<CR>
 nnoremap <silent> [unite]b :Unite buffer<CR>
-nnoremap <silent> [unite]t :Unite file/async:t<CR>
 nnoremap <silent> [unite]<space> :Unite source<CR>
 nnoremap <silent> [unite]s :Unite grep:.<CR>
-nnoremap <silent> [unite]r :Unite rust/doc<CR>
+nnoremap <silent> [unite]/ :Unite grep:.<CR>
 let g:unite_source_history_yank_enable=1
 nnoremap <silent> [unite]y :Unite history/yank<CR>
+nnoremap <silent> [unite]p :Unite history/yank<CR>
 nnoremap <silent> [unite]h :Unite help<CR>
-nnoremap <silent> [unite]u :GundoToggle<CR>
+nnoremap <silent> [unite]u :UndotreeToggle<CR>
 nnoremap <silent> [unite]: :Unite command mapping<CR>
 nnoremap <silent> <c-space> :Unite menu<CR>
 nnoremap <silent> <NUL>     :Unite menu<CR>

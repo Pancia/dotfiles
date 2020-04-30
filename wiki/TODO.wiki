@@ -1,9 +1,35 @@
-= Assorted =
-- [ ] karabiner transfer installs/k*/karabiner.json to karabiner-elements (how ??)
-- [ ] https://github.com/danistefanovic/build-your-own-x
+= TODOS =
+- [X] :conjure: esc to close conjure.cljc
+- [ ] :conjure: abbreviate nss (virtual text?)
+- [X] :deoplete: enter should not select completion (causes stutter when i want newline)
+- [ ] :clojure: rainbow parens
+- [ ] :clojure: ? syntastic or nvim alternatives
+- [ ] :clojure: :syntax: #_ does nothing
+- [ ] :clojure: :format: auto formatter (pre-commit check or run thru cursive?)
+- [ ] :clojure: :format: auto align to 2 spaces always (?)
+- [ ] :clojure: ?? kondo, joker
+- [o] :lotus: 2 hour reset/review/plan reminder (webview?)
+- [ ] :lotus: list of sounds is offset, first sound is actually last
+- [X] :nvim: no auto fold close on open (annoying/broken)
+- [X] :nvim: remember fold levels
+- [X] :nvim: mouse
+- [ ] :nvim: terminal unicode? (kaocha test output)
+- [ ] :nvim: TODO FIXME should mark/highlight line (red?)
+- [ ] :nvim: TASK LANDMARK CONTEXT should be highlighted
+- [ ] :nvim: terminal buffer names empty
+- [X] :nvim: esc (not q) to close help & loc buffers
+- [ ] :vimwiki: conf mappings, add to unite, ctrl a/x for todos
 
-= cmus =
-- [ ] https://github.com/cmus/cmus/wiki/cmus_edit_tags
+= BACKLOG =
+- [ ] cmus: tag playlist songs (O,S) & display tags
+- [ ] karabiner: transfer installs/k*/karabiner.json to karabiner-elements (how ??)
+- [ ] nvim: disable or understand what paste mode is when cmd-v
+- [ ] ? nvim: unite, ag, search default to zO open folds at cursor
+- [ ] ? nvim: conf mappings (remove <Space>) :vimwiki:
+- [ ] ? nvim: vim-plug lazy load plugins `vim --startuptime`
+- [ ] zsh: silence antigen bundle on `.zshrc`
+- [ ] zsh: antigen: install using brew
+- [ ] zsh: zcompile my .zsh files? (profile impact)
 
 = Specific =
 * [[Vim#TODOS]]

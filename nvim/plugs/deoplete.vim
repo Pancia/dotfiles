@@ -1,16 +1,20 @@
 " https://github.com/Shougo/deoplete.nvim/wiki/Completion-Sources
 let g:deoplete#enable_at_startup = 1
-let g:deoplete#enable_smart_case = 1
+call deoplete#custom#option({
+            \ 'smart_case': v:true,
+            \ 'keyword_patterns': {'clojure': '[\w!$%&*+/:<=>?@\^_~\-\.#]*'},
+            \})
 set completeopt+=noinsert
 " https://github.com/Shougo/deoplete.nvim/blob/master/doc/deoplete.txt
 inoremap <expr> <Tab> pumvisible() ? "\<C-n>" : "\<Tab>"
 inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
-let g:deoplete#keyword_patterns = {}
-let g:deoplete#keyword_patterns.clojure = '[\w!$%&*+/:<=>?@\^_~\-\.#]*'
-call deoplete#custom#option('omni_patterns', {
-            \ 'java': '[^. *\t]\.\w*',
-            \ 'kotlin': '[^. *\t]\.\w*',
-            \})
+
+set completeopt+=noselect
+inoremap <silent> <CR> <C-r>=<SID>my_cr_function()<CR>
+function! s:my_cr_function() abort
+    return deoplete#close_popup() . "\<CR>"
+endfunction
+
 " https://github.com/Shougo/deoplete.nvim/issues/115
 autocmd InsertLeave,CompleteDone * if pumvisible() == 0 && bufname('') !~ 'conjure.cljc' | silent! pclose | endif
 

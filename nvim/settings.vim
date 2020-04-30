@@ -1,11 +1,9 @@
 filetype plugin indent on
 
-" !: Fixes cmd-c on osx terminal
-set mouse=
+set mouse=a
 
 " CTRL_SPACE
 set hidden
-set showtabline=2
 
 set cursorline "Highlight line cursor is on
 set expandtab "Use spaces, not tabs!
@@ -18,6 +16,7 @@ set number
 set ruler
 set shiftwidth=4 "Indent Key(Tab) == width 4
 set showcmd
+set showtabline=2 "always
 set tabstop=4 "Tab Literal(\t) == width 4
 set visualbell "Dont make noise
 set wildmode=list:longest,full

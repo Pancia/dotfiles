@@ -1,9 +1,6 @@
-# Scratchpad
+= Scratchpad =
 
-
-
-
-# nvim-terminus
+== nvim-terminus ==
 {{{zsh
 echo -en "\e]0;string\a" #-- Set icon name and window title to string
 echo -en "\e]1;string\a" #-- Set icon name to string

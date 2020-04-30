@@ -1,1 +1,1 @@
-map <buffer> q :bd<cr>
+map <buffer> <esc> :bd<cr>

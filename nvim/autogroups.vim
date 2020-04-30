@@ -12,12 +12,28 @@ augroup Essentials
     au BufEnter * silent! lcd %:p:h " Eqv to `set autochdir`
 augroup END
 
+augroup Todos
+    au!
+    au Syntax * syn match MyTodo /(NOTE|LANDMARK|CONTEXT)/
+          \ containedin=.*Comment,vimCommentTitle
+augroup END
+hi def link MyTodo Todo
+
+" TASK: NOTE: LANDMARK: CONTEXT: asdf
+" FOO:
+" NOTE:
+" LANDMARK:
+" CONTEXT:
+
+augroup RememberFolds
+  autocmd!
+  autocmd BufWinLeave * silent! mkview
+  autocmd BufWinEnter * silent! loadview
+augroup END
+
 augroup FileTypes
     au!
-    au BufNewFile,BufRead .eslintrc set filetype=json
-    au BufNewFile,BufRead TODO set filetype=zsh
-    au BufNewFile,BufRead *.svelte set filetype=html
-    au BufNewFile,BufRead *.wiki set filetype=vimwiki
+    au BufRead *.wiki set filetype=vimwiki
 augroup END
 
 augroup Terminal
