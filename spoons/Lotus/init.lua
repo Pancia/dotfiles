@@ -43,7 +43,6 @@ function obj:stopAwarenessSound()
 end
 
 function obj:init()
-    obj._soundIdx = 1
     obj._paused = false
 end
 
@@ -61,7 +60,8 @@ function renderMenuBar()
         local soundTitle = sound.name or sound.path:match("[^/]+$"):match("[^.]+")
         local nextTrigger = obj._lotusTimer:nextTrigger()
         _, refreshRate = userIntervalToSeconds(obj.interval)
-        title = math.max(math.ceil(nextTrigger / refreshRate), 0) .. "->" .. soundTitle
+        title = math.max(math.ceil(nextTrigger / refreshRate), 0)
+            .. "->[" .. obj._soundIdx .. "/" .. #obj.sounds .."]#" .. soundTitle
     end
     obj._menubar:setTitle(title)
 end
@@ -179,6 +179,7 @@ function userIntervalToSeconds(x)
 end
 
 function obj:start()
+    obj._soundIdx = #obj.sounds
     obj._menubar = hs.menubar.new():setMenu(renderMenu)
 
     interval, refreshRate = userIntervalToSeconds(obj.interval)
