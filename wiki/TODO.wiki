@@ -1,31 +1,33 @@
 = TODOS =
-- [X] :conjure: esc to close conjure.cljc
+- [ ] :cmds: should set terminal.app title
 - [ ] :conjure: abbreviate nss (virtual text?)
-- [X] :deoplete: enter should not select completion (causes stutter when i want newline)
+- [ ] :conjure: eval root form should ignore comment block
+- [ ] :clojure: add formatting https://github.com/venantius/vim-cljfmt/tree/master/plugin
+- [ ] :clojure: fix highlighting: https://github.com/guns/vim-clojure-highlight/blob/master/autoload/vim_clojure_highlight.vim
 - [ ] :clojure: rainbow parens
-- [ ] :clojure: ? syntastic or nvim alternatives
-- [ ] :clojure: :syntax: #_ does nothing
-- [ ] :clojure: :format: auto formatter (pre-commit check or run thru cursive?)
-- [ ] :clojure: :format: auto align to 2 spaces always (?)
-- [ ] :clojure: ?? kondo, joker
+- [ ] :clojure: ale: kondo, joker https://github.com/dense-analysis/ale
+- [ ] :clojure: async ale/lint/syntastic run TESTS & outline file?
+- [ ] :clojure: https://github.com/jiangmiao/auto-pairs
 - [o] :lotus: 2 hour reset/review/plan reminder (webview?)
-- [ ] :lotus: list of sounds is offset, first sound is actually last
-- [X] :nvim: no auto fold close on open (annoying/broken)
-- [X] :nvim: remember fold levels
-- [X] :nvim: mouse
+- [X] :lotus: list of sounds is offset, first sound is actually last
 - [ ] :nvim: terminal unicode? (kaocha test output)
-- [ ] :nvim: TODO FIXME should mark/highlight line (red?)
-- [ ] :nvim: TASK LANDMARK CONTEXT should be highlighted
+- [ ] :nvim: TASK LANDMARK CONTEXT should be highlighted https://www.reddit.com/r/vim/comments/6im3mi/how_do_i_create_new_syntax_highlighting_groups/
 - [ ] :nvim: terminal buffer names empty
-- [X] :nvim: esc (not q) to close help & loc buffers
-- [ ] :vimwiki: conf mappings, add to unite, ctrl a/x for todos
+- [ ] :nvim: <C-W>k goes up-left, annoying when i want up-right
+- [ ] :nvim: disable arrow up/down for completion
+- [ ] :nvim: https://github.com/liuchengxu/vim-which-key
+- [ ] :nvim: always show git markers (modified) ???
+- [ ] :nvim: :deoplete: more fuzzy suggestions
+- [ ] :ruby: refactor optionparse into lib/ruby/
+- [X] :service: add restart cmd
+- [ ] :vimwiki: root mappings to comma <,>; add to unite; ctrl a/x for todos
+- [ ] :git: pre-commit check for TASK & focus markers
 
 = BACKLOG =
 - [ ] cmus: tag playlist songs (O,S) & display tags
 - [ ] karabiner: transfer installs/k*/karabiner.json to karabiner-elements (how ??)
 - [ ] nvim: disable or understand what paste mode is when cmd-v
 - [ ] ? nvim: unite, ag, search default to zO open folds at cursor
-- [ ] ? nvim: conf mappings (remove <Space>) :vimwiki:
 - [ ] ? nvim: vim-plug lazy load plugins `vim --startuptime`
 - [ ] zsh: silence antigen bundle on `.zshrc`
 - [ ] zsh: antigen: install using brew
