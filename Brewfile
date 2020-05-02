@@ -33,6 +33,7 @@ brew 'neovim'
 
 cask 'gimp'
 cask 'hammerspoon'
+cask 'iterm2'
 cask 'karabiner'
 cask 'karabiner-elements'
 cask 'keepassxc'
