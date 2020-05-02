@@ -1,7 +1,8 @@
 #!/usr/bin/env ruby
 
+require "cli.rb"
+
 require "json"
-require "optparse"
 require "tempfile"
 require "shellwords"
 require "pp"
@@ -16,17 +17,6 @@ module RbReadline
   def self.rl_prefill_hook
     rl_insert_text @rl_prefill if @rl_prefill
     @rl_startup_hook = nil
-  end
-end
-
-class OptionParser
-  def info
-    @info
-  end
-  def info=(str)
-    @info = str
-    top.append(">>> "+str, nil, nil)
-    top.append("", nil, nil)
   end
 end
 
@@ -49,57 +39,6 @@ end
 Dir["/Users/#{%x[whoami].strip}/dotfiles/lib/ruby/music/*.cmd.rb"]
   .each { |file| require file }
 
-class MusicCMDs extend MusicCMD
-  def self.help_opts()
-    OptionParser.new do |opts|
-      opts.info = "Show the help, or inquire about a command"
-    end
-  end
-  def self.help(cmd = nil)
-    p cmd if $options[:verbose]
-    if not $options[:helped]
-      if not cmd
-        puts $global_opts
-      else
-        puts MusicCMDs.send(cmd+"_opts")
-      end
-    end
-  end
-end
+class MusicCMDs extend MusicCMD end
 
-$options = {}
-$global_opts = OptionParser.new do |opts|
-  opts.banner = "Usage: music [OPTS] COMMAND [ARGS]"
-  opts.on("-h", "--help", "Print this help document") do
-    puts opts if not $options[:helped]
-    $options[:helped] = true
-  end
-  $options[:verbose] = false
-  opts.on("-v", "--verbose", "Print more, for debugging") do
-    $options[:verbose] = true
-  end
-  $options[:dry_run] = false
-  opts.on("-n", "--dry-run", "Dry Run / Simulation, prints commands instead of executing.") do
-    $options[:dry_run] = true
-  end
-  opts.separator ""
-  opts.separator "COMMANDs:"
-  opts.separator (MusicCMDs.methods - Object.methods)
-    .keep_if {|m| not m.to_s.include? "_" and m}
-    .map {|m| [m, MusicCMDs.send(m.to_s+"_opts").info]}
-    .keep_if {|_,i| i}
-    .sort.map {|m,i| "\t"+m.to_s+"\t:\t"+i }
-    .join "\n"
-  opts.separator ""
-  opts.separator "See `music COMMAND --help` or `music help COMMAND` for more information on a specific command."
-end
-
-$global_opts.order!
-if ARGV[0] and MusicCMDs.respond_to? ARGV[0]
-  puts "ARGV: #{ARGV}" if $options[:verbose]
-  command = ARGV.shift
-  MusicCMDs.send(command+"_opts").order!
-  puts "OPTS: #{$options}" if $options[:verbose]
-  puts "send(#{command}, *#{ARGV})" if $options[:verbose]
-    MusicCMDs.send(command, *ARGV)
-end
+CLI.parse! MusicCMDs

@@ -1,20 +1,9 @@
 #!/usr/bin/env ruby
 
-require "optparse"
+require "cli.rb"
+
 require "shellwords"
 
-class OptionParser
-  def info
-    @info
-  end
-  def info=(str)
-    @info = str
-    top.append(">>> "+str, nil, nil)
-    top.append("", nil, nil)
-  end
-end
-
-$options = {}
 $home_dir = "/Users/#{%x[whoami].strip}/"
 $command_dir = "./dotfiles/services/"
 $service_dir = "./.config/services/"
@@ -22,7 +11,7 @@ $service_dir = "./.config/services/"
 system("mkdir -p #{$home_dir}/#{$command_dir}")
 system("mkdir -p #{$home_dir}/#{$service_dir}")
 
-for pidf in %x[find #{$home_dir}/#{$service_dir}/*.pid].split
+for pidf in %x[find #{$home_dir}/#{$service_dir}/*.pid 2> /dev/null].split
   is_running = %x[ps -p $(cat #{pidf}) > /dev/null \; echo $?].strip
   if is_running != "0" then
     name = %x[ basename #{pidf} .pid ].strip
@@ -43,107 +32,50 @@ def execute(cmd)
   system(cmd)
 end
 
-class CMDS
-  def self.help_opts()
-    OptionParser.new do |opts|
-      opts.info = "Show this help"
-    end
+class ServiceCMDS
+  def self.list(opts)
+    opts.info = "Start a service."
+    lambda { execute("find #{$home_dir}/#{$command_dir}/* -exec basename {} \\;") }
   end
-  def self.help(cmd = nil)
-    p cmd if $options[:verbose]
-    if not $options[:helped]
-      if not cmd
-        puts $global_opts
+  def self.start(opts)
+    opts.info = "Start a service."
+    lambda { |name|
+      if File.exists? pid_for(name)
+        puts "[ERROR]: #{name} already started!"
+        exit 1
       else
-        puts CMDS.send(cmd+"_opts")
+        execute("#{$home_dir}/#{$command_dir}/#{name} > #{log_for(name)} 2>&1 & echo $! > #{pid_for(name)}")
+        puts "Started #{%x[cat #{pid_for name}]}"
       end
-    end
+    }
   end
-  def self.list_opts()
-    OptionParser.new do |opts|
-      opts.info = "Start a service."
-    end
+  def self.stop(opts)
+    opts.info = "Stop a service."
+    lambda { |name| execute("kill $(cat #{pid_for(name)}) && rm #{log_for(name)} #{pid_for(name)}") }
   end
-  def self.list()
-    execute("find #{$home_dir}/#{$command_dir}/* -exec basename {} \\;")
+  def self.restart(opts)
+    opts.info = "Restart a service."
+    lambda { |name|
+      self.stop(name)
+      self.start(name)
+    }
   end
-  def self.start_opts()
-    OptionParser.new do |opts|
-      opts.info = "Start a service."
-    end
+  def self.status(opts)
+    opts.info = "Show the logs for a service."
+    lambda {
+      for pidf in %x[find #{$home_dir}/#{$service_dir}/*.pid 2> /dev/null].split
+        puts %x[cat #{pidf}].strip() +
+          "\t" + %x[basename #{pidf} .pid].strip()
+      end
+    }
   end
-  def self.start(name)
-    if File.exists? pid_for(name)
-      puts "[ERROR]: #{name} already started!"
-      exit 1
-    else
-      execute("#{$home_dir}/#{$command_dir}/#{name} > #{log_for(name)} 2>&1 & echo $! > #{pid_for(name)}")
-      puts "Started #{%x[cat #{pid_for name}]}"
-    end
-  end
-  def self.stop_opts()
-    OptionParser.new do |opts|
-      opts.info = "Stop a service."
-    end
-  end
-  def self.stop(name)
-    execute("kill $(cat #{pid_for(name)}) && rm #{log_for(name)} #{pid_for(name)}")
-  end
-  def self.restart_opts()
-    OptionParser.new do |opts|
-      opts.info = "Restart a service."
-    end
-  end
-  def self.restart(name)
-    self.stop(name)
-    self.start(name)
-  end
-  def self.status_opts()
-    OptionParser.new do |opts|
-      opts.info = "Show the logs for a service."
-    end
-  end
-  def self.status()
-    for pidf in %x[find #{$home_dir}/#{$service_dir}/*.pid].split
-      puts %x[cat #{pidf}].strip() +
-        "\t" + %x[basename #{pidf} .pid].strip()
-    end
-  end
-  def self.log_opts()
-    OptionParser.new do |opts|
-      opts.info = "Show the logs for a service."
-    end
-  end
-  def self.log(name)
-    # Become that process, so we can  to stop +F paging & look around with less
-    Kernel.exec("command less +GF #{log_for(name)}")
+  def self.log(opts)
+    opts.info = "Show the logs for a service."
+    lambda { |name|
+      # Become that process, so we can  to stop +F paging & look around with less
+      Kernel.exec("command less +GF #{log_for(name)}")
+    }
   end
 end
 
-$global_opts = OptionParser.new do |opts|
-  opts.banner = "Usage: service [OPTS] COMMAND [ARGS]"
-  opts.on("-h", "--help", "Print this help document") do
-    puts opts if not $options[:helped]
-    $options[:helped] = true
-  end
-  opts.on("-v", "--verbose", "Be more verbose, for debugging.") do
-    $options[:verbose] = true
-  end
-  opts.separator ""
-  opts.separator "global CMDS:"
-  opts.separator (CMDS.methods - Object.methods)
-    .keep_if {|m| not m.to_s.include? "_" and m}
-    .map {|m| [m, CMDS.send(m.to_s+"_opts").info]}
-    .keep_if {|_,i| i}
-    .sort.map {|m,i| "\t"+m.to_s+"\t:\t"+i }
-    .join "\n"
-end
-
-$global_opts.order!
-if ARGV[0] and CMDS.respond_to? ARGV[0]
-  command = ARGV.shift
-  CMDS.send(command+"_opts").order!
-  CMDS.send(command, *ARGV)
-else
-  CMDS.help()
-end
+CLI.parse! ServiceCMDS

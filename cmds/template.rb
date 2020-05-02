@@ -1,4 +1,4 @@
-require "optparse"
+# require's go here
 
 def execute(command)
   temp = "/tmp/command.zsh"
@@ -8,17 +8,15 @@ def execute(command)
 end
 
 module CMD
-  def example_opts()
-    OptionParser.new do |opts|
-      opts.banner = "Usage: example"
-      opts.info = "FIXME"
-    end
-  end
-  def example(*args)
-    command = %{
-      echo "FIXME"
+  def example(opts)
+    opts.banner = "Usage: example"
+    opts.info = "FIXME"
+    lambda { |*args|
+      command = %{
+        echo "FIXME"
+      }
+      execute(command)
     }
-    execute(command)
   end
 end
 

@@ -1,25 +1,6 @@
-#!/usr/bin/env ruby
-
-require "optparse"
 require 'music/music_db.rb'
 
 module MusicCMD
-
-  def edit_opts()
-    OptionParser.new do |opts|
-      opts.banner = "Usage: edit [OPTS] ITEM"
-      opts.info = "Edit the item interactively"
-      opts.separator "    ITEM: String, will be compared in `jq` to FILTER"
-      opts.separator ""
-      $options[:filter] = ".playlist"
-      opts.on("-f", "--filter FILTER", "Any string that `jq` will accept -- default: .playlist") { |jqf|
-        $options[:filter] = jqf
-      }
-      opts.on("-s", "--search", "Search for items to edit") {
-        $options[:search] = true
-      }
-    end
-  end
 
   def edit_impl(item)
     p item if $options[:verbose]
@@ -49,20 +30,33 @@ module MusicCMD
     edit_ask edit_me
   end
 
-  def edit(item = nil)
-    to_edit = edit_impl(item)
-    raise "FAILED TO FIND ANY ITEMS" if to_edit.empty?
-    to_edit.each do |edit_me|
-      puts
-      pp edit_me
-      edit_ask edit_me
-    end
-    to_edit = to_edit.reduce({}) { |m, s|
-      m[s["id"]] = s; m
+  def edit(opts)
+    opts.banner = "Usage: edit [OPTS] ITEM"
+    opts.info = "Edit the item interactively"
+    opts.separator "    ITEM: String, will be compared in `jq` to FILTER"
+    opts.separator ""
+    $options[:filter] = ".playlist"
+    opts.on("-f", "--filter FILTER", "Any string that `jq` will accept -- default: .playlist") { |jqf|
+      $options[:filter] = jqf
     }
-    music = MusicDB.read
-    MusicDB.save music.merge to_edit
-    MusicDB.tag to_edit.values
+    opts.on("-s", "--search", "Search for items to edit") {
+      $options[:search] = true
+    }
+    lambda { |item = nil|
+      to_edit = edit_impl(item)
+      raise "FAILED TO FIND ANY ITEMS" if to_edit.empty?
+      to_edit.each do |edit_me|
+        puts
+        pp edit_me
+        edit_ask edit_me
+      end
+      to_edit = to_edit.reduce({}) { |m, s|
+        m[s["id"]] = s; m
+      }
+      music = MusicDB.read
+      MusicDB.save music.merge to_edit
+      MusicDB.tag to_edit.values
+    }
   end
 
 end
