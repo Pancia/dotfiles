@@ -14,10 +14,8 @@ set nofileignorecase "Dont ignore case when cmd/ex mode
 set noswapfile
 set number
 set ruler
-set shiftwidth=4 "Indent Key(Tab) == width 4
 set showcmd
 set showtabline=2 "always
-set tabstop=4 "Tab Literal(\t) == width 4
 set visualbell "Dont make noise
 set wildmode=list:longest,full
 

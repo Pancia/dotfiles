@@ -2,8 +2,8 @@ nnoremap [unite] <nop>
 nmap <space><space> [unite]
 nnoremap <silent> [unite]b :Unite buffer<CR>
 nnoremap <silent> [unite]<space> :Unite source<CR>
-nnoremap <silent> [unite]s :Unite grep:.<CR>
-nnoremap <silent> [unite]/ :Unite grep:.<CR>
+nnoremap <silent> [unite]s :Unite grep/git:/<CR>
+nnoremap <silent> [unite]/ :Unite grep/git:/<CR>
 let g:unite_source_history_yank_enable=1
 nnoremap <silent> [unite]y :Unite history/yank<CR>
 nnoremap <silent> [unite]p :Unite history/yank<CR>
@@ -54,7 +54,7 @@ let g:unite_source_menu_menus.git.command_candidates = [
 
 let g:unite_source_menu_menus._helpers = {'description' : 'my custom helpers'}
 let g:unite_source_menu_menus._helpers.command_candidates = [
-            \['> source current file', 'source %'],
+            \['> source vimrc', 'source ~/dotfiles/nvim/init.vim'],
             \['> vimrc dotfiles', 'e ~/dotfiles/nvim/init.vim | cd ~/dotfiles/nvim'],
             \['> zshrc dotfiles', 'e ~/dotfiles/zsh/init.zsh | cd ~/dotfiles/zsh'],
             \['> delete all buffers', '%bd'],

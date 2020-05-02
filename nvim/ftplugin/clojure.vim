@@ -1,30 +1,20 @@
+set shiftwidth=2
+set tabstop=2
+
 let g:airline_detect_whitespace=0
 
 let g:clojure_maxlines=300
 let g:clojure_align_multiline_strings=1
 let g:clojure_syntax_keywords = {
-            \ 'clojureMacro': ['defsc', 'specification', 'behavior', 'provided', 'assertions', 'component', 'provided', 'when-mocking', 'defmutation', '>defn']
-            \ }
+      \ 'clojureMacro': [
+      \   'defsc', '>defn', 'defmutation',
+      \   'specification', 'behavior', 'provided', 'assertions', 'component',
+      \   'provided', 'when-mocking', 'provided!', 'when-mocking!',
+      \   ]
+      \ }
 
 let g:clojure_fuzzy_indent = 1
-let g:clojure_fuzzy_indent_patterns = [
-            \ '^def.*', '^with.*', 'specification', 'behavior', 'assertions', 'component', 'provided',
-            \ 'start', 'stop', 'letfn', '-tx$', 'transact!', '^check.*', '^assert.*',
-            \ 'concat', '.*Exception.*', '.*Error.*', 'trace\|debug\|info\|warn\|error\|fatal',
-            \ '.*->>\?$', 'either', 'synfn', 'parse.*', 'spawn-*', 'load-data.*',
-            \ '!$', '^do', 'into', '^test-.*', '\..*', 'ui-*',
-            \ 'a', 'article', 'button', 'code', 'defs', 'div', 'footer', 'form',
-            \ 'h1', 'h2', 'h4', 'header', 'hr', 'img', 'input', 'label', 'li', 'linearGradient',
-            \ 'main', 'nav', 'node', 'ol', 'option', 'p', 'path', 'polygon',
-            \ 'section', 'select', 'small', 'span', 'stop', 'strong', 'svg',
-            \ 'table', 'tbody', 'td', 'textarea', 'th', 'thead', 'tr', 'ul',
-            \ 'fdef', 'reduce', 'merge', 'row', 'col', 'icon',
-            \ '>defn',
-            \ ]
+let g:clojure_fuzzy_indent_patterns = '.*'
 let g:clojure_fuzzy_indent_blacklist = []
-let g:clojure_special_indent_words = join([
-            \ 'defrecord', 'defui', 'reify', 'letfn', 'extend-type',
-            \ 'defprotocol', 'defmutation', '>defn',
-            \ ], ',')
 
-nnoremap <expr> <esc> bufname('') =~ 'conjure.cljc' ? ':call conjure#close_unused_log()<cr>' : '<esc>'
+nnoremap <expr> <esc> bufname('') =~ 'conjure.cljc' ? ':ConjureToggleLog<cr>' : '<esc>'
