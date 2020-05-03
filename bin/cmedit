@@ -7,4 +7,4 @@ uuid=$(cmus-remote --raw status \
     | sed 's/\..*$//')
 
 echo "edit -f '.id' $uuid" > $ZSH_INIT_CMD_DIR/music
-open -a Terminal `dirname $MUSIC_DB`
+open -a iTerm `dirname $MUSIC_DB`

@@ -1,11 +1,7 @@
 = TODOS =
 
 == PRIORITY ==
-- [X] :iterm2: alt left/right not mapped
-- [ ] :iterm2: hold fn to not send to app? like terminal
-- [X] :iterm2: fn up/down -> page-up/down
-- [ ] :iterm2: switch cmedit to use iterm2 (not terminal)
-- [X] :cmus: tag playlist songs (O,S) & display tags
+- [X] :iterm2: switch cmedit to use iterm2 (not terminal)
 - [ ] :nvim: https://github.com/liuchengxu/vim-which-key
 - [ ] :vimwiki: root mappings to comma <,>; add to unite; ctrl a/x for todos
 - [ ] :clojure: ale: kondo, joker https://github.com/dense-analysis/ale
@@ -16,6 +12,7 @@
 - [ ] :cmds: should set iterm2 tab title
 - [ ] :nvim: disable arrow up/down for completion
 - [ ] :nvim: :deoplete: more fuzzy suggestions
+- [ ] :iterm2: :nvim: map cmd-c to pbcopy ??
 - [ ] :nvim: always show git markers (modified) ???
 - [ ] :git: pre-commit check for TASK & focus markers
 - [ ] :nvim: reinstall ag, search default to zO open folds at cursor
@@ -23,6 +20,7 @@
 
 == MAIN ==
 - [ ] :cmus: music select broken
+- [ ] :lotus: sound broken? not playing?
 - [ ] :lotus: pause broken... wont restart
 - [ ] :iterm2: start cmus & vim dotfiles/todo.wiki on first startup?
 - [ ] :nvim: TASK LANDMARK CONTEXT should be highlighted https://www.reddit.com/r/vim/comments/6im3mi/how_do_i_create_new_syntax_highlighting_groups/
@@ -30,9 +28,6 @@
 - [ ] :clojure: async ale/lint/syntastic run TESTS & outline file?
 - [ ] :conjure: abbreviate nss (virtual text?)
 - [o] :lotus: 2 hour reset/review/plan reminder (webview?)
-- [X] :lotus: list of sounds is offset, first sound is actually last
-- [X] :ruby: refactor optionparse into lib/ruby/
-- [X] :service: add restart cmd
 
 == BACKLOG ==
 - [ ] :karabiner: transfer installs/k*/karabiner.json to karabiner-elements (how ??)
