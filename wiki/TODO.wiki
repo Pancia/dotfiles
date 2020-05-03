@@ -1,9 +1,9 @@
 = TODOS =
 
 == PRIORITY ==
-- [ ] :iterm2: alt left/right not mapped
+- [X] :iterm2: alt left/right not mapped
 - [ ] :iterm2: hold fn to not send to app? like terminal
-- [ ] :iterm2: fn up/down -> page-up/down
+- [X] :iterm2: fn up/down -> page-up/down
 - [ ] :iterm2: switch cmedit to use iterm2 (not terminal)
 - [X] :cmus: tag playlist songs (O,S) & display tags
 - [ ] :nvim: https://github.com/liuchengxu/vim-which-key

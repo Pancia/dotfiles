@@ -27,7 +27,7 @@
 	<key>ClosingHotkeySwitchesSpaces</key>
 	<true/>
 	<key>Command</key>
-	<string></string>
+	<string>/usr/local/bin/zsh</string>
 	<key>CommandSelection</key>
 	<true/>
 	<key>Control</key>
@@ -405,57 +405,7 @@
 	<key>FsTabDelay</key>
 	<real>1</real>
 	<key>GlobalKeyMap</key>
-	<dict>
-		<key>0x60-0x100000</key>
-		<dict>
-			<key>Action</key>
-			<integer>30</integer>
-			<key>Text</key>
-			<string></string>
-		</dict>
-		<key>0xf729-0x100000</key>
-		<dict>
-			<key>Action</key>
-			<integer>5</integer>
-			<key>Text</key>
-			<string></string>
-		</dict>
-		<key>0xf72b-0x100000</key>
-		<dict>
-			<key>Action</key>
-			<integer>4</integer>
-			<key>Text</key>
-			<string></string>
-		</dict>
-		<key>0xf72c-0x100000</key>
-		<dict>
-			<key>Action</key>
-			<integer>9</integer>
-			<key>Text</key>
-			<string></string>
-		</dict>
-		<key>0xf72c-0x20000</key>
-		<dict>
-			<key>Action</key>
-			<integer>9</integer>
-			<key>Text</key>
-			<string></string>
-		</dict>
-		<key>0xf72d-0x100000</key>
-		<dict>
-			<key>Action</key>
-			<integer>8</integer>
-			<key>Text</key>
-			<string></string>
-		</dict>
-		<key>0xf72d-0x20000</key>
-		<dict>
-			<key>Action</key>
-			<integer>8</integer>
-			<key>Text</key>
-			<string></string>
-		</dict>
-	</dict>
+	<dict/>
 	<key>HapticFeedbackForEsc</key>
 	<false/>
 	<key>HiddenAFRStrokeThickness</key>
@@ -556,7 +506,7 @@
 	<key>NSWindow Frame Preferences</key>
 	<string>753 276 924 485 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 0</key>
-	<string>383 0 1802 1071 0 0 2560 1417 </string>
+	<string>393 0 1802 1071 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 1</key>
 	<string>533 536 1596 833 0 0 2560 1417 </string>
 	<key>New Bookmarks</key>
@@ -955,19 +905,54 @@
 			</array>
 			<key>Keyboard Map</key>
 			<dict>
-				<key>0x63-0x100000</key>
+				<key>0x60-0x100000</key>
 				<dict>
 					<key>Action</key>
-					<integer>10</integer>
+					<integer>1</integer>
 					<key>Text</key>
-					<string>C</string>
+					<string></string>
 				</dict>
-				<key>0x76-0x100000</key>
+				<key>0xf702-0x280000</key>
 				<dict>
 					<key>Action</key>
 					<integer>10</integer>
 					<key>Text</key>
-					<string>V</string>
+					<string>b</string>
+				</dict>
+				<key>0xf703-0x280000</key>
+				<dict>
+					<key>Action</key>
+					<integer>10</integer>
+					<key>Text</key>
+					<string>f</string>
+				</dict>
+				<key>0xf729-0x0</key>
+				<dict>
+					<key>Action</key>
+					<integer>5</integer>
+					<key>Text</key>
+					<string></string>
+				</dict>
+				<key>0xf72b-0x0</key>
+				<dict>
+					<key>Action</key>
+					<integer>4</integer>
+					<key>Text</key>
+					<string></string>
+				</dict>
+				<key>0xf72c-0x0</key>
+				<dict>
+					<key>Action</key>
+					<integer>9</integer>
+					<key>Text</key>
+					<string></string>
+				</dict>
+				<key>0xf72d-0x0</key>
+				<dict>
+					<key>Action</key>
+					<integer>8</integer>
+					<key>Text</key>
+					<string></string>
 				</dict>
 			</dict>
 			<key>Link Color</key>
@@ -1214,12 +1199,12 @@
 		<key>screenFrame</key>
 		<string>{{0, 0}, {2560, 1440}}</string>
 		<key>topLeft</key>
-		<string>{1440, 813}</string>
+		<string>{924, 864}</string>
 	</dict>
 	<key>NoSyncInstallationId</key>
 	<string>3C9F06F6-1E59-43C7-BAC3-D190375DCD5D</string>
 	<key>NoSyncLaunchExperienceControllerRunCount</key>
-	<integer>11</integer>
+	<integer>13</integer>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile</key>
 	<true/>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile_selection</key>
@@ -1993,7 +1978,7 @@
 	<key>SUHasLaunchedBefore</key>
 	<true/>
 	<key>SULastCheckTime</key>
-	<date>2020-05-02T02:47:15Z</date>
+	<date>2020-05-03T19:18:44Z</date>
 	<key>SUUpdateRelaunchingMarker</key>
 	<false/>
 	<key>SavePasteHistory</key>
@@ -2013,9 +1998,9 @@
 	<key>StretchTabsToFillBar</key>
 	<true/>
 	<key>SwitchPaneModifier</key>
-	<integer>4</integer>
+	<integer>9</integer>
 	<key>SwitchTabModifier</key>
-	<integer>5</integer>
+	<integer>9</integer>
 	<key>SwitchWindowModifier</key>
 	<integer>9</integer>
 	<key>TabStyleWithAutomaticOption</key>
@@ -2050,6 +2035,8 @@
 	<integer>0</integer>
 	<key>WordCharacters</key>
 	<string>/-+\~_.</string>
+	<key>findMode_iTerm</key>
+	<integer>0</integer>
 	<key>iTerm Version</key>
 	<string>3.3.10beta4</string>
 	<key>kCPKSelectionViewPreferredModeKey</key>
