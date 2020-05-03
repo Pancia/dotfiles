@@ -1,3 +1,4 @@
+require "json"
 require "tempfile"
 require "shellwords"
 
@@ -33,7 +34,11 @@ class MusicDB
     JSON.parse %x[ cat $MUSIC_DB | jq '[.[] | select(#{filter} == $item)]' --arg item "#{item}" ]
   end
 
-  @meta_to_db = {"artist"=>"artist", "title"=>"name", "album"=>"playlist"}
+  def self.select_raw(select)
+    JSON.parse %x[ cat $MUSIC_DB | jq '[.[] | #{select}]' ]
+  end
+
+  @meta_to_db = {"artist"=>"artist", "title"=>"name", "album"=>"playlist", "genre" => "tags"}
 
   def self.metadata(item)
     metadata = JSON.parse(%x[ ffprobe -v quiet -print_format json -show_format $MUSIC_DIR/#{item["id"]}.m4a])
@@ -53,10 +58,14 @@ class MusicDB
     items.each do |i|
       file_tags = self.parse_tags i
       item = i.select {|k,_| @meta_to_db.values.include? k}
+      puts "file_tags: #{file_tags}" if $options[:verbose]
+      puts "item: #{item}" if $options[:verbose]
       diff = hash_diff item, file_tags
-      if not diff.empty?
+      if diff.empty?
+        puts "No metadata changes."
+      else
         meta_str = diff.keys
-          .map {|k| [" -metadata ", @meta_to_db.invert[k], "=", "#{item[k].shellescape}", " "]}
+          .map {|k| [" -metadata ", @meta_to_db.invert[k], "=", "#{item[k].to_s.shellescape}", " "]}
           .join ""
         if $options[:dry_run]
           puts meta_str

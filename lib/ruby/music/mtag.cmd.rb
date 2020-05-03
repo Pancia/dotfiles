@@ -14,8 +14,16 @@ module MusicCMD
     opts.on("-f", "--filter FILTER", "Any string that `jq` will accept") { |jqf|
       $options[:filter] = jqf
     }
+    $options[:select] = nil
+    opts.on("-s", "--select SELECT", "Any string that `jq` will accept") { |select|
+      $options[:select] = select
+    }
     lambda { |item|
-      MusicDB.tag MusicDB.select(item.gsub(/\..*$/, ""), $options[:filter])
+      if $options[:select]
+        MusicDB.tag MusicDB.select_raw($options[:select])
+      elsif
+        MusicDB.tag MusicDB.select(item.gsub(/\..*$/, ""), $options[:filter])
+      end
     }
   end
 

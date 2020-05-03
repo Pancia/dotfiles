@@ -28,7 +28,7 @@ class String
 end
 
 def hash_diff(x, y)
-  Hash[*(x.size > y.size ? x.to_a - y.to_a : y.to_a - x.to_a).flatten]
+  Hash[*(x.size > y.size ? x.to_a - y.to_a : y.to_a - x.to_a).flatten(1)]
 end
 
 def execute(cmd)

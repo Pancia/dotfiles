@@ -23,9 +23,9 @@ class CLI
   def self.parse!(cmds)
     @program_name = File.basename $PROGRAM_NAME
     cmd_to_opts = (cmds.methods - Object.methods)
-      .keep_if {|m| not m.to_s.include? "_" and m}
+      .filter {|m| not m.to_s.include? "_" and m}
       .map {|m| parse_method cmds, m}
-      .keep_if {|_,i| i}
+      .filter {|_,i| i}
       .sort.to_h
     @global_opts = OptionParser.new do |opts|
       opts.banner = "Usage: #{@program_name} [OPTS] COMMAND [ARGS]"

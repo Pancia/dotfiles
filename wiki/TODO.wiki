@@ -5,7 +5,7 @@
 - [ ] :iterm2: hold fn to not send to app? like terminal
 - [ ] :iterm2: fn up/down -> page-up/down
 - [ ] :iterm2: switch cmedit to use iterm2 (not terminal)
-- [ ] :cmus: tag playlist songs (O,S) & display tags
+- [X] :cmus: tag playlist songs (O,S) & display tags
 - [ ] :nvim: https://github.com/liuchengxu/vim-which-key
 - [ ] :vimwiki: root mappings to comma <,>; add to unite; ctrl a/x for todos
 - [ ] :clojure: ale: kondo, joker https://github.com/dense-analysis/ale
