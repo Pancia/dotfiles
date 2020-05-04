@@ -1,7 +1,6 @@
 = TODOS =
 
 == PRIORITY ==
-- [X] :clojure: ale: kondo, joker https://github.com/dense-analysis/ale
 - [ ] :clojure: add formatting https://github.com/venantius/vim-cljfmt/tree/master/plugin
 - [ ] :clojure: fix highlighting: https://github.com/guns/vim-clojure-highlight/blob/master/autoload/vim_clojure_highlight.vim
 - [ ] :clojure: ? rainbow parens
@@ -9,7 +8,6 @@
 - [ ] :cmds: should set iterm2 tab title
 - [ ] :nvim: disable arrow up/down for completion
 - [ ] :nvim: :deoplete: more fuzzy suggestions
-- [ ] :iterm2: :nvim: map cmd-c to pbcopy ??
 - [ ] :nvim: always show git markers (modified) ???
 - [ ] :git: pre-commit check for TASK & focus markers
 - [ ] :nvim: reinstall ag, search default to zO open folds at cursor

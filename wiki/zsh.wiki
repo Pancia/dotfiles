@@ -1,4 +1,5 @@
 = TIL =
+* `cat` to view what is pressed
 * zsh loading order:
 | file     | Interactive Login | Interactive Not Login | Script |
 |----------|-------------------|-----------------------|--------|
