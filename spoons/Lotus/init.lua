@@ -67,6 +67,7 @@ function renderMenuBar()
 end
 
 function restartTimer()
+    obj.stopAwarenessSound()
     obj._lotusTimer = obj._lotusTimer:start()
     obj._menuRefreshTimer:fire()
 end
@@ -74,10 +75,28 @@ end
 function renderMenu()
     if obj._paused then
         return {
+            {title = "resume"
+            , fn = function()
+                obj._paused = false
+                obj._lotusTimer:fire()
+                obj._lotusTimer = obj._lotusTimer:stop()
+                if obj._pauseTimer then
+                    obj._pauseTimer:stop()
+                    obj._pauseTimer = nil
+                end
+                restartTimer()
+            end},
             {title = "restart"
             , fn = function()
-                restartTimer()
                 obj._paused = false
+                obj._soundIdx = 1
+                obj._lotusTimer:fire()
+                obj._lotusTimer = obj._lotusTimer:stop()
+                if obj._pauseTimer then
+                    obj._pauseTimer:stop()
+                    obj._pauseTimer = nil
+                end
+                restartTimer()
             end},
         }
     else
@@ -126,20 +145,6 @@ function renderMenu()
                     obj._pauseTimer:stop()
                     obj._pauseTimer = nil
                 end
-                obj._menuRefreshTimer:fire()
-            end},
-            {title = "restart"
-            , fn = function()
-                obj.stopAwarenessSound()
-                obj._soundIdx = 1
-                obj._lotusTimer:fire()
-                obj._lotusTimer = obj._lotusTimer:stop()
-                if obj._pauseTimer then
-                    obj._pauseTimer:stop()
-                    obj._pauseTimer = nil
-                end
-                restartTimer()
-                obj._paused = false
                 obj._menuRefreshTimer:fire()
             end},
             {title = "view log"
