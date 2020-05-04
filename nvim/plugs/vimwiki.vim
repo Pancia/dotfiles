@@ -2,7 +2,14 @@ let g:vimwiki_list = [
             \{'path': '~/Dropbox/wiki', 'path_html': '~/Dropbox/wiki', 'auto_tags': 1, 'auto_export': 1 },
             \{'path': '~/dotfiles/wiki', 'auto_tags': 1 }
             \]
-map glt <Plug>VimwikiToggleListItem
+
+let g:vimwiki_map_prefix = ','
+
+map <buffer> ,T    <Plug>VimwikiToggleListItem
+map <buffer> <C-A> <Plug>VimwikiIncrementListItem
+map <buffer> <C-X> <Plug>VimwikiDecrementListItem
+
+
 function! VimwikiLinkHandler(link)
     " Use Vim to open external files with the 'vfile:' scheme.  E.g.:
     "   1) [[vfile:~/Code/PythonProject/abc123.py]]

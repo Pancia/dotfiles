@@ -4,17 +4,17 @@ nnoremap <c-space> :Unite menu<CR>
 let g:which_key_map['<C-Space>'] = 'which_key_ignore'
 
 let g:which_key_map.u = {
-      \ 'name' : '+unite' ,
-      \ ' ' : [':Unite source', '#source'],
-      \ '/' : [':Unite grep/git:/', 'git grep at project root'],
-      \ ':' : [':Unite command mapping', 'search #commands'],
-      \ 'b' : [':Unite buffer', '#buffer'],
-      \ 'h' : [':Unite help', '#help'],
-      \ 'p' : [':Unite history/yank', '#yank #paste'],
-      \ 's' : [':Unite grep/git:/', 'git grep at project root'],
-      \ 'u' : [':UndotreeToggle', 'UndoTree'],
-      \ 'y' : [':Unite history/yank', '#yank #paste'],
-      \ }
+            \ 'name' : '+unite' ,
+            \ ' ' : [':Unite source', '#source'],
+            \ '/' : [':Unite grep/git:/', 'git grep at project root'],
+            \ ':' : [':Unite command mapping', 'search #commands'],
+            \ 'b' : [':Unite buffer', '#buffer'],
+            \ 'h' : [':Unite help', '#help'],
+            \ 'p' : [':Unite history/yank', '#yank #paste'],
+            \ 's' : [':Unite grep/git:/', 'git grep at project root'],
+            \ 'u' : [':UndotreeToggle', 'UndoTree'],
+            \ 'y' : [':Unite history/yank', '#yank #paste'],
+            \ }
 
 autocmd FileType unite call s:unite_settings()
 function! s:unite_settings()

@@ -10,14 +10,7 @@ let g:which_key_map['<Right>'] = 'which_key_ignore'
 nmap <CR> <nop>
 let g:which_key_map['<CR>'] = 'which_key_ignore'
 " Map Y to y$, makes way more sense
-map Y y$
-" Swap j,k with gj,gk
-noremap j gj
-noremap k gk
-noremap gj j
-let g:which_key_map['gj'] = 'which_key_ignore'
-noremap gk k
-let g:which_key_map['gk'] = 'which_key_ignore'
+noremap Y y$
 " U redoes
 nnoremap U <c-r>
 " ctrl-e removes last search highlighting
