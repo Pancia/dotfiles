@@ -13,7 +13,7 @@ Plug 'tpope/vim-dispatch'
 
 " ESSENTIALS {{{
 Plug 'liuchengxu/vim-which-key'
-Plug 'scrooloose/syntastic'
+Plug 'w0rp/ale'
 Plug 'godlygeek/tabular'
 Plug 'majutsushi/tagbar'
 Plug 'bling/vim-airline'
