@@ -1,7 +1,7 @@
 = TODOS =
 
 == PRIORITY ==
-- [ ] :nvim: https://github.com/liuchengxu/vim-which-key
+- [X] :nvim: https://github.com/liuchengxu/vim-which-key
 - [ ] :vimwiki: root mappings to comma <,>; add to unite; ctrl a/x for todos
 - [ ] :clojure: ale: kondo, joker https://github.com/dense-analysis/ale
 - [ ] :clojure: add formatting https://github.com/venantius/vim-cljfmt/tree/master/plugin

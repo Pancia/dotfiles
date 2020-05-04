@@ -8,17 +8,17 @@ call plug#begin('~/.config/nvim/plugged')
 
 " LIBS {{{
 Plug 'Shougo/vimproc.vim', {'do' : 'make'}
+Plug 'tpope/vim-dispatch'
 " }}}
 
 " ESSENTIALS {{{
+Plug 'liuchengxu/vim-which-key'
 Plug 'scrooloose/syntastic'
 Plug 'godlygeek/tabular'
 Plug 'majutsushi/tagbar'
 Plug 'bling/vim-airline'
 Plug 'vim-scripts/vim-auto-save'
 Plug 'ntpeters/vim-better-whitespace'
-Plug 'tpope/vim-dispatch'
-Plug 'tpope/vim-projectionist'
 Plug 'tpope/vim-repeat'
 "Plug 'kshenoy/vim-signature' " Marks
 Plug 'tpope/vim-speeddating'

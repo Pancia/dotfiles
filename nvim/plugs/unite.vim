@@ -1,17 +1,20 @@
-nnoremap [unite] <nop>
-nmap <space><space> [unite]
-nnoremap <silent> [unite]b :Unite buffer<CR>
-nnoremap <silent> [unite]<space> :Unite source<CR>
-nnoremap <silent> [unite]s :Unite grep/git:/<CR>
-nnoremap <silent> [unite]/ :Unite grep/git:/<CR>
 let g:unite_source_history_yank_enable=1
-nnoremap <silent> [unite]y :Unite history/yank<CR>
-nnoremap <silent> [unite]p :Unite history/yank<CR>
-nnoremap <silent> [unite]h :Unite help<CR>
-nnoremap <silent> [unite]u :UndotreeToggle<CR>
-nnoremap <silent> [unite]: :Unite command mapping<CR>
-nnoremap <silent> <c-space> :Unite menu<CR>
-nnoremap <silent> <NUL>     :Unite menu<CR>
+
+nnoremap <c-space> :Unite menu<CR>
+let g:which_key_map['<C-Space>'] = 'which_key_ignore'
+
+let g:which_key_map.u = {
+      \ 'name' : '+unite' ,
+      \ ' ' : [':Unite source', '#source'],
+      \ '/' : [':Unite grep/git:/', 'git grep at project root'],
+      \ ':' : [':Unite command mapping', 'search #commands'],
+      \ 'b' : [':Unite buffer', '#buffer'],
+      \ 'h' : [':Unite help', '#help'],
+      \ 'p' : [':Unite history/yank', '#yank #paste'],
+      \ 's' : [':Unite grep/git:/', 'git grep at project root'],
+      \ 'u' : [':UndotreeToggle', 'UndoTree'],
+      \ 'y' : [':Unite history/yank', '#yank #paste'],
+      \ }
 
 autocmd FileType unite call s:unite_settings()
 function! s:unite_settings()
