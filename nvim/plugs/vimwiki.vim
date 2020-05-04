@@ -9,7 +9,6 @@ map <buffer> ,T    <Plug>VimwikiToggleListItem
 map <buffer> <C-A> <Plug>VimwikiIncrementListItem
 map <buffer> <C-X> <Plug>VimwikiDecrementListItem
 
-
 function! VimwikiLinkHandler(link)
     " Use Vim to open external files with the 'vfile:' scheme.  E.g.:
     "   1) [[vfile:~/Code/PythonProject/abc123.py]]
