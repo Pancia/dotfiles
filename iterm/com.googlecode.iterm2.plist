@@ -27,7 +27,7 @@
 	<key>ClosingHotkeySwitchesSpaces</key>
 	<true/>
 	<key>Command</key>
-	<string>/usr/local/bin/zsh</string>
+	<string></string>
 	<key>CommandSelection</key>
 	<true/>
 	<key>Control</key>
@@ -502,7 +502,7 @@
 		<integer>1</integer>
 	</dict>
 	<key>NSWindow Frame NSNavPanelAutosaveName</key>
-	<string>880 726 799 448 0 0 2560 1417 </string>
+	<string>922 347 799 448 0 0 2560 1417 </string>
 	<key>NSWindow Frame Preferences</key>
 	<string>753 276 924 485 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 0</key>
@@ -855,7 +855,7 @@
 			<key>Custom Command</key>
 			<string>Custom Shell</string>
 			<key>Custom Directory</key>
-			<string>No</string>
+			<string>Recycle</string>
 			<key>Default Bookmark</key>
 			<string>No</string>
 			<key>Disable Printing</key>
@@ -1199,12 +1199,12 @@
 		<key>screenFrame</key>
 		<string>{{0, 0}, {2560, 1440}}</string>
 		<key>topLeft</key>
-		<string>{924, 864}</string>
+		<string>{744, 941}</string>
 	</dict>
 	<key>NoSyncInstallationId</key>
 	<string>3C9F06F6-1E59-43C7-BAC3-D190375DCD5D</string>
 	<key>NoSyncLaunchExperienceControllerRunCount</key>
-	<integer>13</integer>
+	<integer>17</integer>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile</key>
 	<true/>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile_selection</key>
@@ -1984,6 +1984,8 @@
 	<key>SavePasteHistory</key>
 	<false/>
 	<key>SeparateStatusBarsPerPane</key>
+	<true/>
+	<key>SetCookie</key>
 	<true/>
 	<key>ShowBookmarkName</key>
 	<false/>
