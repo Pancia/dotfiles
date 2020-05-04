@@ -1,32 +1,30 @@
 = TODOS =
 
 == PRIORITY ==
-- [ ] :clojure: add formatting https://github.com/venantius/vim-cljfmt/tree/master/plugin
-- [ ] :clojure: fix highlighting: https://github.com/guns/vim-clojure-highlight/blob/master/autoload/vim_clojure_highlight.vim
-- [ ] :clojure: ? rainbow parens
-- [ ] :nvim: terminal buffer names empty
-- [ ] :cmds: should set iterm2 tab title
 - [ ] :nvim: disable arrow up/down for completion
 - [ ] :nvim: :deoplete: more fuzzy suggestions
+- [ ] :nvim: TASK LANDMARK CONTEXT should be highlighted https://www.reddit.com/r/vim/comments/6im3mi/how_do_i_create_new_syntax_highlighting_groups/
 - [ ] :nvim: always show git markers (modified) ???
 - [ ] :git: pre-commit check for TASK & focus markers
 - [ ] :nvim: reinstall ag, search default to zO open folds at cursor
-- [ ] :nvim: remove unite, something else? must support vim command searching & ...
+- [ ] :clojure: fix highlighting: https://github.com/guns/vim-clojure-highlight/blob/master/autoload/vim_clojure_highlight.vim
+- [ ] :clojure: ? rainbow parens
+- [ ] :bin/cmds: should set iterm2 tab title
+- [ ] :nvim: terminal buffer names empty
 
 == MAIN ==
 - [ ] :cmus: music select broken
 - [ ] :lotus: sound broken? not playing?
 - [ ] :lotus: pause broken... wont restart
-- [ ] :iterm2: start cmus & vim dotfiles/todo.wiki on first startup?
-- [ ] :nvim: TASK LANDMARK CONTEXT should be highlighted https://www.reddit.com/r/vim/comments/6im3mi/how_do_i_create_new_syntax_highlighting_groups/
 - [ ] :conjure: eval root form should ignore comment block
-- [ ] :clojure: async ale/lint/syntastic run TESTS & outline file?
 - [ ] :conjure: abbreviate nss (virtual text?)
 - [o] :lotus: 2 hour reset/review/plan reminder (webview?)
 
 == BACKLOG ==
+- [ ] :clojure: compare with IDEA/Cursive && conjure-ify https://github.com/venantius/vim-cljfmt/tree/master/plugin
+- [ ] :iterm2: start cmus & vim dotfiles/todo.wiki on first startup?
 - [ ] :karabiner: transfer installs/k*/karabiner.json to karabiner-elements (how ??)
-- [ ] :nvim: disable or understand what paste mode is when cmd-v
+- [ ] :nvim: ? remove unite, something else? must support vim command searching & ...
 - [ ] :nvim: vim-plug lazy load plugins `vim --startuptime`
 - [ ] :zsh: silence antigen bundle on `.zshrc`
 - [ ] :zsh: antigen: install using brew
