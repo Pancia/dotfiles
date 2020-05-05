@@ -52,21 +52,6 @@ Install:andUse("WiFiTransitions", {
     start = true,
 })
 
-Install:andUse("Seal", {
-    hotkeys = {show = {hs_global_modifier, "space"}},
-    fn = function(s)
-        s:loadPlugins({"apps", "calc", "screencapture", "useractions"})
-        s.plugins.useractions.actions = {
-            ["Hammerspoon docs webpage"] = {
-                url = "http://hammerspoon.org/docs/",
-                icon = hs.image.imageFromName(hs.image.systemImageNames.ApplicationIcon),
-            },
-        }
-        s:refreshAllCommands()
-    end,
-    start = true,
-})
-
 Install:andUse("FadeLogo", {
     config = {
         default_run = 1.0,
