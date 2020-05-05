@@ -43,7 +43,6 @@ brew 'zsh'
 
 brew 'borkdude/brew/babashka'
 brew 'borkdude/brew/clj-kondo'
-brew 'candid82/brew/joker'
 
 cask 'deluge'
 cask 'gimp'
