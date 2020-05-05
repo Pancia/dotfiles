@@ -3,7 +3,9 @@ let g:unite_source_history_yank_enable=1
 nnoremap <c-space> :Unite menu<CR>
 let g:which_key_map['<C-Space>'] = 'which_key_ignore'
 
-let g:which_key_map.u = {
+nnoremap ? :WhichKey '?'<CR>
+call which_key#register('?', "g:unite_which_key_map")
+let g:unite_which_key_map = {
             \ 'name' : '+unite' ,
             \ ' ' : [':Unite source', '#source'],
             \ '/' : [':Unite grep/git:/', 'git grep at project root'],

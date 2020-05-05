@@ -4,6 +4,7 @@
 - [ ] :nvim: disable arrow up/down for completion
 - [ ] :nvim: :deoplete: more fuzzy suggestions
 - [ ] :nvim: TASK LANDMARK CONTEXT should be highlighted https://www.reddit.com/r/vim/comments/6im3mi/how_do_i_create_new_syntax_highlighting_groups/
+- [ ] :conjure: upgrade to 3.0
 - [ ] :nvim: always show git markers (modified) ???
 - [ ] :git: pre-commit check for TASK & focus markers
 - [ ] :nvim: reinstall ag, search default to zO open folds at cursor
@@ -14,14 +15,18 @@
 
 == MAIN ==
 - [ ] :cmus: music select broken
-- [ ] :lotus: sound broken? not playing?
-- [ ] :lotus: pause broken... wont restart
+- [ ] :which-key: sexp meta-* mappings should be disabled
+- [ ] :which-key: disable default mappings for plugins
+- [ ] :which-key: when window is too small, single column & doesnt show all mappings
+- [ ] :lotus: snooze button on notif, open duration picker (webview)
 - [ ] :conjure: eval root form should ignore comment block
 - [ ] :conjure: abbreviate nss (virtual text?)
-- [o] :lotus: 2 hour reset/review/plan reminder (webview?)
+- [o] :lotus: 2 hour reset reminder => webview: record journal, plan, view homeboard, ...
 
 == BACKLOG ==
-- [ ] :clojure: compare with IDEA/Cursive && conjure-ify https://github.com/venantius/vim-cljfmt/tree/master/plugin
+- [ ] :cmus: music select by tags
+- [ ] :cmus: FN keys update player delayed/staggered
+- [ ] :clojure: compare with IDEA/Cursive && conjure-ify [[https://github.com/venantius/vim-cljfmt/tree/master/plugin|vim-cljfmt]]
 - [ ] :iterm2: start cmus & vim dotfiles/todo.wiki on first startup?
 - [ ] :karabiner: transfer installs/k*/karabiner.json to karabiner-elements (how ??)
 - [ ] :nvim: ? remove unite, something else? must support vim command searching & ...
