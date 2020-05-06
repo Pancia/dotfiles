@@ -4,7 +4,9 @@ call deoplete#custom#option({
             \ 'smart_case': v:true,
             \ 'keyword_patterns': {'clojure': '[\w!$%&*+/:<=>?@\^_~\-\.#]*'},
             \})
+
 set completeopt+=noinsert
+
 " https://github.com/Shougo/deoplete.nvim/blob/master/doc/deoplete.txt
 inoremap <expr> <Tab> pumvisible() ? "\<C-n>" : "\<Tab>"
 inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"

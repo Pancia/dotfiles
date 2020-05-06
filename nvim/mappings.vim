@@ -1,13 +1,17 @@
 " Disable arrows
-nmap <up> <nop>
+noremap <up> <nop>
+inoremap <up> <nop>
 let g:which_key_map['<Up>'] = 'which_key_ignore'
-nmap <down> <nop>
+noremap <down> <nop>
+inoremap <down> <nop>
 let g:which_key_map['<Down>'] = 'which_key_ignore'
-nmap <left> <nop>
+noremap <left> <nop>
+inoremap <left> <nop>
 let g:which_key_map['<Left>'] = 'which_key_ignore'
-nmap <right> <nop>
+noremap <right> <nop>
+inoremap <right> <nop>
 let g:which_key_map['<Right>'] = 'which_key_ignore'
-nmap <CR> <nop>
+noremap <CR> <nop>
 let g:which_key_map['<CR>'] = 'which_key_ignore'
 " Map Y to y$, makes way more sense
 noremap Y y$
