@@ -2,23 +2,17 @@
 - [ ] :git: pre-commit check for TASK & focus markers
 - [ ] :clojure: fix highlighting: https://github.com/guns/vim-clojure-highlight/blob/master/autoload/vim_clojure_highlight.vim
 - [ ] :clojure: ? rainbow parens
-- [ ] :bin/cmds: should set iterm2 tab title
-- [ ] :nvim: terminal buffer names empty
 
 == MAIN ==
-- [ ] :cmus: music select broken
 - [ ] :lotus: snooze button on notif, open duration picker (webview)
-- [ ] :conjure: eval root form should ignore comment block
-- [ ] :conjure: abbreviate nss (virtual text?)
 - [o] :lotus: 2 hour reset reminder => webview: record journal, plan, view homeboard, ...
 
 == BACKLOG ==
 - [ ] :cmus: music select by tags
 - [ ] :clojure: compare with IDEA/Cursive && conjure-ify [[https://github.com/venantius/vim-cljfmt/tree/master/plugin|vim-cljfmt]]
-- [ ] :iterm2: start cmus & vim dotfiles/todo.wiki on first startup?
+- [ ] :nvim: terminal buffer names empty
+- [ ] :bin/cmds: should set iterm2 tab title
 - [ ] :karabiner: transfer installs/k*/karabiner.json to karabiner-elements (how ??)
-- [ ] :nvim: https://github.com/airblade/vim-gitgutter
-- [ ] :nvim: ? remove unite, something else? must support vim command searching & ...
 - [ ] :nvim: vim-plug lazy load plugins `vim --startuptime`
 - [ ] :zsh: silence antigen bundle on `.zshrc`
 - [ ] :zsh: antigen: install using brew
