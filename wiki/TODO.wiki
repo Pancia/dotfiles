@@ -6,7 +6,6 @@
 - [ ] :nvim: terminal buffer names empty
 
 == MAIN ==
-- [ ] :ctrlp: ? MRU only in project
 - [ ] :cmus: music select broken
 - [ ] :which-key: sexp meta-* mappings should be disabled
 - [ ] :which-key: disable default mappings for plugins
