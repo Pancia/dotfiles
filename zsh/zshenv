@@ -1,6 +1,7 @@
 export SHELL=/bin/zsh
 export PATH="$HOME/dotfiles/bin:$PATH"
 export LESSCHARSET=UTF-8 # git (& => less) otherwise doesn't show UTF-8 file properly
+export LC_ALL=en_US.UTF-8
 
 for env in $(ls ~/dotfiles/zsh/env); do
     source "$HOME/dotfiles/zsh/env/${env}"

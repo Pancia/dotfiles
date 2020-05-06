@@ -1,17 +1,12 @@
-= TODOS =
-
 == PRIORITY ==
-- [ ] :nvim: TASK LANDMARK CONTEXT should be highlighted https://www.reddit.com/r/vim/comments/6im3mi/how_do_i_create_new_syntax_highlighting_groups/
-- [ ] :conjure: upgrade to 3.0
-- [ ] :nvim: always show git markers (modified) ???
 - [ ] :git: pre-commit check for TASK & focus markers
-- [ ] :nvim: reinstall ag, search default to zO open folds at cursor
 - [ ] :clojure: fix highlighting: https://github.com/guns/vim-clojure-highlight/blob/master/autoload/vim_clojure_highlight.vim
 - [ ] :clojure: ? rainbow parens
 - [ ] :bin/cmds: should set iterm2 tab title
 - [ ] :nvim: terminal buffer names empty
 
 == MAIN ==
+- [ ] :ctrlp: ? MRU only in project
 - [ ] :cmus: music select broken
 - [ ] :which-key: sexp meta-* mappings should be disabled
 - [ ] :which-key: disable default mappings for plugins
@@ -27,6 +22,7 @@
 - [ ] :clojure: compare with IDEA/Cursive && conjure-ify [[https://github.com/venantius/vim-cljfmt/tree/master/plugin|vim-cljfmt]]
 - [ ] :iterm2: start cmus & vim dotfiles/todo.wiki on first startup?
 - [ ] :karabiner: transfer installs/k*/karabiner.json to karabiner-elements (how ??)
+- [ ] :nvim: https://github.com/airblade/vim-gitgutter
 - [ ] :nvim: ? remove unite, something else? must support vim command searching & ...
 - [ ] :nvim: vim-plug lazy load plugins `vim --startuptime`
 - [ ] :zsh: silence antigen bundle on `.zshrc`

@@ -13,19 +13,24 @@ Plug 'tpope/vim-dispatch'
 
 " ESSENTIALS {{{
 Plug 'liuchengxu/vim-which-key'
-Plug 'w0rp/ale'
-Plug 'godlygeek/tabular'
-Plug 'majutsushi/tagbar'
-Plug 'bling/vim-airline'
+Plug 'w0rp/ale' "Async Lint Engine
+Plug 'bling/vim-airline' " Status Bar
 Plug 'vim-scripts/vim-auto-save'
 Plug 'ntpeters/vim-better-whitespace'
 Plug 'tpope/vim-repeat'
-"Plug 'kshenoy/vim-signature' " Marks
 Plug 'tpope/vim-speeddating'
 Plug 'tpope/vim-surround'
+Plug 'mbbill/undotree'
+"Plug 'kshenoy/vim-signature' " Marks
+" }}}
+
+" DIR/FILE VIEWER {{{
 Plug 'romgrk/vimfiler-prompt'
 Plug 'Shougo/vimfiler.vim'
-Plug 'mbbill/undotree'
+" }}}
+
+" SEARCH {{{
+Plug 'mileszs/ack.vim'
 " }}}
 
 " WIKI {{{
