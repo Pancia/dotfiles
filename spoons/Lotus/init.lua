@@ -150,8 +150,7 @@ function renderMenu()
             {title = "view log"
             , fn = function()
                 local logFileLoc = obj.logDir.."/log"
-                hs.execute("echo '"..logFileLoc.."' > $HOME/.init-zsh-cmds/viewLog", true)
-                hs.execute("open -a iTerm $HOME", true)
+                hs.execute("open -a TextEdit '"..logFileLoc.."'", true)
             end},
         }
     end

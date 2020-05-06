@@ -1,35 +1,22 @@
-function _same_inode {
+function _not_same_inode {
     [ "$(stat -f '%i' $1)" != "$(stat -f '%i' $2)" ]
 }
 
 function _ENSURE_RCS {
     for rc in $(ls $HOME/dotfiles/rcs); do
         local rc_dest="$(head -n 1 $HOME/dotfiles/rcs/$rc | sed -E 's/.*<\[(.*)\]>.*/\1/' )"
-        if [[ ! -f "$HOME/$rc_dest" ]] || $(_same_inode "$HOME/$rc_dest" "$HOME/dotfiles/rcs/$rc") ; then
+        if [[ ! -f "$HOME/$rc_dest" ]] || $(_not_same_inode "$HOME/$rc_dest" "$HOME/dotfiles/rcs/$rc") ; then
             mkdir -p "$(dirname $HOME/$rc_dest)"
             ln -f "$HOME/dotfiles/rcs/$rc" "$HOME/$rc_dest"
         fi
     done
 }
 
-function _EXEC_INIT_CMDS {
-    for argsFile in $(ls $ZSH_INIT_CMD_DIR); do
-        local CMD="$HOME/dotfiles/bin/$argsFile"
-        if [[ ! -x $CMD ]]; then break; fi
-        local ARGS=$(command cat $ZSH_INIT_CMD_DIR/$argsFile)
-        command rm $ZSH_INIT_CMD_DIR/$argsFile
-        (zsh -ic "$CMD $ARGS")
-    done
-}
-
-export ZSH_INIT_CMD_DIR="$HOME/.init-zsh-cmds"; mkdir -p $ZSH_INIT_CMD_DIR
 function ZSHRC {
     (_ENSURE_RCS &)
 
     source ~/dotfiles/zsh/init.zsh
     [ -e ~/dotfiles/zsh/extra.zsh ] && source ~/dotfiles/zsh/extra.zsh
-
-    _EXEC_INIT_CMDS
 
     if [[ $1 == prompt ]]; then
         shift

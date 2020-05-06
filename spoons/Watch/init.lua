@@ -46,8 +46,7 @@ end
 
 function viewScriptLogFile(script)
     local logFileLoc = obj.logDir.."/"..script.name
-    hs.execute("echo '"..logFileLoc.."' > $HOME/.init-zsh-cmds/viewLog", true)
-    hs.execute("open -a iTerm $HOME", true)
+    hs.execute("open -a TextEdit '"..logFileLoc.."'", true)
 end
 
 function renderMenu()
