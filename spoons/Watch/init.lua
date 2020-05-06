@@ -59,8 +59,8 @@ function renderMenu()
             end},
             {title = "-> Execute now!"
             , fn = function()
-                viewScriptLogFile(script)
                 runScriptCmd(script)
+                viewScriptLogFile(script)
             end},
             {title = "-"},
         }
