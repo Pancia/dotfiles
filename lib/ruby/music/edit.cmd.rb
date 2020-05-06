@@ -35,7 +35,6 @@ module MusicCMD
     opts.info = "Edit the item interactively"
     opts.separator "    ITEM: String, will be compared in `jq` to FILTER"
     opts.separator ""
-    $options[:filter] = ".playlist"
     opts.on("-f", "--filter FILTER", "Any string that `jq` will accept -- default: .playlist") { |jqf|
       $options[:filter] = jqf
     }
@@ -43,6 +42,7 @@ module MusicCMD
       $options[:search] = true
     }
     lambda { |item = nil|
+      $options[:filter] = ".playlist" if not $options[:filter]
       to_edit = edit_impl(item)
       raise "FAILED TO FIND ANY ITEMS" if to_edit.empty?
       to_edit.each do |edit_me|

@@ -8,7 +8,6 @@ module MusicCMD
     opts.separator "    SONG_ID: Song \"id\" or filename"
     opts.separator "    TAGS format: <tag>[, <tag>]*"
     opts.separator ""
-    $options[:song_id] = nil
     opts.on("-s", "--song-id SONG_ID", "Required: Apply the mark to SONG_ID") { |id|
       $options[:song_id] = id
     }

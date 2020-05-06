@@ -5,7 +5,6 @@ module MusicCMD
   def import(opts)
     opts.banner = "Usage: import FILES"
     opts.info = "Imports files into $MUSIC_DB & $MUSIC_DIR"
-    $options[:playlist] = nil
     opts.on("-p", "--playlist PLAYLIST_NAME", "String to use as FILES's PLAYLIST metadata") { |pl|
       $options[:playlist] = pl
     }

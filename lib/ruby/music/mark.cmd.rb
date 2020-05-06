@@ -8,11 +8,9 @@ module MusicCMD
     opts.separator "    SONG_ID: Song \"id\" or filename"
     opts.separator "    TEXT: string to mark SONG_ID with"
     opts.separator ""
-    $options[:song_id] = nil
     opts.on("-s", "--song-id SONG_ID", "Apply the mark to SONG_ID") { |id|
       $options[:song_id] = id
     }
-    $options[:text] = nil
     opts.on("-t", "--text TEXT", "Mark it with the supplied TEXT") { |text|
       $options[:text] = text
     }

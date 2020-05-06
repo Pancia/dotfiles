@@ -5,7 +5,6 @@ module MusicCMD
   def select(opts)
     opts.banner = "Usage: select [OPTS]"
     opts.info = "Select items to set as the playlist using `cmus-remote`"
-    $options[:filter] = ".playlist"
     opts.on("-f", "--filter FILTER", "Any string that `jq` will accept -- default: .playlist") { |jqf|
       $options[:filter] = jqf
     }
@@ -13,6 +12,7 @@ module MusicCMD
       $options[:filter] = "select(.tags) | .tags | .[]"
     }
     lambda {
+      $options[:filter] = ".playlist" if not $options[:filter]
       result = self.search_impl()
       items = result.split "\n"
       p "items: #{items}" if $options[:verbose]

@@ -12,12 +12,14 @@ module MusicCMD
   def search(opts)
     opts.banner = "Usage: search [OPTS]"
     opts.info = "Search the music db, only prints selected"
-    $options[:filter] = '"\(.playlist) - \(.name)"'
     opts.on("-f", "--filter FILTER",
             "Any string that `jq` will accept -- default: '\"\\(.playlist) - \\(.name)\"'") { |jqf|
       $options[:filter] = jqf
     }
-    lambda { puts search_impl() }
+    lambda {
+      $options[:filter] = '"\(.playlist) - \(.name)"' if not $options[:filter]
+      puts search_impl()
+    }
   end
 
 end
