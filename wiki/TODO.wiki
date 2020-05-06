@@ -1,8 +1,6 @@
 = TODOS =
 
 == PRIORITY ==
-- [ ] :nvim: disable arrow up/down for completion
-- [ ] :nvim: :deoplete: more fuzzy suggestions
 - [ ] :nvim: TASK LANDMARK CONTEXT should be highlighted https://www.reddit.com/r/vim/comments/6im3mi/how_do_i_create_new_syntax_highlighting_groups/
 - [ ] :conjure: upgrade to 3.0
 - [ ] :nvim: always show git markers (modified) ???

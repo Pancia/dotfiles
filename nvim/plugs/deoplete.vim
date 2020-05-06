@@ -5,6 +5,8 @@ call deoplete#custom#option({
             \ 'keyword_patterns': {'clojure': '[\w!$%&*+/:<=>?@\^_~\-\.#]*'},
             \})
 
+call deoplete#custom#source('_', 'matchers', ['matcher_full_fuzzy'])
+
 set completeopt+=noinsert
 
 " https://github.com/Shougo/deoplete.nvim/blob/master/doc/deoplete.txt
