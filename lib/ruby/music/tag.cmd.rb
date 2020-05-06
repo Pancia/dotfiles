@@ -31,6 +31,7 @@ module MusicCMD
       song["tags"] = song["tags"].uniq
       p song["tags"]
       MusicDB.save music, song_id if not $options[:dry_run]
+      MusicDB.tag [song]
     }
   end
 
