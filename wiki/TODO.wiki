@@ -17,7 +17,6 @@
 
 == BACKLOG ==
 - [ ] :cmus: music select by tags
-- [ ] :cmus: FN keys update player delayed/staggered
 - [ ] :clojure: compare with IDEA/Cursive && conjure-ify [[https://github.com/venantius/vim-cljfmt/tree/master/plugin|vim-cljfmt]]
 - [ ] :iterm2: start cmus & vim dotfiles/todo.wiki on first startup?
 - [ ] :karabiner: transfer installs/k*/karabiner.json to karabiner-elements (how ??)

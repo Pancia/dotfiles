@@ -6,20 +6,22 @@ obj.author = "Anthony D'Ambrosio <anthony.dayzerostudio@gmail.com>"
 obj.homepage = "https://github.com/pancia/dotfiles/tree/master/spoons/cmus"
 obj.license = "MIT - https://opensource.org/licenses/MIT"
 
+obj.cmusPath = "/usr/local/bin/"
+
 function obj:init()
 end
 
 function cmusRemote(command)
-    return hs.execute("cmus-remote "..command, true)
+	return hs.execute(obj.cmusPath.."/cmus-remote "..command)
 end
 
 function isActive()
-    _, status = hs.execute("cmus-remote --raw status", true)
+    _, status = hs.execute(obj.cmusPath.."/cmus-remote --raw status")
     return status
 end
 
 function isPlaying()
-    cmusStatus = hs.execute("cmus-remote --raw status", true)
+    cmusStatus = hs.execute(obj.cmusPath.."/cmus-remote --raw status")
     return string.match(cmusStatus, "status playing")
 end
 
