@@ -1,15 +1,13 @@
 == PRIORITY ==
-- [ ] :git: pre-commit check for TASK & focus markers
-- [ ] :clojure: fix highlighting: https://github.com/guns/vim-clojure-highlight/blob/master/autoload/vim_clojure_highlight.vim
-- [ ] :clojure: ? rainbow parens
 
 == MAIN ==
 - [ ] :lotus: snooze button on notif, open duration picker (webview)
 - [o] :lotus: 2 hour reset reminder => webview: record journal, plan, view homeboard, ...
 
 == BACKLOG ==
-- [ ] :cmus: music select by tags
 - [ ] :clojure: compare with IDEA/Cursive && conjure-ify [[https://github.com/venantius/vim-cljfmt/tree/master/plugin|vim-cljfmt]]
+- [ ] :clojure: fix highlighting: https://github.com/guns/vim-clojure-highlight/blob/master/autoload/vim_clojure_highlight.vim
+- [ ] :clojure: ? rainbow parens
 - [ ] :nvim: terminal buffer names empty
 - [ ] :bin/cmds: should set iterm2 tab title
 - [ ] :karabiner: transfer installs/k*/karabiner.json to karabiner-elements (how ??)
