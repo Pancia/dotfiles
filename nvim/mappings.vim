@@ -4,9 +4,7 @@ inoremap <up> <nop>
 noremap <down> <nop>
 inoremap <down> <nop>
 noremap <left> <nop>
-inoremap <left> <nop>
 noremap <right> <nop>
-inoremap <right> <nop>
 noremap <CR> <nop>
 " Map Y to y$, makes way more sense
 noremap Y y$

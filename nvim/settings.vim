@@ -2,6 +2,10 @@ filetype plugin indent on
 
 set mouse=a
 
+" Default tab / indent level
+set shiftwidth=4
+set tabstop=4
+
 " CTRL_SPACE
 set hidden
 

@@ -7,9 +7,6 @@
 
 == MAIN ==
 - [ ] :cmus: music select broken
-- [ ] :which-key: sexp meta-* mappings should be disabled
-- [ ] :which-key: disable default mappings for plugins
-- [ ] :which-key: when window is too small, single column & doesnt show all mappings
 - [ ] :lotus: snooze button on notif, open duration picker (webview)
 - [ ] :conjure: eval root form should ignore comment block
 - [ ] :conjure: abbreviate nss (virtual text?)
