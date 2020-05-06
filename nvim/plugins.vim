@@ -86,8 +86,6 @@ Plug 'calviken/vim-gdscript3'
 
 call plug#end()
 
-let g:which_key_map = {}
-
 for plug_conf in split(globpath(expand("<sfile>:p:h"), 'plugs/*.vim'), '\n')
     execute 'source ' . plug_conf
 endfor
