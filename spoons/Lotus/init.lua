@@ -48,9 +48,11 @@ end
 
 function renderMenuBar()
     local title
+    local _, refreshRate = userIntervalToSeconds(obj.interval)
     if obj._paused then
         if obj._pauseTimer then
-            title = "|| " .. math.ceil(obj._pauseTimer:nextTrigger() / 60)
+            local nextTrigger = obj._pauseTimer:nextTrigger()
+            title = "|| " .. math.max(math.ceil(nextTrigger / refreshRate), 0)
         else
             title = "||"
         end
@@ -59,11 +61,41 @@ function renderMenuBar()
         obj._menubar:setIcon(obj.spoonPath.."/lotus-flower.png")
         local soundTitle = sound.name or sound.path:match("[^/]+$"):match("[^.]+")
         local nextTrigger = obj._lotusTimer:nextTrigger()
-        _, refreshRate = userIntervalToSeconds(obj.interval)
         title = math.max(math.ceil(nextTrigger / refreshRate), 0)
             .. "->[" .. obj._soundIdx .. "/" .. #obj.sounds .."]#" .. soundTitle
     end
     obj._menubar:setTitle(title)
+end
+
+function showDurationPicker(onDuration, onClose)
+    local frame = hs.screen.primaryScreen():fullFrame()
+    local rect = hs.geometry.rect(
+    frame["x"] + (3 * frame["w"] / 8),
+    frame["y"] + 3 * (frame["h"] / 8),
+    2 * frame["w"] / 8,
+    2 * frame["h"] / 8)
+    local uc = hs.webview.usercontent.new("durationPicker")
+    local browser
+    local pickedDuration = false
+    uc:setCallback(function(response)
+        local duration = response.body
+        pickedDuration = true
+        browser:delete()
+        onDuration(duration)
+    end)
+    browser = hs.webview.newBrowser(rect, {developerExtrasEnabled = true}, uc)
+    browser:windowCallback(function(action, webview)
+        if action == "closing" and not pickedDuration then
+            if onClose then onClose(duration) end
+        end
+    end)
+    browser:deleteOnClose(true)
+    local f = io.open(obj.spoonPath.."/durationPicker.html")
+    local html = ""
+    for each in f:lines() do
+        html = html .. each
+    end
+    browser:html(html):bringToFront():show()
 end
 
 function restartTimer()
@@ -101,32 +133,10 @@ function renderMenu()
         }
     else
         return {
-            {title = "pause"
+            {title = "pause for ...?"
             , fn = function()
                 obj.stopAwarenessSound()
-                obj._lastNextTrigger = obj._lotusTimer:nextTrigger()
-                obj._lotusTimer = obj._lotusTimer:stop()
-                if obj._pauseTimer then
-                    obj._pauseTimer:stop()
-                    obj._pauseTimer = nil
-                end
-                obj._paused = true
-                obj._menuRefreshTimer:fire()
-            end},
-            {title = "pause for >?"
-            , fn = function()
-                obj.stopAwarenessSound()
-                local frame = hs.screen.primaryScreen():fullFrame()
-                local rect = hs.geometry.rect(
-                    frame["x"] + (3 * frame["w"] / 8),
-                    frame["y"] + 3 * (frame["h"] / 8),
-                    2 * frame["w"] / 8,
-                    2 * frame["h"] / 8)
-                local uc = hs.webview.usercontent.new("durationPicker")
-                local browser
-                uc:setCallback(function(response)
-                    local duration = response.body
-                    browser:delete()
+                showDurationPicker(function(duration)
                     obj._paused = true
                     if obj._pauseTimer then
                         obj._pauseTimer:stop()
@@ -135,19 +145,13 @@ function renderMenu()
                     obj._menuRefreshTimer:fire()
                     obj._lastNextTrigger = obj._lotusTimer:nextTrigger()
                     obj._lotusTimer = obj._lotusTimer:stop()
-                    obj._pauseTimer = hs.timer.doAfter(60*duration, function()
+                    _, refreshRate = userIntervalToSeconds(obj.interval)
+                    obj._pauseTimer = hs.timer.doAfter(refreshRate*duration, function()
                         obj._pauseTimer = nil
                         obj._lotusTimer = obj._lotusTimer:setNextTrigger(obj._lastNextTrigger)
                     end)
                     obj._menuRefreshTimer:fire()
                 end)
-                browser = hs.webview.newBrowser(rect, {developerExtrasEnabled = true}, uc)
-                local f = io.open(obj.spoonPath.."/durationPicker.html")
-                local html = ""
-                for each in f:lines() do
-                    html = html .. each
-                end
-                browser:html(html):bringToFront():show()
             end},
             {title = "view log"
             , fn = function()
@@ -160,12 +164,44 @@ function renderMenu()
     end
 end
 
+function with_default(obj, key, default)
+    obj[key] = obj[key] or default
+end
+
+function snoozeTimer()
+    showDurationPicker(function(duration)
+        obj._paused = true
+        obj._lotusTimer = obj._lotusTimer:stop()
+        _, refreshRate = userIntervalToSeconds(obj.interval)
+        obj._pauseTimer = hs.timer.doAfter(refreshRate*duration, function()
+            obj._pauseTimer = nil
+            restartTimer()
+        end)
+        obj._menuRefreshTimer:fire()
+    end, function()
+        obj._paused = false
+        restartTimer()
+    end)
+end
+
+function notifCallback(notif)
+    local activationType = notif:activationType()
+    if activationType == hs.notify.activationTypes.actionButtonClicked then
+        snoozeTimer()
+    else
+        restartTimer()
+    end
+end
+
 function lotusBlock()
     local sound = obj.sounds[obj._soundIdx]
     obj:playAwarenessSound()
     if sound.notif then
         obj._lotusTimer = obj._lotusTimer:stop()
-        obj._notif = hs.notify.new(restartTimer, sound.notif):send()
+        local notification = sound.notif
+        with_default(notification, "hasActionButton", true)
+        with_default(notification, "actionButtonTitle", "SNOOZE")
+        obj._notif = hs.notify.new(notifCallback, notification):send()
         clearCheck = hs.timer.doEvery(1, function()
             if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
                 if obj._notif:activationType() == hs.notify.activationTypes.none then

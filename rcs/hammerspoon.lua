@@ -89,10 +89,14 @@ localInstall("Lotus", {
     config = {
         logDir = os.getenv("HOME").."/.log/lotus/",
         sounds = {
-            {name = "short", path = "bowl.wav", notif = {title = "Quick Stretch! #short", withdrawAfter = 0}},
-            {name = "long", path = "gong.wav", volume = .5, notif = {title = "Take a break! #long", withdrawAfter = 0}},
-            {name = "short", path = "bowl.wav", notif = {title = "Quick Stretch! #short", withdrawAfter = 0}},
-            {name = "reset", path = "gong.wav", volume = .5, notif = {title = "Take 10 to #review #plan", withdrawAfter = 0}},
+            {name = "short", path = "bowl.wav"
+            , notif = {title = "Quick Stretch! #short", withdrawAfter = 0}},
+            {name = "long", path = "gong.wav", volume = .5
+            , notif = {title = "Take a break! #long", withdrawAfter = 0}},
+            {name = "short", path = "bowl.wav"
+            , notif = {title = "Quick Stretch! #short", withdrawAfter = 0}},
+            {name = "reset", path = "gong.wav", volume = .5
+            , notif = {title = "Take 10 to #review #plan", withdrawAfter = 0}},
         },
         interval = { minutes = 30 },
         notifOptions = false,
