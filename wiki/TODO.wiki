@@ -10,7 +10,6 @@
 - [ ] :clojure: ? rainbow parens
 - [ ] :nvim: terminal buffer names empty
 - [ ] :bin/cmds: should set iterm2 tab title
-- [ ] :cmus: if marked show '!' instead of '.'
 - [ ] :karabiner: transfer installs/k*/karabiner.json to karabiner-elements (how ??)
 - [ ] :nvim: vim-plug lazy load plugins `vim --startuptime`
 - [ ] :zsh: silence antigen bundle on `.zshrc`
