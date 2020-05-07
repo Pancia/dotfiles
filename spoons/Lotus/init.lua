@@ -152,7 +152,9 @@ function renderMenu()
             {title = "view log"
             , fn = function()
                 local logFileLoc = obj.logDir.."/log"
-                hs.execute("open -a TextEdit '"..logFileLoc.."'", true)
+                hs.osascript.applescript("tell application \"iterm2\""
+                .."\ncreate window with default profile command \"zsh -ic 'viewLog "..logFileLoc.."'\""
+                .."\nend tell")
             end},
         }
     end

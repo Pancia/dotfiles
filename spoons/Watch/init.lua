@@ -46,7 +46,9 @@ end
 
 function viewScriptLogFile(script)
     local logFileLoc = obj.logDir.."/"..script.name
-    hs.execute("open -a TextEdit '"..logFileLoc.."'", true)
+    hs.osascript.applescript("tell application \"iterm2\""
+    .."\ncreate window with default profile command \"zsh -ic 'viewLog "..logFileLoc.."'\""
+    .."\nend tell")
 end
 
 function renderMenu()
@@ -59,8 +61,8 @@ function renderMenu()
             end},
             {title = "-> Execute now!"
             , fn = function()
-                runScriptCmd(script)
                 viewScriptLogFile(script)
+                runScriptCmd(script)
             end},
             {title = "-"},
         }
