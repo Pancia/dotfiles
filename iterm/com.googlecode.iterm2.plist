@@ -502,15 +502,19 @@
 		<integer>1</integer>
 	</dict>
 	<key>NSWindow Frame NSNavPanelAutosaveName</key>
-	<string>859 710 841 470 0 0 2560 1417 </string>
+	<string>859 710 841 417 0 0 2560 1417 </string>
 	<key>NSWindow Frame Preferences</key>
 	<string>753 276 924 485 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 0</key>
 	<string>396 0 1802 1071 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 1</key>
-	<string>533 275 1802 1071 0 0 2560 1417 </string>
+	<string>758 0 1802 1100 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 2</key>
 	<string>493 130 1802 1071 0 0 2560 1417 </string>
+	<key>NeverWarnAboutShortLivedSessions_7EF0271F-5154-40A5-B63B-A0737DB0ABB0</key>
+	<true/>
+	<key>NeverWarnAboutShortLivedSessions_7EF0271F-5154-40A5-B63B-A0737DB0ABB0_selection</key>
+	<integer>0</integer>
 	<key>New Bookmarks</key>
 	<array>
 		<dict>
@@ -914,6 +918,20 @@
 					<key>Text</key>
 					<string></string>
 				</dict>
+				<key>0x66-0x140000</key>
+				<dict>
+					<key>Action</key>
+					<integer>23</integer>
+					<key>Text</key>
+					<string></string>
+				</dict>
+				<key>0xd-0x100000</key>
+				<dict>
+					<key>Action</key>
+					<integer>13</integer>
+					<key>Text</key>
+					<string></string>
+				</dict>
 				<key>0xf702-0x280000</key>
 				<dict>
 					<key>Action</key>
@@ -995,7 +1013,7 @@
 			<key>Right Option Key Sends</key>
 			<integer>0</integer>
 			<key>Rows</key>
-			<integer>36</integer>
+			<integer>37</integer>
 			<key>Screen</key>
 			<integer>-1</integer>
 			<key>Scrollback Lines</key>
@@ -1207,6 +1225,8 @@
 	<string>3C9F06F6-1E59-43C7-BAC3-D190375DCD5D</string>
 	<key>NoSyncLaunchExperienceControllerRunCount</key>
 	<integer>19</integer>
+	<key>NoSyncNeverPromptToChangeOption</key>
+	<true/>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile</key>
 	<true/>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile_selection</key>
@@ -1220,7 +1240,7 @@
 	<key>NoSyncPersistentRateLimitedUpdates</key>
 	<dict>
 		<key>CheckForUpdatedPythonRuntime</key>
-		<real>610411666.45918703</real>
+		<real>610617864.72877705</real>
 	</dict>
 	<key>NoSyncRecordedVariables</key>
 	<dict>
@@ -1947,6 +1967,8 @@
 	<false/>
 	<key>OpenTmuxWindowsIn</key>
 	<integer>0</integer>
+	<key>PMPrintingExpandedStateForPrint2</key>
+	<false/>
 	<key>PassOnControlClick</key>
 	<false/>
 	<key>PasteFromClipboard</key>
@@ -1968,6 +1990,8 @@
 	<string>/Users/pancia/dotfiles/iterm</string>
 	<key>PreserveWindowSizeWhenTabBarVisibilityChanges</key>
 	<true/>
+	<key>Print In Black And White</key>
+	<true/>
 	<key>PromptOnQuit</key>
 	<true/>
 	<key>QuitWhenAllWindowsClosed</key>
@@ -1987,7 +2011,7 @@
 	<key>SUHasLaunchedBefore</key>
 	<true/>
 	<key>SULastCheckTime</key>
-	<date>2020-05-04T19:33:25Z</date>
+	<date>2020-05-06T20:44:43Z</date>
 	<key>SUUpdateRelaunchingMarker</key>
 	<false/>
 	<key>SavePasteHistory</key>
