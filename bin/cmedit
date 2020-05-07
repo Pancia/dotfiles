@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+uuid=$(cmus-remote --raw status \
+    | ag 'file ' \
+    | sed 's/file //' \
+    | xargs basename \
+    | sed 's/\..*$//')
+
+music edit -f '.id' "$uuid"
