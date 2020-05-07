@@ -3,6 +3,7 @@
 == MAIN ==
 - [ ] :lotus: snooze button on notif, open duration picker (webview)
 - [o] :lotus: 2 hour reset reminder => webview: record journal, plan, view homeboard, ...
+- [ ] :music: tags array -> csv "tag1[,tag2...]"
 
 == BACKLOG ==
 - [ ] :clojure: compare with IDEA/Cursive && conjure-ify [[https://github.com/venantius/vim-cljfmt/tree/master/plugin|vim-cljfmt]]
