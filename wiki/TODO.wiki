@@ -1,8 +1,7 @@
 == PRIORITY ==
 
 == MAIN ==
-- [ ] :lotus: snooze button on notif, open duration picker (webview)
-- [o] :lotus: 2 hour reset reminder => webview: record journal, plan, view homeboard, ...
+- [O] :lotus: plan, view homeboard videos, ...
 - [ ] :music: tags array -> csv "tag1[,tag2...]"
 
 == BACKLOG ==

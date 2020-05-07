@@ -74,7 +74,7 @@ function showDurationPicker(onDuration, onClose)
     frame["y"] + 3 * (frame["h"] / 8),
     2 * frame["w"] / 8,
     2 * frame["h"] / 8)
-    local uc = hs.webview.usercontent.new("durationPicker")
+    local uc = hs.webview.usercontent.new("HammerSpoon") -- jsPortName
     local browser
     local pickedDuration = false
     uc:setCallback(function(response)
@@ -185,27 +185,35 @@ function snoozeTimer()
 end
 
 function notifCallback(notif)
+    local action = obj._sound.action
     local activationType = notif:activationType()
     if activationType == hs.notify.activationTypes.actionButtonClicked then
         snoozeTimer()
     else
-        restartTimer()
+        if action then
+            action(function()
+                obj._paused = false
+                restartTimer()
+            end)
+        else
+            restartTimer()
+        end
     end
 end
 
 function lotusBlock()
-    local sound = obj.sounds[obj._soundIdx]
+    obj._sound = obj.sounds[obj._soundIdx]
     obj:playAwarenessSound()
-    if sound.notif then
+    if obj._sound.notif then
         obj._lotusTimer = obj._lotusTimer:stop()
-        local notification = sound.notif
+        local notification = obj._sound.notif
         with_default(notification, "hasActionButton", true)
         with_default(notification, "actionButtonTitle", "SNOOZE")
         obj._notif = hs.notify.new(notifCallback, notification):send()
         clearCheck = hs.timer.doEvery(1, function()
             if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
                 if obj._notif:activationType() == hs.notify.activationTypes.none then
-                    restartTimer()
+                    notifCallback(obj._notif)
                 end
                 clearCheck:stop()
                 clearCheck = nil

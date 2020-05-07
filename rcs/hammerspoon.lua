@@ -84,13 +84,54 @@ localInstall = function(name, conf)
     end
 end
 
+local HOME = os.getenv("HOME")
+
+function showHomeBoard(onClose, onResponse)
+    local frame = hs.screen.primaryScreen():fullFrame()
+    local rect = hs.geometry.rect(
+    frame["x"] + 2 * (frame["w"] / 8),
+    frame["y"] + 1 * (frame["h"] / 8),
+    2 * frame["w"] / 4,
+    3 * frame["h"] / 4)
+    local uc = hs.webview.usercontent.new("HammerSpoon") -- jsPortName
+    local browser
+    local responded = false
+    uc:setCallback(function(response)
+        local body = response.body
+        responded = true
+        browser:delete()
+        onResponse(body)
+    end)
+    browser = hs.webview.newBrowser(rect, {developerExtrasEnabled = true}, uc)
+    browser:windowCallback(function(action, webview)
+        if action == "closing" then
+            onClose(duration)
+        end
+    end)
+    browser:deleteOnClose(true)
+    browser:transparent(true)
+    local f = io.open(HOME.."/Dropbox/HomeBoard/index.html")
+    local html = ""
+    for each in f:lines() do
+        html = html .. each
+    end
+    browser:html(html):bringToFront():show()
+end
+
 localInstall("Lotus", {
     start = true,
     config = {
-        logDir = os.getenv("HOME").."/.log/lotus/",
+        logDir = HOME.."/.log/lotus/",
         sounds = {
             {name = "short", path = "bowl.wav"
-            , notif = {title = "Quick Stretch! #short", withdrawAfter = 0}},
+            , action = function(onDone)
+                showHomeBoard(onDone, function(body)
+                    local journal = hs.execute("printf '%s' `date +%y-%m-%d_%H:%M`")
+                    io.open(HOME.."/Dropbox/HomeBoard/"..journal..".txt", "w")
+                        :write(body)
+                        :close()
+                end)
+            end, notif = {title = "Quick Stretch! #short", withdrawAfter = 0}},
             {name = "long", path = "gong.wav", volume = .5
             , notif = {title = "Take a break! #long", withdrawAfter = 0}},
             {name = "short", path = "bowl.wav"
