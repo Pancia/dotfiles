@@ -79,19 +79,19 @@ function renderMenu()
             , fn = function()
                 obj._paused = false
                 obj._lotusTimer:fire()
-                obj._lotusTimer = obj._lotusTimer:stop()
                 if obj._pauseTimer then
                     obj._pauseTimer:stop()
                     obj._pauseTimer = nil
                 end
-                restartTimer()
+                obj.stopAwarenessSound()
+                obj._lotusTimer = obj._lotusTimer:setNextTrigger(obj._lastNextTrigger)
+                obj._menuRefreshTimer:fire()
             end},
             {title = "restart"
             , fn = function()
                 obj._paused = false
                 obj._soundIdx = 1
                 obj._lotusTimer:fire()
-                obj._lotusTimer = obj._lotusTimer:stop()
                 if obj._pauseTimer then
                     obj._pauseTimer:stop()
                     obj._pauseTimer = nil
@@ -104,6 +104,7 @@ function renderMenu()
             {title = "pause"
             , fn = function()
                 obj.stopAwarenessSound()
+                obj._lastNextTrigger = obj._lotusTimer:nextTrigger()
                 obj._lotusTimer = obj._lotusTimer:stop()
                 if obj._pauseTimer then
                     obj._pauseTimer:stop()
@@ -115,7 +116,6 @@ function renderMenu()
             {title = "pause for >?"
             , fn = function()
                 obj.stopAwarenessSound()
-                obj._lotusTimer = obj._lotusTimer:stop()
                 local frame = hs.screen.primaryScreen():fullFrame()
                 local rect = hs.geometry.rect(
                     frame["x"] + (3 * frame["w"] / 8),
@@ -127,9 +127,17 @@ function renderMenu()
                 uc:setCallback(function(response)
                     local duration = response.body
                     browser:delete()
+                    obj._paused = true
+                    if obj._pauseTimer then
+                        obj._pauseTimer:stop()
+                        obj._pauseTimer = nil
+                    end
+                    obj._menuRefreshTimer:fire()
+                    obj._lastNextTrigger = obj._lotusTimer:nextTrigger()
+                    obj._lotusTimer = obj._lotusTimer:stop()
                     obj._pauseTimer = hs.timer.doAfter(60*duration, function()
                         obj._pauseTimer = nil
-                        obj._lotusTimer = obj._lotusTimer:start()
+                        obj._lotusTimer = obj._lotusTimer:setNextTrigger(obj._lastNextTrigger)
                     end)
                     obj._menuRefreshTimer:fire()
                 end)
@@ -140,12 +148,6 @@ function renderMenu()
                     html = html .. each
                 end
                 browser:html(html):bringToFront():show()
-                obj._paused = true
-                if obj._pauseTimer then
-                    obj._pauseTimer:stop()
-                    obj._pauseTimer = nil
-                end
-                obj._menuRefreshTimer:fire()
             end},
             {title = "view log"
             , fn = function()
