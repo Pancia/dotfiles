@@ -1,3 +1,4 @@
 == TIL ==
+- debug mappings with `:verbose map ...`
 - :sort /pattern/r
 - http://learnvimscriptthehardway.stevelosh.com/

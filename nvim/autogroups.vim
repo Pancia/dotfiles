@@ -12,19 +12,15 @@ augroup Essentials
     au BufEnter * silent! lcd %:p:h " Eqv to `set autochdir`
 augroup END
 
-augroup Todos
-    au!
-    au Syntax * syn match MyTodo /(NOTE|LANDMARK|CONTEXT)/
-          \ containedin=.*Comment,vimCommentTitle
-augroup END
-hi def link MyTodo Todo
-
-" TASK: NOTE: LANDMARK: CONTEXT: asdf
-" FOO:
+" TASK: NOTE: CONTEXT: should all be TASK color
 " NOTE:
 " LANDMARK:
 " CONTEXT:
+" FOO: what is this?
 
+" Bit me in the ass as it remembers mappings by default
+" should not so I can change plugin config & have it fully update
+let &viewoptions="cursor,folds"
 augroup RememberFolds
   autocmd!
   autocmd BufWinLeave * silent! mkview
