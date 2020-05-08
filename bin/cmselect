@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+command="music select $@"
+
+osascript <<EOF
+tell application "iterm2"
+  create window with default profile command "zsh -ic '$command'"
+end tell
+EOF

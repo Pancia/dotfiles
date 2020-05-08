@@ -17,13 +17,15 @@ module MusicCMD
       items = result.split "\n"
       p "items: #{items}" if $options[:verbose]
       if not items.empty?
-        %x< cmus-remote -c >
+        system("cmus-remote --clear")
         items.each do |item|
           files = MusicDB.find item, $options[:filter]
           files.split("\n").each do |f|
-            %x< cmus-remote $MUSIC_DIR/#{f} >
+            system("cmus-remote $MUSIC_DIR/#{f}")
           end
         end
+        system("cmus-remote --raw 'view playlist'")
+        system("cmus-remote --raw 'win-activate'")
       end
     }
   end

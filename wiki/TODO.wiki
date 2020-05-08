@@ -2,6 +2,8 @@
 
 == MAIN ==
 - [.] :lotus: plan, view homeboard videos, review ...
+-     [ ] how to talk: lua -> webview
+- [X] :cmus: bin/cmpick `$@` -> `music select $@` in new window
 
 == BACKLOG ==
 - [ ] :clojure: compare with IDEA/Cursive && conjure-ify [[https://github.com/venantius/vim-cljfmt/tree/master/plugin|vim-cljfmt]]
