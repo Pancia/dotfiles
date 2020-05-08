@@ -6,6 +6,23 @@ augroup MY_VIM_SEXP_MAPPING
 augroup END
 
 function! s:my_vim_sexp_mappings()
+    xmap <buffer> af   <Plug>(sexp_outer_list)
+    omap <buffer> af   <Plug>(sexp_outer_list)
+    xmap <buffer> if   <Plug>(sexp_inner_list)
+    omap <buffer> if   <Plug>(sexp_inner_list)
+    xmap <buffer> aF   <Plug>(sexp_outer_top_list)
+    omap <buffer> aF   <Plug>(sexp_outer_top_list)
+    xmap <buffer> iF   <Plug>(sexp_inner_top_list)
+    omap <buffer> iF   <Plug>(sexp_inner_top_list)
+    xmap <buffer> as   <Plug>(sexp_outer_string)
+    omap <buffer> as   <Plug>(sexp_outer_string)
+    xmap <buffer> is   <Plug>(sexp_inner_string)
+    omap <buffer> is   <Plug>(sexp_inner_string)
+    xmap <buffer> ae   <Plug>(sexp_outer_element)
+    omap <buffer> ae   <Plug>(sexp_outer_element)
+    xmap <buffer> ie   <Plug>(sexp_inner_element)
+    omap <buffer> ie   <Plug>(sexp_inner_element)
+
     nmap <buffer> si   <Plug>(sexp_round_head_wrap_list)
     xmap <buffer> si   <Plug>(sexp_round_head_wrap_list)
     nmap <buffer> sI   <Plug>(sexp_round_tail_wrap_list)
