@@ -86,6 +86,20 @@ end
 
 local HOME = os.getenv("HOME")
 
+local char_to_hex = function(c)
+  return string.format("%%%02X", string.byte(c))
+end
+
+local function urlencode(url)
+  if url == nil then
+    return
+  end
+  url = url:gsub("\n", "\r\n")
+  url = url:gsub("([^%w ])", char_to_hex)
+  url = url:gsub(" ", "+")
+  return url
+end
+
 function showHomeBoard(onClose, onResponse)
     local frame = hs.screen.primaryScreen():fullFrame()
     local rect = hs.geometry.rect(
@@ -110,12 +124,15 @@ function showHomeBoard(onClose, onResponse)
     end)
     browser:deleteOnClose(true)
     browser:transparent(true)
-    local f = io.open(HOME.."/Dropbox/HomeBoard/index.html")
-    local html = ""
-    for each in f:lines() do
-        html = html .. each
+    files = {}
+    for line in hs.execute("find ~/Movies/HomeBoard/ -type f"):gmatch("[^\n]+") do
+        table.insert(files, line)
     end
-    browser:html(html):bringToFront():show()
+    videoToPlay = files[math.random(#files)]
+    hs.printf("videoToPlay: %s", videoToPlay)
+    local f = "file:///"..HOME.."/Dropbox/HomeBoard/index.html?video-url="
+        .. urlencode("file://"..videoToPlay)
+    browser:url(f):bringToFront():show()
 end
 
 localInstall("Lotus", {
@@ -124,6 +141,13 @@ localInstall("Lotus", {
         logDir = HOME.."/.log/lotus/",
         sounds = {
             {name = "short", path = "bowl.wav"
+            , notif = {title = "Quick Stretch! #short", withdrawAfter = 0}},
+            {name = "long", path = "gong.wav", volume = .5
+            , notif = {title = "Take a break! #long", withdrawAfter = 0}},
+            {name = "short", path = "bowl.wav"
+            , notif = {title = "Quick Stretch! #short", withdrawAfter = 0}},
+            {name = "reset", path = "gong.wav", volume = .5
+            , notif = {title = "Take 10 to #review #plan", withdrawAfter = 0}
             , action = function(onDone)
                 showHomeBoard(onDone, function(body)
                     local journal = hs.execute("printf '%s' `date +%y-%m-%d_%H:%M`")
@@ -131,13 +155,7 @@ localInstall("Lotus", {
                         :write(body)
                         :close()
                 end)
-            end, notif = {title = "Quick Stretch! #short", withdrawAfter = 0}},
-            {name = "long", path = "gong.wav", volume = .5
-            , notif = {title = "Take a break! #long", withdrawAfter = 0}},
-            {name = "short", path = "bowl.wav"
-            , notif = {title = "Quick Stretch! #short", withdrawAfter = 0}},
-            {name = "reset", path = "gong.wav", volume = .5
-            , notif = {title = "Take 10 to #review #plan", withdrawAfter = 0}},
+            end},
         },
         interval = { minutes = 30 },
         notifOptions = false,
