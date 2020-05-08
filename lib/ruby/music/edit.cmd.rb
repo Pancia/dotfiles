@@ -18,7 +18,7 @@ module MusicCMD
   def edit_ask(edit_me)
     field = Readline.readline(">?:".reverse).chomp
     case
-    when edit_me.include?(field) || ["marked"].include?(field)
+    when edit_me.include?(field) || ["tags", "marked"].include?(field)
       RbReadline.prefill_prompt(edit_me[field].to_s)
       new_entry = Readline.readline((field+">?:").reverse).chomp
       edit_me[field] = new_entry
@@ -43,6 +43,11 @@ module MusicCMD
     }
     lambda { |item = nil|
       $options[:filter] = ".playlist" if not $options[:filter]
+      music = MusicDB.read
+      tags = music.values.reduce([]) { |tags, x|
+        tags.concat((x["tags"] || "").split(",")).uniq
+      }
+      puts "TAGS: #{tags}"
       to_edit = edit_impl(item)
       raise "FAILED TO FIND ANY ITEMS" if to_edit.empty?
       to_edit.each do |edit_me|
@@ -53,7 +58,6 @@ module MusicCMD
       to_edit = to_edit.reduce({}) { |m, s|
         m[s["id"]] = s; m
       }
-      music = MusicDB.read
       MusicDB.save music.merge to_edit
       MusicDB.tag to_edit.values
     }

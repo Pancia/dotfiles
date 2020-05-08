@@ -6,13 +6,13 @@ module MusicCMD
     opts.banner = "Usage: tag [-s SONG_ID] TAGS*"
     opts.info = "Tag SONG_ID with TAGS"
     opts.separator "    SONG_ID: Song \"id\" or filename"
-    opts.separator "    TAGS format: <tag>[, <tag>]*"
+    opts.separator "    TAGS format: <tag>[ <tag>]*"
     opts.separator ""
     opts.on("-s", "--song-id SONG_ID", "Required: Apply the mark to SONG_ID") { |id|
       $options[:song_id] = id
     }
 
-    lambda { |*tag_args|
+    lambda { |*tags|
       song_id = $options[:song_id]
       raise "NEED SONG ID" if not song_id
       raise "NEED TAGS" if not tag_args
@@ -25,10 +25,11 @@ module MusicCMD
       puts "#{song["playlist"]} | #{song["artist"]} - #{song["name"]}" if not $options[:verbose]
 
       p $options if $options[:verbose]
-      tags = tag_args.map {|s| s.gsub(/^,/, "").gsub(/,$/, "")}
       p tags if $options[:verbose]
-      (song["tags"] ||= []).concat(tags)
-      song["tags"] = song["tags"].uniq
+      song["tags"] = (song["tags"] ||= "")
+        .split(",")
+        .concat(tags).uniq()
+        .join(",")
       p song["tags"]
       MusicDB.save music, song_id if not $options[:dry_run]
       MusicDB.tag [song]

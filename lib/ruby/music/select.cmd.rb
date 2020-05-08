@@ -9,7 +9,7 @@ module MusicCMD
       $options[:filter] = jqf
     }
     opts.on("-t", "--filter-by-tags", "Filter by tags") {
-      $options[:filter] = "select(.tags) | .tags | .[]"
+      $options[:filter] = "select(.tags) | .tags / \",\" | .[]"
     }
     lambda {
       $options[:filter] = ".playlist" if not $options[:filter]

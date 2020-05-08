@@ -1,8 +1,7 @@
 == PRIORITY ==
 
 == MAIN ==
-- [O] :lotus: plan, view homeboard videos, ...
-- [ ] :music: tags array -> csv "tag1[,tag2...]"
+- [.] :lotus: plan, view homeboard videos, review ...
 
 == BACKLOG ==
 - [ ] :clojure: compare with IDEA/Cursive && conjure-ify [[https://github.com/venantius/vim-cljfmt/tree/master/plugin|vim-cljfmt]]
