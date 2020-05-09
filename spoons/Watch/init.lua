@@ -9,11 +9,7 @@ obj.attributions = {
     "Watch icon made by: https://www.flaticon.com/free-icon/clock_2088617",
 }
 
-local function script_path()
-    local str = debug.getinfo(2, "S").source:sub(2)
-    return str:match("(.*/)")
-end
-obj.spoonPath = script_path()
+obj.spoonPath = hs.spoons.scriptPath()
 
 obj.scripts = {}
 obj.interval = 60

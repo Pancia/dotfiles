@@ -11,11 +11,7 @@ obj.attributions = {
     "bowl.wav from: http://naturesoundsfor.me/",
 }
 
-local function script_path()
-    local str = debug.getinfo(2, "S").source:sub(2)
-    return str:match("(.*/)")
-end
-obj.spoonPath = script_path()
+obj.spoonPath = hs.spoons.scriptPath()
 
 obj.sounds = nil
 obj.interval = { minutes = 30 }
