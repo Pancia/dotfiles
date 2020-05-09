@@ -90,10 +90,8 @@ local char_to_hex = function(c)
   return string.format("%%%02X", string.byte(c))
 end
 
-local function urlencode(url)
-  if url == nil then
-    return
-  end
+local function urlEncode(url)
+  if url == nil then return end
   url = url:gsub("\n", "\r\n")
   url = url:gsub("([^%w ])", char_to_hex)
   url = url:gsub(" ", "+")
@@ -109,30 +107,33 @@ function showHomeBoard(onClose, onResponse)
     3 * frame["h"] / 4)
     local uc = hs.webview.usercontent.new("HammerSpoon") -- jsPortName
     local browser
-    local responded = false
-    uc:setCallback(function(response)
-        local body = response.body
-        responded = true
-        browser:delete()
-        onResponse(body)
-    end)
-    browser = hs.webview.newBrowser(rect, {developerExtrasEnabled = true}, uc)
-    browser:windowCallback(function(action, webview)
-        if action == "closing" then
-            onClose(duration)
-        end
-    end)
-    browser:deleteOnClose(true)
-    browser:transparent(true)
     files = {}
     for line in hs.execute("find ~/Movies/HomeBoard/ -type f"):gmatch("[^\n]+") do
         table.insert(files, line)
     end
-    videoToPlay = files[math.random(#files)]
-    hs.printf("videoToPlay: %s", videoToPlay)
+    videoToPlay = function() return files[math.random(#files)] end
+    uc:setCallback(function(response)
+        local body = response.body
+        if body.type == "submit" then
+            browser:delete()
+        elseif body.type == "newVideo" then
+            browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..videoToPlay().."\")")
+        elseif onResponse then
+            onResponse(body)
+        end
+    end)
+    browser = hs.webview.newBrowser(rect, {developerExtrasEnabled = true}, uc)
+    browser:windowCallback(function(action, webview)
+        if action == "closing" then
+            if onClose then onClose() end
+        end
+    end)
+    browser:deleteOnClose(true)
+    browser:transparent(true)
     local f = "file:///"..HOME.."/Dropbox/HomeBoard/index.html?video-url="
-        .. urlencode("file://"..videoToPlay)
+        .. urlEncode("file://"..videoToPlay())
     browser:url(f):bringToFront():show()
+    return browser
 end
 
 localInstall("Lotus", {
