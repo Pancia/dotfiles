@@ -91,8 +91,12 @@ localInstall = function(name, conf)
         , "failed to make dir '%s'", outdir)
         _x("cp "..spoonDir.."/* "..outdir
         , "failed to copy '%s' local spoon to '%s'", spoonDir, outdir)
+        prevFn = conf["fn"]
         conf["fn"] = function(spoon)
             localSpoons[name] = spoon
+            if prevFn then
+                prevFn(spoon)
+            end
         end
         hs.spoons.use(name, conf)
     end
@@ -111,53 +115,15 @@ local function urlEncode(url)
 end
 
 local HOME = os.getenv("HOME")
-local HOMEBOARD = HOME.."/Dropbox/HomeBoard/"
 
-function showHomeBoard(onClose, onResponse)
-    local frame = hs.screen.primaryScreen():fullFrame()
-    local rect = hs.geometry.rect(
-    frame["x"] + 1 * (frame["w"] / 8),
-    frame["y"] + 0 * (frame["h"] / 8),
-    3 * frame["w"] / 4,
-    4 * frame["h"] / 4)
-    local uc = hs.webview.usercontent.new("HammerSpoon") -- jsPortName
-    local browser
-    files = {}
-    for line in hs.execute("find ~/Movies/HomeBoard/ -type f -not -path '*/\\.*'"):gmatch("[^\n]+") do
-        table.insert(files, line)
-    end
-    videoToPlay = function() return files[math.random(#files)] end
-    uc:setCallback(function(response)
-        local body = response.body
-        if body.type == "loaded" then
-            browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..videoToPlay().."\")")
-            local lastPlanFile = hs.execute("printf '%s' $(ls -t "..HOMEBOARD.."/*.plan.txt 2> /dev/null | head -n 1)")
-            if lastPlanFile and not lastPlanFile == '' then
-                local lastPlan = io.open(lastPlanFile, "r"):read("*all")
-                browser:evaluateJavaScript("HOMEBOARD.setReview(".. hs.inspect(lastPlan) ..")")
-            end
-        elseif body.type == "newVideo" then
-            browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..videoToPlay().."\")")
-        elseif body.type == "done" then
-            browser:delete()
-        elseif onResponse then
-            onResponse(body)
-        else
-            hs.printf("Unknown HomeBoard Response: %s", hs.inspect(body))
-        end
-    end)
-    browser = hs.webview.newBrowser(rect, {developerExtrasEnabled = true}, uc)
-    browser:windowCallback(function(action, webview)
-        if action == "closing" then
-            if onClose then onClose() end
-        end
-    end)
-    browser:deleteOnClose(true)
-    browser:transparent(true)
-    local f = "file://"..HOMEBOARD.."/index.html"
-    browser:url(f):bringToFront():show()
-    return browser
-end
+local showHomeBoard = nil
+localInstall("HomeBoard", {
+    start = true,
+    config = {
+        homeBoardPath = HOME.."/Dropbox/HomeBoard/",
+    },
+    fn = function(spoon) showHomeBoard = spoon.showHomeBoard end
+})
 
 localInstall("Lotus", {
     start = true,
@@ -172,21 +138,7 @@ localInstall("Lotus", {
             , notif = {title = "Quick Stretch! #short", withdrawAfter = 0}},
             {name = "reset", path = "gong.wav", volume = .5
             , notif = {title = "Take 10 to #review #plan", withdrawAfter = 0}
-            , action = function(onDone)
-                showHomeBoard(onDone, function(body)
-                    if body.type == "journal" then
-                        local journal = hs.execute("printf '%s' `date +%y-%m-%d_%H:%M`")
-                        io.open(HOMEBOARD..journal..".journal.txt", "w")
-                            :write(body.value)
-                            :close()
-                    elseif body.type == "plan" then
-                        local plan = hs.execute("printf '%s' `date +%y-%m-%d_%H:%M`")
-                        io.open(HOMEBOARD..plan..".plan.txt", "w")
-                            :write(body.value)
-                            :close()
-                    end
-                end)
-            end},
+            , action = showHomeBoard},
         },
         interval = { minutes = 30 },
         notifOptions = false,
