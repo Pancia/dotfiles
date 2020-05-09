@@ -36,34 +36,35 @@ function notify()
 end
 
 function obj:start()
-    obj._prev = hs.hotkey.bind({}, "f7", function()
+    obj._hotkeys = {}
+    table.insert(obj._hotkeys, hs.hotkey.bind({}, "f7", function()
         if isActive() then
             cmusRemote("--prev")
             notify()
         end
-    end)
-    obj._seekBack = hs.hotkey.bind("shift", "f7", function()
+    end))
+    table.insert(obj._hotkeys, hs.hotkey.bind("shift", "f7", function()
         if isActive() then
             cmusRemote("--seek -10")
         end
-    end)
-    obj._pause = hs.hotkey.bind({}, "f8", function()
+    end))
+    table.insert(obj._hotkeys, hs.hotkey.bind({}, "f8", function()
         if isActive() then
             cmusRemote("--pause")
         end
-    end)
-    obj._next = hs.hotkey.bind({}, "f9", function()
+    end))
+    table.insert(obj._hotkeys, hs.hotkey.bind({}, "f9", function()
         if isActive() then
             cmusRemote("--next")
             notify()
         end
-    end)
-    obj._seekNext = hs.hotkey.bind("shift", "f9", function()
+    end))
+    table.insert(obj._hotkeys, hs.hotkey.bind("shift", "f9", function()
         if isActive() then
             cmusRemote("--seek +10")
         end
-    end)
-    obj._volumeDown = hs.hotkey.bind({}, "f19", function()
+    end))
+    table.insert(obj._hotkeys, hs.hotkey.bind({}, "f19", function()
         if isActive() and isPlaying() then
             cmusRemote("--volume -5")
         else
@@ -71,8 +72,8 @@ function obj:start()
             output:setVolume(output:volume() - 5)
             hs.sound.getByName("Pop"):play()
         end
-    end)
-    obj._volumeUp = hs.hotkey.bind({}, "f20", function()
+    end))
+    table.insert(obj._hotkeys, hs.hotkey.bind({}, "f20", function()
         if isActive() and isPlaying() then
             cmusRemote("--volume +5")
         else
@@ -80,28 +81,24 @@ function obj:start()
             output:setVolume(output:volume() + 5)
             hs.sound.getByName("Pop"):play()
         end
-    end)
-    obj._osxVolumeDown = hs.hotkey.bind("cmd", "f19", function()
+    end))
+    table.insert(obj._hotkeys, hs.hotkey.bind("cmd", "f19", function()
         output = hs.audiodevice.defaultOutputDevice()
         output:setVolume(output:volume() - 5)
         hs.sound.getByName("Pop"):play()
-    end)
-    obj._osxVolumeUp = hs.hotkey.bind("cmd", "f20", function()
+    end))
+    table.insert(obj._hotkeys, hs.hotkey.bind("cmd", "f20", function()
         output = hs.audiodevice.defaultOutputDevice()
         output:setVolume(output:volume() + 5)
         hs.sound.getByName("Pop"):play()
-    end)
+    end))
     return self
 end
 
 function obj:stop()
-    obj._prev:delete()
-    obj._prevSeek:delete()
-    obj._pause:delete()
-    obj._next:delete()
-    obj._seekNext:delete()
-    obj._volumeDown:delete()
-    obj._volumeUp:delete()
+    hs.fnutils.each(obj._hotkeys, function(hotkey)
+        hotkey:delete()
+    end)
     return self
 end
 

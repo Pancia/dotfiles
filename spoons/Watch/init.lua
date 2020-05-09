@@ -94,8 +94,12 @@ end
 
 function obj:stop()
     hs.fnutils.ieach(obj.scripts, function(script)
-        script._timer:stop()
-        script._delayedStartTimer:stop()
+        if script._timer then
+            script._timer:stop()
+        end
+        if script._delayedStartTimer then
+            script._delayedStartTimer:stop()
+        end
     end)
     return self
 end

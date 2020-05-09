@@ -9,12 +9,23 @@ hs.loadSpoon("SpoonInstall")
 spoon.SpoonInstall.use_syncinstall = true
 Install=spoon.SpoonInstall
 
+function tryCatch(try, catch)
+    local status, err = pcall(try)
+    if not status then catch(err) end
+end
+
 -- ie: <cmd-ctrl-r>
-Install:andUse("ReloadConfiguration", {
-    hotkeys = {
-        reloadConfiguration = {hs_global_modifier, "r"}
-    }
-})
+local localSpoons = {}
+hs.hotkey.bind(hs_global_modifier, "R", function()
+    hs.fnutils.each(localSpoons, function(spoon)
+        tryCatch(function()
+            if spoon.stop then spoon.stop() end
+        end, function(err)
+            hs.printf("\n\n\nERROR: stop(%s):\n%s\n\n", spoon.name, err)
+        end)
+    end)
+    hs.reload()
+end)
 
 Install:andUse("TextClipboardHistory", {
     hotkeys = {
@@ -80,6 +91,9 @@ localInstall = function(name, conf)
         , "failed to make dir '%s'", outdir)
         _x("cp "..spoonDir.."/* "..outdir
         , "failed to copy '%s' local spoon to '%s'", spoonDir, outdir)
+        conf["fn"] = function(spoon)
+            localSpoons[name] = spoon
+        end
         hs.spoons.use(name, conf)
     end
 end
