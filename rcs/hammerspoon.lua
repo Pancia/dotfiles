@@ -98,8 +98,6 @@ localInstall = function(name, conf)
     end
 end
 
-local HOME = os.getenv("HOME")
-
 local char_to_hex = function(c)
   return string.format("%%%02X", string.byte(c))
 end
@@ -112,28 +110,40 @@ local function urlEncode(url)
   return url
 end
 
+local HOME = os.getenv("HOME")
+local HOMEBOARD = HOME.."/Dropbox/HomeBoard/"
+
 function showHomeBoard(onClose, onResponse)
     local frame = hs.screen.primaryScreen():fullFrame()
     local rect = hs.geometry.rect(
-    frame["x"] + 2 * (frame["w"] / 8),
-    frame["y"] + 1 * (frame["h"] / 8),
-    2 * frame["w"] / 4,
-    3 * frame["h"] / 4)
+    frame["x"] + 1 * (frame["w"] / 8),
+    frame["y"] + 0 * (frame["h"] / 8),
+    3 * frame["w"] / 4,
+    4 * frame["h"] / 4)
     local uc = hs.webview.usercontent.new("HammerSpoon") -- jsPortName
     local browser
     files = {}
-    for line in hs.execute("find ~/Movies/HomeBoard/ -type f"):gmatch("[^\n]+") do
+    for line in hs.execute("find ~/Movies/HomeBoard/ -type f -not -path '*/\\.*'"):gmatch("[^\n]+") do
         table.insert(files, line)
     end
     videoToPlay = function() return files[math.random(#files)] end
     uc:setCallback(function(response)
         local body = response.body
-        if body.type == "submit" then
-            browser:delete()
+        if body.type == "loaded" then
+            browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..videoToPlay().."\")")
+            local lastPlanFile = hs.execute("printf '%s' $(ls -t "..HOMEBOARD.."/*.plan.txt 2> /dev/null | head -n 1)")
+            if lastPlanFile and not lastPlanFile == '' then
+                local lastPlan = io.open(lastPlanFile, "r"):read("*all")
+                browser:evaluateJavaScript("HOMEBOARD.setReview(".. hs.inspect(lastPlan) ..")")
+            end
         elseif body.type == "newVideo" then
             browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..videoToPlay().."\")")
+        elseif body.type == "done" then
+            browser:delete()
         elseif onResponse then
             onResponse(body)
+        else
+            hs.printf("Unknown HomeBoard Response: %s", hs.inspect(body))
         end
     end)
     browser = hs.webview.newBrowser(rect, {developerExtrasEnabled = true}, uc)
@@ -144,8 +154,7 @@ function showHomeBoard(onClose, onResponse)
     end)
     browser:deleteOnClose(true)
     browser:transparent(true)
-    local f = "file:///"..HOME.."/Dropbox/HomeBoard/index.html?video-url="
-        .. urlEncode("file://"..videoToPlay())
+    local f = "file://"..HOMEBOARD.."/index.html"
     browser:url(f):bringToFront():show()
     return browser
 end
@@ -165,10 +174,17 @@ localInstall("Lotus", {
             , notif = {title = "Take 10 to #review #plan", withdrawAfter = 0}
             , action = function(onDone)
                 showHomeBoard(onDone, function(body)
-                    local journal = hs.execute("printf '%s' `date +%y-%m-%d_%H:%M`")
-                    io.open(HOME.."/Dropbox/HomeBoard/"..journal..".txt", "w")
-                        :write(body)
-                        :close()
+                    if body.type == "journal" then
+                        local journal = hs.execute("printf '%s' `date +%y-%m-%d_%H:%M`")
+                        io.open(HOMEBOARD..journal..".journal.txt", "w")
+                            :write(body.value)
+                            :close()
+                    elseif body.type == "plan" then
+                        local plan = hs.execute("printf '%s' `date +%y-%m-%d_%H:%M`")
+                        io.open(HOMEBOARD..plan..".plan.txt", "w")
+                            :write(body.value)
+                            :close()
+                    end
                 end)
             end},
         },

@@ -1,13 +1,17 @@
 == PRIORITY ==
+- [ ] :nvim: terminal buffer names empty
+- [ ] :nvim: buffer/tab names stutter when switching
+- [ ] :nvim: how git markers always? (does it conflict with ALE?)
 
 == MAIN ==
-- [o] :lotus: plan, review ...
+- [ ] :spoon: add button to open homeboard
+- [ ] :homeboard: playback speed controls
+- [ ] :homeboard: ? better video player ?
 
 == BACKLOG ==
 - [ ] :clojure: compare with IDEA/Cursive && conjure-ify [[https://github.com/venantius/vim-cljfmt/tree/master/plugin|vim-cljfmt]]
 - [ ] :clojure: fix highlighting: https://github.com/guns/vim-clojure-highlight/blob/master/autoload/vim_clojure_highlight.vim
 - [ ] :clojure: ? rainbow parens
-- [ ] :nvim: terminal buffer names empty
 - [ ] :bin/cmds: should set iterm2 tab title
 - [ ] :karabiner: transfer installs/k*/karabiner.json to karabiner-elements (how ??)
 - [ ] :nvim: vim-plug lazy load plugins `vim --startuptime`
