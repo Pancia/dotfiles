@@ -170,7 +170,8 @@ localInstall("Watch", {
     },
 })
 
+local LIB = "/Users/pancia/dotfiles/lib/fennel/"
 fennel = require("fennel")
-fennel.path = "/Users/pancia/dotfiles/lib/fennel/?.fnl;" .. fennel.path
+fennel.path = LIB.."/?.fnl;"..LIB.."/spacehammer/?.fnl;".. fennel.path
 table.insert(package.loaders or package.searchers, fennel.searcher)
 require("core")
