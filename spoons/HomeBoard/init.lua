@@ -32,8 +32,8 @@ function obj:showHomeBoard(onClose)
         if body.type == "loaded" then
             browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..videoToPlay().."\")")
             local lastPlanFile = hs.execute("printf '%s' $(ls -t "..obj.homeBoardPath.."/*.plan.txt 2> /dev/null | head -n 1)")
-            hs.printf("lastPlanFile: %s", lastPlanFile)
-            if lastPlanFile and not lastPlanFile == '' then
+            hs.printf("lastPlanFile: %s", hs.inspect(lastPlanFile))
+            if lastPlanFile and lastPlanFile ~= '' then
                 local lastPlan = io.open(lastPlanFile, "r"):read("*all")
                 browser:evaluateJavaScript("HOMEBOARD.setReview(".. hs.inspect(lastPlan) ..")")
             end
