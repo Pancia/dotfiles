@@ -4,8 +4,6 @@
 - [ ] :nvim: how git markers always? (does it conflict with ALE?)
 
 == MAIN ==
-- [ ] :spoon: add button to open homeboard
-- [ ] :homeboard: menubar icon
 - [ ] :homeboard: playback speed controls
 - [ ] :homeboard: ? better video player ?
 

@@ -5,6 +5,11 @@ obj.version = "1.0"
 obj.author = "Anthony D'Ambrosio <anthony.dayzerostudio@gmail.com>"
 obj.homepage = "https://github.com/pancia/dotfiles/tree/master/spoons/homeboard"
 obj.license = "MIT - https://opensource.org/licenses/MIT"
+obj.attributions = {
+    "Home icon from: https://www.flaticon.com/free-icon/home_553376"
+}
+
+obj.spoonPath = hs.spoons.scriptPath()
 
 function obj:init() end
 
@@ -65,7 +70,7 @@ end
 function obj:start()
     obj._menubar = hs.menubar.new()
     obj._menubar:setClickCallback(obj.showHomeBoard)
-    obj._menubar:setTitle("HomeBoard")
+    obj._menubar:setIcon(obj.spoonPath.."/home.png")
 end
 
 function obj:stop()
