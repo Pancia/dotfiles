@@ -4,7 +4,9 @@
 - [ ] :nvim: how git markers always? (does it conflict with ALE?)
 
 == MAIN ==
-- [ ] :homeboard: playback speed controls
+- [ ] :spoons: port to fennel!
+- [ ] :spacehammer: dont timeout modal automatically
+- [ ] :spacehammer: alt-tab use opt-n/p instead
 
 == BACKLOG ==
 - [ ] :clojure: compare with IDEA/Cursive && conjure-ify [[https://github.com/venantius/vim-cljfmt/tree/master/plugin|vim-cljfmt]]
@@ -12,6 +14,7 @@
 - [ ] :clojure: ? rainbow parens
 - [ ] :bin/cmds: should set iterm2 tab title
 - [ ] :karabiner: transfer installs/k*/karabiner.json to karabiner-elements (how ??)
+- [ ] :homeboard: playback speed controls
 - [ ] :nvim: vim-plug lazy load plugins `vim --startuptime`
 - [ ] :zsh: silence antigen bundle on `.zshrc`
 - [ ] :zsh: antigen: install using brew

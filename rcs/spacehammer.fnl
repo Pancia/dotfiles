@@ -4,90 +4,23 @@
 (local windows (require :windows))
 (local slack (require :slack))
 (local vim (require :vim))
+(local cmus-remote (require :cmus-remote))
 
 (local {:concat concat :logf logf} (require :lib.functional))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Table of Contents
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; [x] w - windows
-;; [x] |-- w - Last window
-;; [x] |-- cmd + hjkl - jumping
-;; [x] |-- hjkl - halves
-;; [x] |-- alt + hjkl - increments
-;; [x] |-- shift + hjkl - resize
-;; [x] |-- n, p - next, previous screen
-;; [x] |-- shift + n, p - up, down screen
-;; [x] |-- g - grid
-;; [x] |-- m - maximize
-;; [x] |-- c - center
-;; [x] |-- u - undo
-;;
-;; [x] a - apps
-;; [x] |-- g - chrome
-;; [x] |-- f - firefox
-;; [x] |-- i - iTerm
-;; [x] |-- s - Slack
-;;
-;; [x] j - jump
-;;
-;; [x] m - media
-;; [x] |-- h - previous track
-;; [x] |-- l - next track
-;; [x] |-- k - volume up
-;; [x] |-- j - volume down
-;; [x] |-- s - play\pause
-;; [x] |-- a - launch player
-;;
-;; [x] cmd-n - next-app
-;; [x] cmd-p - prev-app
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Initialize
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Actions
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(fn activator
-  [app-name]
-  "
-  A higher order function to activate a target app. It's useful for quickly
-  binding a modal menu action or hotkey action to launch or focus on an app.
-  Takes a string application name
-  Returns a function to activate that app.
-
-  Example:
-  (local launch-firefox (activator \"Firefox\"))
-  (launch-firefox)
-  "
+(fn activator [app-name]
   (fn activate []
     (windows.activate-app app-name)))
 
-(fn toggle-console
-  []
-  "
-  A simple action function to toggle the hammer spoon console.
-  Change the keybinding in the common keys section of this config file.
-  "
+(fn toggle-console []
   (if-let [console (hs.console.hswindow)]
    (hs.closeConsole)
    (hs.openConsole)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; General
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (local return
        {:key :space
         :title "Back"
         :action :previous})
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Windows
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (local window-jumps
        [{:mods [:cmd]
@@ -213,10 +146,6 @@
           :title "Undo"
           :action "windows:undo-action"}]))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Apps Menu
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 (local app-bindings
        [return
         {:key :g
@@ -235,25 +164,31 @@
        [return
         {:key :s
          :title "Play or Pause"
-         :action "multimedia:play-or-pause"}
-        {:key :h
+         :action cmus-remote.play-or-pause}
+        {:key :p
          :title "Prev Track"
-         :action "multimedia:prev-track"}
-        {:key :l
+         :action cmus-remote.prev-track
+         :repeatable true}
+        {:key :n
          :title "Next Track"
-         :action "multimedia:next-track"}
+         :action cmus-remote.next-track
+         :repeatable true}
+        {:key :l
+         :title "Seek Forwards"
+         :action cmus-remote.seek-forwards
+         :repeatable true}
+        {:key :h
+         :title "Seek Backwards"
+         :action cmus-remote.seek-backwards
+         :repeatable true}
         {:key :j
          :title "Volume Down"
-         :action "multimedia:volume-down"
+         :action cmus-remote.dec-volume
          :repeatable true}
         {:key :k
          :title "Volume Up"
-         :action "multimedia:volume-up"
+         :action cmus-remote.inc-volume
          :repeatable true}])
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Main Menu & Config
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (local menu-items
        [{:key :space
@@ -285,11 +220,6 @@
         {:mods [:cmd :ctrl]
          :key "`"
          :action toggle-console}])
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; App Specific Config
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (local browser-keys
        [{:mods [:cmd :shift]
@@ -388,10 +318,5 @@
         :keys common-keys
         :apps apps
         :hyper {:key :F18}})
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Exports
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 config
