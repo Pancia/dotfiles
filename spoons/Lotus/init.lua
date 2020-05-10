@@ -189,12 +189,12 @@ function notifCallback(notif)
         if action then
             action(function()
                 obj._paused = false
-                restartTimer()
                 obj._soundIdx = (obj._soundIdx % #obj.sounds) + 1
+                restartTimer()
             end)
         else
-            restartTimer()
             obj._soundIdx = (obj._soundIdx % #obj.sounds) + 1
+            restartTimer()
         end
     end
 end
