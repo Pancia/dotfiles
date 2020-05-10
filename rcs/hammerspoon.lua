@@ -116,13 +116,15 @@ end
 
 local HOME = os.getenv("HOME")
 
-local showHomeBoard = nil
+local HomeBoard = nil
 localInstall("HomeBoard", {
     start = true,
     config = {
         homeBoardPath = HOME.."/Dropbox/HomeBoard/",
     },
-    fn = function(spoon) showHomeBoard = spoon.showHomeBoard end
+    fn = function(spoon)
+        HomeBoard = spoon
+    end
 })
 
 localInstall("Lotus", {
@@ -138,10 +140,9 @@ localInstall("Lotus", {
             , notif = {title = "Quick Stretch! #short", withdrawAfter = 0}},
             {name = "reset", path = "gong.wav", volume = .5
             , notif = {title = "Take 10 to #review #plan", withdrawAfter = 0}
-            , action = showHomeBoard},
+            , action = function(onDone) HomeBoard:showHomeBoard(onDone) end },
         },
         interval = { minutes = 30 },
-        notifOptions = false,
     },
 })
 

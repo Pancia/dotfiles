@@ -15,7 +15,6 @@ obj.spoonPath = hs.spoons.scriptPath()
 
 obj.sounds = nil
 obj.interval = { minutes = 30 }
-obj.notifOptions = nil
 
 function obj:playAwarenessSound()
     local sound = obj.sounds[obj._soundIdx]
@@ -24,7 +23,6 @@ function obj:playAwarenessSound()
         and hs.sound.getByName(sound.name)
         or hs.sound.getByFile(obj.spoonPath.."/"..sound.path)
     obj.lastPlayedSound = s:volume(volume):play()
-    obj._soundIdx = (obj._soundIdx % #obj.sounds) + 1
     hs.execute("mkdir -p "..obj.logDir)
     hs.execute("echo $(date +%T) -- '"..(sound.name or sound.path).."' >> "..obj.logDir.."/log")
     return self
@@ -144,6 +142,8 @@ function renderMenu()
                     _, refreshRate = userIntervalToSeconds(obj.interval)
                     obj._pauseTimer = hs.timer.doAfter(refreshRate*duration, function()
                         obj._pauseTimer = nil
+                        obj._paused = false
+                        obj._menuRefreshTimer:fire()
                         obj._lotusTimer = obj._lotusTimer:setNextTrigger(obj._lastNextTrigger)
                     end)
                     obj._menuRefreshTimer:fire()
@@ -190,9 +190,11 @@ function notifCallback(notif)
             action(function()
                 obj._paused = false
                 restartTimer()
+                obj._soundIdx = (obj._soundIdx % #obj.sounds) + 1
             end)
         else
             restartTimer()
+            obj._soundIdx = (obj._soundIdx % #obj.sounds) + 1
         end
     end
 end
@@ -227,12 +229,34 @@ function userIntervalToSeconds(x)
 end
 
 function obj:start()
-    obj._soundIdx = #obj.sounds
+    local saved = {
+        ["soundIdx"] = hs.settings.get("soundIdx"),
+        ["pausedFor"] = hs.settings.get("pausedFor"),
+        ["nextTrigger"] = hs.settings.get("nextTrigger"),
+    }
+    hs.printf("Lotus started with: %s", hs.inspect(saved))
+    obj._soundIdx = saved["soundIdx"] or #obj.sounds
     obj._menubar = hs.menubar.new():setMenu(renderMenu)
 
     interval, refreshRate = userIntervalToSeconds(obj.interval)
-    obj._lotusTimer = hs.timer.doEvery(interval, lotusBlock)
-    obj:playAwarenessSound()
+    if saved["pausedFor"] then
+        obj._paused = true
+        obj._lastNextTrigger = saved["nextTrigger"]
+        obj._pauseTimer = hs.timer.doAfter(refreshRate*saved["pausedFor"], function()
+            obj._pauseTimer = nil
+            obj._paused = false
+            obj._lotusTimer = hs.timer.doEvery(interval, lotusBlock)
+            obj._lotusTimer = obj._lotusTimer:setNextTrigger(obj._lastNextTrigger)
+            obj._menuRefreshTimer:fire()
+        end)
+    else
+        obj._lotusTimer = hs.timer.doEvery(interval, lotusBlock)
+        obj._lotusTimer:setNextTrigger(saved["nextTrigger"])
+    end
+
+    if not saved["soundIdx"] then
+        obj:playAwarenessSound()
+    end
 
     renderMenuBar()
     obj._menuRefreshTimer = hs.timer.doEvery(refreshRate, renderMenuBar)
@@ -240,7 +264,19 @@ function obj:start()
     return self
 end
 
+function saveState()
+    hs.settings.set("soundIdx", obj._soundIdx)
+    if obj._paused then
+        hs.settings.set("pausedFor", obj._pauseTimer:nextTrigger())
+        hs.settings.set("nextTrigger", obj._lastNextTrigger)
+    else
+        hs.settings.set("pausedFor", nil)
+        hs.settings.set("nextTrigger", obj._lotusTimer:nextTrigger())
+    end
+end
+
 function obj:stop()
+    saveState()
     if obj._pauseTimer then
         obj._pauseTimer:stop()
         obj._pauseTimer = nil
