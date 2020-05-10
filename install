@@ -47,10 +47,15 @@ task_ruby () {
     bundle install
 }
 
+task_lua() {
+    luarocks install fennel
+}
+
 task_all () {
     task_init_dotfiles
     task_brew
     task_ruby
+    task_luarocks
     task_fonts
     task_gitconfig
     task_neovim
@@ -69,6 +74,7 @@ main() {
         neovim|nvim|vim) task_neovim ;;
         opt) task_opt ;;
         ruby) task_ruby ;;
+        lua) task_lua ;;
         *) echo "Failed to recognize: '$@'" && exit 1 ;;
     esac
 }

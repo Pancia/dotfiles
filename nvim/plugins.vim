@@ -73,6 +73,7 @@ Plug 'guns/vim-sexp', {'for': 'clojure'}
 " LUA {{{
 "Plug 'xolox/vim-misc', {'for': 'lua'}
 "Plug 'xolox/vim-lua-ftplugin', {'for': 'lua'}
+Plug 'bakpakin/fennel.vim'
 " }}}
 
 " RUBY {{{
