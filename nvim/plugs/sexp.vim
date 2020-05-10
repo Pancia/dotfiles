@@ -53,6 +53,9 @@ function! s:my_vim_sexp_mappings()
     nmap <buffer> sO   <Plug>(sexp_raise_element)
     xmap <buffer> sO   <Plug>(sexp_raise_element)
 
+    nnoremap <silent> s :<c-u>WhichKey       's'<CR>
+    vnoremap <silent> s :<c-u>WhichKeyVisual 's'<CR>
+
     nmap <buffer> (    <Plug>(sexp_move_to_prev_bracket)
     xmap <buffer> (    <Plug>(sexp_move_to_prev_bracket)
     omap <buffer> (    <Plug>(sexp_move_to_prev_bracket)
