@@ -6,6 +6,7 @@
 == MAIN ==
 - [ ] :homeboard: playback speed controls
 - [ ] :homeboard: ? better video player ?
+- [ ] :lotus: remember timer progress through restart
 
 == BACKLOG ==
 - [ ] :clojure: compare with IDEA/Cursive && conjure-ify [[https://github.com/venantius/vim-cljfmt/tree/master/plugin|vim-cljfmt]]

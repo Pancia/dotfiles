@@ -63,7 +63,8 @@ function obj:showHomeBoard(onClose)
     browser:deleteOnClose(true)
     browser:transparent(true)
     local f = "file://"..obj.homeBoardPath.."/index.html"
-    browser:url(f):bringToFront():show()
+    browser:url(f):show()
+    browser:hswindow():focus()
     return browser
 end
 
