@@ -2,9 +2,8 @@ let g:unite_source_history_yank_enable=1
 
 nnoremap ; :Unite menu<CR>
 
-nnoremap ,? ?
-nnoremap ? :WhichKey '?'<CR>
-call which_key#register('?', "g:unite_which_key_map")
+nnoremap \ :WhichKey '\'<CR>
+call which_key#register('\', "g:unite_which_key_map")
 let g:unite_which_key_map = {
             \ 'name' : '+unite' ,
             \ ' ' : [':Unite source', '#source'],
