@@ -22,10 +22,10 @@
          :key :space
          :action "lib.modal:activate-modal"}
         {:mods [:alt]
-         :key :n
+         :key :tab
          :action "apps:next-app"}
-        {:mods [:alt]
-         :key :p
+        {:mods [:alt :shift]
+         :key :tab
          :action "apps:prev-app"}
         {:mods [:cmd :ctrl]
          :key "`"
