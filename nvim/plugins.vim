@@ -21,7 +21,10 @@ Plug 'tpope/vim-repeat'
 Plug 'tpope/vim-speeddating'
 Plug 'tpope/vim-surround'
 Plug 'mbbill/undotree'
-"Plug 'kshenoy/vim-signature' " Marks
+Plug 'kshenoy/vim-signature' " Marks
+Plug 'junegunn/vim-peekaboo' " Preview Registers
+Plug 'RRethy/vim-illuminate' " Highlight cursor word matches
+Plug 'airblade/vim-gitgutter'
 " }}}
 
 " DIR/FILE VIEWER {{{
@@ -30,7 +33,7 @@ Plug 'Shougo/vimfiler.vim'
 " }}}
 
 " SEARCH {{{
-Plug 'mileszs/ack.vim'
+Plug 'dyng/ctrlsf.vim'
 " }}}
 
 " WIKI {{{
@@ -85,6 +88,8 @@ Plug 'calviken/vim-gdscript3'
 " }}}
 
 call plug#end()
+
+let g:unite_source_menu_menus = get(g:, 'unite_source_menu_menus', {})
 
 for plug_conf in split(globpath(expand("<sfile>:p:h"), 'plugs/*.vim'), '\n')
     execute 'source ' . plug_conf
