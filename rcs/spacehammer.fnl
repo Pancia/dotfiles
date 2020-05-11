@@ -18,7 +18,7 @@
    (hs.openConsole)))
 
 (local common-keys
-       [{:mods [:shift]
+       [{:mods [:ctrl]
          :key :space
          :action "lib.modal:activate-modal"}
         {:mods [:alt]

@@ -1,6 +1,6 @@
 let g:unite_source_history_yank_enable=1
 
-nnoremap <c-space> :Unite menu<CR>
+nnoremap ; :Unite menu<CR>
 
 nnoremap ,? ?
 nnoremap ? :WhichKey '?'<CR>
