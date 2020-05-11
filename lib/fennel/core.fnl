@@ -1,3 +1,6 @@
 (print "CORE FNL")
 
-(require "spacehammer.core")
+(local cmus (require :cmus))
+(cmus.bind-media-keys)
+
+(require :spacehammer.core)

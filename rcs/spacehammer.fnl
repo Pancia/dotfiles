@@ -4,7 +4,7 @@
 (local windows (require :windows))
 (local slack (require :slack))
 (local vim (require :vim))
-(local cmus-remote (require :cmus-remote))
+(local cmus (require :cmus))
 
 (local {:concat concat :logf logf} (require :lib.functional))
 
@@ -164,30 +164,30 @@
        [return
         {:key :s
          :title "Play or Pause"
-         :action cmus-remote.play-or-pause}
+         :action cmus.play-or-pause}
         {:key :p
          :title "Prev Track"
-         :action cmus-remote.prev-track
+         :action cmus.prev-track
          :repeatable true}
         {:key :n
          :title "Next Track"
-         :action cmus-remote.next-track
+         :action cmus.next-track
          :repeatable true}
         {:key :l
          :title "Seek Forwards"
-         :action cmus-remote.seek-forwards
+         :action cmus.seek-forwards
          :repeatable true}
         {:key :h
          :title "Seek Backwards"
-         :action cmus-remote.seek-backwards
+         :action cmus.seek-backwards
          :repeatable true}
         {:key :j
          :title "Volume Down"
-         :action cmus-remote.dec-volume
+         :action cmus.dec-volume
          :repeatable true}
         {:key :k
          :title "Volume Up"
-         :action cmus-remote.inc-volume
+         :action cmus.inc-volume
          :repeatable true}])
 
 (local menu-items

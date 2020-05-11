@@ -31,36 +31,6 @@ Install:andUse("TextClipboardHistory", {
     }, start = true,
 })
 
-openWifiWiki = function(file)
-    local frame = hs.screen.primaryScreen():fullFrame()
-    rect = hs.geometry.rect(
-    frame["x"] + (frame["w"] / 3),
-    frame["y"] + (frame["h"] / 4),
-    frame["w"] / 3,
-    frame["h"] / 2)
-    url = "file://"..file
-    hs.webview.newBrowser(rect):url(url):show()
-end
-
-Install:andUse("WiFiTransitions", {
-    config = {
-        actions = {
-            {
-                doc = "Show ~/Dropbox/wiki/{ssid}.wiki if it exists",
-                fn = function(_,_,_,ssid)
-                    wiki = "/Users/Anthony/Dropbox/wiki/"..ssid..".html"
-                    if hs.fs.attributes(wiki) ~= nil then
-                        hs.notify.new(hs.fnutils.partial(openWifiWiki, wiki), {
-                            title="View: "..ssid..".wiki"
-                        }):send()
-                    end
-                end
-            }
-        },
-    },
-    start = true,
-})
-
 Install:andUse("FadeLogo", {
     config = {
         default_run = 1.0,
@@ -100,18 +70,6 @@ localInstall = function(name, conf)
     end
 end
 
-local char_to_hex = function(c)
-  return string.format("%%%02X", string.byte(c))
-end
-
-local function urlEncode(url)
-  if url == nil then return end
-  url = url:gsub("\n", "\r\n")
-  url = url:gsub("([^%w ])", char_to_hex)
-  url = url:gsub(" ", "+")
-  return url
-end
-
 local HOME = os.getenv("HOME")
 
 local HomeBoard = nil
@@ -142,11 +100,6 @@ localInstall("Lotus", {
         },
         interval = { minutes = 30 },
     },
-})
-
-localInstall("Cmus", {
-    start = true,
-    config = {},
 })
 
 localInstall("Watch", {
