@@ -52,11 +52,11 @@
   (hs.hotkey.bind {} "f8" play-or-pause)
   (hs.hotkey.bind {} "f9" next-track))
 
-{:play-or-pause play-or-pause
- :prev-track prev-track
- :next-track next-track
- :seek-forwards seek-forwards
- :seek-backwards seek-backwards
- :inc-volume inc-volume
- :dec-volume dec-volume
- :bind-media-keys bind-media-keys}
+{: play-or-pause
+ : prev-track
+ : next-track
+ : seek-forwards
+ : seek-backwards
+ : inc-volume
+ : dec-volume
+ : bind-media-keys}

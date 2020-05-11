@@ -5,7 +5,6 @@
 
 == MAIN ==
 - [ ] :spoons: port to fennel!
-- [ ] :spacehammer: dont timeout modal automatically
 - [ ] :spacehammer: alt-tab use opt-n/p instead
 - [ ] :nvim: https://github.com/dyng/ctrlsf.vim
 - [ ] :nvim: https://github.com/airblade/vim-gitgutter

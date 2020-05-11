@@ -1,5 +1,3 @@
-(print "CORE FNL")
-
 (local cmus (require :cmus))
 (cmus.bind-media-keys)
 

@@ -168,27 +168,33 @@
         {:key :p
          :title "Prev Track"
          :action cmus.prev-track
-         :repeatable true}
+         :repeatable true
+         :timeout false}
         {:key :n
          :title "Next Track"
          :action cmus.next-track
-         :repeatable true}
+         :repeatable true
+         :timeout false}
         {:key :l
          :title "Seek Forwards"
          :action cmus.seek-forwards
-         :repeatable true}
+         :repeatable true
+         :timeout false}
         {:key :h
          :title "Seek Backwards"
          :action cmus.seek-backwards
-         :repeatable true}
+         :repeatable true
+         :timeout false}
         {:key :j
          :title "Volume Down"
          :action cmus.dec-volume
-         :repeatable true}
+         :repeatable true
+         :timeout false}
         {:key :k
          :title "Volume Up"
          :action cmus.inc-volume
-         :repeatable true}])
+         :repeatable true
+         :timeout false}])
 
 (local menu-items
        [{:key :space
@@ -205,7 +211,8 @@
          :action "windows:jump"}
         {:key :m
          :title "Media"
-         :items media-bindings}])
+         :items media-bindings
+         :timeout false}])
 
 (local common-keys
        [{:mods [:cmd]
