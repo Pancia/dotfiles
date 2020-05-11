@@ -17,6 +17,20 @@
    (hs.closeConsole)
    (hs.openConsole)))
 
+(local common-keys
+       [{:mods [:shift]
+         :key :space
+         :action "lib.modal:activate-modal"}
+        {:mods [:alt]
+         :key :n
+         :action "apps:next-app"}
+        {:mods [:alt]
+         :key :p
+         :action "apps:prev-app"}
+        {:mods [:cmd :ctrl]
+         :key "`"
+         :action toggle-console}])
+
 (local return
        {:key :space
         :title "Back"
@@ -213,20 +227,6 @@
          :title "Media"
          :items media-bindings
          :timeout false}])
-
-(local common-keys
-       [{:mods [:cmd]
-         :key :space
-         :action "lib.modal:activate-modal"}
-        {:mods [:alt]
-         :key :n
-         :action "apps:next-app"}
-        {:mods [:alt]
-         :key :p
-         :action "apps:prev-app"}
-        {:mods [:cmd :ctrl]
-         :key "`"
-         :action toggle-console}])
 
 (local browser-keys
        [{:mods [:cmd :shift]
