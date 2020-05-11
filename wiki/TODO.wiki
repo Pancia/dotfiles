@@ -7,6 +7,13 @@
 - [ ] :spoons: port to fennel!
 - [ ] :spacehammer: dont timeout modal automatically
 - [ ] :spacehammer: alt-tab use opt-n/p instead
+- [ ] :nvim: https://github.com/dyng/ctrlsf.vim
+- [ ] :nvim: https://github.com/airblade/vim-gitgutter
+- [ ] :nvim: https://github.com/RRethy/vim-illuminate
+- [ ] :nvim: https://github.com/junegunn/vim-peekaboo
+- [ ] :nvim: https://github.com/airblade/vim-rooter
+- [ ] :nvim: https://github.com/kshenoy/vim-signature
+- [ ] :nvim: try `set diffopt+=internal,algorithm:patience`
 
 == BACKLOG ==
 - [ ] :clojure: compare with IDEA/Cursive && conjure-ify [[https://github.com/venantius/vim-cljfmt/tree/master/plugin|vim-cljfmt]]
