@@ -4,7 +4,6 @@
 
 == MAIN ==
 - [ ] :nvim: try `set diffopt+=internal,algorithm:patience`
-- [ ] :music: call cmedit/cmselect from spacehammer menu
 
 == BACKLOG ==
 - [ ] :clojure: compare with IDEA/Cursive && conjure-ify [[https://github.com/venantius/vim-cljfmt/tree/master/plugin|vim-cljfmt]]

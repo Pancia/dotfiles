@@ -52,6 +52,18 @@
   (hs.hotkey.bind {} "f8" play-or-pause)
   (hs.hotkey.bind {} "f9" next-track))
 
+(fn edit-track []
+  (when (and (is-active?) (is-playing?))
+    (hs.execute "cmedit" true)))
+
+(fn select-by-playlist []
+  (when (is-active?)
+    (hs.execute "cmselect" true)))
+
+(fn select-by-tags []
+  (when (is-active?)
+    (hs.execute "cmselect --filter-by-tags" true)))
+
 {: play-or-pause
  : prev-track
  : next-track
@@ -59,4 +71,7 @@
  : seek-backwards
  : inc-volume
  : dec-volume
- : bind-media-keys}
+ : bind-media-keys
+ : edit-track
+ : select-by-playlist
+ : select-by-tags}

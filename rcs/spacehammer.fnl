@@ -176,17 +176,26 @@
 
 (local media-bindings
        [return
-        {:key :s
+        {:key :c
          :title "Play or Pause"
          :action cmus.play-or-pause}
-        {:key :p
-         :title "Prev Track"
-         :action cmus.prev-track
-         :repeatable true
-         :timeout false}
+        {:key :e
+         :title "Edit Track"
+         :action cmus.edit-track}
+        {:key :s
+         :title "Select Track by Playlist"
+         :action cmus.select-by-playlist}
+        {:key :t
+         :title "Select Track by Tags"
+         :action cmus.select-by-tags}
         {:key :n
          :title "Next Track"
          :action cmus.next-track
+         :repeatable true
+         :timeout false}
+        {:key :p
+         :title "Prev Track"
+         :action cmus.prev-track
          :repeatable true
          :timeout false}
         {:key :l
