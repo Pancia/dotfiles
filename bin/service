@@ -11,14 +11,6 @@ $service_dir = "./.config/services/"
 system("mkdir -p #{$home_dir}/#{$command_dir}")
 system("mkdir -p #{$home_dir}/#{$service_dir}")
 
-for pidf in %x[find #{$home_dir}/#{$service_dir}/*.pid 2> /dev/null].split
-  is_running = %x[ps -p $(cat #{pidf}) > /dev/null \; echo $?].strip
-  if is_running != "0" then
-    name = %x[ basename #{pidf} .pid ].strip
-    execute("rm #{log_for(name)} #{pid_for(name)}")
-  end
-end
-
 def log_for(name)
   "#{$home_dir}/#{$service_dir}/#{name}.log"
 end
@@ -30,6 +22,14 @@ end
 def execute(cmd)
   puts cmd if $options[:verbose]
   system(cmd)
+end
+
+for pidf in %x[find #{$home_dir}/#{$service_dir}/*.pid 2> /dev/null].split
+  is_running = %x[ps -p $(cat #{pidf}) > /dev/null \; echo $?].strip
+  if is_running != "0" then
+    name = %x[ basename #{pidf} .pid ].strip
+    execute("rm #{log_for(name)} #{pid_for(name)}")
+  end
 end
 
 class ServiceCMDS
