@@ -16,12 +16,7 @@
                         "manipulators": [
                             {
                                 "from": {
-                                    "key_code": "right_control",
-                                    "modifiers": {
-                                        "optional": [
-                                            "any"
-                                        ]
-                                    }
+                                    "key_code": "right_control"
                                 },
                                 "to": [
                                     {
@@ -31,6 +26,49 @@
                                 "to_if_alone": [
                                     {
                                         "key_code": "escape"
+                                    }
+                                ],
+                                "type": "basic"
+                            }
+                        ]
+                    },
+                    {
+                        "description": "right shift alone = escape",
+                        "manipulators": [
+                            {
+                                "from": {
+                                    "key_code": "right_shift"
+                                },
+                                "to": [
+                                    {
+                                        "key_code": "right_shift"
+                                    }
+                                ],
+                                "to_if_alone": [
+                                    {
+                                        "key_code": "escape"
+                                    }
+                                ],
+                                "type": "basic"
+                            }
+                        ]
+                    },
+                    {
+                        "description": "right shift + space = ctrl + space",
+                        "manipulators": [
+                            {
+                                "from": {
+                                    "key_code": "spacebar",
+                                    "modifiers": {
+                                        "mandatory": [
+                                            "right_shift"
+                                        ]
+                                    }
+                                },
+                                "to": [
+                                    {
+                                        "key_code": "spacebar",
+                                        "modifiers": ["right_control"]
                                     }
                                 ],
                                 "type": "basic"
@@ -78,7 +116,7 @@
                         "key_code": "f5"
                     },
                     "to": {
-                        "key_code": "illumination_decrement"
+                        "key_code": "f5"
                     }
                 },
                 {
@@ -86,7 +124,7 @@
                         "key_code": "f6"
                     },
                     "to": {
-                        "key_code": "illumination_increment"
+                        "key_code": "f5"
                     }
                 },
                 {
@@ -94,7 +132,7 @@
                         "key_code": "f7"
                     },
                     "to": {
-                        "consumer_key_code": "rewind"
+                        "consumer_key_code": "f7"
                     }
                 },
                 {
@@ -102,7 +140,7 @@
                         "key_code": "f8"
                     },
                     "to": {
-                        "consumer_key_code": "play_or_pause"
+                        "consumer_key_code": "f8"
                     }
                 },
                 {
@@ -110,7 +148,7 @@
                         "key_code": "f9"
                     },
                     "to": {
-                        "consumer_key_code": "fastforward"
+                        "consumer_key_code": "f9"
                     }
                 },
                 {
