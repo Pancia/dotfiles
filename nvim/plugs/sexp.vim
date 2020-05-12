@@ -2,7 +2,7 @@ let g:sexp_filetypes = ""
 
 augroup MY_VIM_SEXP_MAPPING
     autocmd!
-    autocmd FileType clojure call s:my_vim_sexp_mappings()
+    autocmd FileType clojure,fennel call s:my_vim_sexp_mappings()
 augroup END
 
 function! s:my_vim_sexp_mappings()

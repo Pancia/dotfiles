@@ -70,7 +70,7 @@ Plug 'Shougo/neoyank.vim'
 Plug 'Olical/conjure', {'for': 'clojure', 'tag': 'v2.1.2', 'do': 'bin/compile' }
 Plug 'guns/vim-clojure-highlight', {'for': 'clojure'}
 Plug 'guns/vim-clojure-static', {'for': 'clojure'}
-Plug 'guns/vim-sexp', {'for': 'clojure'}
+Plug 'guns/vim-sexp', {'for': ['clojure', 'fennel']}
 " }}}
 
 " LUA {{{
