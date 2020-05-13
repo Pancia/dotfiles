@@ -23,7 +23,7 @@ function obj:showHomeBoard(onClose)
     local uc = hs.webview.usercontent.new("HammerSpoon") -- jsPortName
     local browser
     files = {}
-    for line in hs.execute("find ~/Movies/HomeBoard/ -type f -not -path '*/\\.*'"):gmatch("[^\n]+") do
+    for line in hs.execute("find "..obj.videosPath.." -type f -not -path '*/\\.*'"):gmatch("[^\n]+") do
         table.insert(files, line)
     end
     videoToPlay = function() return files[math.random(#files)] end
@@ -39,6 +39,11 @@ function obj:showHomeBoard(onClose)
             end
         elseif body.type == "newVideo" then
             browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..videoToPlay().."\")")
+        elseif body.type == "pickVideo" then
+            pickedVideo = hs.dialog.chooseFileOrFolder("Pick a video to play:", obj.videosPath)
+            if pickedVideo then
+                browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..pickedVideo["1"].."\")")
+            end
         elseif body.type == "done" then
             browser:delete()
         elseif body.type == "journal" then

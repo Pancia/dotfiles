@@ -77,6 +77,7 @@ localInstall("HomeBoard", {
     start = true,
     config = {
         homeBoardPath = HOME.."/Dropbox/HomeBoard/",
+        videosPath = HOME.."/Movies/HomeBoard",
     },
     fn = function(spoon)
         HomeBoard = spoon
