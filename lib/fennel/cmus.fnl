@@ -33,11 +33,11 @@
    (cmus-remote "--next")
    (notify)))
 
-(fn seek-forwards []
- (cmus-remote "--seek +10"))
+(fn seek-forwards [num]
+ (lambda [] (cmus-remote (.. "--seek +" num))))
 
-(fn seek-backwards []
- (cmus-remote "--seek -10"))
+(fn seek-backwards [num]
+ (lambda [] (cmus-remote (.. "--seek -" num))))
 
 (fn inc-volume []
   (when (and (is-active?) (is-playing?))

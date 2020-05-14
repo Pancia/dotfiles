@@ -1,16 +1,12 @@
-== PRIORITY ==
-- [ ] :nvim: terminal buffer names empty
-- [ ] :nvim: buffer/tab names stutter when switching
-
 == MAIN ==
-- [X] :homeboard: select video (send msg to spoon)
-- [ ] :homeboard: playback speed controls
 
 == BACKLOG ==
 - [ ] :clojure: compare with IDEA/Cursive && conjure-ify [[https://github.com/venantius/vim-cljfmt/tree/master/plugin|vim-cljfmt]]
 - [ ] :clojure: fix highlighting: https://github.com/guns/vim-clojure-highlight/blob/master/autoload/vim_clojure_highlight.vim
 - [ ] :clojure: ? rainbow parens
 - [ ] :bin/cmds: should set iterm2 tab title
+- [ ] :nvim: terminal buffer names empty
+- [ ] :nvim: buffer/tab names stutter when switching
 - [ ] :nvim: try `set diffopt+=internal,algorithm:patience`
 - [ ] :spoons: port to fennel!
 - [ ] :nvim: vim-plug lazy load plugins `vim --startuptime`

@@ -199,13 +199,23 @@
          :repeatable true
          :timeout false}
         {:key :l
-         :title "Seek Forwards"
-         :action cmus.seek-forwards
+         :title "Seek 10 Forwards"
+         :action (cmus.seek-forwards 10)
          :repeatable true
          :timeout false}
         {:key :h
-         :title "Seek Backwards"
-         :action cmus.seek-backwards
+         :title "Seek 10 Backwards"
+         :action (cmus.seek-backwards 10)
+         :repeatable true
+         :timeout false}
+        {:key "."
+         :title "Seek 30 Forwards"
+         :action (cmus.seek-forwards 30)
+         :repeatable true
+         :timeout false}
+        {:key ","
+         :title "Seek 30 Backwards"
+         :action (cmus.seek-backwards 30)
          :repeatable true
          :timeout false}
         {:key :j
