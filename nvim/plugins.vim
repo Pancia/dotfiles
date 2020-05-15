@@ -64,13 +64,14 @@ Plug 'ctrlpvim/ctrlp.vim'
 Plug 'Shougo/unite.vim'
 Plug 'Shougo/unite-help'
 Plug 'Shougo/neoyank.vim'
+Plug 'autozimu/LanguageClient-neovim', {'branch': 'next', 'do': 'bash install.sh'}
 " }}}
 
 " CLOJURE {{{
 Plug 'Olical/conjure', {'for': 'clojure', 'tag': 'v3.1.1'}
-Plug 'guns/vim-clojure-highlight', {'for': 'clojure'}
 Plug 'guns/vim-clojure-static', {'for': 'clojure'}
 Plug 'guns/vim-sexp', {'for': ['clojure', 'fennel']}
+"Plug '~/projects/vim/conjure-highlight', {'for': 'clojure'}
 " }}}
 
 " LUA {{{

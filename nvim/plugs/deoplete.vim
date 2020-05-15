@@ -20,7 +20,7 @@ function! s:my_cr_function() abort
 endfunction
 
 " https://github.com/Shougo/deoplete.nvim/issues/115
-autocmd InsertLeave,CompleteDone * if pumvisible() == 0 && bufname('') !~ 'conjure.cljc' | silent! pclose | endif
+autocmd InsertLeave,CompleteDone * if pumvisible() == 0 | silent! pclose | endif
 
 " USE FLOAT PREVIEW INSTEAD
 set completeopt-=preview
