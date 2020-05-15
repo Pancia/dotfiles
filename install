@@ -15,7 +15,7 @@ task_brew () {
 }
 
 task_fonts () {
-    [[ -e fonts ]] || (git clone https://github.com/powerline/fonts.git && ./fonts/install.sh)
+    (cd fonts; ./install.sh)
 }
 
 task_gitconfig () {
@@ -67,9 +67,8 @@ main() {
     case "$1" in
         '') task_all && exec zsh zsh/zshrc ;;
         brew) task_brew ;;
-        fonts) task_fonts ;;
         gitconfig|git) task_gitconfig ;;
-        help) echo "init brew fonts gitconfig neovim opt" ;;
+        help) echo "init brew gitconfig neovim opt" ;;
         init) task_init_dotfiles ;;
         neovim|nvim|vim) task_neovim ;;
         opt) task_opt ;;
