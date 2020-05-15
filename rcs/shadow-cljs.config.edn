@@ -1,0 +1,3 @@
+;<[.shadow-cljs/config.edn]>
+{:dependencies [;; middleware automagically added if in deps
+                [cider/cider-nrepl "0.21.1"]]}
