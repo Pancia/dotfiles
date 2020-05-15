@@ -45,14 +45,3 @@ let g:unite_source_menu_menus._helpers.command_candidates = [
             \['> zshrc dotfiles', 'e ~/dotfiles/zsh/init.zsh | cd ~/dotfiles/zsh'],
             \['> delete all buffers', '%bd'],
             \]
-
-let g:unite_source_menu_menus.plug = {'description' : 'vim-plug'}
-let g:unite_source_menu_menus.plug.command_candidates = [
-            \['PlugInstall', 'source % | PlugInstall'],
-            \['PlugClean', 'source % | PlugClean'],
-            \]
-
-let g:unite_source_menu_menus.fulcro = {'description' : 'Fulcro Project Commands'}
-let g:unite_source_menu_menus.fulcro.command_candidates = [
-            \['restart', "ConjureEval (require '[development :as dev])(dev/restart)"],
-            \]

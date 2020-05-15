@@ -10,6 +10,7 @@ let g:clojure_syntax_keywords = {
       \   'defsc', '>defn', 'defmutation',
       \   'specification', 'behavior', 'provided', 'assertions', 'component',
       \   'provided', 'when-mocking', 'provided!', 'when-mocking!',
+      \   'defrule', 'defstate',
       \   ]
       \ }
 

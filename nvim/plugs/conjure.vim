@@ -1,7 +1,9 @@
-let g:conjure_map_prefix = ","
-let g:conjure_log_direction = "horizontal"
-let g:conjure_log_size_small = 33
-let g:conjure_nmap_toggle_log = g:conjure_map_prefix . "l"
-let g:conjure_log_blacklist = ["up"] " ~> conjure_log_auto_open_blacklist
+let g:conjure_config = {
+      \ "log.hud.width" : "0.55",
+      \ "log.hud.height": "0.75",
+      \ }
 
-let g:conjure_log_auto_close = v:false
+let g:unite_source_menu_menus.conjure = {'description' : 'Conjure Commands'}
+let g:unite_source_menu_menus.conjure.command_candidates = [
+      \['restart', "ConjureEval (require 'development)(in-ns 'development)(restart)"],
+      \]

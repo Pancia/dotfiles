@@ -44,8 +44,6 @@ function obj:showHomeBoard(onClose)
             if pickedVideo then
                 browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..pickedVideo["1"].."\")")
             end
-        elseif body.type == "done" then
-            browser:delete()
         elseif body.type == "journal" then
             local journal = hs.execute("printf '%s' `date +%y-%m-%d_%H:%M`")
             io.open(obj.homeBoardPath..journal..".journal.txt", "w")
@@ -56,6 +54,8 @@ function obj:showHomeBoard(onClose)
             io.open(obj.homeBoardPath..plan..".plan.txt", "w")
             :write(body.value)
             :close()
+        elseif body.type == "done" then
+            browser:delete()
         else
             hs.printf("Unknown HomeBoard Response: %s", hs.inspect(body))
         end
