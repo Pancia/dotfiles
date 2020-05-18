@@ -7,4 +7,4 @@ let g:ctrlsf_auto_focus = {
 let g:ctrlsf_mapping = {
     \ "quit": "<esc>",
     \ }
-cnoreabbrev Grep CtrlSF
+cnoreabbrev GREP CtrlSF
