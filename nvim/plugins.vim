@@ -15,7 +15,6 @@ Plug 'tpope/vim-dispatch'
 Plug 'liuchengxu/vim-which-key'
 Plug 'w0rp/ale' "Async Lint Engine
 Plug 'bling/vim-airline' " Status Bar
-Plug 'vim-scripts/vim-auto-save'
 Plug 'ntpeters/vim-better-whitespace'
 Plug 'tpope/vim-repeat'
 Plug 'tpope/vim-speeddating'

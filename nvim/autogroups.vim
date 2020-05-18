@@ -42,3 +42,22 @@ augroup Terminal
                 \| endif
     au TermOpen * redraw
 augroup END
+
+set updatetime=200
+
+augroup auto_save
+  autocmd!
+  au CursorHold,InsertLeave * nested call AutoSave()
+augroup END
+
+function! AutoSave()
+    if bufname('') =~ 'conjure-log-\d\+.cljc'
+        setlocal wrap
+    else
+        let was_modified = &modified
+        silent! wa
+        if was_modified && !&modified
+            echo "(AutoSaved at " . strftime("%H:%M:%S") . ")"
+        endif
+    endif
+endfunction
