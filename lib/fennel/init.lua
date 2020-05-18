@@ -7,6 +7,19 @@ hs.loadSpoon("SpoonInstall")
 spoon.SpoonInstall.use_syncinstall = true
 Install=spoon.SpoonInstall
 
+Install:andUse("TextClipboardHistory", {
+    hotkeys = {
+        toggle_clipboard = {hs_global_modifier, "p"}
+    }, start = true,
+})
+
+Install:andUse("FadeLogo", {
+    config = {
+        default_run = 1.0,
+    },
+    start = true
+})
+
 function tryCatch(try, catch)
     local status, err = pcall(try)
     if not status then catch(err) end
@@ -24,19 +37,6 @@ hs.hotkey.bind(hs_global_modifier, "R", function()
     end)
     hs.reload()
 end)
-
-Install:andUse("TextClipboardHistory", {
-    hotkeys = {
-        toggle_clipboard = {hs_global_modifier, "p"}
-    }, start = true,
-})
-
-Install:andUse("FadeLogo", {
-    config = {
-        default_run = 1.0,
-    },
-    start = true
-})
 
 local function _x(cmd, errfmt, ...)
    local output, status = hs.execute(cmd)
