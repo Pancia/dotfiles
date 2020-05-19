@@ -31,4 +31,3 @@ hi MyProjectLandmark guifg=#17C80D
 "
 hi MyProjectContext  guifg=#DF447B
 " CONTEXT asdf CONTEXT: foo bar
-
