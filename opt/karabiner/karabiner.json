@@ -96,6 +96,32 @@
                                 "type": "basic"
                             }
                         ]
+                    },
+                    {
+                        "description": "shift-cmd-tab -> shift-alt-tab",
+                        "manipulators": [
+                            {
+                                "from": {
+                                    "key_code": "tab",
+                                    "modifiers": {
+                                        "mandatory": [
+                                            "left_command",
+                                            "left_shift"
+                                        ]
+                                    }
+                                },
+                                "to": [
+                                    {
+                                        "key_code": "tab",
+                                        "modifiers": [
+                                            "left_option",
+                                            "left_shift"
+                                        ]
+                                    }
+                                ],
+                                "type": "basic"
+                            }
+                        ]
                     }
                 ]
             },
@@ -106,7 +132,7 @@
                         "key_code": "f1"
                     },
                     "to": {
-                        "consumer_key_code": "display_brightness_decrement"
+                        "key_code": "display_brightness_decrement"
                     }
                 },
                 {
@@ -114,7 +140,7 @@
                         "key_code": "f2"
                     },
                     "to": {
-                        "consumer_key_code": "display_brightness_increment"
+                        "key_code": "display_brightness_increment"
                     }
                 },
                 {
@@ -154,7 +180,7 @@
                         "key_code": "f7"
                     },
                     "to": {
-                        "consumer_key_code": "f7"
+                        "key_code": "f7"
                     }
                 },
                 {
@@ -162,7 +188,7 @@
                         "key_code": "f8"
                     },
                     "to": {
-                        "consumer_key_code": "f8"
+                        "key_code": "f8"
                     }
                 },
                 {
@@ -170,7 +196,7 @@
                         "key_code": "f9"
                     },
                     "to": {
-                        "consumer_key_code": "f9"
+                        "key_code": "f9"
                     }
                 },
                 {
@@ -178,7 +204,7 @@
                         "key_code": "f10"
                     },
                     "to": {
-                        "consumer_key_code": "mute"
+                        "key_code": "mute"
                     }
                 },
                 {
@@ -186,7 +212,7 @@
                         "key_code": "f11"
                     },
                     "to": {
-                        "consumer_key_code": "f13"
+                        "key_code": "f13"
                     }
                 },
                 {
@@ -194,7 +220,7 @@
                         "key_code": "f12"
                     },
                     "to": {
-                        "consumer_key_code": "f14"
+                        "key_code": "f14"
                     }
                 }
             ],
