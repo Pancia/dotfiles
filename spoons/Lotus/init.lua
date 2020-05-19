@@ -204,7 +204,7 @@ function lotusBlock()
     obj:playAwarenessSound()
     if obj._sound.notif then
         obj._lotusTimer = obj._lotusTimer:stop()
-        local notification = obj._sound.notif
+        local notification = obj._sound.notif()
         with_default(notification, "hasActionButton", true)
         with_default(notification, "actionButtonTitle", "SNOOZE")
         obj._notif = hs.notify.new(notifCallback, notification):send()

@@ -90,14 +90,26 @@ localInstall("Lotus", {
         logDir = HOME.."/.log/lotus/",
         sounds = {
             {name = "short", path = "bowl.wav"
-            , notif = {title = "Quick Stretch! #short", withdrawAfter = 0}},
+            , notif = function() return {
+                title = "Quick Stretch! #short", withdrawAfter = 0
+                , informativeText = HomeBoard:getLastPlan()
+            } end},
             {name = "long", path = "gong.wav", volume = .5
-            , notif = {title = "Take a break! #long", withdrawAfter = 0}},
+            , notif = function() return {
+                title = "Take a walk! #long", withdrawAfter = 0
+                , informativeText = HomeBoard:getLastPlan()
+            } end},
             {name = "short", path = "bowl.wav"
-            , notif = {title = "Quick Stretch! #short", withdrawAfter = 0}},
+            , notif = function() return {
+                title = "Quick Stretch! #short", withdrawAfter = 0
+                , informativeText = HomeBoard:getLastPlan()
+            } end},
             {name = "reset", path = "gong.wav", volume = .5
-            , notif = {title = "Take 10 to #review #plan", withdrawAfter = 0}
-            , action = function(onDone) HomeBoard:showHomeBoard(onDone) end },
+            , action = function(onDone) HomeBoard:showHomeBoard(onDone) end
+            , notif = function() return {
+                title = "Take 10 to #review #plan", withdrawAfter = 0
+                , informativeText = HomeBoard:getLastPlan()
+            } end},
         },
         interval = { minutes = 30 },
     },

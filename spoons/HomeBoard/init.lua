@@ -13,6 +13,14 @@ obj.spoonPath = hs.spoons.scriptPath()
 
 function obj:init() end
 
+function obj:getLastPlan()
+    local lastPlanFile = hs.execute("printf '%s' $(ls -t "..obj.homeBoardPath.."/*.plan.txt 2> /dev/null | head -n 1)")
+    hs.printf("lastPlanFile: %s", hs.inspect(lastPlanFile))
+    if lastPlanFile and lastPlanFile ~= '' then
+        return io.open(lastPlanFile, "r"):read("*all")
+    end
+end
+
 function obj:showHomeBoard(onClose)
     local frame = hs.screen.primaryScreen():fullFrame()
     local rect = hs.geometry.rect(
@@ -31,12 +39,8 @@ function obj:showHomeBoard(onClose)
         local body = response.body
         if body.type == "loaded" then
             browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..videoToPlay().."\")")
-            local lastPlanFile = hs.execute("printf '%s' $(ls -t "..obj.homeBoardPath.."/*.plan.txt 2> /dev/null | head -n 1)")
-            hs.printf("lastPlanFile: %s", hs.inspect(lastPlanFile))
-            if lastPlanFile and lastPlanFile ~= '' then
-                local lastPlan = io.open(lastPlanFile, "r"):read("*all")
-                browser:evaluateJavaScript("HOMEBOARD.setReview(".. hs.inspect(lastPlan) ..")")
-            end
+            local lastPlan = obj:getLastPlan()
+            browser:evaluateJavaScript("HOMEBOARD.setReview(".. hs.inspect(lastPlan) ..")")
         elseif body.type == "newVideo" then
             browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..videoToPlay().."\")")
         elseif body.type == "pickVideo" then
