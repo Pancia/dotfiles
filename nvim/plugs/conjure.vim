@@ -4,8 +4,3 @@ let g:conjure_config = {
       \ "mappings.doc-word": "k",
       \ "mappings.def-word": "gd",
       \ }
-
-let g:unite_source_menu_menus.conjure = {'description' : 'Conjure Commands'}
-let g:unite_source_menu_menus.conjure.command_candidates = [
-      \['restart', "ConjureEval (require 'development)(in-ns 'development)(restart)"],
-      \]
