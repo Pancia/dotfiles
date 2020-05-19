@@ -39,18 +39,43 @@
 (fn seek-backwards [num]
  (lambda [] (cmus-remote (.. "--seek -" num))))
 
+(fn inc-osx-volume []
+  (let [output (hs.audiodevice.defaultOutputDevice)]
+    (output:setVolume (+ (output:volume) (/ 100 15)))
+    (: (hs.sound.getByName "Pop") :play)
+    (: (hs.eventtap.event.newSystemKeyEvent "MUTE" true) :post)
+    (: (hs.eventtap.event.newSystemKeyEvent "MUTE" false) :post)
+    (: (hs.eventtap.event.newSystemKeyEvent "MUTE" true) :post)
+    (: (hs.eventtap.event.newSystemKeyEvent "MUTE" false) :post)
+    ))
+
+(fn dec-osx-volume []
+  (let [output (hs.audiodevice.defaultOutputDevice)]
+    (output:setVolume (- (output:volume) (/ 100 15)))
+    (: (hs.sound.getByName "Pop") :play)
+    (: (hs.eventtap.event.newSystemKeyEvent "MUTE" true) :post)
+    (: (hs.eventtap.event.newSystemKeyEvent "MUTE" false) :post)
+    (: (hs.eventtap.event.newSystemKeyEvent "MUTE" true) :post)
+    (: (hs.eventtap.event.newSystemKeyEvent "MUTE" false) :post)))
+
 (fn inc-volume []
-  (when (and (is-active?) (is-playing?))
-    (cmus-remote "--volume +5")))
+  (if (and (is-active?) (is-playing?))
+    (cmus-remote "--volume +5")
+    (inc-osx-volume)))
 
 (fn dec-volume []
-  (when (and (is-active?) (is-playing?))
-    (cmus-remote "--volume -5")))
+  (if (and (is-active?) (is-playing?))
+    (cmus-remote "--volume -5")
+    (dec-osx-volume)))
 
 (fn bind-media-keys []
   (hs.hotkey.bind {} "f7" prev-track)
   (hs.hotkey.bind {} "f8" play-or-pause)
-  (hs.hotkey.bind {} "f9" next-track))
+  (hs.hotkey.bind {} "f9" next-track)
+  (hs.hotkey.bind {} "f13" dec-volume)
+  (hs.hotkey.bind {} "f14" inc-volume)
+  (hs.hotkey.bind "cmd" "f13" dec-osx-volume)
+  (hs.hotkey.bind "cmd" "f14" inc-osx-volume))
 
 (fn edit-track []
   (when (and (is-active?) (is-playing?))
