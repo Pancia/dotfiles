@@ -21,7 +21,8 @@
 
 (fn play-or-pause []
   (when (is-active?)
-    (cmus-remote "--pause"))) ;; toggles play/pause
+    ;; NOTE: --pause toggles play/pause
+    (cmus-remote "--pause")))
 
 (fn prev-track []
  (when (is-active?)

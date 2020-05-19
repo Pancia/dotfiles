@@ -1,1 +1,1 @@
-ln -s karabiner.json ~/.config/karabiner/karabiner.json
+ln -f karabiner.json ~/.config/karabiner/karabiner.json
