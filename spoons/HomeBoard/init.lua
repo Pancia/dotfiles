@@ -14,7 +14,7 @@ obj.spoonPath = hs.spoons.scriptPath()
 function obj:init() end
 
 function obj:getLastPlan()
-    local lastPlanFile = hs.execute("printf '%s' $(ls -t "..obj.homeBoardPath.."/*.plan.txt 2> /dev/null | head -n 1)")
+    local lastPlanFile = hs.execute("printf '%s' $(ls -t "..obj.homeBoardPath.."/plans/*.plan.txt 2> /dev/null | head -n 1)")
     hs.printf("lastPlanFile: %s", hs.inspect(lastPlanFile))
     if lastPlanFile and lastPlanFile ~= '' then
         return io.open(lastPlanFile, "r"):read("*all")
@@ -50,12 +50,12 @@ function obj:showHomeBoard(onClose)
             end
         elseif body.type == "journal" then
             local journal = hs.execute("printf '%s' `date +%y-%m-%d_%H:%M`")
-            io.open(obj.homeBoardPath..journal..".journal.txt", "w")
+            io.open(obj.homeBoardPath.."journals/"..journal..".journal.txt", "w")
             :write(body.value)
             :close()
         elseif body.type == "plan" then
             local plan = hs.execute("printf '%s' `date +%y-%m-%d_%H:%M`")
-            io.open(obj.homeBoardPath..plan..".plan.txt", "w")
+            io.open(obj.homeBoardPath.."plans/"..plan..".plan.txt", "w")
             :write(body.value)
             :close()
         elseif body.type == "done" then
