@@ -251,7 +251,7 @@ function obj:start()
         end)
     else
         obj._lotusTimer = hs.timer.doEvery(interval, lotusBlock)
-        obj._lotusTimer:setNextTrigger(saved["nextTrigger"])
+        obj._lotusTimer:setNextTrigger(saved["nextTrigger"] or interval)
     end
 
     if not saved["soundIdx"] then
@@ -284,7 +284,9 @@ function obj:stop()
     if obj._notif then
         obj._notif:withdraw()
     end
-    obj._lotusTimer:stop()
+    if obj._lotusTimer then
+        obj._lotusTimer:stop()
+    end
     obj._menuRefreshTimer:stop()
     obj._menubar:delete()
     return self
