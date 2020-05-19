@@ -1,4 +1,6 @@
 == MAIN ==
+- [ ] :music: volume -> cmus & cmd-volume -> osx
+- [ ] :karabiner: cmd-tab => alt-tab
 
 == BACKLOG ==
 - [ ] :clojure: compare with IDEA/Cursive && conjure-ify [[https://github.com/venantius/vim-cljfmt/tree/master/plugin|vim-cljfmt]]

@@ -45,15 +45,25 @@ augroup END
 
 set updatetime=200
 
+augroup not_files
+  autocmd!
+  au BufEnter * call NotFiles()
+augroup END
+
+function NotFiles()
+    if bufname('') =~ 'conjure-log-\d\+.cljc'
+        set buftype=nofile
+        set wrap
+    endif
+endfunction
+
 augroup auto_save
   autocmd!
   au CursorHold,InsertLeave * nested call AutoSave()
 augroup END
 
 function! AutoSave()
-    if bufname('') =~ 'conjure-log-\d\+.cljc'
-        setlocal wrap
-    else
+    if bufname('') !~ 'conjure-log-\d\+.cljc'
         let was_modified = &modified
         silent! wa
         if was_modified && !&modified
