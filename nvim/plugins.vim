@@ -32,7 +32,7 @@ Plug 'Shougo/vimfiler.vim'
 " }}}
 
 " SEARCH {{{
-Plug 'dyng/ctrlsf.vim'
+Plug 'dyng/ctrlsf.vim' " -> plugs/grep.vim
 " }}}
 
 " WIKI {{{

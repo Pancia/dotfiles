@@ -12,6 +12,7 @@ set hidden
 set cursorline "Highlight line cursor is on
 set expandtab "Use spaces, not tabs!
 set foldmethod=indent
+set helpheight=9999 "Maximize help pages
 set lazyredraw "Silly macros
 set nobackup
 set nofileignorecase "Dont ignore case when cmd/ex mode
