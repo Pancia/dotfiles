@@ -1,0 +1,55 @@
+#!/usr/bin/env ruby
+
+puts
+puts
+puts
+puts
+
+def parse_diff_tree(c, diff)
+  diff.split("\n").map { |x|
+    adds, removals, file = x.split("\t")
+    {:commit => c, :file => file.strip,
+     :add => adds, :min => removals,}
+  }
+end
+
+branch = "HEAD"
+current_files = %x[ git ls-tree --full-tree -r --name-only #{branch} ].split("\n")
+revs = %x[ git rev-list #{branch} ].split("\n")
+
+if not File.exists? ".diff_tree"
+  start = Time.now
+  diff_tree = revs
+    .map {|c| [c, %x[ git diff-tree --no-commit-id --numstat #{c}]]}
+    .keep_if {|_, x| not x.empty?}
+    .flat_map {|c, x| parse_diff_tree(c, x)}
+    .group_by {|x| x[:file]}
+    .map {|k,vs| [k, vs.map{|v| v[:add].to_i + v[:min].to_i}]}
+    .keep_if {|k,_| current_files.include? k}
+  File.write(".diff_tree", diff_tree)
+  puts "TIME(seconds): #{Time.now - start}"
+else
+  diff_tree = eval(File.read(".diff_tree"))
+end
+
+puts diff_tree
+  .map {|k,vs| [k, vs.count]}
+  .sort_by {|_,vs| vs}.reverse
+  .take(10).reverse
+  .map {|k,vs| "#commits #{vs}|#{(vs.to_f / revs.count * 100).round 0}% #{k}"}
+
+puts '========='
+
+puts diff_tree
+  .map {|k,vs| [k, vs.sum]}
+  .sort_by {|_,vs| vs}.reverse
+  .take(10).reverse
+  .map {|k,vs| "#lines #{vs} | #{vs / (File.read(k).split("\n").count+1)}x #{k}"}
+
+puts '========='
+
+puts diff_tree
+  .map {|k,vs| [k, vs.sum / (%x[wc -l #{k}].to_i + 1)]}
+  .sort_by {|_,vs| vs}.reverse
+  .take(10).reverse
+  .map {|k,vs| "#lines #{%x[wc -l #{k}].to_i} * #{vs}x #{k}"}
