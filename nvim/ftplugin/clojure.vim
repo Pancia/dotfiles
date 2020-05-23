@@ -18,7 +18,7 @@ let g:clojure_fuzzy_indent = 1
 let g:clojure_fuzzy_indent_patterns = '.*'
 let g:clojure_fuzzy_indent_blacklist = []
 
-nnoremap <buffer><silent> ,fr :ConjureEval (require 'development)(in-ns 'development)(restart)<CR>
+nnoremap <buffer><silent> ,fr :ConjureEval (require 'user)(in-ns 'user)(require 'development)(in-ns 'development)(restart)<CR>
 
 setlocal completefunc=LanguageClient#complete
 
