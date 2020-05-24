@@ -1,7 +1,17 @@
 ;<[.config/clojure/deps.edn]>
-{:aliases {:nREPL {:extra-deps {cider/cider-nrepl {:mvn/version "0.22.4"}}
-                   :main-opts ["-m" "nrepl.cmdline" "--middleware" "[cider.nrepl/cider-middleware]"]}
-           :rad-dev {:override-deps {com.fulcrologic/fulcro-rad {:local/root "/Users/pancia/projects/lib/fulcro-rad"}
-                                     com.fulcrologic/fulcro-rad-datomic {:local/root "/Users/pancia/projects/lib/fulcro-rad-datomic"}}}
-           :f3-dev {:override-deps {com.fulcrologic/fulcro {:local/root "/Users/pancia/projects/lib/fulcro"
-                                                            :exclusions [com.taoensso/sente]}}}}}
+{:aliases
+ {:nREPL {:extra-deps
+          {cider/cider-nrepl {:mvn/version "0.22.4"}
+           tee {:local/root "/Users/pancia/dotfiles/lib/clojure/tee"}}
+          :main-opts
+          ["-m" "nrepl.cmdline" "--interactive"
+           "--middleware" "[cider.nrepl/cider-middleware,tee.core/middleware]"]}
+  :rad-dev {:override-deps
+            {com.fulcrologic/fulcro-rad
+             {:local/root "/Users/pancia/projects/lib/fulcro-rad"}
+             com.fulcrologic/fulcro-rad-datomic
+             {:local/root "/Users/pancia/projects/lib/fulcro-rad-datomic"}}}
+  :f3-dev {:override-deps
+           {com.fulcrologic/fulcro
+            {:local/root "/Users/pancia/projects/lib/fulcro"
+             :exclusions [com.taoensso/sente]}}}}}
