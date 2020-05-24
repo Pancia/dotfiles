@@ -15,9 +15,9 @@
       (send [this response]
         (when (is-user-eval? msg)
           (when-let [out (:out response)]
-            (.println System/out out))
+            (.print System/out out))
           (when-let [err (:err response)]
-            (.println System/out err)))
+            (.print System/out err)))
         (.send transport response)
         this))))
 
