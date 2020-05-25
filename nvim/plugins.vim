@@ -67,10 +67,9 @@ Plug 'autozimu/LanguageClient-neovim', {'branch': 'next', 'do': 'bash install.sh
 " }}}
 
 " CLOJURE {{{
-Plug 'Olical/conjure', {'for': 'clojure', 'tag': 'v3.2.0'}
+Plug 'Olical/conjure', {'for': 'clojure', 'tag': 'v3.4.0'}
 Plug 'guns/vim-clojure-static', {'for': 'clojure'}
 Plug 'guns/vim-sexp', {'for': ['clojure', 'fennel']}
-"Plug '~/projects/vim/conjure-highlight', {'for': 'clojure'}
 " }}}
 
 " LUA {{{
