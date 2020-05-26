@@ -30,10 +30,14 @@ class CMDS
       end
     }
   end
-  def self.list(opts)
-    opts.info = "Show all set registers."
-    lambda {
-      execute("cd #{$home_dir} && bat .config/q/*")
+  def self.show(opts)
+    opts.info = "Show (all) register(s)."
+    lambda { |*args|
+      registers = Dir["#{$home_dir}/.config/q/#{args[0] or "*"}"].map{|r|File.basename(r)}
+      max_len = registers.max_by(&:length).length
+      registers.each { |reg|
+        puts("%-#{max_len}s -> %s" % [reg, File.read("#{reg_file(reg)}")])
+      }
     }
   end
   def self.delreg(opts)
