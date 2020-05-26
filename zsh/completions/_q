@@ -1,5 +1,7 @@
 #compdef _q q
 
+# https://mads-hartmann.com/2017/08/06/writing-zsh-completion-scripts.html
+# https://github.com/zsh-users/zsh-completions/blob/master/zsh-completions-howto.org#user-content-actions
 function _q {
   _arguments -C \
     "1: :($(_q_get_registers))" \
