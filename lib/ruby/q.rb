@@ -20,13 +20,13 @@ class CMDS
       File.write(reg_file(name), args.join(" "))
     }
   end
-  def self.doreg(opts)
-    opts.info = "Execute a register."
+  def self.getreg(opts)
+    opts.info = "Prints a register."
     lambda { |name|
       if File.exists? reg_file(name)
-        execute(File.read(reg_file(name)))
+        puts File.read(reg_file(name))
       else
-        puts "Register #{name} does not exist yet!"
+        STDERR.puts "Register #{name} does not exist yet!"
       end
     }
   end

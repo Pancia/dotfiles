@@ -1,0 +1,11 @@
+#compdef _q q
+
+function _q {
+  _arguments -C \
+    "1: :($(_q_get_registers))" \
+    "*::arg:->args"
+}
+
+function _q_get_registers {
+  ls ~/.config/q
+}

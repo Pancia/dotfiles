@@ -1,0 +1,3 @@
+#compdef _q! q!
+
+function _q! { _q }
