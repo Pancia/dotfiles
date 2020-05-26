@@ -1,3 +1,0 @@
-#compdef _q_ q_
-
-function _q_ { _q }
