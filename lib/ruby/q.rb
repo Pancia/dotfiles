@@ -33,7 +33,7 @@ class CMDS
   def self.list(opts)
     opts.info = "Show all set registers."
     lambda {
-      execute("bat #{$home_dir}/.config/q/*")
+      execute("cd #{$home_dir} && bat .config/q/*")
     }
   end
   def self.delreg(opts)
