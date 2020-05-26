@@ -23,7 +23,7 @@ class CMDS extend CMD
     lambda {
       commands = CMDS.methods - $old_methods
       if not commands.empty?
-        p commands.map(&:to_s)
+        puts commands.map(&:to_s).join(" ")
       else
         exit 1
       end
