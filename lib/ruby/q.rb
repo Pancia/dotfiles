@@ -33,7 +33,7 @@ class CMDS
   def self.show(opts)
     opts.info = "Show (all) register(s)."
     lambda { |*args|
-      registers = Dir["#{$home_dir}/.config/q/#{args[0] or "*"}"].map{|r|File.basename(r)}
+      registers = Dir["#{$home_dir}/.config/q/#{args[0] or "*"}"].map{|r|File.basename(r)}.sort
       max_len = registers.max_by(&:length).length
       registers.each { |reg|
         puts("%-#{max_len}s -> %s" % [reg, File.read("#{reg_file(reg)}")])
