@@ -53,6 +53,11 @@ function meditate {
     cmus-remote --play
 }
 
+alias "q?"="ruby ~/dotfiles/lib/ruby/q.rb list"
+function q  { ruby ~/dotfiles/lib/ruby/q.rb doreg  "$@" }
+function Q  { ruby ~/dotfiles/lib/ruby/q.rb setreg "$@" }
+function q_ { ruby ~/dotfiles/lib/ruby/q.rb delreg "$@" }
+
 local functions_dir=`dirname $0`/fns
 for f in $(ls $functions_dir); do
     source $functions_dir/$f

@@ -9,7 +9,6 @@ brew 'bat'
 brew 'cloc'
 brew 'clojure'
 brew 'cmus'
-brew 'fasd'
 brew 'ffmpeg'
 brew 'flow'
 brew 'git', args: ['without-completions']
