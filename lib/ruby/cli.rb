@@ -23,7 +23,7 @@ class CLI
   def self.parse!(cmds)
     @program_name = File.basename $PROGRAM_NAME
     cmd_to_opts = (cmds.methods - Object.methods)
-      .filter {|m| not m.to_s.include? "_" and m}
+      .filter {|m| not m.to_s.start_with? "_" and m}
       .map {|m| parse_method cmds, m}
       .filter {|_,i| i}
       .sort.to_h
@@ -58,6 +58,7 @@ class CLI
         cmd_to_opts[command][:action].call(*ARGV)
       else
         puts @global_opts
+        exit 1
       end
     end
   end

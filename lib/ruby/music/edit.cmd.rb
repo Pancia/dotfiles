@@ -2,11 +2,11 @@ require 'music/music_db.rb'
 
 module MusicCMD
 
-  def edit_impl(item)
+  def _edit_impl(item)
     p item if $options[:verbose]
     p $options[:filter] if $options[:verbose]
     if $options[:search] or not item
-      items = self.search_impl("--query #{item or "\"\""}").split "\n"
+      items = self._search_impl("--query #{item or "\"\""}").split "\n"
       items.reduce([]) { |to_edit, x|
         to_edit.concat MusicDB.select x, $options[:filter]
       }
@@ -15,7 +15,7 @@ module MusicCMD
     end
   end
 
-  def edit_ask(edit_me)
+  def _edit_ask(edit_me)
     field = Readline.readline(">?:".reverse).chomp
     case
     when edit_me.include?(field) || ["tags", "marked"].include?(field)
@@ -27,7 +27,7 @@ module MusicCMD
     else
       puts "INVALID FIELD"
     end
-    edit_ask edit_me
+    _edit_ask edit_me
   end
 
   def edit(opts)
@@ -48,12 +48,12 @@ module MusicCMD
         tags.concat((x["tags"] || "").split(",")).uniq
       }
       puts "TAGS: #{tags}"
-      to_edit = edit_impl(item)
+      to_edit = _edit_impl(item)
       raise "FAILED TO FIND ANY ITEMS" if to_edit.empty?
       to_edit.each do |edit_me|
         puts
         pp edit_me
-        edit_ask edit_me
+        _edit_ask edit_me
       end
       to_edit = to_edit.reduce({}) { |m, s|
         m[s["id"]] = s; m

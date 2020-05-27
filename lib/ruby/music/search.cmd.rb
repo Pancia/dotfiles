@@ -2,7 +2,7 @@ require 'music/music_db.rb'
 
 module MusicCMD
 
-  def search_impl(args = "")
+  def _search_impl(args = "")
     puts "CMD[SEARCH]" if $options[:verbose]
     puts "search: #{$options[:filter]}" if $options[:verbose]
     tmp = Tempfile.new; IO.write tmp, MusicDB.read($options[:filter])
@@ -18,7 +18,7 @@ module MusicCMD
     }
     lambda {
       $options[:filter] = '"\(.playlist) - \(.name)"' if not $options[:filter]
-      puts search_impl()
+      puts _search_impl()
     }
   end
 
