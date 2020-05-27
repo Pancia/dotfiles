@@ -41,7 +41,14 @@ function listVims {
         echo "&> VIMS:" && echo "$VIMS"
 }
 
+# used by z.zsh
+function recordCWD {
+    echo `pwd` >> ~/.config/dir_history
+    echo "$(cat ~/.config/dir_history | sort | uniq)" > ~/.config/dir_history
+}
+
 function chpwd {
+    recordCWD
     cache 15 showTodos
     cache 15 showCmds
     cache 5 listVims
