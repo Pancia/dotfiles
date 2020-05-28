@@ -1,8 +1,10 @@
 #!/usr/bin/env zsh
 
-#while read local_ref local_sha remote_ref remote_sha do done
+read local_ref local_sha remote_ref remote_sha
 
-[[ `cmds list` =~ 'pre_push' ]] \
-    && cmds pre_push
-
-exit 0
+if [[ `cmds list` =~ 'pre_push' ]]; then
+    cmds pre_push
+    exit $?
+else
+    exit 0
+fi
