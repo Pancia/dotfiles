@@ -1,9 +1,11 @@
 == MAIN ==
 
 == BACKLOG ==
-- [ ] :clojure: compare with IDEA/Cursive && conjure-ify [[https://github.com/venantius/vim-cljfmt/tree/master/plugin|vim-cljfmt]]
-- [ ] :clojure: fix highlighting: https://github.com/guns/vim-clojure-highlight/blob/master/autoload/vim_clojure_highlight.vim
+- [ ] :deoplete: :nvim: :conjure: lags if (?) not connected to repl (or was not started ?)
+- [ ] :clojure: ? cljfmt: format {} & bindings
+- [ ] :cljfmt: compare with IDEA/Cursive && ? conjure-ify
 - [ ] :clojure: ? rainbow parens
+- [ ] :clojure: add static highlighting: https://github.com/guns/vim-clojure-highlight/blob/master/autoload/vim_clojure_highlight.vim
 - [ ] :bin/cmds: should set iterm2 tab title
 - [ ] :nvim: terminal buffer names empty
 - [ ] :nvim: buffer/tab names stutter when switching

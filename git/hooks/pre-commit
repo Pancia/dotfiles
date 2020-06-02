@@ -1,10 +1,16 @@
 #!/usr/bin/env zsh
 
-for f in `git diff --name-only --staged`; do
-    echo $f
-    ag 'test/focused' $f \
-        && echo "[pre-commit/error]: Found focused tests!" >&2 \
-        && exit 1
-done
+staged_changes="$(git diff --staged --unified=0)"
+
+ag 'test/focused' <(echo $staged_changes) \
+    && echo "[pre-commit/error]: Found focused tests!" >&2 \
+    && exit 11
+
+markers="$(echo $staged_changes | ag '[^+]' | ag 'TASK')"
+if [[ -n "$markers" ]]; then
+    echo "Found TASK markers:"
+    echo $markers
+    exit 12
+fi
 
 exit 0
