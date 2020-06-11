@@ -1,4 +1,5 @@
 require 'music/music_db.rb'
+require 'music/search.cmd.rb'
 
 module MusicCMD
 
@@ -13,7 +14,7 @@ module MusicCMD
     }
     lambda {
       $options[:filter] = ".playlist" if not $options[:filter]
-      result = self.search_impl()
+      result = self._search_impl()
       items = result.split "\n"
       p "items: #{items}" if $options[:verbose]
       if not items.empty?
