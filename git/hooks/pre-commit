@@ -1,16 +1,25 @@
 #!/usr/bin/env zsh
 
-staged_changes="$(git diff --staged --unified=0)"
+local staged_changes="$(git diff --staged --unified=0)"
 
-ag 'test/focused' <(echo $staged_changes) \
-    && echo "[pre-commit/error]: Found focused tests!" >&2 \
+ag 'test/focused' <(echo $staged_changes | ag '^\+') \
+    && echo "[pre-commit/ERROR]: Found focused tests!" >&2 \
     && exit 11
 
-markers="$(echo $staged_changes | ag '[^+]' | ag 'TASK')"
+local markers="$(echo $staged_changes | ag '^\+' | ag 'TASK')"
 if [[ -n "$markers" ]]; then
-    echo "Found TASK markers:"
+    echo "[pre-commit/ERROR]: Found staged TASK markers:"
     echo $markers
     exit 12
+fi
+
+local dev_branch="$(git flow config 2> /dev/null | ag -o 'development: (\w+)' | ag -o '\w+$' || echo 'master')"
+
+local markers="$(git diff $dev_branch...HEAD | ag '^\+' | ag 'TASK')"
+if [[ -n "$markers" ]]; then
+    echo "[pre-commit/ERROR]: Found TASK markers in branch:"
+    echo $markers
+    exit 13
 fi
 
 exit 0
