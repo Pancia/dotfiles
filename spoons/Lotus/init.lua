@@ -92,12 +92,6 @@ function showDurationPicker(onDuration, onClose)
     browser:html(html):bringToFront():show()
 end
 
-function restartTimer()
-    obj.stopAwarenessSound()
-    obj._lotusTimer = obj._lotusTimer:start()
-    obj._menuRefreshTimer:fire()
-end
-
 function renderMenu()
     if obj._paused then
         return {
@@ -122,7 +116,9 @@ function renderMenu()
                     obj._pauseTimer:stop()
                     obj._pauseTimer = nil
                 end
-                restartTimer()
+                obj.stopAwarenessSound()
+                obj._lotusTimer = obj._lotusTimer:start()
+                obj._menuRefreshTimer:fire()
             end},
         }
     else
@@ -167,16 +163,21 @@ end
 function snoozeTimer()
     showDurationPicker(function(duration)
         obj._paused = true
+        obj.stopAwarenessSound()
         obj._lotusTimer = obj._lotusTimer:stop()
         _, refreshRate = userIntervalToSeconds(obj.interval)
         obj._pauseTimer = hs.timer.doAfter(refreshRate*duration, function()
             obj._pauseTimer = nil
-            restartTimer()
+            obj._paused = false
+            obj._menuRefreshTimer:fire()
+            obj._lotusTimer = obj._lotusTimer:setNextTrigger(0)
         end)
         obj._menuRefreshTimer:fire()
     end, function()
         obj._paused = false
-        restartTimer()
+        obj.stopAwarenessSound()
+        obj._lotusTimer = obj._lotusTimer:start()
+        obj._menuRefreshTimer:fire()
     end)
 end
 
@@ -186,15 +187,17 @@ function notifCallback(notif)
     if activationType == hs.notify.activationTypes.actionButtonClicked then
         snoozeTimer()
     else
-        if action then
-            action(function()
-                obj._paused = false
-                obj._soundIdx = (obj._soundIdx % #obj.sounds) + 1
-                restartTimer()
-            end)
-        else
+        local resume = function()
+            obj._paused = false
             obj._soundIdx = (obj._soundIdx % #obj.sounds) + 1
-            restartTimer()
+            obj.stopAwarenessSound()
+            obj._lotusTimer = obj._lotusTimer:start()
+            obj._menuRefreshTimer:fire()
+        end
+        if action then
+            action(resume)
+        else
+            resume()
         end
     end
 end

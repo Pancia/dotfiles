@@ -1,6 +1,7 @@
 == MAIN ==
 
 == BACKLOG ==
+- [ ] :lotus: switch to fennel & state machine architecture
 - [ ] :deoplete: :nvim: :conjure: lags if (?) not connected to repl (or was not started ?)
 - [ ] :clojure: ? cljfmt: format {} & bindings
 - [ ] :cljfmt: compare with IDEA/Cursive && ? conjure-ify
