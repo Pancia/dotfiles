@@ -1,0 +1,2 @@
+{:deps {com.gfredericks/dot-slash-2 {:mvn/version "0.1.5"}
+        org.clojure/tools.namespace {:mvn/version "1.0.0"}}}
