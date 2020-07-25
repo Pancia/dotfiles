@@ -8,6 +8,10 @@
            "--middleware" "[cider.nrepl/cider-middleware,tee.core/middleware]"]}
   :utils {:extra-deps {utils {:local/root "/Users/pancia/dotfiles/lib/clojure/utils"}}
           :main-opts ["--eval" "(require,'utils.core)"]}
+  :kaocha {:extra-deps {lambdaisland/kaocha {:mvn/version "1.0-612"}}
+           :main-opts ["-m" "kaocha.runner"]}
+  :gr-dev {:override-deps {com.fulcrologic/guardrails {:local/root "/Users/pancia/projects/lib/guardrails"}}}
+  :grpro-dev {:override-deps {com.fulcrologic/guardrails-pro {:local/root "/Users/pancia/projects/work/guardrails-pro"}}}
   :rad-dev {:override-deps
             {com.fulcrologic/fulcro-rad
              {:local/root "/Users/pancia/projects/lib/fulcro-rad"}
