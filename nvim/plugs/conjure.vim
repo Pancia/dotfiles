@@ -1,6 +1,4 @@
-let g:conjure_config = {
-      \ "log.hud.width":  "0.50",
-      \ "log.hud.height": "0.50",
-      \ "mappings.doc-word": "k",
-      \ "mappings.def-word": "gd",
-      \ }
+let g:conjure#log#hud#width = "0.50"
+let g:conjure#log#hud#height = "0.50"
+let g:conjure#mapping#doc_word = "k"
+let g:conjure#mapping#def_word = "gd"
