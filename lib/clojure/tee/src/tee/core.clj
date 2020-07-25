@@ -17,7 +17,10 @@
           (when-let [out (:out response)]
             (.print System/out out))
           (when-let [err (:err response)]
-            (.print System/out err)))
+            (.print System/out err))
+          (when-let [value (:value response)]
+            (.println System/out (pr-str value))
+            (.print System/out (str (ns-name *ns*) "=> "))))
         (.send transport response)
         this))))
 
