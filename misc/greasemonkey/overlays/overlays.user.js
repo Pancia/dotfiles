@@ -19,7 +19,8 @@ function addOverlay(selector) {
         'text': `Show: ${selector}`,
         'click': (e) => {$(`[id='${selector}']`).remove()}
     }).css({
-        'height': '50px'
+        'height': '50px',
+        'background-color': 'white'
     }).appendTo($overlay);
 
     $overlay.prependTo(selector)
@@ -37,17 +38,38 @@ function waitForElementToBeLoaded(selector, callback) {
 }
 
 function MAIN() {
-    waitForElementToBeLoaded("#comments #comment", () => {
-        addOverlay("#comments");
-    });
+    if (window.location.host == "www.youtube.com") {
+        waitForElementToBeLoaded("#comments #comment", () => {
+            addOverlay("#comments");
+        });
+        waitForElementToBeLoaded("#related #dismissable", () => {
+            addOverlay("#related");
+        });
+        waitForElementToBeLoaded("#primary", () => {
+            addOverlay("#primary");
+        });
+    }
 
-    waitForElementToBeLoaded("#related #dismissable", () => {
-        addOverlay("#related");
-    });
-
-    waitForElementToBeLoaded("#primary", () => {
-        addOverlay("#primary");
-    });
+    if (window.location.host == "www.linkedin.com") {
+        waitForElementToBeLoaded(".feed-shared-news-module", () => {
+            addOverlay(".feed-shared-news-module");
+        });
+        if (window.location.pathname == "/feed/") {
+            waitForElementToBeLoaded(".core-rail", () => {
+                addOverlay(".core-rail");
+            });
+        }
+        if (window.location.pathname == "/notifications/") {
+            waitForElementToBeLoaded(".core-rail", () => {
+                addOverlay(".core-rail");
+            });
+        }
+        if (window.location.pathname.startsWith("/news/daily-rundown/")) {
+            waitForElementToBeLoaded(".core-rail", () => {
+                addOverlay(".core-rail");
+            });
+        }
+    }
 }
 
 var pageURLCheckTimer = setInterval(function() {
