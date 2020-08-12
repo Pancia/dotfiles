@@ -1,5 +1,7 @@
 #<[.config/cmus/rc]>
 
+colorscheme gruvbox
+
 set lib_sort=album
 set softvol=true
 set start_view=sorted
