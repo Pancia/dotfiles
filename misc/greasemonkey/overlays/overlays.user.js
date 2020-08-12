@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  2
+// @version  3
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @grant    none
@@ -22,7 +22,7 @@ function addOverlay(selector) {
     }).css({
         'height': '50px',
         'background-color': 'white'
-    }).pressAndHold().on("complete.pressAndHold", () => {
+    }).pressAndHold({holdTime: 3000}).on("complete.pressAndHold", () => {
       $(`[id='${selector}']`).remove();
     }).appendTo($overlay);
 
