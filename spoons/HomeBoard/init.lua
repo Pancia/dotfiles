@@ -13,11 +13,22 @@ obj.spoonPath = hs.spoons.scriptPath()
 
 function obj:init() end
 
+function getLastPlanFile()
+    return hs.execute("printf '%s' $(ls -t "..obj.homeBoardPath.."/plans/*.plan.txt 2> /dev/null | head -n 1)")
+end
+
 function obj:getLastPlan()
-    local lastPlanFile = hs.execute("printf '%s' $(ls -t "..obj.homeBoardPath.."/plans/*.plan.txt 2> /dev/null | head -n 1)")
+    local lastPlanFile = getLastPlanFile()
     hs.printf("lastPlanFile: %s", hs.inspect(lastPlanFile))
     if lastPlanFile and lastPlanFile ~= '' then
         return io.open(lastPlanFile, "r"):read("*all")
+    end
+end
+
+function obj:getLastPlanTime()
+    local lastPlanFile = getLastPlanFile()
+    if lastPlanFile and lastPlanFile ~= '' then
+        return io.popen("stat -f %m " .. lastPlanFile):read()
     end
 end
 
