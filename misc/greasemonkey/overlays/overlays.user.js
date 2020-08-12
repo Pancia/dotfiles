@@ -1,7 +1,8 @@
 // ==UserScript==
 // @name     Overlays
-// @version  1
+// @version  2
 // @require  http://code.jquery.com/jquery-latest.min.js
+// @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @grant    none
 // ==/UserScript==
 
@@ -21,6 +22,8 @@ function addOverlay(selector) {
     }).css({
         'height': '50px',
         'background-color': 'white'
+    }).pressAndHold().on("complete.pressAndHold", () => {
+      $(`[id='${selector}']`).remove();
     }).appendTo($overlay);
 
     $overlay.prependTo(selector)
