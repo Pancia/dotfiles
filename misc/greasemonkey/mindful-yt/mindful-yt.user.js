@@ -1,7 +1,8 @@
 // ==UserScript==
 // @name     mindful-yt
-// @version  3
+// @version  4
 // @require  http://code.jquery.com/jquery-latest.min.js
+// @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @grant    none
 // ==/UserScript==
 
@@ -90,36 +91,20 @@ function showOverlay(text, selector) {
     <button
         id='mindful-yt-dismiss'
         class='mindful-yt-dismiss-area mindful-yt-dismiss'>
-      Loading...
+      Hold me to dismiss!
     </button>
 </div>
 `;
     $(overlayHtml).appendTo(selector);
 }
 
-var dismissWaitTimer;
-
 function MAIN() {
-    clearTimeout(dismissWaitTimer);
-    var waitFor = dismissWaitTime;
-
     showOverlay(mindfulnessReminderText, "body");
-    dismissWaitTimer = setInterval(() => {
-        $("#mindful-yt-dismiss").text(`Wait ${waitFor}s`);
-        if (document.visibilityState !== 'visible') { return; }
-        if (waitFor-- == 0) {
-            $("#mindful-yt-dismiss")
-                .text(`DISMISS`)
-                .click(() => {$("#mindful-yt-overlay").remove();});
-            $("#mindful-yt-overlay").css({
-                "cursor": "auto"
-            });
-            $("#mindful-yt-dismiss").css({
-                "cursor": "auto"
-            });
-            clearTimeout(dismissWaitTimer);
-        }
-    }, 1000);
+    $("#mindful-yt-dismiss")
+        .pressAndHold({holdTime: dismissWaitTime * 1000})
+        .on("complete.pressAndHold", () => {
+            $("#mindful-yt-overlay").remove();
+        });
 }
 
 var pageURLCheckTimer = setInterval(function() {
@@ -128,4 +113,3 @@ var pageURLCheckTimer = setInterval(function() {
         MAIN();
     }
 }, 222);
-
