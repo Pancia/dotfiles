@@ -50,7 +50,9 @@ Plug 'deris/vim-shot-f'
 " }}}
 
 " THEME {{{
+Plug 'KabbAmine/vCoolor.vim'
 Plug 'joshdick/onedark.vim'
+
 " }}}
 
 " AUTOCOMPLETE {{{
