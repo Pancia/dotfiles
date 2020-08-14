@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name     Overlays
-// @version  4
+// @version  5
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @grant    none
 // ==/UserScript==
 
-function addOverlay(selector) {
+function addOverlay(selector, text) {
     var $overlay = $(`<div id='${selector}'></div>`)
         .width($(selector).width())
         .css({
@@ -14,12 +14,14 @@ function addOverlay(selector) {
             'position': 'absolute',
             'background-color': 'black',
             'height': '100%',
-            'z-index': 5000
+            'z-index': 2200
         });
     $('<button>', {
-        'text': `Show: ${selector}`
+        'text': text || `Show: ${selector}`
     }).css({
-        'height': '50px',
+        'height': '100px',
+				'width': '100%',
+				'font-size': '22px',
         'background-color': 'white'
     }).pressAndHold({holdTime: 3000}).on("complete.pressAndHold", () => {
       $(`[id='${selector}']`).remove();
@@ -42,13 +44,13 @@ function waitForElementToBeLoaded(selector, callback) {
 function MAIN() {
     if (window.location.host == "www.youtube.com") {
         waitForElementToBeLoaded("#comments #comment", () => {
-            addOverlay("#comments");
+            addOverlay("#comments", "STOP!, is it really worth it?");
         });
         waitForElementToBeLoaded("#related #dismissable", () => {
             addOverlay("#related");
         });
         waitForElementToBeLoaded("#primary", () => {
-            addOverlay("#primary");
+            addOverlay("#primary", "Remember you shouldn't be watching yt/anime on the iMac!");
         });
     }
 
