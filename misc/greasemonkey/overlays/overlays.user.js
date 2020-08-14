@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  3
+// @version  4
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @grant    none
@@ -17,8 +17,7 @@ function addOverlay(selector) {
             'z-index': 5000
         });
     $('<button>', {
-        'text': `Show: ${selector}`,
-        'click': (e) => {$(`[id='${selector}']`).remove()}
+        'text': `Show: ${selector}`
     }).css({
         'height': '50px',
         'background-color': 'white'
