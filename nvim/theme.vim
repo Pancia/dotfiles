@@ -22,8 +22,7 @@ let g:onedark_color_overrides = {
 \}
 colorscheme onedark
 
-hi Folded guifg=#5fd7d7
-hi Folded guibg=#404040
+hi Folded guifg=#67EAEA guibg=#808080
 
 hi MatchParen gui=standout
 hi illuminatedWord gui=standout
