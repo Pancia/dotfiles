@@ -1,7 +1,7 @@
 set shiftwidth=2
 set tabstop=2
 
-call onedark#set_highlight("clojureKeyword", {"fg": {"gui": "#EE2DB2", "cterm": "NONE"}})
+highlight link clojureKeyword Constant
 
 let g:airline_detect_whitespace=0
 

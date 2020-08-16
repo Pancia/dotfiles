@@ -5,10 +5,10 @@ set termguicolors "enables gui*
 let g:onedark_color_overrides = {
 \ "black":          {"gui": "#FFFFFF", "cterm": "NONE"},
 \ "white":          {"gui": "#000000", "cterm": "NONE"},
-\ "blue":           {"gui": "#1143EF", "cterm": "NONE"},
+\ "blue":           {"gui": "#2653F0", "cterm": "NONE"},
 \ "cyan":           {"gui": "#37B5C2", "cterm": "NONE"},
-\ "green":          {"gui": "#16A808", "cterm": "NONE"},
-\ "purple":         {"gui": "#C420DE", "cterm": "NONE"},
+\ "green":          {"gui": "#2FAC1F", "cterm": "NONE"},
+\ "purple":         {"gui": "#BC28B9", "cterm": "NONE"},
 \ "red":            {"gui": "#E00013", "cterm": "NONE"},
 \ "yellow":         {"gui": "#EDC409", "cterm": "NONE"},
 \ "dark_yellow":    {"gui": "#D1853A", "cterm": "NONE"},
@@ -27,5 +27,7 @@ hi Folded guibg=#404040
 
 hi MatchParen gui=standout
 hi illuminatedWord gui=standout
+
+hi EasyMotionIncSearch gui=standout
 
 nmap <A-CR> :VCoolor<CR>
