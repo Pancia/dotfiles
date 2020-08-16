@@ -1,6 +1,8 @@
 syntax on
 set termguicolors "enables gui*
 
+nmap <A-CR> :VCoolor<CR>
+
 " NOTE: MUST BE BEFORE `colorscheme onedark`
 let g:onedark_color_overrides = {
 \ "black":          {"gui": "#FFFFFF", "cterm": "NONE"},
@@ -29,4 +31,20 @@ hi illuminatedWord gui=standout
 
 hi EasyMotionIncSearch gui=standout
 
-nmap <A-CR> :VCoolor<CR>
+hi MyProjectTodo     guifg=#BB22DD
+" TODO asdf TODO: asdf asdf
+"
+hi MyProjectTask     guifg=#BF1020
+" TASK asdf TASK: asdf asdf
+"
+hi MyProjectNote     guifg=#1FC5C8
+" NOTE asdf NOTE: asdf asdf
+"
+hi MyProjectLandmark guifg=#17C80D
+" LANDMARK asdf LANDMARK: asdf asdf
+"
+hi MyProjectContext  guifg=#DF447B
+" CONTEXT asdf CONTEXT: asdf asdf
+"
+call onedark#set_highlight("MyProjectFixme", {"fg": g:onedark_color_overrides.yellow})
+" FIXME asdf FIXME: asdf asdf
