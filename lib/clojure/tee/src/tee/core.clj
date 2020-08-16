@@ -4,8 +4,9 @@
   (:import
     [nrepl.transport Transport]))
 
-(defn is-user-eval? [{:keys [op file]}]
-  (and (= op "eval") file))
+(defn is-user-eval? [{:keys [op file code]}]
+  (and file (= op "eval")
+    (not (.startsWith code "(do {:conjure-highlight/silent true}"))))
 
 (defn tee-transport [{:as msg :keys [transport]}]
   (assoc msg :transport

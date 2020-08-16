@@ -24,7 +24,7 @@ end
 local function eval_str(code, cb)
     client["with-filetype"]("clojure", eval["eval-str"], {
         origin = "conjure-highlight",
-        code = code,
+        code = "(do {:conjure-highlight/silent true} "..code..")",
         ["passive?"] = true,
         ["on-result"] = cb
     })
