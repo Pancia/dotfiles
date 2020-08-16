@@ -52,7 +52,6 @@ Plug 'deris/vim-shot-f'
 " THEME {{{
 Plug 'KabbAmine/vCoolor.vim'
 Plug 'joshdick/onedark.vim'
-
 " }}}
 
 " AUTOCOMPLETE {{{
@@ -72,6 +71,7 @@ Plug 'autozimu/LanguageClient-neovim', {'branch': 'next', 'do': 'bash install.sh
 Plug 'Olical/conjure', {'for': 'clojure', 'tag': 'v4.3.1'}
 Plug 'guns/vim-clojure-static', {'for': 'clojure'}
 Plug 'guns/vim-sexp', {'for': ['clojure', 'fennel']}
+Plug '~/dotfiles/lib/vim/conjure-highlight'
 " }}}
 
 " LUA {{{
