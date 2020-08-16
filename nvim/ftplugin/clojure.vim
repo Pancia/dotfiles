@@ -1,6 +1,8 @@
 set shiftwidth=2
 set tabstop=2
 
+call onedark#set_highlight("clojureKeyword", {"fg": {"gui": "#EE2DB2", "cterm": "NONE"}})
+
 let g:airline_detect_whitespace=0
 
 let g:clojure_maxlines=300

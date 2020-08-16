@@ -27,7 +27,7 @@
 	<key>ClosingHotkeySwitchesSpaces</key>
 	<true/>
 	<key>Command</key>
-	<string></string>
+	<string>/usr/local/bin/zsh</string>
 	<key>CommandSelection</key>
 	<true/>
 	<key>Control</key>
@@ -450,6 +450,12 @@
 	<false/>
 	<key>NSColorPanelMode</key>
 	<string>6</string>
+	<key>NSColorPanelMode.modal</key>
+	<integer>6</integer>
+	<key>NSColorPanelToolbarIsShown.modal</key>
+	<integer>1</integer>
+	<key>NSColorPanelVisibleSwatchRows.modal</key>
+	<integer>2</integer>
 	<key>NSNavLastRootDirectory</key>
 	<string>~/Library/Application Support/iTerm2/Scripts</string>
 	<key>NSNavLastUserSetHideExtensionButtonState</key>
@@ -501,14 +507,18 @@
 		<key>TB Is Shown</key>
 		<integer>1</integer>
 	</dict>
+	<key>NSWindow Frame NSColorPanel</key>
+	<string>0 83 224 275 0 0 2560 1417 </string>
+	<key>NSWindow Frame NSColorPanel.modal</key>
+	<string>1136 802 347 387 0 0 2560 1417 </string>
 	<key>NSWindow Frame NSNavPanelAutosaveName</key>
 	<string>880 726 799 448 0 0 2560 1417 </string>
 	<key>NSWindow Frame Preferences</key>
 	<string>753 276 924 485 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 0</key>
-	<string>758 6 1802 1094 0 0 2560 1417 </string>
+	<string>758 0 1802 1123 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 1</key>
-	<string>0 0 2560 1290 0 0 2560 1417 </string>
+	<string>-1 0 2560 1417 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 2</key>
 	<string>0 317 1802 1100 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 3</key>
@@ -569,16 +579,12 @@
 			</dict>
 			<key>Ansi 11 Color</key>
 			<dict>
-				<key>Alpha Component</key>
-				<real>1</real>
 				<key>Blue Component</key>
-				<real>0.24076805752702057</real>
-				<key>Color Space</key>
-				<string>sRGB</string>
+				<string>0.3098039</string>
 				<key>Green Component</key>
-				<real>0.80591138770619253</real>
+				<string>0.9137255</string>
 				<key>Red Component</key>
-				<real>0.8800811767578125</real>
+				<string>0.9882353</string>
 			</dict>
 			<key>Ansi 12 Color</key>
 			<dict>
@@ -727,7 +733,7 @@
 			<key>Blur</key>
 			<true/>
 			<key>Blur Radius</key>
-			<real>7.1742147842639588</real>
+			<real>5.1258228902284255</real>
 			<key>Bold Color</key>
 			<dict>
 				<key>Blue Component</key>
@@ -925,7 +931,7 @@
 			<key>Normal Font</key>
 			<string>RobotoMonoForPowerline-Medium 24</string>
 			<key>Only The Default BG Color Uses Transparency</key>
-			<false/>
+			<true/>
 			<key>Open Toolbelt</key>
 			<false/>
 			<key>Option Key Sends</key>
@@ -1083,7 +1089,7 @@
 			<key>Thin Strokes</key>
 			<integer>0</integer>
 			<key>Transparency</key>
-			<real>0.068670685279187807</real>
+			<real>0.049272287436548226</real>
 			<key>Triggers</key>
 			<array/>
 			<key>Unicode Version</key>
@@ -1135,12 +1141,12 @@
 		<key>screenFrame</key>
 		<string>{{0, 0}, {2560, 1440}}</string>
 		<key>topLeft</key>
-		<string>{1010, 821}</string>
+		<string>{494, 686}</string>
 	</dict>
 	<key>NoSyncInstallationId</key>
 	<string>3C9F06F6-1E59-43C7-BAC3-D190375DCD5D</string>
 	<key>NoSyncLaunchExperienceControllerRunCount</key>
-	<integer>74</integer>
+	<integer>75</integer>
 	<key>NoSyncNeverPromptToChangeOption</key>
 	<true/>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile</key>
@@ -1927,7 +1933,7 @@
 	<key>SUHasLaunchedBefore</key>
 	<true/>
 	<key>SULastCheckTime</key>
-	<date>2020-08-12T22:54:30Z</date>
+	<date>2020-08-15T23:30:03Z</date>
 	<key>SUUpdateRelaunchingMarker</key>
 	<false/>
 	<key>SavePasteHistory</key>

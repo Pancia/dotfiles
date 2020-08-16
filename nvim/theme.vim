@@ -27,3 +27,5 @@ hi Folded guibg=#404040
 
 hi MatchParen gui=standout
 hi illuminatedWord gui=standout
+
+nmap <A-CR> :VCoolor<CR>
