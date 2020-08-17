@@ -182,6 +182,10 @@ function snoozeTimer()
 end
 
 function notifCallback(notif)
+    if obj._soundRepeat then
+      obj._soundRepeat:stop()
+      obj._soundRepeat = nil
+    end
     local action = obj._sound.action
     local activationType = notif:activationType()
     if activationType == hs.notify.activationTypes.actionButtonClicked then
@@ -219,6 +223,9 @@ function lotusBlock()
                 clearCheck:stop()
                 clearCheck = nil
             end
+        end)
+        obj._soundRepeat = hs.timer.doEvery(60, function()
+          obj:playAwarenessSound()
         end)
     end
 end
