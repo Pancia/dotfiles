@@ -261,7 +261,7 @@ function obj:start()
         end)
     else
         obj._lotusTimer = hs.timer.doEvery(interval, lotusBlock)
-        obj._lotusTimer:setNextTrigger(saved["nextTrigger"] or interval)
+        obj._lotusTimer:setNextTrigger((saved["nextTrigger"] < interval) and saved["nextTrigger"] or interval)
     end
 
     if not saved["soundIdx"] then
