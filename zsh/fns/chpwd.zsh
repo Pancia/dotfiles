@@ -41,10 +41,21 @@ function listVims {
         echo "&> VIMS:" && echo "$VIMS"
 }
 
-# used by z.zsh
-function recordCWD {
+function _recordCWD {
     echo `pwd` >> ~/.config/dir_history
     echo "$(cat ~/.config/dir_history | sort | uniq)" > ~/.config/dir_history
+}
+
+# used by z.zsh
+function recordCWD {
+    local root="$(git rev-parse --show-toplevel 2> /dev/null)"
+    if [[ $root != '' ]]; then
+        if [[ `pwd` == $root ]]; then
+            _recordCWD
+        fi
+    else
+        _recordCWD
+    fi
 }
 
 function chpwd {
