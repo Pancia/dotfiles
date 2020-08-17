@@ -3,6 +3,14 @@ set termguicolors "enables gui*
 
 nmap <A-CR> :VCoolor<CR>
 
+let g:unite_source_menu_menus.theme = {'description' : 'theme'}
+let g:unite_source_menu_menus.theme.command_candidates = [
+      \['show syntax attribute', "echo synIDattr(synID(line('.'), col('.'), 0), 'name')"],
+      \['debug syntax', "echo ('hi<' . synIDattr(synID(line('.'),col('.'),1),'name') . '> trans<' . synIDattr(synID(line('.'),col(' '),0),'name') . '> lo<' . synIDattr(synIDtrans(synID(line('.'),col('.'),1)),'name') . '>')"],
+      \['show syntax stack', "echo map(synstack(line('.'), col('.')), 'synIDattr(v:val, \"name\")')"],
+      \['list syntax rules', "exec 'syn list '.synIDattr(synID(line('.'), col('.'), 0), 'name')"],
+      \]
+
 " NOTE: MUST BE BEFORE `colorscheme onedark`
 let g:onedark_color_overrides = {
 \ "black":          {"gui": "#FFFFFF", "cterm": "NONE"},
