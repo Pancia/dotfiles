@@ -1,17 +1,13 @@
 == MAIN ==
 
 == BACKLOG ==
-- [ ] :lotus: switch to fennel & state machine architecture
 - [ ] :deoplete: :nvim: :conjure: lags if (?) not connected to repl (or was not started ?)
 - [ ] :clojure: ? cljfmt: format {} & bindings
 - [ ] :cljfmt: compare with IDEA/Cursive && ? conjure-ify
-- [ ] :clojure: ? rainbow parens
-- [ ] :clojure: add static highlighting: https://github.com/guns/vim-clojure-highlight/blob/master/autoload/vim_clojure_highlight.vim
 - [ ] :bin/cmds: should set iterm2 tab title
 - [ ] :nvim: terminal buffer names empty
 - [ ] :nvim: buffer/tab names stutter when switching
 - [ ] :nvim: try `set diffopt+=internal,algorithm:patience`
-- [ ] :spoons: port to fennel!
 - [ ] :nvim: vim-plug lazy load plugins `vim --startuptime`
 - [ ] :zsh: silence antigen bundle on `.zshrc`
 - [ ] :zsh: antigen: install using brew

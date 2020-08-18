@@ -297,8 +297,12 @@ function obj:stop()
     if obj._lotusTimer then
         obj._lotusTimer:stop()
     end
-    obj._menuRefreshTimer:stop()
-    obj._menubar:delete()
+    if obj._menuRefreshTimer then
+      obj._menuRefreshTimer:stop()
+    end
+    if obj._menubar then
+      obj._menubar:delete()
+    end
     return self
 end
 
