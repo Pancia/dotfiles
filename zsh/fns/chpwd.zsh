@@ -25,6 +25,7 @@ function cache {
 }
 
 function showTodos {
+    [[ `pwd` =~ ~/dotfiles ]] && return
     [[ -f TODO.wiki ]] && echo "&> TODO.wiki:" && cat TODO.wiki
     [[ -f wiki/TODO.wiki ]] && echo "&> wiki/TODO.wiki:" && cat wiki/TODO.wiki
 }
