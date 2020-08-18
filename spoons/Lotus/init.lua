@@ -249,10 +249,13 @@ function obj:start()
     obj._menubar = hs.menubar.new():setMenu(renderMenu)
 
     interval, refreshRate = userIntervalToSeconds(obj.interval)
+    obj._lotusTimer = hs.timer.doEvery(interval, lotusBlock)
+
     if saved["pausedFor"] then
         obj._paused = true
+        obj._lotusTimer = obj._lotusTimer:stop()
         obj._lastNextTrigger = saved["nextTrigger"]
-        obj._pauseTimer = hs.timer.doAfter(refreshRate*saved["pausedFor"], function()
+        obj._pauseTimer = hs.timer.doAfter(saved["pausedFor"], function()
             obj._pauseTimer = nil
             obj._paused = false
             obj._lotusTimer = hs.timer.doEvery(interval, lotusBlock)
@@ -260,7 +263,6 @@ function obj:start()
             obj._menuRefreshTimer:fire()
         end)
     else
-        obj._lotusTimer = hs.timer.doEvery(interval, lotusBlock)
         obj._lotusTimer:setNextTrigger((saved["nextTrigger"] < interval) and saved["nextTrigger"] or interval)
     end
 
