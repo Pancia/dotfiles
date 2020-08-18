@@ -32,6 +32,13 @@ function obj:getLastPlanTime()
     end
 end
 
+function obj:addTodos(browser)
+    for name, path in pairs(obj.todosPaths) do
+        local text = io.open(path, "r"):read("*all")
+        browser:evaluateJavaScript("HOMEBOARD.addTodos('"..name.."', ".. hs.inspect(text) ..")")
+    end
+end
+
 function obj:showHomeBoard(onClose)
     local frame = hs.screen.primaryScreen():fullFrame()
     local rect = hs.geometry.rect(
@@ -52,6 +59,7 @@ function obj:showHomeBoard(onClose)
             browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..videoToPlay().."\")")
             local lastPlan = obj:getLastPlan()
             browser:evaluateJavaScript("HOMEBOARD.setReview(".. hs.inspect(lastPlan) ..")")
+            obj:addTodos(browser)
         elseif body.type == "newVideo" then
             browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..videoToPlay().."\")")
         elseif body.type == "pickVideo" then

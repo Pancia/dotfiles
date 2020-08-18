@@ -78,6 +78,10 @@ localInstall("HomeBoard", {
     config = {
         homeBoardPath = HOME.."/Dropbox/HomeBoard/",
         videosPath = HOME.."/Movies/HomeBoard",
+        todosPaths = {
+            dotfiles = HOME.."/dotfiles/wiki/TODO.wiki",
+            dropbox  = HOME.."/Dropbox/wiki/Tasks.wiki"
+        }
     },
     fn = function(spoon)
         HomeBoard = spoon
