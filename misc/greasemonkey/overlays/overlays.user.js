@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  5
+// @version  6
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @grant    none
@@ -20,11 +20,11 @@ function addOverlay(selector, text) {
         'text': text || `Show: ${selector}`
     }).css({
         'height': '100px',
-				'width': '100%',
-				'font-size': '22px',
+        'width': '100%',
+        'font-size': '22px',
         'background-color': 'white'
     }).pressAndHold({holdTime: 3000}).on("complete.pressAndHold", () => {
-      $(`[id='${selector}']`).remove();
+        $(`[id='${selector}']`).remove();
     }).appendTo($overlay);
 
     $overlay.prependTo(selector)
@@ -37,7 +37,7 @@ function waitForElementToBeLoaded(selector, callback) {
         if (x == null) { return }
         // x was loaded, go ahead!
         clearInterval(tid)
-        callback()
+        callback(x)
     }, 100);
 }
 
@@ -51,6 +51,17 @@ function MAIN() {
         });
         waitForElementToBeLoaded("#primary", () => {
             addOverlay("#primary", "Remember you shouldn't be watching yt/anime on the iMac!");
+        });
+        waitForElementToBeLoaded("#avatar-btn", () => {
+            $("#avatar-btn").click()
+            $("ytd-popup-container").hide()
+            waitForElementToBeLoaded("#channel-container #email", (x) => {
+                if (x.title == "anthony@itausa.net") {
+                    $("[id='#primary']").remove()
+                }
+                $("ytd-popup-container").show()
+                $("#avatar-btn").click()
+            });
         });
     }
 
