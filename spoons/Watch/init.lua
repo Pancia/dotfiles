@@ -18,10 +18,12 @@ function obj:init()
 end
 
 function runScriptCmd(script)
-    cmd = script.command
     hs.execute("mkdir -p "..obj.logDir)
     local logFileLoc = obj.logDir.."/"..script.name
-    hs.execute(cmd.." | tee -a "..logFileLoc.." &", true)
+    hs.task.new(script.command, nil, function(_, stdOut, stdErr)
+        io.open(logFileLoc, "a"):write(stdOut):write(stdErr):close()
+        return true
+    end):start()
 end
 
 function startScriptTimer(script)

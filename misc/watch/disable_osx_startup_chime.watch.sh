@@ -1,3 +1,5 @@
+#!/usr/bin/env zsh
+
 function disable_osx_startup_chime() {
     local sysAudVol=$(nvram SystemAudioVolume | cut -d$'\t' -f2)
     if [[ ! "$sysAudVol" == '%80' ]]; then
@@ -11,4 +13,4 @@ function disable_osx_startup_chime() {
     fi
 }
 
-disable_osx_startup_chime
+disable_osx_startup_chime 2>&1
