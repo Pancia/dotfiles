@@ -40,8 +40,7 @@ end
 local function execute_syntax_command()
     eval_str("(ns-name *ns*)", function(ns)
         eval_str("(conjure-highlight/syntax-command (quote "..ns.."))", function(r)
-            vim.api.nvim_command("execute "..r)
-            vim.api.nvim_command("let &syntax = &syntax")
+            vim.api.nvim_command("ExecuteSyntaxCommand "..r)
         end)
     end)
 end
