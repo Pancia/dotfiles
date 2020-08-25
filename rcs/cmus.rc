@@ -10,5 +10,5 @@ set start_view=sorted
 set format_playlist= %-15{album} | %-15%{artist} > %{title}%= %{?genre?%g} %{duration} .
 set format_current= %{album} | %{artist} > %{title}%=%{?genre?%g}
 
-unbind common t
-unbind common m
+unbind -f common t
+unbind -f common m
