@@ -59,7 +59,7 @@ endfunction
 
 augroup auto_save
   autocmd!
-  au CursorHold,InsertLeave * nested call AutoSave()
+  au CursorHold,InsertLeave,TextChanged * nested call AutoSave()
 augroup END
 
 function! AutoSave()
