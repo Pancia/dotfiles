@@ -74,6 +74,9 @@
           (fn-var? v) "clojureFunc"
           :else "clojureVariable")))
 
+(defn vim-escape [s]
+  (string/replace s "|" "<bar>"))
+
 (defn syntax-keyword-dictionary [ns-refs]
   (->> ns-refs
        (group-by (comp var-type peek))
@@ -81,6 +84,7 @@
                (->> sym->var
                     (mapv (comp pr-str str first))
                     (string/join \,)
+                    (vim-escape)
                     (format "'%s': [%s]" type))))
        (string/join \,)))
 
