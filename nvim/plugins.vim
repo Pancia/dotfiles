@@ -64,7 +64,7 @@ Plug 'ctrlpvim/ctrlp.vim'
 Plug 'Shougo/unite.vim'
 Plug 'Shougo/unite-help'
 Plug 'Shougo/neoyank.vim'
-"Plug 'autozimu/LanguageClient-neovim', {'branch': 'next', 'do': 'bash install.sh'}
+Plug 'autozimu/LanguageClient-neovim', {'branch': 'next', 'do': 'bash install.sh'}
 " }}}
 
 " CLOJURE {{{

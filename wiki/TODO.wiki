@@ -1,5 +1,4 @@
 == MAIN (in priority order) ==
-- [ ] :nvim: disable clojure lsp (is it better?, does it try to write a new ns form?)
 - [ ] :iterm: :nvim: print table of colors (in vim & term) to better pick theme colors
 - [ ] :nvim: NOTE color is too similar to clojure keywords
 - [ ] :nvim: underline/standout project todo markers (eg NOTE, TODO, ...)
