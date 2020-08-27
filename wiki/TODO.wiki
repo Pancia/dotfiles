@@ -1,6 +1,4 @@
 == MAIN (in priority order) ==
-- [ ] :iterm: :nvim: print table of colors (in vim & term) to better pick theme colors
-- [ ] :nvim: :clojure: rainbow more colors! (? whats max nesting lvl of "([{}])" ?)
 - [ ] :nvim: vim-signify signs & colors
 - [ ] :conjure: ,vd => open clojuredocs.org (assert! ,vd mapping does not exist)
 - [ ] :homeboard: timestamp of last journal
