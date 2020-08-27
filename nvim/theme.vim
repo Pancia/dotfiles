@@ -54,5 +54,7 @@ hi MyProjectLandmark guifg=#17C80D gui=standout
 hi MyProjectContext  guifg=#DF447B gui=standout
 " CONTEXT asdf CONTEXT: asdf asdf
 "
-call onedark#set_highlight("MyProjectFixme", {"fg": g:onedark_color_overrides.yellow, "gui": "standout"})
+call onedark#set_highlight("MyProjectFixme", {"fg": g:onedark_color_overrides.yellow
+            \                                ,"bg": g:onedark_color_overrides.white
+            \                                ,"gui": "standout"})
 " FIXME asdf FIXME: asdf asdf
