@@ -25,4 +25,9 @@ if [[ -n "$markers" ]]; then
     exit 13
 fi
 
+if [[ `cmds list` =~ 'pre_commit' ]]; then
+    cmds pre_commit
+    exit $?
+fi
+
 exit 0

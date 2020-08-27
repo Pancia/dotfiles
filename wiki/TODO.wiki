@@ -6,7 +6,6 @@
 - [ ] :nvim: :gitgutter: `Error detected while processing function gitgutter#process_buffer[19]..gitgutter#diff#run_diff[86]..gitgutter#async#execute: line 11: E903: Process failed to start: too many open files: "/bin/sh"`
 - [ ] :cmds: :ruby: extract execute function to lib/ruby/
 - [ ] :nvim: :easymotion: ??? add lispy chars to jump targets ???
-- [ ] :git: :hooks: pre-commit should tell you file & line of errors
 - [ ] :nvim: :vimfiler: which-key localleader , commands!
 
 == BACKLOG (in alphabetical order) ==
