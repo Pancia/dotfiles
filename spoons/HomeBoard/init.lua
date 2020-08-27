@@ -25,6 +25,7 @@ function obj:getLastPlan()
     end
 end
 
+-- NOTE: used to make notif subtitle
 function obj:getLastPlanTime()
     local lastPlanFile = getLastPlanFile()
     if lastPlanFile and lastPlanFile ~= '' then

@@ -97,26 +97,26 @@ localInstall("Lotus", {
             , notif = function() return {
                 title = "Quick Stretch! #short", withdrawAfter = 0
                 , informativeText = HomeBoard:getLastPlan()
-                , subTitle = os.date("%c", HomeBoard:getLastPlanTime())
+                , subTitle = HomeBoard:getLastPlanTime()
             } end},
             {name = "long", path = "gong.wav", volume = .5
             , notif = function() return {
                 title = "Take a walk! #long", withdrawAfter = 0
                 , informativeText = HomeBoard:getLastPlan()
-                , subTitle = os.date("%c", HomeBoard:getLastPlanTime())
+                , subTitle = HomeBoard:getLastPlanTime()
             } end},
             {name = "short", path = "bowl.wav"
             , notif = function() return {
                 title = "Quick Stretch! #short", withdrawAfter = 0
                 , informativeText = HomeBoard:getLastPlan()
-                , subTitle = os.date("%c", HomeBoard:getLastPlanTime())
+                , subTitle = HomeBoard:getLastPlanTime()
             } end},
             {name = "reset", path = "gong.wav", volume = .5
             , action = function(onDone) HomeBoard:showHomeBoard(onDone) end
             , notif = function() return {
                 title = "Take 10 to #review #plan", withdrawAfter = 0
                 , informativeText = HomeBoard:getLastPlan()
-                , subTitle = os.date("%c", HomeBoard:getLastPlanTime())
+                , subTitle = HomeBoard:getLastPlanTime()
             } end},
         },
         interval = { minutes = 30 },
