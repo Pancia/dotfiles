@@ -28,7 +28,9 @@ end
 function obj:getLastPlanTime()
     local lastPlanFile = getLastPlanFile()
     if lastPlanFile and lastPlanFile ~= '' then
-        return io.popen("stat -f %m " .. lastPlanFile):read()
+        return lastPlanFile:match("[%d-:_]+")
+    else
+        return ""
     end
 end
 
@@ -58,7 +60,7 @@ function obj:showHomeBoard(onClose)
         if body.type == "loaded" then
             browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..videoToPlay().."\")")
             local lastPlan = obj:getLastPlan()
-            browser:evaluateJavaScript("HOMEBOARD.setReview(".. hs.inspect(lastPlan) ..")")
+            browser:evaluateJavaScript("HOMEBOARD.setReview("..hs.inspect(obj:getLastPlanTime())..","..hs.inspect(lastPlan)..")")
             obj:addTodos(browser)
         elseif body.type == "newVideo" then
             browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..videoToPlay().."\")")

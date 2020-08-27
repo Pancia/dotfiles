@@ -1,7 +1,6 @@
 == MAIN (in priority order) ==
 - [ ] :nvim: vim-signify signs & colors
 - [ ] :conjure: ,vd => open clojuredocs.org (assert! ,vd mapping does not exist)
-- [ ] :homeboard: timestamp of last journal
 - [ ] :homeboard: ?? click on todo textarea to open iterm + vim
 - [ ] :nvim: :gitgutter: `Error detected while processing function gitgutter#process_buffer[19]..gitgutter#diff#run_diff[86]..gitgutter#async#execute: line 11: E903: Process failed to start: too many open files: "/bin/sh"`
 - [ ] :nvim: :easymotion: ??? add lispy chars to jump targets ???
