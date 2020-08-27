@@ -39,20 +39,20 @@ hi illuminatedWord gui=standout
 
 hi EasyMotionIncSearch gui=standout
 
-hi MyProjectTodo     guifg=#BB22DD
+hi MyProjectTodo     guifg=#BB22DD gui=standout
 " TODO asdf TODO: asdf asdf
 "
-hi MyProjectTask     guifg=#BF1020
+hi MyProjectTask     guifg=#BF1020 gui=standout
 " TASK asdf TASK: asdf asdf
 "
-hi MyProjectNote     guifg=#1FC5C8
+hi MyProjectNote     guifg=#1FC5C8 gui=standout
 " NOTE asdf NOTE: asdf asdf
 "
-hi MyProjectLandmark guifg=#17C80D
+hi MyProjectLandmark guifg=#17C80D gui=standout
 " LANDMARK asdf LANDMARK: asdf asdf
 "
-hi MyProjectContext  guifg=#DF447B
+hi MyProjectContext  guifg=#DF447B gui=standout
 " CONTEXT asdf CONTEXT: asdf asdf
 "
-call onedark#set_highlight("MyProjectFixme", {"fg": g:onedark_color_overrides.yellow})
+call onedark#set_highlight("MyProjectFixme", {"fg": g:onedark_color_overrides.yellow, "gui": "standout"})
 " FIXME asdf FIXME: asdf asdf

@@ -1,7 +1,5 @@
 == MAIN (in priority order) ==
 - [ ] :iterm: :nvim: print table of colors (in vim & term) to better pick theme colors
-- [ ] :nvim: NOTE color is too similar to clojure keywords
-- [ ] :nvim: underline/standout project todo markers (eg NOTE, TODO, ...)
 - [ ] :nvim: :clojure: rainbow more colors! (? whats max nesting lvl of "([{}])" ?)
 - [ ] :nvim: vim-signify signs & colors
 - [ ] :conjure: ,vd => open clojuredocs.org (assert! ,vd mapping does not exist)
