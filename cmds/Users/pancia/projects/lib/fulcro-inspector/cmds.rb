@@ -1,12 +1,5 @@
 # require's go here
 
-def execute(command)
-  temp = "/tmp/command.zsh"
-  pretty_command = command.lstrip.split(/\s\s+/).join(" \\\n")
-  system("echo '#{pretty_command}' > #{temp} && bat #{temp}")
-  system(command)
-end
-
 module CMD
   def shadow(opts)
     opts.banner = "Usage: shadow"
@@ -15,7 +8,7 @@ module CMD
       command = %{
         shadow-cljs watch test-app electron-main electron-renderer electron-sandbox base-visualizers
       }
-      execute(command)
+      EXE.execute(command)
     }
   end
   def electron(opts)
@@ -25,7 +18,7 @@ module CMD
       command = %{
         (cd out/electron; electron .)
       }
-      execute(command)
+      EXE.execute(command)
     }
   end
   def server(opts)
@@ -35,7 +28,7 @@ module CMD
       command = %{
         clj -A:nREPL:test-app
       }
-      execute(command)
+      EXE.execute(command)
     }
   end
 end
