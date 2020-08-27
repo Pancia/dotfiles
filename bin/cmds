@@ -16,6 +16,15 @@ class OptionParser
   end
 end
 
+module EXE
+  def self.system(command)
+    temp = "/tmp/command.zsh"
+    pretty_command = command.lstrip.split(/\s\s+/).join(" \\\n")
+    Kernel.system("echo '#{pretty_command}' > #{temp} && bat #{temp}")
+    Kernel.system(command)
+  end
+end
+
 module CMD end
 class CMDS extend CMD
   def self.list(opts)

@@ -1,12 +1,3 @@
-# require's go here
-
-def execute(command)
-  temp = "/tmp/command.zsh"
-  pretty_command = command.lstrip.split(/\s\s+/).join(" \\\n")
-  system("echo '#{pretty_command}' > #{temp} && bat #{temp}")
-  system(command)
-end
-
 module CMD
   def example(opts)
     opts.banner = "Usage: example"
@@ -15,7 +6,7 @@ module CMD
       command = %{
         echo "FIXME"
       }
-      execute(command)
+      EXE.system(command)
     }
   end
 end
