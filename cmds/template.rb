@@ -3,10 +3,9 @@ module CMD
     opts.banner = "Usage: example"
     opts.info = "FIXME"
     lambda { |*args|
-      command = %{
+      EXE.system %{
         echo "FIXME"
       }
-      EXE.system(command)
     }
   end
 end
