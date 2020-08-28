@@ -1,4 +1,4 @@
--- TODO: [[../wiki/HammerSpoon.wiki]]
+-- CONTEXT: [[~/dotfiles/wiki/HammerSpoon.wiki]]
 
 hs_global_modifier = {"cmd", "ctrl"}
 hs.hotkey.bindSpec({hs_global_modifier, "c"}, hs.toggleConsole)
@@ -93,6 +93,18 @@ localInstall("Lotus", {
     config = {
         logDir = HOME.."/.log/lotus/",
         sounds = {
+            {name = "short", path = "bowl.wav"
+            , notif = function() return {
+                title = "Quick Stretch! #short", withdrawAfter = 0
+                , informativeText = HomeBoard:getLastPlan()
+                , subTitle = HomeBoard:getLastPlanTime()
+            } end},
+            {name = "long", path = "gong.wav", volume = .5
+            , notif = function() return {
+                title = "Take a walk! #long", withdrawAfter = 0
+                , informativeText = HomeBoard:getLastPlan()
+                , subTitle = HomeBoard:getLastPlanTime()
+            } end},
             {name = "short", path = "bowl.wav"
             , notif = function() return {
                 title = "Quick Stretch! #short", withdrawAfter = 0
