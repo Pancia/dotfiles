@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  6
+// @version  7
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @grant    none
@@ -66,8 +66,8 @@ function MAIN() {
     }
 
     if (window.location.host == "www.linkedin.com") {
-        waitForElementToBeLoaded(".feed-shared-news-module", () => {
-            addOverlay(".feed-shared-news-module");
+        waitForElementToBeLoaded(".news-module", () => {
+            addOverlay(".news-module");
         });
         if (window.location.pathname == "/feed/") {
             waitForElementToBeLoaded(".core-rail", () => {
