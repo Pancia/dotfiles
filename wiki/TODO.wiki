@@ -1,9 +1,10 @@
 == MAIN (in priority order) ==
-- [ ] :nvim: vim-signify signs & colors
-- [ ] :conjure: ,vd => open clojuredocs.org (assert! ,vd mapping does not exist)
-- [ ] :homeboard: ?? click on todo textarea to open iterm + vim
-- [ ] :nvim: :gitgutter: `Error detected while processing function gitgutter#process_buffer[19]..gitgutter#diff#run_diff[86]..gitgutter#async#execute: line 11: E903: Process failed to start: too many open files: "/bin/sh"`
-- [ ] :nvim: :easymotion: ??? add lispy chars to jump targets ???
+- [ ] :clojure: REBL nrepl tap middleware
+- [ ] :clojure: `$ repl` in grp wont take enter?
+- [ ] :nvim: :easymotion:
+    - [ ] ??? add lispy chars to jump targets ???
+    - [ ] https://github.com/easymotion/vim-easymotion#bonus-fuzzy-search-with-easymotion
+- [ ] :nvim: :conjure: ,vd => open clojuredocs.org (assert! ,vd mapping does not exist)
 - [ ] :nvim: :vimfiler: which-key localleader , commands!
 
 == BACKLOG (in alphabetical order) ==
@@ -11,6 +12,7 @@
 - [ ] :cljfmt: compare with IDEA/Cursive && ? conjure-ify
 - [ ] :clojure: ? cljfmt: format {} & bindings
 - [ ] :deoplete: :nvim: :conjure: lags if (?) not connected to repl (or was not started ?)
+- [ ] :nvim: :clojure: gray out unused params #"_\w+"
 - [ ] :nvim: buffer/tab names stutter when switching
 - [ ] :nvim: terminal buffer names empty
 - [ ] :nvim: try `set diffopt+=internal,algorithm:patience`

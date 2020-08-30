@@ -46,7 +46,6 @@ function obj:videoToPlay()
     return obj.files[math.random(#obj.files)]
 end
 
--- NOTE boardFolder = "board",
 function obj:addBoard(browser)
     for file in hs.execute("ls "..obj.homeBoardPath.."/"..obj.boardFolder.."/*"):gmatch("[^\n]+") do
         local text = io.open(file, "r"):read("*all")
