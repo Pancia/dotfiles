@@ -46,6 +46,16 @@ function obj:videoToPlay()
     return obj.files[math.random(#obj.files)]
 end
 
+-- NOTE boardFolder = "board",
+function obj:addBoard(browser)
+    for file in hs.execute("ls "..obj.homeBoardPath.."/"..obj.boardFolder.."/*"):gmatch("[^\n]+") do
+        local text = io.open(file, "r"):read("*all")
+        local fileName = file:match("^.+/([^%.]+).+$")
+        browser:evaluateJavaScript("HOMEBOARD.addBoardItem('"..fileName.."', "..hs.inspect(text)..")")
+    end
+end
+--TODO musingsFolder = "musings"
+
 function handleHomeboardMessages(response)
     local body = response.body
     if body.type == "loaded" then
@@ -53,6 +63,7 @@ function handleHomeboardMessages(response)
         local lastPlan = obj:getLastPlan()
         obj.browser:evaluateJavaScript("HOMEBOARD.setReview("..hs.inspect(obj:getLastPlanTime())..","..hs.inspect(lastPlan)..")")
         obj:addTodos(obj.browser)
+        obj:addBoard(obj.browser)
     elseif body.type == "newVideo" then
         obj.browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..obj:videoToPlay().."\")")
     elseif body.type == "pickVideo" then
@@ -78,7 +89,8 @@ function handleHomeboardMessages(response)
 end
 
 function obj:showHomeBoard(onClose)
-    local uc = hs.webview.usercontent.new("HammerSpoon") -- jsPortName
+    local jsPortName = "HammerSpoon" -- NOTE: used by homeboard.js
+    local uc = hs.webview.usercontent.new(jsPortName)
     uc:setCallback(handleHomeboardMessages)
     local fullscreen = hs.screen.primaryScreen():fullFrame()
     local browser = hs.webview.newBrowser(fullscreen, {developerExtrasEnabled = true}, uc)

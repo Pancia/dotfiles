@@ -81,7 +81,9 @@ localInstall("HomeBoard", {
         todosPaths = {
             dotfiles = HOME.."/dotfiles/wiki/TODO.wiki",
             dropbox  = HOME.."/Dropbox/wiki/Tasks.wiki"
-        }
+        },
+        boardFolder = "board",
+        musingsFolder = "musings"
     },
     fn = function(spoon)
         HomeBoard = spoon
