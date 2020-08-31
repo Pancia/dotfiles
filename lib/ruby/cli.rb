@@ -44,7 +44,7 @@ class CLI
       opts.separator ""
       opts.separator "COMMANDs:"
       opts.separator cmd_to_opts
-        .map {|m,i| "\t"+m.to_s+"\t:\t"+i[:opts].info }
+        .map {|m,i| "\t#{m.to_s}\t:\t#{i[:opts].info}" }
         .join "\n"
       opts.separator ""
       yield opts if block_given?

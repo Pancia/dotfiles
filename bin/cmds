@@ -17,11 +17,11 @@ class OptionParser
 end
 
 module EXE
-  def self.system(command)
+  def self.system(command, opts={silent: false})
     temp = "/tmp/command.zsh"
     pretty_command = command.lstrip.split(/\s\s+/).join(" \\\n")
-    Kernel.system("echo '#{pretty_command}' > #{temp} && bat #{temp}")
-    Kernel.system(command)
+    opts[:silent] or Kernel.system("echo '#{pretty_command}' > #{temp} && bat #{temp}")
+    Kernel.system(command) or exit $?.exitstatus
   end
 end
 
