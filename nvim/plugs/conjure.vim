@@ -5,7 +5,7 @@ let g:conjure#mapping#def_word = "gd"
 let g:conjure#log#wrap = v:true
 
 function! ResolveSymbol()
-  call luaeval("require('conjure.client')['with-filetype']('clojure', require('conjure.eval')['eval-str'], { origin = 'dotfiles/clojuredocs', code = '`".expand("<cword>")."', ['on-result'] = function(sym) vim.api.nvim_command('call OpenClojureDocs(\"'..sym..'\")') end})")
+  call luaeval("require('conjure.client')['with-filetype']('clojure', require('conjure.eval')['eval-str'], { origin = 'dotfiles/clojuredocs', code = '(do {:conjure-highlight/silent true} `".expand("<cword>").")', ['passive?'] = true, ['on-result'] = function(sym) vim.api.nvim_command('call OpenClojureDocs(\"'..sym..'\")') end})")
 endfunction
 
 function! OpenClojureDocs(fqsym)
