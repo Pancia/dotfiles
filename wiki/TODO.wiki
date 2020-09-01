@@ -1,6 +1,5 @@
 == MAIN (in priority order) ==
 - [ ] :clojure: REBL nrepl tap middleware
-- [ ] :clojure: `$ repl` in grp wont take enter?
 - [ ] :nvim: :iterm2: unmap left alt, change :VCoolor mapping ... ?
 - [ ] :nvim: :easymotion:
     - [ ] ??? add lispy chars to jump targets ???
