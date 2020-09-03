@@ -1,11 +1,9 @@
 == MAIN (in priority order) ==
-- [ ] :clojure: REBL nrepl tap middleware
-- [ ] :nvim: :iterm2: unmap left alt, change :VCoolor mapping ... ?
+- [o] :clojure: REBL nrepl tap middleware
 - [ ] :nvim: :easymotion:
     - [ ] ??? add lispy chars to jump targets ???
     - [ ] https://github.com/easymotion/vim-easymotion#bonus-fuzzy-search-with-easymotion
-- [ ] :nvim: :conjure: ,vd => open clojuredocs.org (assert! ,vd mapping does not exist)
-- [ ] :nvim: :vimfiler: which-key localleader , commands!
+- [ ] :nvim: :vimfiler: which-key integration
 
 == BACKLOG (in alphabetical order) ==
 - [ ] :bin/cmds: should set iterm2 tab title
