@@ -35,10 +35,10 @@ function obj:getLastPlanTime()
     end
 end
 
-function obj:addTodos(browser)
+function obj:addTodos()
     for name, path in pairs(obj.todosPaths) do
         local text = io.open(path, "r"):read("*all")
-        browser:evaluateJavaScript("HOMEBOARD.addTodos('"..name.."', ".. hs.inspect(text) ..")")
+        obj.browser:evaluateJavaScript("HOMEBOARD.addTodos('"..name.."', ".. hs.inspect(text) ..")")
     end
 end
 
@@ -46,14 +46,20 @@ function obj:videoToPlay()
     return obj.files[math.random(#obj.files)]
 end
 
-function obj:addBoard(browser)
+function obj:addBoard()
     for file in hs.execute("ls "..obj.homeBoardPath.."/"..obj.boardFolder.."/*"):gmatch("[^\n]+") do
         local text = io.open(file, "r"):read("*all")
         local fileName = file:match("^.+/([^%.]+).+$")
-        browser:evaluateJavaScript("HOMEBOARD.addBoardItem('"..fileName.."', "..hs.inspect(text)..")")
+        obj.browser:evaluateJavaScript("HOMEBOARD.addBoardItem('"..fileName.."', "..hs.inspect(text)..")")
     end
 end
---TODO musingsFolder = "musings"
+
+function obj:addMusings()
+    for file in hs.execute("ls "..obj.homeBoardPath.."/"..obj.musingsFolder.."/*"):gmatch("[^\n]+") do
+        local text = io.open(file, "r"):read("*all")
+        obj.browser:evaluateJavaScript("HOMEBOARD.addMusing("..hs.inspect(text)..")")
+    end
+end
 
 function handleHomeboardMessages(response)
     local body = response.body
@@ -61,8 +67,10 @@ function handleHomeboardMessages(response)
         obj.browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..obj:videoToPlay().."\")")
         local lastPlan = obj:getLastPlan()
         obj.browser:evaluateJavaScript("HOMEBOARD.setReview("..hs.inspect(obj:getLastPlanTime())..","..hs.inspect(lastPlan)..")")
-        obj:addTodos(obj.browser)
-        obj:addBoard(obj.browser)
+        obj:addTodos()
+        obj:addBoard()
+        obj:addMusings()
+        obj.browser:evaluateJavaScript("HOMEBOARD.doneLoading()")
     elseif body.type == "newVideo" then
         obj.browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..obj:videoToPlay().."\")")
     elseif body.type == "pickVideo" then
