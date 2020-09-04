@@ -3,7 +3,6 @@
 - [ ] :nvim: :easymotion:
     - [ ] ??? add lispy chars to jump targets ???
     - [ ] https://github.com/easymotion/vim-easymotion#bonus-fuzzy-search-with-easymotion
-- [ ] :nvim: :vimfiler: which-key integration
 
 == BACKLOG (in alphabetical order) ==
 - [ ] :bin/cmds: should set iterm2 tab title

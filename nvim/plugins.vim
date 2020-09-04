@@ -47,6 +47,7 @@ Plug 'tpope/vim-fugitive'
 " MOVEMENT {{{
 Plug 'Lokaltog/vim-easymotion'
 Plug 'deris/vim-shot-f'
+Plug 'rhysd/clever-f.vim'
 " }}}
 
 " THEME {{{
