@@ -28,3 +28,4 @@ nmap <c-j> :bprevious<CR>
 command! BD b#|bd#
 " terminal helpers
 tnoremap <Esc> <C-\><C-n>
+nnoremap ! :!
