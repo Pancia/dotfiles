@@ -6,9 +6,9 @@
   (prn tag (api/sexpr value)) (prn)
   value)
 
-(defn when-mocking [{:keys [node]}]
-  (let [mock-triples (partition 3 (butlast (rest (:children node))))
-        body (last (:children node))]
+(defn when-mocking* [children]
+  (let [mock-triples (partition 3 (butlast children))
+        body (last children)]
     {:node (api/list-node
              (list
                (api/token-node 'with-redefs)
@@ -23,6 +23,12 @@
                           value))])
                    mock-triples))
                body))}))
+
+(defn provided [{{[_ _str & children] :children} :node}]
+  (when-mocking* children))
+
+(defn when-mocking [{{[_ & children] :children} :node}]
+  (when-mocking* children))
 
 (comment
   (fulcro-spec.core/when-mocking

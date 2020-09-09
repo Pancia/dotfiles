@@ -1,0 +1,28 @@
+;<[.config/clj-kondo/config.edn]>
+{:skip-comments true
+
+ :config-paths ["/Users/pancia/dotfiles/lib/clojure/my-kondo"]
+
+ :linters {:unused-binding {:level :off}}
+
+ :lint-as {
+           com.fulcrologic.fulcro.components/defsc                  clojure.core/defn
+           com.fulcrologic.fulcro.mutations/defmutation             clojure.core/defrecord
+           com.fulcrologic.fulcro.routing.dynamic-routing/defrouter clojure.core/defn
+           com.fulcrologic.guardrails-pro.core/>defn                clojure.core/defn
+           com.fulcrologic.guardrails-pro.core/>fn                  clojure.core/fn
+           com.fulcrologic.guardrails-pro.core/>ftag                clojure.core/defn
+           com.fulcrologic.guardrails.core/>defn                    clojure.core/defn
+           com.wsscode.pathom.connect/defmutation                   clojure.core/defn
+           com.wsscode.pathom.connect/defresolver                   clojure.core/defn
+           mount.core/defstate                                      clojure.core/def
+           taoensso.encore/if-let                                   clojure.core/let
+           taoensso.encore/when-let                                 clojure.core/let
+           }
+
+ ;; TODO: remove once clojure-lsp updates to clj-kondo 2020.09.09
+ :hooks {:analyze-call {fulcro-spec.core/when-mocking  hooks.fulcro-spec/when-mocking
+                        fulcro-spec.core/when-mocking! hooks.fulcro-spec/when-mocking
+                        fulcro-spec.core/provided      hooks.fulcro-spec/provided
+                        fulcro-spec.core/provided!     hooks.fulcro-spec/provided}}
+ }
