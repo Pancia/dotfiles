@@ -5,17 +5,6 @@ require "cli.rb"
 $cmds_base_dir = "/Users/#{%x[whoami].strip}/dotfiles/cmds/"
 $cmds_file = "/Users/#{%x[whoami].strip}/dotfiles/cmds/#{%x[pwd].strip}/cmds.rb"
 
-class OptionParser
-  def info
-    @info
-  end
-  def info=(str)
-    @info = str
-    top.append(">>> "+str, nil, nil)
-    top.append("", nil, nil)
-  end
-end
-
 module EXE
   def self.system(command, opts={silent: false})
     temp = "/tmp/command.zsh"
@@ -39,7 +28,7 @@ class CMDS extend CMD
     }
   end
   def self.edit(opts)
-    opts.info = "Edit cmds.rb file, with template default."
+    opts.info = "Edit cmds.rb file, with default template."
     lambda {
       if not File.file? $cmds_file
         system("mkdir -p $(dirname #{$cmds_file})")

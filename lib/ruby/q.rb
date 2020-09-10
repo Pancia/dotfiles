@@ -46,6 +46,12 @@ class CMDS
       execute("zsh -ic 'trash #{reg_file(name)}'")
     }
   end
+  def self.completions(opts)
+    lambda { |*args|
+      registers = Dir["#{$home_dir}/.config/q/*"].map{|r|File.basename r}.join " "
+      puts "_values description #{registers}"
+    }
+  end
 end
 
 CLI.parse! CMDS

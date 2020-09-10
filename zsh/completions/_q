@@ -3,11 +3,5 @@
 # https://mads-hartmann.com/2017/08/06/writing-zsh-completion-scripts.html
 # https://github.com/zsh-users/zsh-completions/blob/master/zsh-completions-howto.org#user-content-actions
 function _q {
-  _arguments \
-    "1: :($(_q_get_registers))" \
-    "*:::arg:{_normal}"
-}
-
-function _q_get_registers {
-  ls ~/.config/q
+  $(__q)
 }
