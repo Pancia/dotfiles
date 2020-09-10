@@ -21,6 +21,12 @@ function meditate {
     cmus-remote --play
 }
 
+function __with_IFS {
+  IFS='&';
+  $($@);
+  unset IFS;
+}
+
 local functions_dir=`dirname $0`/fns
 for f in $(ls $functions_dir); do
     source $functions_dir/$f

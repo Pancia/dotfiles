@@ -49,7 +49,7 @@ class CMDS
   def self.completions(opts)
     lambda { |*args|
       registers = Dir["#{$home_dir}/.config/q/*"].map{|r|File.basename r}.join " "
-      puts "_values description #{registers}"
+      puts ["_arguments","1: :(#{registers})","*:::arg:{_normal}"].join "&"
     }
   end
 end
