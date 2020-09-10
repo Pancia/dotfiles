@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+#<[zsh-completion]>: cmds --zsh-completions
 
 require "cli.rb"
 

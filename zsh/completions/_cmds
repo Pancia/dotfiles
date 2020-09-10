@@ -1,5 +1,0 @@
-#compdef _cmds cmds
-
-function _cmds {
-  __with_IFS cmds --zsh-completions
-}

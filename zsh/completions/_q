@@ -1,5 +1,2 @@
-#compdef _q q q! q_
-
-function _q {
-  __with_IFS __q --zsh-completions
-}
+#compdef _q		q q! q_
+function _q { __eval_completion __q --zsh-completions }
