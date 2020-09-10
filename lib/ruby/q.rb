@@ -46,12 +46,14 @@ class CMDS
       execute("zsh -ic 'trash #{reg_file(name)}'")
     }
   end
-  def self.completions(opts)
-    lambda { |*args|
-      registers = Dir["#{$home_dir}/.config/q/*"].map{|r|File.basename r}.join " "
-      puts ["_arguments","1: :(#{registers})","*:::arg:{_normal}"].join "&"
-    }
-  end
 end
 
-CLI.parse! CMDS
+# https://mads-hartmann.com/2017/08/06/writing-zsh-completion-scripts.html
+# https://github.com/zsh-users/zsh-completions/blob/master/zsh-completions-howto.org#user-content-actions
+CLI.parse!(CMDS) { |opts|
+  opts.on("-z", "--zsh-completions", "print zsh completion") do
+    registers = Dir["#{$home_dir}/.config/q/*"].map{|r|File.basename r}.join " "
+    puts ["_arguments","1: :(#{registers})","*:::arg:{_normal}"].join "&"
+    $options[:helped] = true
+  end
+}

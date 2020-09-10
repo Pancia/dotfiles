@@ -1,7 +1,5 @@
 #compdef _q q q! q_
 
-# https://mads-hartmann.com/2017/08/06/writing-zsh-completion-scripts.html
-# https://github.com/zsh-users/zsh-completions/blob/master/zsh-completions-howto.org#user-content-actions
 function _q {
-  __with_IFS __q
+  __with_IFS __q --zsh-completions
 }

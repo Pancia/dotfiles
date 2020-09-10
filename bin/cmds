@@ -45,23 +45,25 @@ class CMDS extend CMD
       end
     }
   end
-  def self.completions(opts)
-    lambda { |*args|
-      cmds = (CMDS.methods - $old_methods).map(&:to_s).join " "
-      puts ["_arguments", "-s", "-S",
-            "-h[Print this help document]",
-            "--help[Print this help document]",
-            "-v[Print more, for debugging]",
-            "--verbose[Print more, for debugging]",
-            "-n[Dry Run / Simulation, prints commands instead of executing.]",
-            "--dry-run[Dry Run / Simulation, prints commands instead of executing.]",
-            "1:cmd:(#{cmds})", "*:::arg:{_normal}"
-      ].join "&"
-    }
-  end
 end
 
 $old_methods = CMDS.methods
 require $cmds_file if File.file? $cmds_file
 
-CLI.parse! CMDS
+# https://mads-hartmann.com/2017/08/06/writing-zsh-completion-scripts.html
+# https://github.com/zsh-users/zsh-completions/blob/master/zsh-completions-howto.org#user-content-actions
+CLI.parse!(CMDS) { |opts|
+  opts.on("-z", "--zsh-completions", "print zsh completion") do
+    cmds = (CMDS.methods - Object.methods).map(&:to_s).join " "
+    puts ["_arguments", "-s", "-S",
+          "-h[Print this help document]",
+          "--help[Print this help document]",
+          "-v[Print more, for debugging]",
+          "--verbose[Print more, for debugging]",
+          "-n[Dry Run / Simulation, prints commands instead of executing.]",
+          "--dry-run[Dry Run / Simulation, prints commands instead of executing.]",
+          "1:cmd:(#{cmds})", "*:::arg:{_normal}"
+    ].join "&"
+    $options[:helped] = true
+  end
+}
