@@ -45,6 +45,20 @@ class CMDS extend CMD
       end
     }
   end
+  def self.completions(opts)
+    lambda { |*args|
+      cmds = (CMDS.methods - $old_methods).map(&:to_s).join " "
+      puts ["_arguments", "-s", "-S",
+            "-h[Print this help document]",
+            "--help[Print this help document]",
+            "-v[Print more, for debugging]",
+            "--verbose[Print more, for debugging]",
+            "-n[Dry Run / Simulation, prints commands instead of executing.]",
+            "--dry-run[Dry Run / Simulation, prints commands instead of executing.]",
+            "1:cmd:(#{cmds})", "*:::arg:{_normal}"
+      ].join "&"
+    }
+  end
 end
 
 $old_methods = CMDS.methods
