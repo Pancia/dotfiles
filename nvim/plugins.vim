@@ -53,6 +53,7 @@ Plug 'rhysd/clever-f.vim'
 " THEME {{{
 Plug 'KabbAmine/vCoolor.vim'
 Plug 'joshdick/onedark.vim'
+Plug 'norcalli/nvim-colorizer.lua'
 " }}}
 
 " AUTOCOMPLETE {{{
