@@ -38,6 +38,8 @@ hi illuminatedWord gui=standout
 
 hi EasyMotionIncSearch gui=standout
 
+hi Search guibg=black guifg=#FFF900
+
 hi MyProjectTodo     guifg=#BB22DD gui=standout
 " TODO asdf TODO: asdf asdf
 "
