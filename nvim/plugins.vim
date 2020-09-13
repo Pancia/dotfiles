@@ -93,7 +93,7 @@ Plug 'calviken/vim-gdscript3'
 
 call plug#end()
 
-let g:unite_source_menu_menus = get(g:, 'unite_source_menu_menus', {})
+let g:semicolon_which_key_map = get(g:, 'semicolon_which_key_map', {})
 
 for plug_conf in split(globpath(expand("<sfile>:p:h"), 'plugs/*.vim'), '\n')
     execute 'source ' . plug_conf
@@ -106,3 +106,12 @@ for ftp in split(globpath('~/dotfiles/nvim/ftplugin', '*.vim'), '\n')
         call system('echo "source ~/dotfiles/nvim/ftplugin/'.base_ftp.'" > '.dest_ftp)
     endif
 endfor
+
+let g:semicolon_which_key_map.p = {
+            \ 'name' : '+vim-plug',
+            \ 'i' : [':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugInstall', 'PlugInstall'],
+            \ 'c' : [':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugClean!', 'PlugClean!'],
+            \ 'u' : [':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugUpdate', 'PlugUpdate'],
+            \ }
+
+call which_key#register(';', "g:semicolon_which_key_map")

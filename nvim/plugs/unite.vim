@@ -1,7 +1,5 @@
 let g:unite_source_history_yank_enable=1
 
-nnoremap ; :Unite menu<CR>
-
 nnoremap \ :WhichKey '\'<CR>
 call which_key#register('\', "g:unite_which_key_map")
 let g:unite_which_key_map = {
@@ -37,11 +35,3 @@ if executable('ag')
 endif
 
 call unite#filters#matcher_default#use(['matcher_fuzzy'])
-
-let g:unite_source_menu_menus._helpers = {'description' : 'my custom helpers'}
-let g:unite_source_menu_menus._helpers.command_candidates = [
-            \['> source vimrc', 'source ~/dotfiles/nvim/init.vim'],
-            \['> vimrc dotfiles', 'e ~/dotfiles/nvim/init.vim | cd ~/dotfiles/nvim'],
-            \['> zshrc dotfiles', 'e ~/dotfiles/zsh/init.zsh | cd ~/dotfiles/zsh'],
-            \['> delete all buffers', '%bd'],
-            \]
