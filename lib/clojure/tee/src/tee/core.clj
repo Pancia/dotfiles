@@ -14,15 +14,19 @@
       (recv [_] (.recv transport))
       (recv [_ timeout] (.recv transport timeout))
       (send [this response]
-        (when (is-user-eval? msg)
-          (when-let [out (:out response)]
-            (.print System/out out))
-          (when-let [err (:err response)]
-            (.print System/out err))
-          (when-let [value (:value response)]
-            (.println System/out (pr-str value))
-            (.print System/out (str (ns-name *ns*) "=> "))))
-        (.send transport response)
+        (try
+          (when (is-user-eval? msg)
+            (when-let [out (:out response)]
+              (.print System/out out))
+            (when-let [err (:err response)]
+              (.print System/out err))
+            (when-let [value (:value response)]
+              (.println System/out (pr-str value))
+              (.print System/out (str (ns-name *ns*) "=> "))))
+          (catch Throwable _))
+        (try
+          (.send transport response)
+          (catch Throwable _))
         this))))
 
 (defn middleware [h]
