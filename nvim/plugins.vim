@@ -73,6 +73,7 @@ Plug 'guns/vim-clojure-static', {'for': 'clojure'}
 Plug 'guns/vim-sexp', {'for': ['clojure', 'fennel']}
 Plug '~/dotfiles/lib/vim/conjure-highlight'
 Plug 'luochen1990/rainbow'
+Plug '~/projects/work/guardrails-pro/editor-plugins/vim'
 " }}}
 
 " LUA {{{

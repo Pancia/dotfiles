@@ -1,5 +1,5 @@
 let g:ale_linters = {
-      \ 'clojure': ['clj-kondo']
+      \ 'clojure': ['clj-kondo', 'guardrails']
       \}
 
 let g:ale_echo_msg_format = '[%linter%/%severity%]: %s'

@@ -89,6 +89,7 @@
        (string/join \,)))
 
 (defn syntax-command [ns & opts]
+  (require ns :reload)
   (let [{:keys [local-vars] :or {local-vars true}} (apply hash-map opts)
         syntax-dict (syntax-keyword-dictionary
                       (concat (ns-refers ns)

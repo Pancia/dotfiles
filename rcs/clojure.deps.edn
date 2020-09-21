@@ -1,15 +1,17 @@
 ;<[.config/clojure/deps.edn]>
 {:aliases
- {:nREPL {:extra-deps
-          {cider/cider-nrepl {:mvn/version "0.22.4"}
-           tee {:local/root "/Users/pancia/dotfiles/lib/clojure/tee"}}
+ {:nREPL {:extra-deps {cider/cider-nrepl {:mvn/version "0.22.4"}
+                       tee {:local/root "/Users/pancia/dotfiles/lib/clojure/tee"}
+                       com.cognitect/rebl {:mvn/version "0.9.241"}
+                       nrebl {:local/root "/Users/pancia/dotfiles/lib/clojure/nrebl"}}
           :main-opts
           ["-m" "nrepl.cmdline" "--interactive"
-           "--middleware" "[cider.nrepl/cider-middleware,tee.core/middleware]"]}
+           "--middleware" "[cider.nrepl/cider-middleware,tee.core/middleware,nrebl.core/middleware]"]}
   :utils {:extra-deps {utils {:local/root "/Users/pancia/dotfiles/lib/clojure/utils"}}
           :main-opts ["--eval" "(require,'utils.core)"]}
   :kaocha {:extra-deps {lambdaisland/kaocha {:mvn/version "1.0-612"}}
            :main-opts ["-m" "kaocha.runner"]}
+  :spec-dev {:override-deps {fulcrologic/fulcro-spec {:local/root "/Users/pancia/projects/lib/fulcro-spec"}}}
   :gr-dev {:override-deps {com.fulcrologic/guardrails {:local/root "/Users/pancia/projects/lib/guardrails"}}}
   :grpro-dev {:override-deps {com.fulcrologic/guardrails-pro {:local/root "/Users/pancia/projects/work/guardrails-pro"}}}
   :rad-dev {:override-deps
