@@ -1,3 +1,6 @@
+# enable `history` timestamps
+setopt EXTENDED_HISTORY
+
 # disable ctrl-d exiting shell
 setopt IGNORE_EOF
 

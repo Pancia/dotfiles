@@ -30,7 +30,6 @@ antigen bundle brew-cask
 # ZSH
 antigen bundle zsh-users/zsh-autosuggestions
 antigen bundle popstas/zsh-command-time
-#antigen bundle rocky/zshdb # TODO FIXME
 antigen bundle zsh-users/zsh-history-substring-search
 antigen bundle zsh-users/zsh-syntax-highlighting
 
