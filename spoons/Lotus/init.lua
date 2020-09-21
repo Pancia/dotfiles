@@ -104,7 +104,7 @@ function renderMenu()
                     obj._pauseTimer = nil
                 end
                 obj.stopAwarenessSound()
-                obj._lotusTimer = obj._lotusTimer:setNextTrigger(obj._lastNextTrigger)
+                obj._lotusTimer = obj._lotusTimer:setNextTrigger(obj._lastNextTrigger or 0)
                 obj._menuRefreshTimer:fire()
             end},
             {title = "restart"
@@ -220,8 +220,10 @@ function lotusBlock()
                 if obj._notif:activationType() == hs.notify.activationTypes.none then
                     notifCallback(obj._notif)
                 end
-                clearCheck:stop()
-                clearCheck = nil
+                if clearCheck then
+                    clearCheck:stop()
+                    clearCheck = nil
+                end
             end
         end)
         obj._soundRepeat = hs.timer.doEvery(60, function()
