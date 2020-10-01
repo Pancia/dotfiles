@@ -12,7 +12,6 @@ let g:clojure_syntax_keywords = {
       \   'defsc', '>defn', 'defmutation',
       \   'specification', 'behavior', 'provided', 'assertions', 'component',
       \   'provided', 'when-mocking', 'provided!', 'when-mocking!',
-      \   'defrule', 'defstate',
       \   ]
       \ }
 
@@ -42,10 +41,12 @@ endfunction
 let g:semicolon_which_key_map['s'] = {'name': '+lsp'}
 let g:semicolon_which_key_map['s']['r'] = {'name': '+refactorings'}
 let g:semicolon_which_key_map['s']['r']['t'] = {'name': '+threading'}
-let g:semicolon_which_key_map['s']['r']['t']['h'] = [':execute "call LSP_exe_here(\"thread-first\")"', 'thread-first']
+let g:semicolon_which_key_map['s']['r']['t']['f'] = [':execute "call LSP_exe_here(\"thread-first\")"', 'thread-first']
 let g:semicolon_which_key_map['s']['r']['t']['t'] = [':execute "call LSP_exe_here(\"thread-last\")"', 'thread-last']
-let g:semicolon_which_key_map['s']['r']['t']['f'] = [':execute "call LSP_exe_here(\"thread-first-all\")"', 'thread-first-all']
-let g:semicolon_which_key_map['s']['r']['t']['l'] = [':execute "call LSP_exe_here(\"thread-last-all\")"', 'thread-last-all']
+let g:semicolon_which_key_map['s']['r']['t']['F'] = [':execute "call LSP_exe_here(\"thread-first-all\")"', 'thread-first-all']
+let g:semicolon_which_key_map['s']['r']['t']['T'] = [':execute "call LSP_exe_here(\"thread-last-all\")"', 'thread-last-all']
+let g:semicolon_which_key_map['s']['r']['t']['u'] = [':execute "call LSP_exe_here(\"unwind-thread\")"', 'unwind-thread']
+let g:semicolon_which_key_map['s']['r']['t']['U'] = [':execute "call LSP_exe_here(\"unwind-all\")"', 'unwind-all']
 let g:semicolon_which_key_map['s']['r']['r'] = {'name': '+requires'}
 let g:semicolon_which_key_map['s']['r']['r']['a'] = [':execute "call LSP_exe_here(\"add-missing-libspec\")"', 'add-missing-libspec']
 let g:semicolon_which_key_map['s']['r']['l'] = {'name': '+let'}
@@ -54,3 +55,5 @@ let g:semicolon_which_key_map['s']['r']['l']['m'] = [':execute "call LSP_exe_her
 let g:semicolon_which_key_map['s']['r']['l']['i'] = [':execute "call LSP_exe_here(\"introduce-let\", input(\"Binding name: \"))"', 'introduce-let']
 
 let g:semicolon_which_key_map['s']['u'] = [':execute "call LanguageClient#textDocument_references()"', 'find usages']
+
+nnoremap <buffer><silent> ,, :call guardrails_pro#run_check()<CR>

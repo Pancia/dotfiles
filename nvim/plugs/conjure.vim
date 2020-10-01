@@ -3,6 +3,7 @@ let g:conjure#log#hud#height = "0.50"
 let g:conjure#mapping#doc_word = "k"
 let g:conjure#mapping#def_word = "gd"
 let g:conjure#log#wrap = v:true
+let g:conjure#client#clojure#nrepl#completion#with_context = v:false
 
 function! ResolveSymbol()
   call luaeval("require('conjure.client')['with-filetype']('clojure', require('conjure.eval')['eval-str'], { origin = 'dotfiles/clojuredocs', code = '(do {:conjure-highlight/silent true} `".expand("<cword>").")', ['passive?'] = true, ['on-result'] = function(sym) vim.api.nvim_command('call OpenClojureDocs(\"'..sym..'\")') end})")

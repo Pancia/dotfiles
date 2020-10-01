@@ -9,11 +9,11 @@
            com.fulcrologic.fulcro.components/defsc                  clojure.core/defn
            com.fulcrologic.fulcro.mutations/defmutation             clojure.core/defrecord
            com.fulcrologic.fulcro.routing.dynamic-routing/defrouter clojure.core/defn
-           com.fulcrologic.guardrails-pro.core/>defn                clojure.core/defn
-           com.fulcrologic.guardrails-pro.core/>fn                  clojure.core/fn
-           com.fulcrologic.guardrails-pro.core/>ftag                clojure.core/defn
-           com.fulcrologic.guardrails-pro.core/>fspec               clojure.core/fn
            com.fulcrologic.guardrails.core/>defn                    clojure.core/defn
+           com.fulcrologic.guardrails.core/>defn-                   clojure.core/defn-
+           com.fulcrologic.guardrails.core/>fn                      clojure.core/fn
+           com.fulcrologic.guardrails.core/>fdef                    clojure.core/defn
+           com.fulcrologic.guardrails.core/>fspec                   clojure.core/fn
            com.wsscode.pathom.connect/defmutation                   clojure.core/defn
            com.wsscode.pathom.connect/defresolver                   clojure.core/defn
            mount.core/defstate                                      clojure.core/def
