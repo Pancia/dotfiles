@@ -7,9 +7,8 @@ let g:ale_echo_msg_format = '[%linter%/%severity%]: %s'
 nmap <silent> gen <Plug>(ale_next_wrap)
 nmap <silent> gep <Plug>(ale_previous_wrap)
 
-let g:semicolon_which_key_map.l = {
-            \ 'name' : '+ALE Linters',
-            \ 'r' : [':ALEStopAllLSPs | :ALELint', 'Restart All Linters'],
-            \ 'n' : [':normal <Plug>(ale_next_wrap)', 'Go to next message'],
-            \ 'p' : [':normal <Plug>(ale_previous_wrap)', 'Go to previous message'],
-            \ }
+call WhichKey_GROUP('l', '+ALE linters')
+call WhichKey_CMD('lD', 'delete all buffers', ':%bd')
+call WhichKey_CMD('lr', 'Restart All Linters', ':ALEStopAllLSPs | :ALELint')
+call WhichKey_CMD('ln', 'Go to next message', ':normal <Plug>(ale_next_wrap)')
+call WhichKey_CMD('lp', 'Go to previous message', ':normal <Plug>(ale_previous_wrap)')

@@ -92,7 +92,31 @@ Plug 'calviken/vim-gdscript3'
 
 call plug#end()
 
+" SEMICOLON WHICH KEY {{{
 let g:semicolon_which_key_map = get(g:, 'semicolon_which_key_map', {})
+
+function! AssocIn(dict, key, value) abort
+    if a:key == []
+        if string(a:dict) !~ '{}' && string(a:dict) !=# string(a:value)
+            echoerr "WARNING: overriding existing value ".string(a:dict)." with ".string(a:value)
+        endif
+        return a:value
+    elseif has_key(a:dict, a:key[0])
+        let a:dict[a:key[0]] = AssocIn(a:dict[a:key[0]], a:key[1:], a:value)
+    else
+        let a:dict[a:key[0]] = AssocIn({}, a:key[1:], a:value)
+    endif
+    return a:dict
+endfunction
+
+function! WhichKey_CMD(path, name, cmd) abort
+    call AssocIn(g:semicolon_which_key_map, split(a:path, '\zs'), [a:cmd, a:name])
+endfunction
+
+function! WhichKey_GROUP(path, name) abort
+    call AssocIn(g:semicolon_which_key_map, split(a:path, '\zs')+['name'], a:name)
+endfunction
+" }}} SEMICOLON WHICH KEY
 
 for plug_conf in split(globpath(expand("<sfile>:p:h"), 'plugs/*.vim'), '\n')
     execute 'source ' . plug_conf
@@ -106,11 +130,9 @@ for ftp in split(globpath('~/dotfiles/nvim/ftplugin', '*.vim'), '\n')
     endif
 endfor
 
-let g:semicolon_which_key_map.p = {
-            \ 'name' : '+vim-plug',
-            \ 'i' : [':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugInstall', 'PlugInstall'],
-            \ 'c' : [':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugClean!', 'PlugClean!'],
-            \ 'u' : [':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugUpdate', 'PlugUpdate'],
-            \ }
+call WhichKey_GROUP('p', '+vim-plug')
+call WhichKey_CMD('pi', 'PlugInstall', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugInstall')
+call WhichKey_CMD('pc', 'PlugClean!', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugClean!')
+call WhichKey_CMD('pu', 'PlugUpdate', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugUpdate')
 
 call which_key#register(';', "g:semicolon_which_key_map")

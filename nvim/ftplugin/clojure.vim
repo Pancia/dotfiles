@@ -38,23 +38,31 @@ function! LSP_exe_here(cmd, ...) abort
         \ [s:Expand('%:p'), line('.') - 1, col('.') - 1] + a:000)
 endfunction
 
-let g:semicolon_which_key_map['s'] = {'name': '+lsp'}
-let g:semicolon_which_key_map['s']['s'] = [':execute ":LanguageClientStop" | :execute ":LanguageClientStart"', 'restart']
-let g:semicolon_which_key_map['s']['r'] = {'name': '+refactorings'}
-let g:semicolon_which_key_map['s']['r']['t'] = {'name': '+threading'}
-let g:semicolon_which_key_map['s']['r']['t']['f'] = [':execute "call LSP_exe_here(\"thread-first\")"', 'thread-first']
-let g:semicolon_which_key_map['s']['r']['t']['t'] = [':execute "call LSP_exe_here(\"thread-last\")"', 'thread-last']
-let g:semicolon_which_key_map['s']['r']['t']['F'] = [':execute "call LSP_exe_here(\"thread-first-all\")"', 'thread-first-all']
-let g:semicolon_which_key_map['s']['r']['t']['T'] = [':execute "call LSP_exe_here(\"thread-last-all\")"', 'thread-last-all']
-let g:semicolon_which_key_map['s']['r']['t']['u'] = [':execute "call LSP_exe_here(\"unwind-thread\")"', 'unwind-thread']
-let g:semicolon_which_key_map['s']['r']['t']['U'] = [':execute "call LSP_exe_here(\"unwind-all\")"', 'unwind-all']
-let g:semicolon_which_key_map['s']['r']['r'] = {'name': '+requires'}
-let g:semicolon_which_key_map['s']['r']['r']['a'] = [':execute "call LSP_exe_here(\"add-missing-libspec\")"', 'add-missing-libspec']
-let g:semicolon_which_key_map['s']['r']['l'] = {'name': '+let'}
-let g:semicolon_which_key_map['s']['r']['l']['e'] = [':execute "call LSP_exe_here(\"expand-let\")"', 'expand-let']
-let g:semicolon_which_key_map['s']['r']['l']['m'] = [':execute "call LSP_exe_here(\"move-to-let\", input(\"Binding name: \"))"', 'move-to-let']
-let g:semicolon_which_key_map['s']['r']['l']['i'] = [':execute "call LSP_exe_here(\"introduce-let\", input(\"Binding name: \"))"', 'introduce-let']
+function! LSP_restart()
+    LanguageClientStop
+    LanguageClientStart
+endfunction
 
-let g:semicolon_which_key_map['s']['u'] = [':execute "call LanguageClient#textDocument_references()"', 'find usages']
+call WhichKey_GROUP('s', '+lsp')
+call WhichKey_CMD('ss', 'restart', 'LSP_restart()')
+
+call WhichKey_GROUP('sr', '+refactorings')
+
+call WhichKey_GROUP('srt', '+threading')
+call WhichKey_CMD('srtf', 'thread-first', 'LSP_exe_here("thread-first")')
+call WhichKey_CMD('srtt', 'thread-last', 'LSP_exe_here("thread-last")')
+call WhichKey_CMD('srtF', 'thread-first-all', 'LSP_exe_here("thread-first-all")')
+call WhichKey_CMD('srtT', 'thread-last-all', 'LSP_exe_here("thread-last-all")')
+call WhichKey_CMD('srtu', 'unwind-thread', 'LSP_exe_here("unwind-thread")')
+call WhichKey_CMD('srtU', 'unwind-all', 'LSP_exe_here("unwind-all")')
+
+call WhichKey_GROUP('srr', '+requires')
+call WhichKey_CMD('srra', 'add-missing-libspec', 'LSP_exe_here("add-missing-libspec")')
+
+call WhichKey_GROUP('srl', '+let')
+call WhichKey_CMD('srle', 'expand-let', 'LSP_exe_here("expand-let")')
+call WhichKey_CMD('srlm', 'move-to-let', 'LSP_exe_here("move-to-let", input("Binding name: "))')
+call WhichKey_CMD('srli', 'introduce-let', 'LSP_exe_here("introduce-let", input("Binding name: "))')
+call WhichKey_CMD('su', 'find usages', 'LanguageClient#textDocument_references()')
 
 nnoremap <buffer><silent> ,, :call guardrails_pro#run_check()<CR>
