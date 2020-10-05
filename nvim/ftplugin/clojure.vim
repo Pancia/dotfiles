@@ -39,6 +39,7 @@ function! LSP_exe_here(cmd, ...) abort
 endfunction
 
 let g:semicolon_which_key_map['s'] = {'name': '+lsp'}
+let g:semicolon_which_key_map['s']['s'] = [':execute ":LanguageClientStop" | :execute ":LanguageClientStart"', 'restart']
 let g:semicolon_which_key_map['s']['r'] = {'name': '+refactorings'}
 let g:semicolon_which_key_map['s']['r']['t'] = {'name': '+threading'}
 let g:semicolon_which_key_map['s']['r']['t']['f'] = [':execute "call LSP_exe_here(\"thread-first\")"', 'thread-first']
