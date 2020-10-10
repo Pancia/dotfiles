@@ -1,6 +1,7 @@
 {
  :hooks {:analyze-call {fulcro-spec.core/when-mocking  hooks.fulcro-spec/when-mocking
                         fulcro-spec.core/when-mocking! hooks.fulcro-spec/when-mocking
+                        fulcro-spec.core/assertions    hooks.fulcro-spec/assertions
                         fulcro-spec.core/provided      hooks.fulcro-spec/provided
                         fulcro-spec.core/provided!     hooks.fulcro-spec/provided}}
  }

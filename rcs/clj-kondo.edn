@@ -14,6 +14,7 @@
            com.fulcrologic.guardrails.core/>fn                      clojure.core/fn
            com.fulcrologic.guardrails.core/>fdef                    clojure.core/defn
            com.fulcrologic.guardrails.core/>fspec                   clojure.core/fn
+           com.fulcrologic.guardrails-pro.test-checkers/>test-fn    clojure.core/fn
            com.wsscode.pathom.connect/defmutation                   clojure.core/defn
            com.wsscode.pathom.connect/defresolver                   clojure.core/defn
            mount.core/defstate                                      clojure.core/def
@@ -21,11 +22,4 @@
            taoensso.encore/when-let                                 clojure.core/let
            fulcro-spec.check/checker                                clojure.core/fn
            }
-
- ;; TODO: remove once clojure-lsp updates to clj-kondo 2020.09.09
- :hooks {:analyze-call {fulcro-spec.core/when-mocking  hooks.fulcro-spec/when-mocking
-                        fulcro-spec.core/when-mocking! hooks.fulcro-spec/when-mocking
-                        fulcro-spec.core/assertions    hooks.fulcro-spec/assertions
-                        fulcro-spec.core/provided      hooks.fulcro-spec/provided
-                        fulcro-spec.core/provided!     hooks.fulcro-spec/provided}}
  }
