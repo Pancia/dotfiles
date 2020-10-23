@@ -1,15 +1,8 @@
+local durp = require("lib/durationpicker")
+
 local obj = {}
 
-obj.name = "HomeBoard"
-obj.version = "1.0"
-obj.author = "Anthony D'Ambrosio <anthony.dayzerostudio@gmail.com>"
-obj.homepage = "https://github.com/pancia/dotfiles/tree/master/spoons/homeboard"
-obj.license = "MIT - https://opensource.org/licenses/MIT"
-obj.attributions = {
-    "Home icon from: https://www.flaticon.com/free-icon/home_553376"
-}
-
-obj.spoonPath = hs.spoons.scriptPath()
+obj.spoonPath = os.getenv("HOME").."/dotfiles/lib/fennel/seeds/homeboard/"
 
 function obj:init() end
 
@@ -43,11 +36,11 @@ function obj:addTodos()
 end
 
 function obj:videoToPlay()
-    return obj.files[math.random(#obj.files)]
+    return obj.videos[math.random(#obj.videos)]
 end
 
 function obj:addBoard()
-    for file in hs.execute("ls "..obj.homeBoardPath.."/"..obj.boardFolder.."/*"):gmatch("[^\n]+") do
+    for file in hs.execute("ls "..obj.homeBoardPath.."/board/*"):gmatch("[^\n]+") do
         local text = io.open(file, "r"):read("*all")
         local fileName = file:match("^.+/([^%.]+).+$")
         obj.browser:evaluateJavaScript("HOMEBOARD.addBoardItem('"..fileName.."', "..hs.inspect(text)..")")
@@ -55,7 +48,7 @@ function obj:addBoard()
 end
 
 function obj:addMusings()
-    for file in hs.execute("ls "..obj.homeBoardPath.."/"..obj.musingsFolder.."/*"):gmatch("[^\n]+") do
+    for file in hs.execute("ls "..obj.homeBoardPath.."/musings/*"):gmatch("[^\n]+") do
         local text = io.open(file, "r"):read("*all")
         obj.browser:evaluateJavaScript("HOMEBOARD.addMusing("..hs.inspect(text)..")")
     end
@@ -115,14 +108,68 @@ function obj:showHomeBoard(onClose)
     return browser
 end
 
-function obj:start()
-    obj._menubar = hs.menubar.new()
+function obj:snoozeTimer(duration)
+    obj._ensureTimer = obj._ensureTimer:stop()
+    obj._boardTimer = hs.timer.doAfter(60*duration, function()
+        obj._boardTimer = nil
+        obj._ensureTimer = obj._ensureTimer:setNextTrigger(0)
+    end)
+    obj._menuRefreshTimer:fire()
+end
+
+function obj:pickSnooze()
+    obj._ensureTimer = obj._ensureTimer:stop()
+    durp:show({
+        defaultDuration = 90,
+        onDuration = function(duration) obj:snoozeTimer(duration) end,
+        onClose = obj.pickSnooze,
+    })
+end
+
+function obj:renderMenuBar()
     obj._menubar:setClickCallback(obj.showHomeBoard)
     obj._menubar:setIcon(obj.spoonPath.."/home.png")
-    obj.files = {}
-    for line in hs.execute("find "..obj.videosPath.." -type f -not -path '*/\\.*'"):gmatch("[^\n]+") do
-        table.insert(obj.files, line)
+    local nextTrigger = (obj._boardTimer and obj._boardTimer:nextTrigger()) or 0
+    local title = math.max(math.ceil(nextTrigger / 60), 0)
+    obj._menubar:setTitle(title)
+end
+
+function obj:notifCallback()
+    obj:showHomeBoard(function()
+        obj:pickSnooze(obj._notif)
+    end)
+end
+
+function obj:ensureTimer()
+    local clearCheck
+    if not clearCheck then
+        local notification = {title = "Set the homeboard timer!", withdrawAfter = 0}
+        obj._notif = hs.notify.new(obj.notifCallback, notification):send()
+        clearCheck = hs.timer.doEvery(1, function()
+            if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
+                if obj._notif:activationType() == hs.notify.activationTypes.none then
+                    obj:notifCallback()
+                end
+                if clearCheck then
+                    clearCheck:stop()
+                    clearCheck = nil
+                end
+                obj._notif = nil
+            end
+        end)
     end
+end
+
+function obj:start(config)
+    for k,v in pairs(config) do obj[k] = v end
+    obj.videos = {}
+    for line in hs.execute("find "..obj.videosPath.." -type f -not -path '*/\\.*'"):gmatch("[^\n]+") do
+        table.insert(obj.videos, line)
+    end
+    obj._menubar = hs.menubar.new()
+    obj:renderMenuBar()
+    obj._menuRefreshTimer = hs.timer.doEvery(60, obj.renderMenuBar)
+    obj._ensureTimer = hs.timer.doEvery(60, obj.ensureTimer):setNextTrigger(0)
 end
 
 function obj:stop()

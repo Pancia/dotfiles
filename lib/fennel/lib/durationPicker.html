@@ -21,16 +21,28 @@ input { grid-area: dur; width: 200px; }
         </style>
 
         <script type="text/javascript">
+var PICKER = {}
 var duration = 0;
 window.onload = function() {
     document.getElementById("duration").value = duration;
+    document.querySelectorAll(".inc button").forEach(function(b) {
+        let num = new Number(b.textContent);
+        b.onclick = function() { update(num); };
+        b.oncontextmenu = function() { update(-num); return false; };
+        b.style = 'user-select:none;'
+    });
+    webkit.messageHandlers.HammerSpoon.postMessage({"onload": true});
 };
+function setDuration(num) {
+    duration = num;
+    document.getElementById("duration").value = duration
+}
+PICKER.setDuration = setDuration;
 function update(num) {
-    duration += num;
-    document.getElementById("duration").value = duration;
+    setDuration(duration + num)
 }
 function submit() {
-    webkit.messageHandlers.HammerSpoon.postMessage(duration);
+    webkit.messageHandlers.HammerSpoon.postMessage({"duration": duration});
 }
         </script>
     </head>
@@ -39,13 +51,13 @@ function submit() {
         <div id="container">
             <input id="duration" type="number" disabled=true/>
             <div class="inc">
-                <button onclick="update(1);">1</button>
-                <button onclick="update(5);">5</button>
-                <button onclick="update(15);">15</button>
-                <button onclick="update(30);">30</button>
+                <button>1</button>
+                <button>5</button>
+                <button>15</button>
+                <button>30</button>
             </div>
             <div class="fin">
-                <button onclick="update(-duration);">CLEAR</button>
+                <button onclick="setDuration(0);">CLEAR</button>
                 <button onclick="submit();">SUBMIT</button>
             </div>
         </div>

@@ -1,19 +1,9 @@
+local durp = require("lib/durationpicker")
+
 local obj = {}
 
-obj.name = "Lotus"
-obj.version = "1.0"
-obj.author = "Anthony D'Ambrosio <anthony.dayzerostudio@gmail.com>"
-obj.homepage = "https://github.com/pancia/dotfiles/tree/master/spoons/lotus"
-obj.license = "MIT - https://opensource.org/licenses/MIT"
-obj.attributions = {
-    "Lotus icon made by: https://www.flaticon.com/free-icon/lotus-flower_1152062",
-    "gong.wav from: http://iamfutureproof.com/tools/awareness/",
-    "bowl.wav from: http://naturesoundsfor.me/",
-}
+obj.spoonPath = os.getenv("HOME").."/dotfiles/lib/fennel/seeds/lotus/"
 
-obj.spoonPath = hs.spoons.scriptPath()
-
-obj.sounds = nil
 obj.interval = { minutes = 30 }
 
 function obj:playAwarenessSound()
@@ -23,8 +13,6 @@ function obj:playAwarenessSound()
         and hs.sound.getByName(sound.name)
         or hs.sound.getByFile(obj.spoonPath.."/"..sound.path)
     obj.lastPlayedSound = s:volume(volume):play()
-    hs.execute("mkdir -p "..obj.logDir)
-    hs.execute("echo $(date +%T) -- '"..(sound.name or sound.path).."' >> "..obj.logDir.."/log")
     return self
 end
 
@@ -34,10 +22,6 @@ function obj:stopAwarenessSound()
         obj.lastPlayedSound = nil
     end
     return self
-end
-
-function obj:init()
-    obj._paused = false
 end
 
 function renderMenuBar()
@@ -59,37 +43,6 @@ function renderMenuBar()
             .. "->[" .. obj._soundIdx .. "/" .. #obj.sounds .."]#" .. soundTitle
     end
     obj._menubar:setTitle(title)
-end
-
-function showDurationPicker(onDuration, onClose)
-    local frame = hs.screen.primaryScreen():fullFrame()
-    local rect = hs.geometry.rect(
-    frame["x"] + (3 * frame["w"] / 8),
-    frame["y"] + 3 * (frame["h"] / 8),
-    2 * frame["w"] / 8,
-    2 * frame["h"] / 8)
-    local uc = hs.webview.usercontent.new("HammerSpoon") -- jsPortName
-    local browser
-    local pickedDuration = false
-    uc:setCallback(function(response)
-        local duration = response.body
-        pickedDuration = true
-        browser:delete()
-        onDuration(duration)
-    end)
-    browser = hs.webview.newBrowser(rect, {developerExtrasEnabled = true}, uc)
-    browser:windowCallback(function(action, webview)
-        if action == "closing" and not pickedDuration then
-            if onClose then onClose(duration) end
-        end
-    end)
-    browser:deleteOnClose(true)
-    local f = io.open(obj.spoonPath.."/durationPicker.html")
-    local html = ""
-    for each in f:lines() do
-        html = html .. each
-    end
-    browser:html(html):bringToFront():show()
 end
 
 function renderMenu()
@@ -126,31 +79,26 @@ function renderMenu()
             {title = "pause for ...?"
             , fn = function()
                 obj.stopAwarenessSound()
-                showDurationPicker(function(duration)
-                    obj._paused = true
-                    if obj._pauseTimer then
-                        obj._pauseTimer:stop()
-                        obj._pauseTimer = nil
-                    end
-                    obj._menuRefreshTimer:fire()
-                    obj._lastNextTrigger = obj._lotusTimer:nextTrigger()
-                    obj._lotusTimer = obj._lotusTimer:stop()
-                    _, refreshRate = userIntervalToSeconds(obj.interval)
-                    obj._pauseTimer = hs.timer.doAfter(refreshRate*duration, function()
-                        obj._pauseTimer = nil
-                        obj._paused = false
+                durp.show({
+                    onDuration = function(duration)
+                        obj._paused = true
+                        if obj._pauseTimer then
+                            obj._pauseTimer:stop()
+                            obj._pauseTimer = nil
+                        end
                         obj._menuRefreshTimer:fire()
-                        obj._lotusTimer = obj._lotusTimer:setNextTrigger(obj._lastNextTrigger)
-                    end)
-                    obj._menuRefreshTimer:fire()
-                end)
-            end},
-            {title = "view log"
-            , fn = function()
-                local logFileLoc = obj.logDir.."/log"
-                hs.osascript.applescript("tell application \"iterm2\""
-                .."\ncreate window with default profile command \"zsh -ic 'viewLog "..logFileLoc.."'\""
-                .."\nend tell")
+                        obj._lastNextTrigger = obj._lotusTimer:nextTrigger()
+                        obj._lotusTimer = obj._lotusTimer:stop()
+                        _, refreshRate = userIntervalToSeconds(obj.interval)
+                        obj._pauseTimer = hs.timer.doAfter(refreshRate*duration, function()
+                            obj._pauseTimer = nil
+                            obj._paused = false
+                            obj._menuRefreshTimer:fire()
+                            obj._lotusTimer = obj._lotusTimer:setNextTrigger(obj._lastNextTrigger)
+                        end)
+                        obj._menuRefreshTimer:fire()
+                    end
+                })
             end},
         }
     end
@@ -161,27 +109,30 @@ function with_default(obj, key, default)
 end
 
 function snoozeTimer()
-    showDurationPicker(function(duration)
-        obj._paused = true
-        obj.stopAwarenessSound()
-        obj._lotusTimer = obj._lotusTimer:stop()
-        _, refreshRate = userIntervalToSeconds(obj.interval)
-        obj._pauseTimer = hs.timer.doAfter(refreshRate*duration, function()
-            obj._pauseTimer = nil
-            obj._paused = false
+    durp.show({
+        onDuration = function(duration)
+            obj._paused = true
+            obj.stopAwarenessSound()
+            obj._lotusTimer = obj._lotusTimer:stop()
+            _, refreshRate = userIntervalToSeconds(obj.interval)
+            obj._pauseTimer = hs.timer.doAfter(refreshRate*duration, function()
+                obj._pauseTimer = nil
+                obj._paused = false
+                obj._menuRefreshTimer:fire()
+                obj._lotusTimer = obj._lotusTimer:setNextTrigger(0)
+            end)
             obj._menuRefreshTimer:fire()
-            obj._lotusTimer = obj._lotusTimer:setNextTrigger(0)
-        end)
-        obj._menuRefreshTimer:fire()
-    end, function()
-        obj._paused = false
-        obj.stopAwarenessSound()
-        obj._lotusTimer = obj._lotusTimer:start()
-        obj._menuRefreshTimer:fire()
-    end)
+        end,
+        onClose = function()
+            obj._paused = false
+            obj.stopAwarenessSound()
+            obj._lotusTimer = obj._lotusTimer:start()
+            obj._menuRefreshTimer:fire()
+        end
+    })
 end
 
-function notifCallback(notif)
+function obj:notifCallback(notif)
     if obj._soundRepeat then
       obj._soundRepeat:stop()
       obj._soundRepeat = nil
@@ -214,11 +165,11 @@ function lotusBlock()
         local notification = obj._sound.notif()
         with_default(notification, "hasActionButton", true)
         with_default(notification, "actionButtonTitle", "SNOOZE")
-        obj._notif = hs.notify.new(notifCallback, notification):send()
+        obj._notif = hs.notify.new(obj.notifCallback, notification):send()
         clearCheck = hs.timer.doEvery(1, function()
             if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
                 if obj._notif:activationType() == hs.notify.activationTypes.none then
-                    notifCallback(obj._notif)
+                    obj:notifCallback(obj._notif)
                 end
                 if clearCheck then
                     clearCheck:stop()
@@ -240,7 +191,8 @@ function userIntervalToSeconds(x)
     end
 end
 
-function obj:start()
+function obj:start(config)
+    for k,v in pairs(config) do obj[k] = v end
     local saved = {
         ["soundIdx"] = hs.settings.get("soundIdx"),
         ["pausedFor"] = hs.settings.get("pausedFor"),

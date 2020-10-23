@@ -1,15 +1,6 @@
 local obj = {}
 
-obj.name = "Watch"
-obj.version = "1.0"
-obj.author = "Anthony D'Ambrosio <anthony.dayzerostudio@gmail.com>"
-obj.homepage = "https://github.com/pancia/dotfiles/tree/master/spoons/watch"
-obj.license = "MIT - https://opensource.org/licenses/MIT"
-obj.attributions = {
-    "Watch icon made by: https://www.flaticon.com/free-icon/clock_2088617",
-}
-
-obj.spoonPath = hs.spoons.scriptPath()
+obj.spoonPath = os.getenv("HOME").."/dotfiles/lib/fennel/seeds/watch/"
 
 obj.scripts = {}
 obj.interval = 60
@@ -67,7 +58,8 @@ function renderMenu()
     end)
 end
 
-function obj:start()
+function obj:start(config)
+    for k,v in pairs(config) do obj[k] = v end
     hs.fnutils.ieach(obj.scripts, function(script)
         if type(script.delayStart) == "number" then
             if script.delayStart == 0 then
