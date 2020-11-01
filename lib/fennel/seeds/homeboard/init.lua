@@ -144,18 +144,17 @@ function obj:notifCallback()
 end
 
 function obj:ensureTimer()
-    local clearCheck
-    if not clearCheck then
+    if not obj._clearCheck and not obj.browser then
         local notification = {title = "Set the homeboard timer!", withdrawAfter = 0}
         obj._notif = hs.notify.new(obj.notifCallback, notification):send()
-        clearCheck = hs.timer.doEvery(1, function()
+        obj._clearCheck = hs.timer.doEvery(1, function()
             if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
                 if obj._notif:activationType() == hs.notify.activationTypes.none then
                     obj:notifCallback()
                 end
-                if clearCheck then
-                    clearCheck:stop()
-                    clearCheck = nil
+                if obj._clearCheck then
+                    obj._clearCheck:stop()
+                    obj._clearCheck = nil
                 end
                 obj._notif = nil
             end
@@ -177,6 +176,9 @@ end
 
 function obj:stop()
     obj._menubar:delete()
+    if obj._notif then
+        obj._notif:withdraw()
+    end
     return self
 end
 

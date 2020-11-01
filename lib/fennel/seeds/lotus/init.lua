@@ -79,7 +79,7 @@ function renderMenu()
             {title = "pause for ...?"
             , fn = function()
                 obj.stopAwarenessSound()
-                durp.show({
+                durp:show({
                     onDuration = function(duration)
                         obj._paused = true
                         if obj._pauseTimer then
@@ -109,7 +109,7 @@ function with_default(obj, key, default)
 end
 
 function snoozeTimer()
-    durp.show({
+    durp:show({
         onDuration = function(duration)
             obj._paused = true
             obj.stopAwarenessSound()
