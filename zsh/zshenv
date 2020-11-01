@@ -5,6 +5,7 @@ export PATH="/usr/local/sbin:$PATH"
 export LESSCHARSET=UTF-8 # git (& => less) otherwise doesn't show UTF-8 file properly
 export LC_ALL=en_US.UTF-8
 export fpath=($fpath $HOME/dotfiles/zsh/completions) # for zsh completion <tab>
+export GPG_TTY=$(tty)
 
 for env in $(ls ~/dotfiles/zsh/env); do
     source "$HOME/dotfiles/zsh/env/${env}"
