@@ -19,7 +19,7 @@ let g:clojure_fuzzy_indent = 1
 let g:clojure_fuzzy_indent_patterns = '.*'
 let g:clojure_fuzzy_indent_blacklist = []
 
-nnoremap <buffer><silent> ,fr :ConjureEval (require 'user)(in-ns 'user)(require 'development)(in-ns 'development)(restart)<CR>
+nnoremap <buffer><silent> ,fr :ConjureEval (require 'development)(in-ns 'development)(restart)<CR>
 
 nnoremap <buffer><expr> <esc> bufname('') =~ 'conjure-log-\d\+.cljc' ? ':normal ,lq<CR>' : '<esc>'
 
@@ -65,4 +65,5 @@ call WhichKey_CMD('srlm', 'move-to-let', 'LSP_exe_here("move-to-let", input("Bin
 call WhichKey_CMD('srli', 'introduce-let', 'LSP_exe_here("introduce-let", input("Binding name: "))')
 call WhichKey_CMD('su', 'find usages', 'LanguageClient#textDocument_references()')
 
-nnoremap <buffer><silent> ,, :call guardrails_pro#run_check()<CR>
+nnoremap <buffer><silent> ,gcf :call guardrails_pro#check_current_file()<CR>
+nnoremap <buffer><silent> ,gcr :call guardrails_pro#check_root_form()<CR>
