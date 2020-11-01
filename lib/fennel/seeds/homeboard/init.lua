@@ -6,12 +6,12 @@ obj.spoonPath = os.getenv("HOME").."/dotfiles/lib/fennel/seeds/homeboard/"
 
 function obj:init() end
 
-function getLastPlanFile()
+function obj:getLastPlanFile()
     return hs.execute("printf '%s' $(ls -t "..obj.homeBoardPath.."/plans/*.plan.txt 2> /dev/null | head -n 1)")
 end
 
 function obj:getLastPlan()
-    local lastPlanFile = getLastPlanFile()
+    local lastPlanFile = obj:getLastPlanFile()
     hs.printf("lastPlanFile: %s", hs.inspect(lastPlanFile))
     if lastPlanFile and lastPlanFile ~= '' then
         return io.open(lastPlanFile, "r"):read("*all")
@@ -20,7 +20,7 @@ end
 
 -- NOTE: used to make notif subtitle
 function obj:getLastPlanTime()
-    local lastPlanFile = getLastPlanFile()
+    local lastPlanFile = obj:getLastPlanFile()
     if lastPlanFile and lastPlanFile ~= '' then
         return lastPlanFile:match("[%d-:_]+")
     else
@@ -96,7 +96,10 @@ function obj:showHomeBoard(onClose)
     local browser = hs.webview.newBrowser(fullscreen, {developerExtrasEnabled = true}, uc)
     browser:windowCallback(function(action, webview)
         if action == "closing" then
-            if onClose then onClose() end
+            if onClose then
+              onClose()
+              obj.browser = nil
+            end
         end
     end)
     browser:deleteOnClose(true)
@@ -136,7 +139,7 @@ end
 
 function obj:notifCallback()
     obj:showHomeBoard(function()
-        obj:pickSnooze(obj._notif)
+        obj:pickSnooze()
     end)
 end
 
