@@ -120,7 +120,7 @@ end
 function obj:pickSnooze()
     obj._ensureTimer = obj._ensureTimer:stop()
     durp:show({
-        defaultDuration = 90,
+        defaultDuration = obj.defaultDuration or 180,
         onDuration = function(duration) obj:snoozeTimer(duration) end,
         onClose = obj.pickSnooze,
     })

@@ -18,10 +18,11 @@
 
 (local homeboard (require :seeds.homeboard.core))
 (homeboard.start
-  {:homeBoardPath (.. HOME "/Dropbox/HomeBoard/")
-   :videosPath    (.. HOME "/Movies/HomeBoard")
-   :todosPaths    {:dotfiles (.. HOME "/dotfiles/wiki/TODO.wiki")
-                   :dropbox  (.. HOME "/Dropbox/wiki/Tasks.wiki")}})
+  {:defaultDuration 180
+   :homeBoardPath   (.. HOME "/Dropbox/HomeBoard/")
+   :videosPath      (.. HOME "/Movies/HomeBoard")
+   :todosPaths      {:dotfiles (.. HOME "/dotfiles/wiki/TODO.wiki")
+                     :dropbox  (.. HOME "/Dropbox/wiki/Tasks.wiki")}})
 
 (local lotus (require :seeds.lotus.core))
 (lotus.start
