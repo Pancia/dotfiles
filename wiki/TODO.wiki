@@ -1,5 +1,5 @@
 == MAIN (in priority order) ==
-- [o] :clojure: REBL nrepl tap middleware
+ [ ] :lotus: 5 minute stand -> sit timer
 - [ ] :nvim: :easymotion:
     - [ ] ??? add lispy chars to jump targets ???
     - [ ] https://github.com/easymotion/vim-easymotion#bonus-fuzzy-search-with-easymotion
