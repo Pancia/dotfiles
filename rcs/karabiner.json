@@ -1,4 +1,4 @@
-{
+{"__rc_loc": "<[.config/karabiner/karabiner.json]>",
     "global": {
         "check_for_updates_on_startup": true,
         "show_in_menu_bar": true,
