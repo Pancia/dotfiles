@@ -1,5 +1,5 @@
 == MAIN (in priority order) ==
- [ ] :lotus: 5 minute stand -> sit timer
+- [ ] https://github.com/junegunn/vim-easy-align
 - [ ] :nvim: :easymotion:
     - [ ] ??? add lispy chars to jump targets ???
     - [ ] https://github.com/easymotion/vim-easymotion#bonus-fuzzy-search-with-easymotion

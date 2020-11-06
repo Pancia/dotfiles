@@ -54,7 +54,7 @@ class CMDS extend CMD
 end
 
 $old_methods = CMDS.methods
-require $cmds_file if File.file? $cmds_file
+begin require $cmds_file if File.file? $cmds_file; rescue Exception; nil end
 
 # https://mads-hartmann.com/2017/08/06/writing-zsh-completion-scripts.html
 # https://github.com/zsh-users/zsh-completions/blob/master/zsh-completions-howto.org#user-content-actions
