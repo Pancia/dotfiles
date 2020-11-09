@@ -21,6 +21,15 @@ function meditate {
     cmus-remote --play
 }
 
+function heater {
+    set -o localoptions -o localtraps
+    trap 'killall yes' EXIT
+    yes > /dev/null &
+    yes > /dev/null &
+    yes > /dev/null &
+    sudo powermetrics --samplers smc | ag '(CPU.*temp|Fan)'
+}
+
 local functions_dir=`dirname $0`/fns
 for f in $(ls $functions_dir); do
     source $functions_dir/$f
