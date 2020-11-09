@@ -10,6 +10,10 @@
   :spec-dev {:override-deps {fulcrologic/fulcro-spec {:local/root "/Users/pancia/projects/lib/fulcro-spec"}}}
   :gr-dev {:override-deps {com.fulcrologic/guardrails {:local/root "/Users/pancia/projects/lib/guardrails"}}}
   :grpro-dev {:override-deps {com.fulcrologic/guardrails-pro {:local/root "/Users/pancia/projects/work/guardrails-pro"}}}
+  :grpro-checker {:jvm-opts  ["-Dguardrails.mode=:pro"]
+                  :exec-fn   com.fulcrologic.guardrails-pro.checkers.clojure/start!
+                  :exec-args {:src-dirs ["src/main" "src/test"]
+                              :main-ns  nil}}
   :rad-dev {:override-deps
             {com.fulcrologic/fulcro-rad
              {:local/root "/Users/pancia/projects/lib/fulcro-rad"}
