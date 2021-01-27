@@ -5,8 +5,9 @@ module CMD
     lambda { |*args|
       EXE.system %{
         clj -A:clj-tests \
-        --watch \
-        #{args.join " "}
+          --focus-meta :test/focused \
+          --watch \
+          #{args.join " "}
       }
     }
   end

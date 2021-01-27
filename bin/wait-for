@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+echo "[wait-for]: Waiting for \`test -e $1\`, will execute \`${@:2}\`"
+i=0
+while [ ! -e "$1" ]; do
+  sleep 1
+  ((i++))
+  printf "\rWaited: $i seconds"
+done
+echo; echo "Done waiting for \`$1\`"; echo "Executing: \`${@:2}\`:"
+"${@:2}"

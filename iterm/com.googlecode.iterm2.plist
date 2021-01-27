@@ -27,7 +27,7 @@
 	<key>ClosingHotkeySwitchesSpaces</key>
 	<true/>
 	<key>Command</key>
-	<string>/usr/local/bin/zsh</string>
+	<string></string>
 	<key>CommandSelection</key>
 	<true/>
 	<key>Control</key>
@@ -451,7 +451,7 @@
 	<key>NSColorPanelMode</key>
 	<string>6</string>
 	<key>NSColorPanelMode.modal</key>
-	<integer>6</integer>
+	<integer>3</integer>
 	<key>NSColorPanelToolbarIsShown.modal</key>
 	<integer>1</integer>
 	<key>NSColorPanelVisibleSwatchRows.modal</key>
@@ -459,7 +459,7 @@
 	<key>NSColorPickerPreferredRGBEntryMode</key>
 	<integer>2</integer>
 	<key>NSColorPickerSlidersDefaults</key>
-	<string>3</string>
+	<string>0</string>
 	<key>NSNavLastRootDirectory</key>
 	<string>~/Library/Application Support/iTerm2/Scripts</string>
 	<key>NSNavLastUserSetHideExtensionButtonState</key>
@@ -514,19 +514,23 @@
 	<key>NSWindow Frame NSColorPanel</key>
 	<string>0 83 224 275 0 0 2560 1417 </string>
 	<key>NSWindow Frame NSColorPanel.modal</key>
-	<string>1011 659 537 570 0 0 2560 1417 </string>
+	<string>1076 659 408 570 0 0 2560 1417 </string>
 	<key>NSWindow Frame NSNavPanelAutosaveName</key>
 	<string>880 726 799 448 0 0 2560 1417 </string>
 	<key>NSWindow Frame Preferences</key>
 	<string>753 276 924 485 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 0</key>
-	<string>758 0 1802 1123 0 0 2560 1417 </string>
+	<string>800 0 1760 978 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 1</key>
-	<string>0 317 1802 1100 0 0 2560 1417 </string>
+	<string>0 0 2560 1319 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 2</key>
-	<string>0 317 1802 1100 0 0 2560 1417 </string>
+	<string>0 0 2560 1013 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 3</key>
-	<string>385 135 1802 1100 0 0 2560 1417 </string>
+	<string>-4 0 1802 1100 0 0 2560 1417 </string>
+	<key>NSWindow Frame iTerm Window 4</key>
+	<string>458 0 1802 1100 0 0 2560 1417 </string>
+	<key>NSWindow Frame iTerm Window 5</key>
+	<string>0 317 2560 1100 0 0 2560 1417 </string>
 	<key>NeverWarnAboutShortLivedSessions_7EF0271F-5154-40A5-B63B-A0737DB0ABB0</key>
 	<true/>
 	<key>NeverWarnAboutShortLivedSessions_7EF0271F-5154-40A5-B63B-A0737DB0ABB0_selection</key>
@@ -939,7 +943,7 @@
 			<key>Open Toolbelt</key>
 			<false/>
 			<key>Option Key Sends</key>
-			<integer>1</integer>
+			<integer>0</integer>
 			<key>Prompt Before Closing 2</key>
 			<integer>2</integer>
 			<key>Right Option Key Sends</key>
@@ -1140,17 +1144,24 @@
 		<string>Roboto Mono Medium for Powerline</string>
 		<string>Monaco</string>
 	</array>
+	<key>NoSyncFrame_SessionsPreferences</key>
+	<dict>
+		<key>screenFrame</key>
+		<string>{{0, 0}, {2560, 1440}}</string>
+		<key>topLeft</key>
+		<string>{977, 1199}</string>
+	</dict>
 	<key>NoSyncFrame_SharedPreferences</key>
 	<dict>
 		<key>screenFrame</key>
 		<string>{{0, 0}, {2560, 1440}}</string>
 		<key>topLeft</key>
-		<string>{494, 686}</string>
+		<string>{1107, 842}</string>
 	</dict>
 	<key>NoSyncInstallationId</key>
 	<string>3C9F06F6-1E59-43C7-BAC3-D190375DCD5D</string>
 	<key>NoSyncLaunchExperienceControllerRunCount</key>
-	<integer>76</integer>
+	<integer>115</integer>
 	<key>NoSyncNeverPromptToChangeOption</key>
 	<true/>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile</key>
@@ -1487,6 +1498,14 @@
 				<true/>
 				<key>name</key>
 				<string>style</string>
+				<key>nonterminalContext</key>
+				<integer>0</integer>
+			</dict>
+			<dict>
+				<key>isTerminal</key>
+				<true/>
+				<key>name</key>
+				<string>currentTab.currentSession.jobPid</string>
 				<key>nonterminalContext</key>
 				<integer>0</integer>
 			</dict>
@@ -1937,7 +1956,7 @@
 	<key>SUHasLaunchedBefore</key>
 	<true/>
 	<key>SULastCheckTime</key>
-	<date>2020-08-15T23:30:03Z</date>
+	<date>2020-11-12T15:22:32Z</date>
 	<key>SUUpdateRelaunchingMarker</key>
 	<false/>
 	<key>SavePasteHistory</key>

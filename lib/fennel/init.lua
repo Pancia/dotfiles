@@ -5,4 +5,4 @@ local LIB = "/Users/pancia/dotfiles/lib/fennel/"
 fennel.path = LIB.."/?.fnl;"..LIB.."/lib/?.fnl;"..LIB.."/seeds/?.fnl;"..LIB.."/spacehammer/?.fnl;"..fennel.path
 table.insert(package.loaders or package.searchers, fennel.searcher)
 require("core")
-_ = require("lib/utils")
+dbg = require("lib/dbg")

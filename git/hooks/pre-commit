@@ -6,6 +6,11 @@ ag 'test/focused' <(echo $staged_changes | ag '^\+') \
     && echo "[pre-commit/ERROR]: Found focused tests!" >&2 \
     && exit 11
 
+ag 'test/ignored' <(echo $staged_changes | ag '^\+') \
+    && echo "[pre-commit/ERROR]: Found ignored tests!" >&2 \
+    && exit 11
+
+
 local markers="$(echo $staged_changes | ag '^\+' | ag 'TASK')"
 if [[ -n "$markers" ]]; then
     echo "[pre-commit/ERROR]: Found staged TASK markers:"

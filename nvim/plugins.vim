@@ -24,6 +24,7 @@ Plug 'kshenoy/vim-signature' " Marks
 Plug 'junegunn/vim-peekaboo' " Preview Registers
 Plug 'RRethy/vim-illuminate' " Highlight cursor word matches
 Plug 'mhinz/vim-signify' " git gutter
+Plug 'junegunn/vim-easy-align'
 " }}}
 
 " DIR/FILE VIEWER {{{
@@ -68,12 +69,12 @@ Plug 'autozimu/LanguageClient-neovim', {'branch': 'next', 'do': 'bash install.sh
 " }}}
 
 " CLOJURE {{{
-Plug 'Olical/conjure', {'for': 'clojure', 'tag': 'v4.4.0'}
+Plug 'Olical/conjure', {'for': 'clojure', 'tag': 'v4.11.0'}
 Plug 'guns/vim-clojure-static', {'for': 'clojure'}
 Plug 'guns/vim-sexp', {'for': ['clojure', 'fennel']}
 Plug '~/dotfiles/lib/vim/conjure-highlight'
 Plug 'luochen1990/rainbow'
-Plug '~/projects/work/guardrails-pro/editor-plugins/vim'
+Plug '~/projects/work/copilot/editor-plugins/vim'
 " }}}
 
 " LUA {{{

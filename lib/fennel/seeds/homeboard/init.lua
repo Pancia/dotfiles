@@ -145,20 +145,18 @@ end
 
 function obj:ensureTimer()
     if not obj._clearCheck and not obj.browser then
-        local notification = {title = "Set the homeboard timer!", withdrawAfter = 0}
-        obj._notif = hs.notify.new(obj.notifCallback, notification):send()
-        obj._clearCheck = hs.timer.doEvery(1, function()
-            if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
-                if obj._notif:activationType() == hs.notify.activationTypes.none then
-                    obj:notifCallback()
-                end
-                if obj._clearCheck then
-                    obj._clearCheck:stop()
-                    obj._clearCheck = nil
-                end
-                obj._notif = nil
-            end
-        end)
+        obj._notif:send()
+      --obj._clearCheck = hs.timer.doEvery(1, function()
+      --    if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
+      --        if obj._notif:activationType() == hs.notify.activationTypes.none then
+      --            obj:notifCallback()
+      --        end
+      --        if obj._clearCheck then
+      --            obj._clearCheck:stop()
+      --            obj._clearCheck = nil
+      --        end
+      --    end
+      --end)
     end
 end
 
@@ -168,6 +166,8 @@ function obj:start(config)
     for line in hs.execute("find "..obj.videosPath.." -type f -not -path '*/\\.*'"):gmatch("[^\n]+") do
         table.insert(obj.videos, line)
     end
+    local notification = {title = "Set the homeboard timer!", withdrawAfter = 0}
+    obj._notif = hs.notify.new(obj.notifCallback, notification)
     obj._menubar = hs.menubar.new()
     obj:renderMenuBar()
     obj._menuRefreshTimer = hs.timer.doEvery(60, obj.renderMenuBar)

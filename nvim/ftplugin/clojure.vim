@@ -65,5 +65,7 @@ call WhichKey_CMD('srlm', 'move-to-let', 'LSP_exe_here("move-to-let", input("Bin
 call WhichKey_CMD('srli', 'introduce-let', 'LSP_exe_here("introduce-let", input("Binding name: "))')
 call WhichKey_CMD('su', 'find usages', 'LanguageClient#textDocument_references()')
 
-nnoremap <buffer><silent> ,gcf :call guardrails_pro#check_current_file()<CR>
-nnoremap <buffer><silent> ,gcr :call guardrails_pro#check_root_form()<CR>
+nnoremap <buffer><silent> ,gcf :call copilot#check_current_file()<CR>
+nnoremap <buffer><silent> ,gcF :call copilot#refresh_and_check_current_file()<CR>
+nnoremap <buffer><silent> ,gcr :call copilot#check_root_form()<CR>
+nnoremap <buffer><silent> ,gcR :call copilot#refresh_and_check_root_form()<CR>

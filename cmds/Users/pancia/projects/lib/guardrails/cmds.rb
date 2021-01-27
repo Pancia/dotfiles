@@ -8,6 +8,7 @@ module CMD
           -A:spec-dev:dev:test:clj-tests \
           -J-Dguardrails.enabled=true \
           -J-Dguardrails.config=guardrails-test.edn \
+          --focus-meta :test/focused \
           --watch
       }
     }
