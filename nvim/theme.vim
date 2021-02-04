@@ -31,21 +31,24 @@ hi EasyMotionIncSearch gui=standout
 
 hi Search guibg=black guifg=#FFF900
 
-hi MyProjectTodo     guifg=#BB22DD gui=standout
+hi MyProjectTodo      guifg=#BB22DD gui=standout
 " TODO asdf TODO: asdf asdf
 "
-hi MyProjectTask     guifg=#BF1020 gui=standout
+hi MyProjectTask      guifg=#BF1020 gui=standout
 " TASK asdf TASK: asdf asdf
 "
-hi MyProjectNote     guifg=#1FC5C8 gui=standout
+hi MyProjectNote      guifg=#1FC5C8 gui=standout
 " NOTE asdf NOTE: asdf asdf
 "
-hi MyProjectLandmark guifg=#17C80D gui=standout
+hi MyProjectLandmark  guifg=#17C80D gui=standout
 " LANDMARK asdf LANDMARK: asdf asdf
 "
-hi MyProjectContext  guifg=#DF447B gui=standout
+hi MyProjectContext   guifg=#DF447B gui=standout
 " CONTEXT asdf CONTEXT: asdf asdf
 "
+hi MyProjectTranslate guifg=#F244E7 gui=standout
+" TRANSLATE asdf TRANSLATE: asdf asdf
+
 call onedark#set_highlight("MyProjectFixme", {"fg": g:onedark_color_overrides.yellow
             \                                ,"bg": g:onedark_color_overrides.white
             \                                ,"gui": "standout"})

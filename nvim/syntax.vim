@@ -1,15 +1,17 @@
 augroup ProjectMarkers
     au!
-    au Syntax * syn match MyProjectTask     /\v<(TASK)(:.*)?/
+    au Syntax * syn match MyProjectTask      /\v<(TASK)(:.*)?/
           \ containedin=.*Comment,vimCommentTitle
-    au Syntax * syn match MyProjectNote     /\v<(NOTE)(:.*)?/
+    au Syntax * syn match MyProjectNote      /\v<(NOTE)(:.*)?/
           \ containedin=.*Comment,vimCommentTitle
-    au Syntax * syn match MyProjectLandmark /\v<(LANDMARK)(:.*)?/
+    au Syntax * syn match MyProjectLandmark  /\v<(LANDMARK)(:.*)?/
           \ containedin=.*Comment,vimCommentTitle
-    au Syntax * syn match MyProjectContext  /\v<(CONTEXT)(:.*)?/
+    au Syntax * syn match MyProjectContext   /\v<(CONTEXT)(:.*)?/
           \ containedin=.*Comment,vimCommentTitle
-    au Syntax * syn match MyProjectContext  /\v<(CONTEXT)(:.*)?/
+    au Syntax * syn match MyProjectTranslate /\v<(TRANSLATE)(:.*)?/
           \ containedin=.*Comment,vimCommentTitle
     au Syntax * call matchadd('MyProjectTodo', '\v<(TODO)(:.*)?', 100)
     au Syntax * call matchadd('MyProjectFixme', '\v<(FIXME)(:.*)?', 100)
 augroup END
+
+" TRANSLATE: asdf
