@@ -1,6 +1,6 @@
 ;<[.config/clojure/deps.edn]>
 {:aliases
- {:nREPL {:extra-deps {cider/cider-nrepl {:mvn/version "0.22.4"}
+ {:nREPL {:extra-deps {cider/cider-nrepl {:mvn/version "0.25.8"}
                        tee/tee {:local/root "/Users/pancia/dotfiles/lib/clojure/tee"}}
           :main-opts
           ["-m" "nrepl.cmdline" "--interactive"
