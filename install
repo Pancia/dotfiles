@@ -51,6 +51,18 @@ task_lua() {
     luarocks install fennel
 }
 
+task_manual() {
+    echo "Run 'sudo visudo /private/etc/sudoers' and append this line:"
+    echo "$(whoami) ALL=(ALL) NOPASSWD: /usr/sbin/nvram SystemAudioVolume=%80"
+    read -p "done?"
+    echo "Download SpoonInstall from here: https://github.com/Hammerspoon/Spoons/raw/master/Spoons/SpoonInstall.spoon.zip"
+    echo "Move it into ~/.hammerspoon/Spoons/"
+    read -p "done?"
+    echo "Install xcode, launch it, and accept the license."
+    read -p "done?"
+    echo "manual steps done!"
+}
+
 task_all () {
     task_init_dotfiles
     task_brew
@@ -58,6 +70,7 @@ task_all () {
     task_luarocks
     task_fonts
     task_gitconfig
+    task_manual
     task_neovim
     task_opt
 }
@@ -70,6 +83,7 @@ main() {
         gitconfig|git) task_gitconfig ;;
         help) echo "init brew gitconfig neovim opt" ;;
         init) task_init_dotfiles ;;
+        manual) task_manual ;;
         neovim|nvim|vim) task_neovim ;;
         opt) task_opt ;;
         ruby) task_ruby ;;
