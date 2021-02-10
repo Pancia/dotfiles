@@ -17,11 +17,6 @@ antigen use oh-my-zsh
 
 # SHELL & CO.
 antigen bundle git
-antigen bundle lein
-antigen bundle node
-antigen bundle npm
-antigen bundle osx
-antigen bundle python
 
 # OSX
 antigen bundle brew
