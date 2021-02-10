@@ -1,0 +1,4 @@
+;<[.lsp/config.edn]>
+{
+ :auto-add-ns-to-new-files? false
+ }
