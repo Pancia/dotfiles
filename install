@@ -52,6 +52,10 @@ task_lua() {
 }
 
 task_manual() {
+    echo "Run 'ssh-keygen -t rsa'"
+    read -p "done?"
+    echo "Run 'ssh-add -K ~/.ssh/id_rsa'"
+    read -p "done?"
     echo "Run 'sudo visudo /private/etc/sudoers' and append this line:"
     echo "$(whoami) ALL=(ALL) NOPASSWD: /usr/sbin/nvram SystemAudioVolume=%80"
     read -p "done?"
