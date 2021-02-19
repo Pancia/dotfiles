@@ -52,6 +52,8 @@ task_lua() {
 }
 
 task_manual() {
+    echo "Run 'mkdir ~/Screenshots && defaults write com.apple.screencapture location ~/Screenshots'"
+    read -p "done?"
     echo "Run 'ssh-keygen -t rsa'"
     read -p "done?"
     echo "Run 'ssh-add -K ~/.ssh/id_rsa'"
