@@ -3,7 +3,7 @@
     excludesfile = ~/dotfiles/git/gitignore_global
     hooksPath = ~/dotfiles/git/hooks
 [push]
-    default = simple
+    default = current
 [color "diff"]
     meta = yellow bold
     frag = magenta bold
@@ -12,4 +12,4 @@
     whitespace = white reverse
 [user]
     name = Anthony D'Ambrosio
-	email = anthony.dayzerostudio@gmail.com
+    email = anthony.dayzerostudio@gmail.com
