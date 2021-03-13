@@ -2,6 +2,9 @@
 
 " NOTE: run `:actionlist` to see all `:action`s
 
+set easymotion
+map <space> <Plug>(easymotion-prefix)
+
 let mapleader = "s"
 
 nmap (         :action :cursive.actions.paredit/backward-up<cr>
