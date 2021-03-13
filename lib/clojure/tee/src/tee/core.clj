@@ -33,7 +33,9 @@
   (fn [msg]
     (when (is-user-eval? msg)
       (.println System/out (:code msg)))
-    (h (tee-transport msg))))
+    (if (= "tap>" (:op msg))
+      (tap> (:value msg))
+      (h (tee-transport msg)))))
 
 (set-descriptor! #'middleware
   ;; expects: below / after
