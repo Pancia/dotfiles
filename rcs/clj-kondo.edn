@@ -19,6 +19,7 @@
            com.fulcrologic.copilot.analysis.analyzer/defanalyzer    clojure.core/defn
            com.wsscode.pathom.connect/defmutation                   clojure.core/defn
            com.wsscode.pathom.connect/defresolver                   clojure.core/defn
+           com.fulcrologic.rad.attributes/defattr                   clj-kondo.lint-as/def-catch-all
            mount.core/defstate                                      clojure.core/def
            taoensso.encore/if-let                                   clojure.core/let
            taoensso.encore/when-let                                 clojure.core/let

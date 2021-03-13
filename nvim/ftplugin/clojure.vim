@@ -19,7 +19,14 @@ let g:clojure_fuzzy_indent = 1
 let g:clojure_fuzzy_indent_patterns = '.*'
 let g:clojure_fuzzy_indent_blacklist = []
 
+nnoremap <buffer><silent> ,cs :ConjureConnect 9000<CR>
+
+nnoremap <buffer><silent> ,fg :ConjureEval (require 'development)(in-ns 'development)(start)<CR>
+nnoremap <buffer><silent> ,fs :ConjureEval (require 'development)(in-ns 'development)(stop)<CR>
 nnoremap <buffer><silent> ,fr :ConjureEval (require 'development)(in-ns 'development)(restart)<CR>
+
+nnoremap <buffer><silent> ,dp :ConjureEval (require 'dataico.server-components.seeds)(dataico.server-components.seeds/populate!)<CR>
+nnoremap <buffer><silent> ,ds :ConjureEval (require 'dataico.server-components.seeds)(dataico.server-components.seeds/setup!)<CR>
 
 nnoremap <buffer><expr> <esc> bufname('') =~ 'conjure-log-\d\+.cljc' ? ':normal ,lq<CR>' : '<esc>'
 
