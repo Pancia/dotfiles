@@ -1,10 +1,18 @@
 ;<[.config/clojure/deps.edn]>
 {:aliases
- {:nREPL {:extra-deps {cider/cider-nrepl {:mvn/version "0.25.8"}
-                       tee/tee {:local/root "/Users/pancia/dotfiles/lib/clojure/tee"}}
+ {:nREPL {:extra-deps {cider/cider-nrepl             {:mvn/version "0.25.8"}
+                       tee/tee                       {:local/root "/Users/pancia/dotfiles/lib/clojure/tee"}
+                       rickmoynihan/nrebl.middleware {:mvn/version "0.2.0"}
+                       com.cognitect/rebl            {:mvn/version "0.9.241"}
+                       org.openjfx/javafx-fxml       {:mvn/version "15-ea+6"}
+                       org.openjfx/javafx-controls   {:mvn/version "15-ea+6"}
+                       org.openjfx/javafx-swing      {:mvn/version "15-ea+6"}
+                       org.openjfx/javafx-base       {:mvn/version "15-ea+6"}
+                       org.openjfx/javafx-web        {:mvn/version "15-ea+6"}}
           :main-opts
-          ["-m" "nrepl.cmdline" "--interactive"
-           "--middleware" "[cider.nrepl/cider-middleware,tee.core/middleware]"]}
+          ["-e" "((requiring-resolve,'cognitect.rebl/ui))"
+           "-m" "nrepl.cmdline" "--interactive"
+           "--middleware" "[nrebl.middleware/wrap-nrebl,cider.nrepl/cider-middleware,tee.core/middleware]"]}
   :spec-dev {:override-deps {fulcrologic/fulcro-spec {:local/root "/Users/pancia/projects/lib/fulcro-spec"}}}
   :gr-dev {:override-deps {com.fulcrologic/guardrails {:local/root "/Users/pancia/projects/lib/guardrails"}}}
   :cp-dev {:override-deps {com.fulcrologic/copilot {:local/root "/Users/pancia/projects/work/copilot"}}}
