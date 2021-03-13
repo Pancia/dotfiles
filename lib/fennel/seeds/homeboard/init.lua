@@ -74,13 +74,13 @@ function handleHomeboardMessages(response)
     elseif body.type == "journal" then
         local journal = hs.execute("printf '%s' `date +%y-%m-%d_%H:%M`")
         io.open(obj.homeBoardPath.."journals/"..journal..".journal.txt", "w")
-        :write(body.value)
-        :close()
+            :write(body.value)
+            :close()
     elseif body.type == "plan" then
         local plan = hs.execute("printf '%s' `date +%y-%m-%d_%H:%M`")
         io.open(obj.homeBoardPath.."plans/"..plan..".plan.txt", "w")
-        :write(body.value)
-        :close()
+            :write(body.value)
+            :close()
     elseif body.type == "done" then
         obj.browser:delete()
     else
@@ -146,17 +146,17 @@ end
 function obj:ensureTimer()
     if not obj._clearCheck and not obj.browser then
         obj._notif:send()
-      --obj._clearCheck = hs.timer.doEvery(1, function()
-      --    if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
-      --        if obj._notif:activationType() == hs.notify.activationTypes.none then
-      --            obj:notifCallback()
-      --        end
-      --        if obj._clearCheck then
-      --            obj._clearCheck:stop()
-      --            obj._clearCheck = nil
-      --        end
-      --    end
-      --end)
+        obj._clearCheck = hs.timer.doEvery(1, function()
+            if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
+                if obj._notif:activationType() == hs.notify.activationTypes.none then
+                    obj:notifCallback()
+                end
+                if obj._clearCheck then
+                    obj._clearCheck:stop()
+                    obj._clearCheck = nil
+                end
+            end
+        end)
     end
 end
 

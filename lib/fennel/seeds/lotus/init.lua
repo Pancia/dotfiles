@@ -166,18 +166,18 @@ function lotusBlock()
         with_default(notification, "hasActionButton", true)
         with_default(notification, "actionButtonTitle", "SNOOZE")
         obj._notif = hs.notify.new(obj.notifCallback, notification):send()
-      --clearCheck = hs.timer.doEvery(1, function()
-      --    if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
-      --        if obj._notif:activationType() == hs.notify.activationTypes.none then
-      --            obj:notifCallback()
-      --        end
-      --        if clearCheck then
-      --            clearCheck:stop()
-      --            clearCheck = nil
-      --        end
-      --        obj._notif = nil
-      --    end
-      --end)
+        clearCheck = hs.timer.doEvery(1, function()
+            if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
+                if obj._notif:activationType() == hs.notify.activationTypes.none then
+                    obj:notifCallback()
+                end
+                if clearCheck then
+                    clearCheck:stop()
+                    clearCheck = nil
+                end
+                obj._notif = nil
+            end
+        end)
         obj._soundRepeat = hs.timer.doEvery(60, function()
           obj:playAwarenessSound()
         end)
@@ -218,7 +218,7 @@ function obj:start(config)
             obj._menuRefreshTimer:fire()
         end)
     else
-        obj._lotusTimer:setNextTrigger((saved["nextTrigger"] < interval) and saved["nextTrigger"] or interval)
+        obj._lotusTimer:setNextTrigger(((saved["nextTrigger"] or interval+1) < interval) and saved["nextTrigger"] or interval)
     end
 
     if not saved["soundIdx"] then

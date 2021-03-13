@@ -17,33 +17,31 @@
 (cmus.bind-media-keys)
 
 (local homeboard (require :seeds.homeboard.core))
-(when false
-  (homeboard.start
-    {:defaultDuration 180
-     :homeBoardPath   (.. HOME "/Dropbox/HomeBoard/")
-     :videosPath      (.. HOME "/Movies/HomeBoard")
-     :todosPaths      {:dotfiles (.. HOME "/dotfiles/wiki/TODO.wiki")
-                       :dropbox  (.. HOME "/Dropbox/wiki/Tasks.wiki")}}))
+(homeboard.start
+  {:defaultDuration 180
+   :homeBoardPath   (.. HOME "/Dropbox/HomeBoard/")
+   :videosPath      (.. HOME "/Movies/HomeBoard")
+   :todosPaths      {:dotfiles (.. HOME "/dotfiles/wiki/TODO.wiki")
+                     :dropbox  (.. HOME "/Dropbox/wiki/Tasks.wiki")}})
 
 (local lotus (require :seeds.lotus.core))
-(when false
-  (lotus.start
-    (let [notif-fn (fn [title]
-                     (fn []
-                       {: title
-                        :withdrawAfter 0
-                        :informativeText (homeboard.getLastPlan)
-                        :subTitle (homeboard.getLastPlanTime)}))]
-      {:sounds [{:name  "short"
-                 :path  "bowl.wav"
-                 :notif (notif-fn "Quick Stretch! #short")}
-                {:name  "short"
-                 :path  "bowl.wav"
-                 :notif (notif-fn "Quick Stretch! #short")}
-                {:name   "long"
-                 :path   "gong.wav"
-                 :volume .5
-                 :notif  (notif-fn "Take a walk! #long")}]})))
+(lotus.start
+  (let [notif-fn (fn [title]
+                   (fn []
+                     {: title
+                      :withdrawAfter 0
+                      :informativeText (homeboard.getLastPlan)
+                      :subTitle (homeboard.getLastPlanTime)}))]
+    {:sounds [{:name  "short"
+               :path  "bowl.wav"
+               :notif (notif-fn "Quick Stretch! #short")}
+              {:name  "short"
+               :path  "bowl.wav"
+               :notif (notif-fn "Quick Stretch! #short")}
+              {:name   "long"
+               :path   "gong.wav"
+               :volume .5
+               :notif  (notif-fn "Take a walk! #long")}]}))
 
 (local watch (require :seeds.watch.core))
 (watch.start
