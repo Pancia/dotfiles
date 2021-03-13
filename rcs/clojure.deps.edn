@@ -1,6 +1,7 @@
 ;<[.config/clojure/deps.edn]>
 {:aliases
- {:nREPL {:extra-deps {cider/cider-nrepl             {:mvn/version "0.25.8"}
+ {:tee {:extra-deps {tee/tee {:local/root "/Users/pancia/dotfiles/lib/clojure/tee"}}}
+  :nREPL {:extra-deps {cider/cider-nrepl             {:mvn/version "0.25.8"}
                        tee/tee                       {:local/root "/Users/pancia/dotfiles/lib/clojure/tee"}
                        rickmoynihan/nrebl.middleware {:mvn/version "0.2.0"}
                        com.cognitect/rebl            {:mvn/version "0.9.241"}

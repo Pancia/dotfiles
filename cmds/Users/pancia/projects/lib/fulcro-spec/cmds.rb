@@ -4,7 +4,7 @@ module CMD
     opts.info = "Run clojure tests"
     lambda { |*args|
       EXE.system %{
-        clj -A:clj-tests \
+        clj -A:tee:clj-tests \
           --focus-meta :test/focused \
           --watch \
           #{args.join " "}

@@ -1,5 +1,6 @@
 (ns tee.core
   (:require
+    [clojure.edn :as edn]
     [nrepl.middleware :refer [set-descriptor!]])
   (:import
     [nrepl.transport Transport]))
@@ -34,7 +35,11 @@
     (when (is-user-eval? msg)
       (.println System/out (:code msg)))
     (if (= "tap>" (:op msg))
-      (tap> (:value msg))
+      (tap> (try (edn/read-string {:default tagged-literal}
+                   (:value msg))
+              (catch Throwable t
+                {:failed-to-read-because t
+                 :value (:value msg)})))
       (h (tee-transport msg)))))
 
 (set-descriptor! #'middleware
