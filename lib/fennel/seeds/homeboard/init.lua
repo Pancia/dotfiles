@@ -161,9 +161,13 @@ function obj:renderMenuBar()
 end
 
 function obj:notifCallback()
-    obj:showHomeBoard(function()
-        obj:pickSnooze()
-    end)
+    if not obj._delivered then
+        obj._delivered = true
+        obj:showHomeBoard(function()
+            obj:pickSnooze()
+            obj._delivered = false
+        end)
+    end
 end
 
 function obj:ensureTimer()
