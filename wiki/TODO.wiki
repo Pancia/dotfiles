@@ -1,5 +1,9 @@
 == MAIN (in priority order) ==
-- [ ] https://github.com/junegunn/vim-easy-align
+- [ ] :homeboard: clicking notification opens browser twice
+- [ ] :homeboard: no sound?
+- [X] :homeboard: pause video by default
+- [X] :homeboard: refactor to three step wizard
+- [ ] :greasemonkey: not working script blocked (just linkedin)... `>:(`
 - [ ] :nvim: :easymotion:
     - [ ] ??? add lispy chars to jump targets ???
     - [ ] https://github.com/easymotion/vim-easymotion#bonus-fuzzy-search-with-easymotion

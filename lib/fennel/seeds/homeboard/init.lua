@@ -28,10 +28,15 @@ function obj:getLastPlanTime()
     end
 end
 
+function obj:evalJS(method, args)
+    obj._logger.df("HOMEBOARD.%s(...)", method)
+    obj.browser:evaluateJavaScript("HOMEBOARD."..method.."("..args..")")
+end
+
 function obj:addTodos()
     for name, path in pairs(obj.todosPaths) do
         local text = io.open(path, "r"):read("*all")
-        obj.browser:evaluateJavaScript("HOMEBOARD.addTodos('"..name.."', ".. hs.inspect(text) ..")")
+        obj:evalJS("addTodos", "'"..name.."', ".. hs.inspect(text))
     end
 end
 
@@ -43,45 +48,58 @@ function obj:addBoard()
     for file in hs.execute("ls "..obj.homeBoardPath.."/board/*"):gmatch("[^\n]+") do
         local text = io.open(file, "r"):read("*all")
         local fileName = file:match("^.+/([^%.]+).+$")
-        obj.browser:evaluateJavaScript("HOMEBOARD.addBoardItem('"..fileName.."', "..hs.inspect(text)..")")
+        obj:evalJS("addBoardItem", "'"..fileName.."', "..hs.inspect(text))
     end
 end
 
 function obj:addMusings()
     for file in hs.execute("ls "..obj.homeBoardPath.."/musings/*"):gmatch("[^\n]+") do
         local text = io.open(file, "r"):read("*all")
-        obj.browser:evaluateJavaScript("HOMEBOARD.addMusing("..hs.inspect(text)..")")
+        obj:evalJS("addMusing", hs.inspect(text))
     end
+end
+
+function obj:setReview()
+    local lastPlan = obj:getLastPlan()
+    obj:evalJS("setReview", hs.inspect(obj:getLastPlanTime())..","..hs.inspect(lastPlan))
 end
 
 function handleHomeboardMessages(response)
     local body = response.body
-    if body.type == "loaded" then
-        obj.browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..obj:videoToPlay().."\")")
-        local lastPlan = obj:getLastPlan()
-        obj.browser:evaluateJavaScript("HOMEBOARD.setReview("..hs.inspect(obj:getLastPlanTime())..","..hs.inspect(lastPlan)..")")
+    obj._logger.df("homeboard msg type: %s", body.type)
+    if body.type == "journal/loaded" then
+        obj:setReview()
+    elseif body.type == "plan/loaded" then
+        obj:setReview()
         obj:addTodos()
         obj:addBoard()
+    elseif body.type == "muse/loaded" then
+        obj:evalJS("showVideo", "\"file://"..obj:videoToPlay().."\"")
         obj:addMusings()
-        obj.browser:evaluateJavaScript("HOMEBOARD.doneLoading()")
-    elseif body.type == "newVideo" then
-        obj.browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..obj:videoToPlay().."\")")
-    elseif body.type == "pickVideo" then
+        obj:evalJS("shuffleMusings", "")
+    elseif body.type == "muse/newVideo" then
+        obj:evalJS("showVideo", "\"file://"..obj:videoToPlay().."\"")
+    elseif body.type == "muse/pickVideo" then
         pickedVideo = hs.dialog.chooseFileOrFolder("Pick a video to play:", obj.videosPath)
         if pickedVideo then
-            obj.browser:evaluateJavaScript("HOMEBOARD.showVideo(\"file://"..pickedVideo["1"].."\")")
+            obj:evalJS("showVideo", "\"file://"..pickedVideo["1"].."\"")
         end
-    elseif body.type == "journal" then
-        local journal = hs.execute("printf '%s' `date +%y-%m-%d_%H:%M`")
-        io.open(obj.homeBoardPath.."journals/"..journal..".journal.txt", "w")
-            :write(body.value)
+    elseif body.type == "submit/journal" then
+        obj._journal = body.value
+    elseif body.type == "submit/plan" then
+        obj._plan = body.value
+    elseif body.type == "submit/done" then
+        local date = hs.execute("printf '%s' `date +%y-%m-%d_%H:%M`")
+        if obj._journal then
+            io.open(obj.homeBoardPath.."journals/"..date..".journal.txt", "w")
+            :write(obj._journal)
             :close()
-    elseif body.type == "plan" then
-        local plan = hs.execute("printf '%s' `date +%y-%m-%d_%H:%M`")
-        io.open(obj.homeBoardPath.."plans/"..plan..".plan.txt", "w")
-            :write(body.value)
+        end
+        if obj._plan then
+            io.open(obj.homeBoardPath.."plans/"..date..".plan.txt", "w")
+            :write(obj._plan)
             :close()
-    elseif body.type == "done" then
+        end
         obj.browser:delete()
     else
         hs.printf("Unknown HomeBoard Response: %s", hs.inspect(body))
@@ -92,8 +110,13 @@ function obj:showHomeBoard(onClose)
     local jsPortName = "HammerSpoon" -- NOTE: used by homeboard.js
     local uc = hs.webview.usercontent.new(jsPortName)
     uc:setCallback(handleHomeboardMessages)
-    local fullscreen = hs.screen.primaryScreen():fullFrame()
-    local browser = hs.webview.newBrowser(fullscreen, {developerExtrasEnabled = true}, uc)
+    local frame = hs.screen.primaryScreen():fullFrame()
+    local rect = hs.geometry.rect(
+        frame["x"] + (1 * frame["w"] / 16),
+        frame["y"] + (1 * frame["h"] / 16),
+        14 * frame["w"] / 16,
+        14 * frame["h"] / 16)
+    local browser = hs.webview.newBrowser(rect, {developerExtrasEnabled = true}, uc)
     browser:windowCallback(function(action, webview)
         if action == "closing" then
             if onClose then
@@ -104,7 +127,7 @@ function obj:showHomeBoard(onClose)
     end)
     browser:deleteOnClose(true)
     browser:transparent(true)
-    local f = "file://"..obj.homeBoardPath.."/index.html"
+    local f = "file://"..obj.homeBoardPath.."/journal.html"
     browser:url(f):show()
     browser:hswindow():focus()
     obj.browser = browser
@@ -161,6 +184,7 @@ function obj:ensureTimer()
 end
 
 function obj:start(config)
+    obj._logger = hs.logger.new("HomeBoard", "debug")
     for k,v in pairs(config) do obj[k] = v end
     obj.videos = {}
     for line in hs.execute("find "..obj.videosPath.." -type f -not -path '*/\\.*'"):gmatch("[^\n]+") do
