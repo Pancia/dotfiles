@@ -1,10 +1,12 @@
 (ns tee.kaocha-plugins
   (:require
+    [clojure.java.io :as io]
     [kaocha.plugin :as p]
     [nrepl.core :as nrepl]))
 
 (defn forward-to-nrepl-tap [x]
-  (when-let [nrepl-port (some-> (slurp ".nrepl-port") Integer/parseInt)]
+  (when-let [nrepl-port (when (.exists (io/file ".nrepl-port"))
+                          (some-> (slurp ".nrepl-port") Integer/parseInt))]
     (with-open [conn (nrepl/connect :port nrepl-port)]
       (nrepl/message (nrepl/client conn 1000)
         {:op "tap>" :value (pr-str x)}))))
