@@ -19,6 +19,30 @@ let g:clojure_fuzzy_indent = 1
 let g:clojure_fuzzy_indent_patterns = '.*'
 let g:clojure_fuzzy_indent_blacklist = []
 
+" LANDMARK: ======== CONJURE =========
+
+function! ResolveSymbol()
+  call luaeval("require('conjure.client')['with-filetype']('clojure', require('conjure.eval')['eval-str'], { origin = 'dotfiles/clojuredocs', code = '(do {:conjure-highlight/silent true} `".expand("<cword>").")', ['passive?'] = true, ['on-result'] = function(sym) vim.api.nvim_command('call OpenClojureDocs(\"'..sym..'\")') end})")
+endfunction
+
+function! OpenClojureDocs(fqsym)
+  echomsg "open clojure docs for: " . a:fqsym
+  let [l:ns, l:sym] = split(a:fqsym, "/")
+  if l:ns =~? 'clojure\..*'
+    execute "!open 'https://clojuredocs.org/".l:ns."/".l:sym."'"
+  else
+    execute "!open 'https://www.google.com/search?q=".a:fqsym."'"
+  endif
+endfunction
+
+nnoremap ,vd :call ResolveSymbol()<CR>
+
+function! EvalAndRunSpecification()
+  call luaeval("require('conjure.client')['with-filetype']('clojure', require('conjure.eval')['eval-str'], { origin = 'dotfiles/run_specification', code = '('..require('conjure.extract')['form']({['root?'] = true})['content']..')' })")
+endfunction
+
+nnoremap ,tt :call EvalAndRunSpecification()<CR>
+
 nnoremap <buffer><silent> ,cs :ConjureConnect 9000<CR>
 
 nnoremap <buffer><silent> ,fg :ConjureEval (require 'development)(in-ns 'development)(start)<CR>
@@ -31,6 +55,8 @@ nnoremap <buffer><silent> ,ds :ConjureEval (require 'dataico.server-components.s
 nnoremap <buffer><silent> ,vc :ConjureEval {:vlaaad.reveal/command '(clear-output)}<CR>
 
 nnoremap <buffer><expr> <esc> bufname('') =~ 'conjure-log-\d\+.cljc' ? ':normal ,lq<CR>' : '<esc>'
+
+" LANDMARK: ======== LSP =========
 
 setlocal completefunc=LanguageClient#complete
 
@@ -73,6 +99,8 @@ call WhichKey_CMD('srle', 'expand-let', 'LSP_exe_here("expand-let")')
 call WhichKey_CMD('srlm', 'move-to-let', 'LSP_exe_here("move-to-let", input("Binding name: "))')
 call WhichKey_CMD('srli', 'introduce-let', 'LSP_exe_here("introduce-let", input("Binding name: "))')
 call WhichKey_CMD('su', 'find usages', 'LanguageClient#textDocument_references()')
+
+" LANDMARK: ======== COPILOT =========
 
 nnoremap <buffer><silent> ,gcf :call copilot#check_current_file()<CR>
 nnoremap <buffer><silent> ,gcF :call copilot#refresh_and_check_current_file()<CR>
