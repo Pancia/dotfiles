@@ -37,11 +37,11 @@ endfunction
 
 nnoremap ,vd :call ResolveSymbol()<CR>
 
-function! EvalAndRunSpecification()
-  call luaeval("require('conjure.client')['with-filetype']('clojure', require('conjure.eval')['eval-str'], { origin = 'dotfiles/run_specification', code = '('..require('conjure.extract')['form']({['root?'] = true})['content']..')' })")
+function! KaochaRunTest()
+  call luaeval("require('conjure.client')['with-filetype']('clojure', require('conjure.eval')['eval-str'], { origin = 'dotfiles/run_specification', code = '(require (symbol \"kaocha.repl\"))(kaocha.repl/run '..require('conjure.extract')['form']({['root?'] = true})['content']..' (if (.exists (new java.io.File \"tests.local.edn\")) {:config-file \"tests.local.edn\"} {}))' })")
 endfunction
 
-nnoremap ,tt :call EvalAndRunSpecification()<CR>
+nnoremap ,tt :call KaochaRunTest()<CR>
 
 nnoremap <buffer><silent> ,cs :ConjureConnect 9000<CR>
 
