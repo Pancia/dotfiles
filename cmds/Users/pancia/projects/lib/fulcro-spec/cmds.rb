@@ -17,7 +17,7 @@ module CMD
     opts.info = "Run clojure repl"
     lambda { |*args|
       EXE.system %{
-        clj -A:nREPL:test #{args.join " "}
+        clj -A:nREVL:test #{args.join " "}
       }
     }
   end
