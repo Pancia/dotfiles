@@ -8,14 +8,17 @@ ag 'test/focused' <(echo $staged_changes | ag '^\+') \
 
 ag 'test/ignored' <(echo $staged_changes | ag '^\+') \
     && echo "[pre-commit/ERROR]: Found ignored tests!" >&2 \
-    && exit 11
+    && exit 12
 
+ag 'tap>' <(echo $staged_changes | ag '^\+') \
+    && echo "[pre-commit/ERROR]: Found calls to tap>!" >&2 \
+    && exit 13
 
 local markers="$(echo $staged_changes | ag '^\+' | ag 'TASK')"
 if [[ -n "$markers" ]]; then
     echo "[pre-commit/ERROR]: Found staged TASK markers:"
     echo $markers
-    exit 12
+    exit 14
 fi
 
 git flow config &> /dev/null \
@@ -27,7 +30,7 @@ local markers="$(git diff $dev_branch...HEAD | ag '^\+' | ag 'TASK')"
 if [[ -n "$markers" ]]; then
     echo "[pre-commit/ERROR]: Found TASK markers in branch:"
     echo $markers
-    exit 13
+    exit 15
 fi
 
 if [[ `cmds list` =~ 'pre_commit' ]]; then
