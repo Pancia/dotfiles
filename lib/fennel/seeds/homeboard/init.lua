@@ -153,7 +153,7 @@ function obj:pickSnooze()
 end
 
 function obj:renderMenuBar()
-    obj._menubar:setClickCallback(obj.showHomeBoard)
+    obj._menubar:setClickCallback(obj.notifCallback)
     obj._menubar:setIcon(obj.spoonPath.."/home.png")
     local nextTrigger = (obj._boardTimer and obj._boardTimer:nextTrigger()) or 0
     local title = math.max(math.ceil(nextTrigger / 60), 0)
