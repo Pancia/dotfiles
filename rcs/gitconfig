@@ -13,3 +13,5 @@
 [user]
     name = Anthony D'Ambrosio
     email = anthony.dayzerostudio@gmail.com
+[rebase]
+    instructionFormat = (%an) %s
