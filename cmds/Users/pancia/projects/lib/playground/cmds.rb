@@ -1,24 +1,25 @@
 module CMD
   def test(opts)
     opts.banner = "Usage: test"
-    opts.info = "run the clojure tests"
+    opts.info = "Run clojure tests"
     lambda { |*args|
       EXE.system %{
         clj \
-          -A:spec-dev:dev:test:clj-tests \
           -J-Dguardrails.enabled=true \
-          -J-Dguardrails.config=guardrails-test.edn \
+          -A:tee:dev:test:run-tests:spec-dev:gr-dev \
+          --config-file tests.local.edn \
           --focus-meta :test/focused \
-          --watch
+          --watch \
+          #{args.join " "}
       }
     }
   end
   def repl(opts)
     opts.banner = "Usage: repl"
-    opts.info = "run the clojure repl"
+    opts.info = "Run clojure repl"
     lambda { |*args|
       EXE.system %{
-        clj -A:nREVL:dev:test
+        clj -A:nREVL:dev:test:spec-dev:gr-dev #{args.join " "}
       }
     }
   end
