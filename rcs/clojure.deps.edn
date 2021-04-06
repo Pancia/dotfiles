@@ -27,6 +27,7 @@
           :main-opts
           ["-e" "(require,'com.phronemophobic.reveal-treemap)" "-m" "nrepl.cmdline" "--interactive"
            "--middleware" "[vlaaad.reveal.nrepl/middleware,cider.nrepl/cider-middleware,tee.core/middleware]"]}
+  :reveal-dev {:override-deps {vlaaad/reveal {:local/root "/Users/pancia/projects/lib/reveal"}}}
   :spec-dev {:override-deps {fulcrologic/fulcro-spec {:local/root "/Users/pancia/projects/lib/fulcro-spec"}}}
   :gr-dev {:override-deps {com.fulcrologic/guardrails {:local/root "/Users/pancia/projects/lib/guardrails"}}}
   :cp-dev {:override-deps {com.fulcrologic/copilot {:local/root "/Users/pancia/projects/work/copilot"}}}
