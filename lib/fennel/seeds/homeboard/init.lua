@@ -135,16 +135,12 @@ function obj:showHomeBoard(onClose)
 end
 
 function obj:snoozeTimer(duration)
-    obj._ensureTimer = obj._ensureTimer:stop()
-    obj._boardTimer = hs.timer.doAfter(60*duration, function()
-        obj._boardTimer = nil
-        obj._ensureTimer = obj._ensureTimer:setNextTrigger(0)
-    end)
-    obj._menuRefreshTimer:fire()
+    obj._minutesLeft = duration
+    obj._state = "countdown"
+    obj:renderMenuBar()
 end
 
 function obj:pickSnooze()
-    obj._ensureTimer = obj._ensureTimer:stop()
     durp:show({
         defaultDuration = obj.defaultDuration or 180,
         onDuration = function(duration) obj:snoozeTimer(duration) end,
@@ -153,37 +149,54 @@ function obj:pickSnooze()
 end
 
 function obj:renderMenuBar()
-    obj._menubar:setClickCallback(obj.notifCallback)
     obj._menubar:setIcon(obj.spoonPath.."/home.png")
-    local nextTrigger = (obj._boardTimer and obj._boardTimer:nextTrigger()) or 0
-    local title = math.max(math.ceil(nextTrigger / 60), 0)
-    obj._menubar:setTitle(title)
+    obj._menubar:setTitle(obj._minutesLeft or 0)
 end
 
 function obj:notifCallback()
-    if not obj._delivered then
-        obj._delivered = true
+    if obj._state ~= "active" then
+        obj._state = "active"
         obj:showHomeBoard(function()
             obj:pickSnooze()
-            obj._delivered = false
         end)
     end
 end
 
-function obj:ensureTimer()
-    if not obj._clearCheck and not obj.browser then
-        obj._notif:send()
-        obj._clearCheck = hs.timer.doEvery(1, function()
-            if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
-                if obj._notif:activationType() == hs.notify.activationTypes.none then
-                    obj:notifCallback()
-                end
-                if obj._clearCheck then
-                    obj._clearCheck:stop()
-                    obj._clearCheck = nil
-                end
-            end
-        end)
+function obj:ensureNotifDelivered()
+    if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
+        if obj._notif:activationType() == hs.notify.activationTypes.none then
+            obj:notifCallback()
+        end
+    end
+end
+
+function obj:heartbeat()
+    obj._logger.df("HeartBeat state = %s, ", obj._state)
+    if obj._state == "countdown" then
+        obj._minutesLeft = obj._minutesLeft - 1
+        if obj._minutesLeft <= 0 then
+            obj._state = "notif"
+            obj._notif:send()
+        end
+    elseif obj._state == "notif" then
+        obj:ensureNotifDelivered()
+    elseif obj._state == "active" then
+    elseif obj._state == "sleeping" then
+    else
+        obj._logger.ef("UNEXPECTED STATE: %s", hs.inspect(obj._state))
+    end
+    obj:renderMenuBar()
+end
+
+function watchSystem(eventType)
+    if eventType == hs.caffeinate.watcher.systemDidWake then
+        obj._logger.df("systemDidWake -> %s", obj._prevState)
+        obj._prevState = nil
+        obj._state = obj._prevState
+    elseif eventType == hs.caffeinate.watcher.systemWillSleep then
+        obj._logger.df("systemWillSleep <- %s", obj._state)
+        obj._prevState = obj._state
+        obj._state = "sleeping"
     end
 end
 
@@ -197,9 +210,12 @@ function obj:start(config)
     local notification = {title = "Set the homeboard timer!", withdrawAfter = 0}
     obj._notif = hs.notify.new(obj.notifCallback, notification)
     obj._menubar = hs.menubar.new()
+    obj._menubar:setClickCallback(obj.notifCallback)
+    obj._state = "countdown"
+    obj._minutesLeft = 180
     obj:renderMenuBar()
-    obj._menuRefreshTimer = hs.timer.doEvery(60, obj.renderMenuBar)
-    obj._ensureTimer = hs.timer.doEvery(60, obj.ensureTimer):setNextTrigger(0)
+    obj._heartbeat = hs.timer.doEvery(60, obj.heartbeat)
+    obj._systemWatcher = hs.caffeinate.watcher.new(watchSystem):start()
 end
 
 function obj:stop()
@@ -207,6 +223,7 @@ function obj:stop()
     if obj._notif then
         obj._notif:withdraw()
     end
+    obj._heartbeat:stop()
     return self
 end
 
