@@ -21,13 +21,12 @@
            "--middleware" "[nrebl.middleware/wrap-nrebl,cider.nrepl/cider-middleware,tee.core/middleware]"]}
   :nREVL {:extra-deps {cider/cider-nrepl                 {:mvn/version "0.25.8"}
                        tee/tee                           {:local/root "/Users/pancia/dotfiles/lib/clojure/tee"}
-                       vlaaad/reveal                     {:mvn/version "1.3.196"}
+                       vlaaad/reveal                     {:local/root "/Users/pancia/projects/lib/reveal"}
                        com.phronemophobic/reveal-treemap {:mvn/version "0.1.4"}}
-          :jvm-opts ["-Dvlaaad.reveal.prefs={:theme,:light,:font-size,30}"]
+          :jvm-opts ["-Dvlaaad.reveal.prefs={:theme,:light,:font-size,30,:width,1600,:height,1200}"]
           :main-opts
           ["-e" "(require,'com.phronemophobic.reveal-treemap)" "-m" "nrepl.cmdline" "--interactive"
            "--middleware" "[vlaaad.reveal.nrepl/middleware,cider.nrepl/cider-middleware,tee.core/middleware]"]}
-  :reveal-dev {:override-deps {vlaaad/reveal {:local/root "/Users/pancia/projects/lib/reveal"}}}
   :spec-dev {:override-deps {fulcrologic/fulcro-spec {:local/root "/Users/pancia/projects/lib/fulcro-spec"}}}
   :gr-dev {:override-deps {com.fulcrologic/guardrails {:local/root "/Users/pancia/projects/lib/guardrails"}}}
   :cp-dev {:override-deps {com.fulcrologic/copilot {:local/root "/Users/pancia/projects/work/copilot"}}}
