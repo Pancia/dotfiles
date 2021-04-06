@@ -150,7 +150,7 @@ end
 
 function obj:renderMenuBar()
     obj._menubar:setIcon(obj.spoonPath.."/home.png")
-    obj._menubar:setTitle(obj._minutesLeft or 0)
+    obj._menubar:setTitle(math.ceil(obj._minutesLeft or 0))
 end
 
 function obj:notifCallback()
