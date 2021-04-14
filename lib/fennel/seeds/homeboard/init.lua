@@ -141,10 +141,11 @@ function obj:snoozeTimer(duration)
 end
 
 function obj:pickSnooze()
+    local onClose = (obj._minutesLeft < 5) and obj.pickSnooze or function() obj:snoozeTimer(obj._minutesLeft) end
     durp:show({
         defaultDuration = obj.defaultDuration or 180,
         onDuration = function(duration) obj:snoozeTimer(duration) end,
-        onClose = obj.pickSnooze,
+        onClose = onClose
     })
 end
 
@@ -191,8 +192,8 @@ end
 function watchSystem(eventType)
     if eventType == hs.caffeinate.watcher.systemDidWake then
         obj._logger.df("systemDidWake -> %s", obj._prevState)
-        obj._prevState = nil
         obj._state = obj._prevState
+        obj._prevState = nil
     elseif eventType == hs.caffeinate.watcher.systemWillSleep then
         obj._logger.df("systemWillSleep <- %s", obj._state)
         obj._prevState = obj._state

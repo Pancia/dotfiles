@@ -31,6 +31,9 @@ window.onload = function() {
         b.oncontextmenu = function() { update(-num); return false; };
         b.style = 'user-select:none;'
     });
+    document.addEventListener("keydown", (e) => {
+        e.metaKey && e.keyCode == 13 && submit();
+    })
     webkit.messageHandlers.HammerSpoon.postMessage({"onload": true});
 };
 function setDuration(num) {
