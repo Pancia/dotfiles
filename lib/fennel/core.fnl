@@ -17,47 +17,50 @@
 (cmus.bind-media-keys)
 
 (local homeboard (require :seeds.homeboard.core))
-(homeboard.start
-  {:defaultDuration 180
-   :homeBoardPath   (.. HOME "/Dropbox/HomeBoard/")
-   :videosPath      (.. HOME "/Movies/HomeBoard")
-   :todosPaths      {:dotfiles (.. HOME "/dotfiles/wiki/TODO.wiki")
-                     :dropbox  (.. HOME "/Dropbox/wiki/Tasks.wiki")}})
+(when false
+  (homeboard.start
+    {:defaultDuration 180
+     :homeBoardPath   (.. HOME "/Dropbox/HomeBoard/")
+     :videosPath      (.. HOME "/Movies/HomeBoard")
+     :todosPaths      {:dotfiles (.. HOME "/dotfiles/wiki/TODO.wiki")
+                       :dropbox  (.. HOME "/Dropbox/wiki/Tasks.wiki")}}))
 
 (local lotus (require :seeds.lotus.core))
-(lotus.start
-  (let [notif-fn (fn [title]
-                   (fn []
-                     {: title
-                      :withdrawAfter 0
-                      :informativeText (homeboard.getLastPlan)
-                      :subTitle (homeboard.getLastPlanTime)}))]
-    {:sounds [{:name  "short"
-               :path  "bowl.wav"
-               :notif (notif-fn "Quick Stretch! #short")}
-              {:name  "short"
-               :path  "bowl.wav"
-               :notif (notif-fn "Quick Stretch! #short")}
-              {:name   "long"
-               :path   "gong.wav"
-               :volume .5
-               :notif  (notif-fn "Take a walk! #long")}]}))
+(when false
+  (lotus.start
+    (let [notif-fn (fn [title]
+                     (fn []
+                       {: title
+                        :withdrawAfter 0
+                        :informativeText (homeboard.getLastPlan)
+                        :subTitle (homeboard.getLastPlanTime)}))]
+      {:sounds [{:name  "short"
+                 :path  "bowl.wav"
+                 :notif (notif-fn "Quick Stretch! #short")}
+                {:name  "short"
+                 :path  "bowl.wav"
+                 :notif (notif-fn "Quick Stretch! #short")}
+                {:name   "long"
+                 :path   "gong.wav"
+                 :volume .5
+                 :notif  (notif-fn "Take a walk! #long")}]})))
 
 (local watch (require :seeds.watch.core))
-(watch.start
-  {:logDir  (.. (os.getenv "HOME") "/.log/watch/")
-   :scripts [{:name "disable_osx_startup_chime"
-              :command "~/dotfiles/misc/watch/disable_osx_startup_chime.watch.sh"
-              :triggerEvery 60
-              :delayStart 0}
-             {:name "ytdl"
-              :command "~/dotfiles/misc/watch/ytdl/ytdl.watch.sh"
-              :triggerEvery 15
-              :delayStart 5}
-             {:name "extra"
-              :command "~/dotfiles/misc/watch/extra.watch.sh"
-              :triggerEvery (* 60 3)
-              :delayStart 15}]})
+(when false
+  (watch.start
+    {:logDir  (.. (os.getenv "HOME") "/.log/watch/")
+     :scripts [{:name "disable_osx_startup_chime"
+                :command "~/dotfiles/misc/watch/disable_osx_startup_chime.watch.sh"
+                :triggerEvery 60
+                :delayStart 0}
+               {:name "ytdl"
+                :command "~/dotfiles/misc/watch/ytdl/ytdl.watch.sh"
+                :triggerEvery 15
+                :delayStart 5}
+               {:name "extra"
+                :command "~/dotfiles/misc/watch/extra.watch.sh"
+                :triggerEvery (* 60 3)
+                :delayStart 15}]}))
 
 (local seeds {: lotus : homeboard : watch})
 

@@ -69,14 +69,29 @@
     (cmus-remote "--volume -5")
     (dec-osx-volume)))
 
+(fn raw-osx-dec-volume []
+  (print :raw-dec)
+  (: (hs.eventtap.event.newSystemKeyEvent "SOUND_DOWN" true) :post)
+  (: (hs.eventtap.event.newSystemKeyEvent "SOUND_DOWN" false) :post))
+
+(fn raw-osx-inc-volume []
+  (print :raw-inc)
+  (: (hs.eventtap.event.newSystemKeyEvent "SOUND_UP" true) :post)
+  (: (hs.eventtap.event.newSystemKeyEvent "SOUND_UP" false) :post))
+
 (fn bind-media-keys []
   (hs.hotkey.bind {} "f7" prev-track)
   (hs.hotkey.bind {} "f8" play-or-pause)
   (hs.hotkey.bind {} "f9" next-track)
-  (hs.hotkey.bind {} "f13" dec-volume)
-  (hs.hotkey.bind {} "f14" inc-volume)
-  (hs.hotkey.bind "cmd" "f13" dec-osx-volume)
-  (hs.hotkey.bind "cmd" "f14" inc-osx-volume))
+  (if false
+    (do
+      (hs.hotkey.bind {} "f13" dec-volume)
+      (hs.hotkey.bind {} "f14" inc-volume)
+      (hs.hotkey.bind "cmd" "f13" dec-osx-volume)
+      (hs.hotkey.bind "cmd" "f14" inc-osx-volume))
+    (do
+      (hs.hotkey.bind {} "f13" raw-osx-dec-volume)
+      (hs.hotkey.bind {} "f14" raw-osx-inc-volume))))
 
 (fn edit-track []
   (when (and (is-active?) (is-playing?))

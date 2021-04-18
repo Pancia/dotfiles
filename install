@@ -28,7 +28,7 @@ task_gitconfig () {
 
 task_neovim () {
     pip3 install neovim-remote
-    pip install --upgrade neovim
+    # pip install --upgrade neovim
     mkdir -p ~/.config/nvim/ftplugin
     mkdir -p ~/.config/nvim/undo
 }
@@ -51,6 +51,8 @@ task_lua() {
     luarocks install fennel
 }
 
+# TASK at each step (mainly brew) verify it worked before continue-ing
+
 task_manual() {
     echo "Run 'mkdir -p ~/Developer/bin'"
     read -p "done?"
@@ -71,6 +73,7 @@ task_manual() {
     echo "Run 'sudo brew services start vnstat'"
     read -p "done?"
     echo "manual steps done!"
+    # TASK spotlight search disable, bind cmd-space to show launchpad
 }
 
 task_all () {

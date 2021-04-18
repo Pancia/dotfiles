@@ -47,7 +47,6 @@ brew 'borkdude/brew/babashka'
 brew 'borkdude/brew/clj-kondo'
 
 cask 'deluge'
-cask 'gimp'
 cask 'hammerspoon'
 cask 'iterm2'
 cask 'karabiner'
