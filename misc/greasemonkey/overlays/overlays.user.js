@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  9
+// @version  10
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @grant    none
@@ -49,20 +49,6 @@
             });
             waitForElementToBeLoaded("#related #dismissable", () => {
                 addOverlay("#related");
-            });
-            waitForElementToBeLoaded("#primary", () => {
-                addOverlay("#primary", "Remember you shouldn't be watching yt/anime on the iMac!");
-            });
-            waitForElementToBeLoaded("#avatar-btn", () => {
-                $("#avatar-btn").click()
-                $("ytd-popup-container").hide()
-                waitForElementToBeLoaded("#channel-container #email", (x) => {
-                    if (x.title == "anthony@itausa.net") {
-                        $("[id='#primary']").remove()
-                    }
-                    $("ytd-popup-container").show()
-                    $("#avatar-btn").click()
-                });
             });
         }
 
