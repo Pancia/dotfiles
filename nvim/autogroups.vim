@@ -45,11 +45,6 @@ augroup END
 
 set updatetime=200
 
-augroup not_files
-  autocmd!
-  au BufEnter * call NotFiles()
-augroup END
-
 function NotFiles()
     if bufname('') =~ 'conjure-log-\d\+.cljc'
         set buftype=nofile
@@ -57,9 +52,9 @@ function NotFiles()
     endif
 endfunction
 
-augroup auto_save
+augroup not_files
   autocmd!
-  au CursorHold,InsertLeave,TextChanged * nested call AutoSave()
+  au BufEnter * call NotFiles()
 augroup END
 
 function! AutoSave()
@@ -71,3 +66,8 @@ function! AutoSave()
         endif
     endif
 endfunction
+
+augroup auto_save
+  autocmd!
+  au CursorHold,InsertLeave,TextChanged * nested call AutoSave()
+augroup END

@@ -1,15 +1,19 @@
-== MAIN (in priority order) ==
+== MAIN ==
 - [ ] :greasemonkey: not working script blocked (just linkedin)... `>:(`
 - [ ] :nvim: :easymotion:
     - [ ] ??? add lispy chars to jump targets ???
     - [ ] https://github.com/easymotion/vim-easymotion#bonus-fuzzy-search-with-easymotion
 - [ ] different karabiner.json for minimac (how? maybe without whole new file?)
+- [ ] :nvim: marker to resume work (move cursor to it on buffer load) COMEHERE
+- [ ] install script (manual -> auto, & validate step success)
+- [ ] minimac differences
+- [ ] :nvim: ? autocmd buffer delete no name if others
 
 == BACKLOG (in alphabetical order) ==
-- [ ] :bin/cmds: should set iterm2 tab title
 - [ ] :cljfmt: compare with IDEA/Cursive && ? conjure-ify
 - [ ] :clojure: ? cljfmt: format {} & bindings
 - [ ] :deoplete: :nvim: :conjure: lags if (?) not connected to repl (or was not started ?)
+- [ ] :clojure: :reveal: https://github.com/vlaaad/reveal/blob/master/src/vlaaad/reveal/nrepl.clj#L11-L13
 - [ ] :nvim: :clojure: gray out unused params #"_\w+"
 - [ ] :nvim: buffer/tab names stutter when switching
 - [ ] :nvim: terminal buffer names empty

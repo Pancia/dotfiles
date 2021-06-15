@@ -8,4 +8,4 @@
 .cljs_rhino_repl
 .session.vim
 .syntastic_javac_config
-tests.local.edn
+*.local.*

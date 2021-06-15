@@ -166,7 +166,7 @@ end
 function obj:ensureNotifDelivered()
     if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
         if obj._notif:activationType() == hs.notify.activationTypes.none then
-            obj:notifCallback()
+            obj._state = "countdown"
         end
     end
 end

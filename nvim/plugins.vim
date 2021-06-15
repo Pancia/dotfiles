@@ -69,11 +69,11 @@ Plug 'autozimu/LanguageClient-neovim', {'branch': 'next', 'do': 'bash install.sh
 " }}}
 
 " CLOJURE {{{
-Plug 'Olical/conjure', {'for': 'clojure', 'tag': 'v4.14.0'}
+Plug 'Olical/conjure', {'for': ['clojure', 'fennel'], 'tag': 'v4.18.0'}
 Plug 'guns/vim-clojure-static', {'for': 'clojure'}
 Plug 'guns/vim-sexp', {'for': ['clojure', 'fennel']}
-Plug '~/dotfiles/lib/vim/conjure-highlight'
 Plug 'luochen1990/rainbow'
+Plug '~/dotfiles/lib/vim/conjure-highlight'
 Plug '~/projects/work/copilot/editor-plugins/vim'
 " }}}
 
@@ -135,5 +135,8 @@ call WhichKey_GROUP('p', '+vim-plug')
 call WhichKey_CMD('pi', 'PlugInstall', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugInstall')
 call WhichKey_CMD('pc', 'PlugClean!', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugClean!')
 call WhichKey_CMD('pu', 'PlugUpdate', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugUpdate')
+call WhichKey_CMD('po', 'open nvim/plugins.vim', ':e ~/dotfiles/nvim/plugins.vim')
+call WhichKey_CMD('ps', 'PlugStatus', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugStatus')
+call WhichKey_CMD('pd', 'PlugDiff', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugDiff')
 
 call which_key#register(';', "g:semicolon_which_key_map")

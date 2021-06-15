@@ -25,7 +25,7 @@
 	<key>ClosingHotkeySwitchesSpaces</key>
 	<true/>
 	<key>Command</key>
-	<string></string>
+	<string>/usr/local/bin/zsh</string>
 	<key>CommandSelection</key>
 	<true/>
 	<key>Control</key>
@@ -508,13 +508,19 @@
 	<key>NSWindow Frame NSNavPanelAutosaveName</key>
 	<string>880 726 799 448 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 0</key>
-	<string>433 232 1802 1100 0 0 2560 1417 </string>
+	<string>758 0 1802 1100 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 1</key>
-	<string>0 0 2560 1058 0 0 2560 1417 </string>
+	<string>0 0 2560 1100 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 2</key>
-	<string>398 53 1802 1100 0 0 2560 1417 </string>
+	<string>0 116 1802 1100 0 0 2560 1417 </string>
 	<key>NSWindow Frame iTerm Window 3</key>
-	<string>454 235 1802 1100 0 0 2560 1417 </string>
+	<string>0 0 1802 1100 0 0 2560 1417 </string>
+	<key>NSWindow Frame iTerm Window 4</key>
+	<string>0 0 2560 1100 0 0 2560 1417 </string>
+	<key>NSWindow Frame iTerm Window 5</key>
+	<string>0 0 1802 1100 0 0 2560 1417 </string>
+	<key>NSWindow Frame iTerm Window 6</key>
+	<string>469 43 1802 1100 0 0 2560 1417 </string>
 	<key>NeverWarnAboutShortLivedSessions_7EF0271F-5154-40A5-B63B-A0737DB0ABB0</key>
 	<true/>
 	<key>NeverWarnAboutShortLivedSessions_7EF0271F-5154-40A5-B63B-A0737DB0ABB0_selection</key>
@@ -1114,6 +1120,13 @@
 	<array>
 		<string>3.3.12</string>
 	</array>
+	<key>NoSyncFrame_SessionsPreferences</key>
+	<dict>
+		<key>screenFrame</key>
+		<string>{{0, 0}, {2560, 1440}}</string>
+		<key>topLeft</key>
+		<string>{977, 1199}</string>
+	</dict>
 	<key>NoSyncFrame_SharedPreferences</key>
 	<dict>
 		<key>screenFrame</key>
@@ -1124,7 +1137,9 @@
 	<key>NoSyncInstallationId</key>
 	<string>29D6E04D-048F-440D-BC36-494A0B5E56A2</string>
 	<key>NoSyncLaunchExperienceControllerRunCount</key>
-	<integer>14</integer>
+	<integer>40</integer>
+	<key>NoSyncNeverPromptToChangeOption</key>
+	<true/>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile</key>
 	<true/>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile_selection</key>
@@ -1901,6 +1916,8 @@
 	<key>SetCookie</key>
 	<true/>
 	<key>ShowBookmarkName</key>
+	<false/>
+	<key>ShowFullScreenTabBar</key>
 	<false/>
 	<key>ShowNewOutputIndicator</key>
 	<false/>

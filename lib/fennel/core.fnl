@@ -59,7 +59,7 @@
               :triggerEvery (* 60 3)
               :delayStart 15}]})
 
-(local seeds {: homeboard : lotus : watch})
+(local seeds {: lotus : homeboard : watch})
 
 (local hs_global_modifier ["cmd" "ctrl"])
 (hs.hotkey.bindSpec [hs_global_modifier "c"] hs.toggleConsole)
