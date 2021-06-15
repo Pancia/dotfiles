@@ -55,10 +55,28 @@ nnoremap <buffer><expr> <esc> bufname('') =~ 'conjure-log-\d\+.cljc' ? ':normal 
 
 " LANDMARK: ======== LSP =========
 
-setlocal completefunc=LanguageClient#complete
+nmap <silent> [l <Plug>(coc-diagnostic-prev)
+nmap <silent> ]l <Plug>(coc-diagnostic-next)
+nmap <silent> [k :CocPrev<cr>
+nmap <silent> ]k :CocNext<cr>
 
-nnoremap <buffer><silent> K    :call LanguageClient#textDocument_hover()<CR>
-nnoremap <buffer><silent> gd   :call LanguageClient#textDocument_definition()<CR>
+function! s:show_documentation()
+    if (index(['vim','help'], &filetype) >= 0)
+        execute 'h '.expand('<cword>')
+    elseif (coc#rpc#ready())
+        call CocActionAsync('doHover')
+    else
+        execute '!' . &keywordprg . " " . expand('<cword>')
+    endif
+endfunction
+
+nnoremap <silent> K :call <SID>show_documentation()<CR>
+
+nmap <silent> gd <Plug>(coc-definition)
+nmap <silent> gr <Plug>(coc-references)
+
+nmap <leader>u <Plug>(coc-references)
+nmap <leader>rn <Plug>(coc-rename)
 
 function! s:Expand(exp) abort
     let l:result = expand(a:exp)
@@ -66,17 +84,11 @@ function! s:Expand(exp) abort
 endfunction
 
 function! LSP_exe_here(cmd, ...) abort
-  call LanguageClient#workspace_executeCommand(a:cmd,
-        \ [s:Expand('%:p'), line('.') - 1, col('.') - 1] + a:000)
-endfunction
-
-function! LSP_restart()
-    LanguageClientStop
-    LanguageClientStart
+  call CocRequest('clojure-lsp', 'workspace/executeCommand', { 'command': a:cmd, 'arguments': [s:Expand('%:p'), line('.') - 1, col('.') - 1] + a:000 })
 endfunction
 
 call WhichKey_GROUP('s', '+lsp')
-call WhichKey_CMD('ss', 'restart', 'LSP_restart()')
+call WhichKey_CMD('ss', 'restart', 'CocRestart')
 
 call WhichKey_GROUP('sr', '+refactorings')
 
@@ -95,7 +107,7 @@ call WhichKey_GROUP('srl', '+let')
 call WhichKey_CMD('srle', 'expand-let', 'LSP_exe_here("expand-let")')
 call WhichKey_CMD('srlm', 'move-to-let', 'LSP_exe_here("move-to-let", input("Binding name: "))')
 call WhichKey_CMD('srli', 'introduce-let', 'LSP_exe_here("introduce-let", input("Binding name: "))')
-call WhichKey_CMD('su', 'find usages', 'LanguageClient#textDocument_references()')
+call WhichKey_CMD('su', 'find usages', '<Plug>(coc-references)')
 
 " LANDMARK: ======== COPILOT =========
 

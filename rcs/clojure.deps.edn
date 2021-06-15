@@ -1,13 +1,13 @@
 ;<[.config/clojure/deps.edn]>
 {:aliases
- {:tee {:extra-deps {tee/tee {:local/root "/Users/pancia/dotfiles/lib/clojure/tee"}}}
+ {:tee {:extra-deps {tee/tee {:local/root "/private/home/dotfiles/lib/clojure/tee"}}}
   :nREPL {:extra-deps {cider/cider-nrepl             {:mvn/version "0.25.8"}
-                       tee/tee                       {:local/root "/Users/pancia/dotfiles/lib/clojure/tee"}}
+                       tee/tee                       {:local/root "/private/home/dotfiles/lib/clojure/tee"}}
           :main-opts
           ["-m" "nrepl.cmdline" "--interactive"
            "--middleware" "[cider.nrepl/cider-middleware,tee.core/middleware]"]}
   :nREBL {:extra-deps {cider/cider-nrepl             {:mvn/version "0.25.8"}
-                       tee/tee                       {:local/root "/Users/pancia/dotfiles/lib/clojure/tee"}
+                       tee/tee                       {:local/root "/private/home/dotfiles/lib/clojure/tee"}
                        rickmoynihan/nrebl.middleware {:mvn/version "0.2.0"}
                        com.cognitect/rebl            {:mvn/version "0.9.241"}
                        org.openjfx/javafx-fxml       {:mvn/version "15-ea+6"}
@@ -20,26 +20,26 @@
            "-m" "nrepl.cmdline" "--interactive"
            "--middleware" "[nrebl.middleware/wrap-nrebl,cider.nrepl/cider-middleware,tee.core/middleware]"]}
   :nREVL {:extra-deps {cider/cider-nrepl                 {:mvn/version "0.25.8"}
-                       tee/tee                           {:local/root "/Users/pancia/dotfiles/lib/clojure/tee"}
-                       vlaaad/reveal                     {:local/root "/Users/pancia/projects/lib/reveal"}
+                       tee/tee                           {:local/root "/private/home/dotfiles/lib/clojure/tee"}
+                       vlaaad/reveal                     {:mvn/version "1.3.209" #_#_:local/root "/private/home/projects/lib/reveal"}
                        com.phronemophobic/reveal-treemap {:mvn/version "0.1.4"}}
           :jvm-opts ["-Dvlaaad.reveal.prefs={:theme,:light,:font-size,30,:width,1600,:height,1200}"]
           :main-opts
           ["-e" "(require,'com.phronemophobic.reveal-treemap)" "-m" "nrepl.cmdline" "--interactive"
            "--middleware" "[vlaaad.reveal.nrepl/middleware,cider.nrepl/cider-middleware,tee.core/middleware]"]}
-  :spec-dev {:override-deps {fulcrologic/fulcro-spec {:local/root "/Users/pancia/projects/lib/fulcro-spec"}}}
-  :gr-dev {:override-deps {com.fulcrologic/guardrails {:local/root "/Users/pancia/projects/lib/guardrails"}}}
-  :cp-dev {:override-deps {com.fulcrologic/copilot {:local/root "/Users/pancia/projects/work/copilot"}}}
+  :spec-dev {:override-deps {fulcrologic/fulcro-spec {:local/root "/private/home/projects/lib/fulcro-spec"}}}
+  :gr-dev {:override-deps {com.fulcrologic/guardrails {:local/root "/private/home/projects/lib/guardrails"}}}
+  :cp-dev {:override-deps {com.fulcrologic/copilot {:local/root "/private/home/projects/work/copilot"}}}
   :cp-checker {:jvm-opts  ["-Dguardrails.enabled=true" "-Dguardrails.mode=:copilot"]
                :extra-deps {com.fulcrologic/copilot {:mvn/version "1.0.0-SNAPSHOT"}}
                :exec-fn   com.fulcrologic.copilot.checkers.clojure/start!
                :exec-args {:src-dirs ["src/main"] :main-ns nil}}
   :rad-dev {:override-deps
             {com.fulcrologic/fulcro-rad
-             {:local/root "/Users/pancia/projects/lib/fulcro-rad"}
+             {:local/root "/private/home/projects/lib/fulcro-rad"}
              com.fulcrologic/fulcro-rad-datomic
-             {:local/root "/Users/pancia/projects/lib/fulcro-rad-datomic"}}}
+             {:local/root "/private/home/projects/lib/fulcro-rad-datomic"}}}
   :f3-dev {:override-deps
            {com.fulcrologic/fulcro
-            {:local/root "/Users/pancia/projects/lib/fulcro"
+            {:local/root "/private/home/projects/lib/fulcro"
              :exclusions [com.taoensso/sente]}}}}}

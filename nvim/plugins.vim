@@ -56,16 +56,14 @@ Plug 'norcalli/nvim-colorizer.lua'
 " }}}
 
 " AUTOCOMPLETE {{{
-Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
 Plug 'ncm2/float-preview.nvim'
 Plug 'Shougo/neco-syntax'
 Plug 'Shougo/neco-vim'
-Plug 'zchee/deoplete-zsh'
 Plug 'ctrlpvim/ctrlp.vim'
 Plug 'Shougo/unite.vim'
 Plug 'Shougo/unite-help'
 Plug 'Shougo/neoyank.vim'
-Plug 'autozimu/LanguageClient-neovim', {'branch': 'next', 'do': 'bash install.sh'}
+Plug 'neoclide/coc.nvim', {'branch': 'release'}
 " }}}
 
 " CLOJURE {{{
