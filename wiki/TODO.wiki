@@ -6,8 +6,15 @@
 - [ ] different karabiner.json for minimac (how? maybe without whole new file?)
 - [ ] :nvim: marker to resume work (move cursor to it on buffer load) COMEHERE
 - [ ] install script (manual -> auto, & validate step success)
-- [ ] minimac differences
 - [ ] :nvim: ? autocmd buffer delete no name if others
+- [ ] :git: fix pre-commit hook, does not only check staged files for TASK markers
+- [ ] minimac differences
+    - [ ] zsh/extra.zsh IS_IMAC / IS_MINIMAC
+    - [ ] core.fnl when IS_IMAC
+    - [ ] luarocks path into zsh/extra.zsh
+    - [ ] cmus.fnl mediakeys when IS_IMAC
+    - [ ] link /private/home -> $HOME (add to install steps)
+    - [ ] fix zshenv eval brew shellenv, bin not at path
 
 == BACKLOG (in alphabetical order) ==
 - [ ] :cljfmt: compare with IDEA/Cursive && ? conjure-ify
