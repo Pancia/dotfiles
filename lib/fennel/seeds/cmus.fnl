@@ -1,14 +1,16 @@
-(local cmus-path "/usr/local/bin/")
+(local cmus-remote-path
+  (: (hs.execute "which cmus-remote" true)
+     :gsub "%s+$" ""))
 
 (fn cmus-remote [action]
-  (hs.execute (.. cmus-path "/cmus-remote " action)))
+  (hs.execute (.. cmus-remote-path " " action)))
 
 (fn is-active? []
-  (let [(_ status) (hs.execute (.. cmus-path "/cmus-remote --raw status"))]
+  (let [(_ status) (cmus-remote "--raw status")]
     status))
 
 (fn is-playing? []
-  (let [cmus-status (hs.execute (.. cmus-path "/cmus-remote --raw status"))]
+  (let [cmus-status (cmus-remote "--raw status")]
     (string.match cmus-status "status playing")))
 
 (fn notify []
@@ -83,7 +85,7 @@
   (hs.hotkey.bind {} "f7" prev-track)
   (hs.hotkey.bind {} "f8" play-or-pause)
   (hs.hotkey.bind {} "f9" next-track)
-  (if false
+  (if true
     (do
       (hs.hotkey.bind {} "f13" dec-volume)
       (hs.hotkey.bind {} "f14" inc-volume)

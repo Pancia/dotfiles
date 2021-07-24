@@ -1,14 +1,16 @@
 local obj = {}
 
-local lib = "/Users/pancia/dotfiles/lib/fennel/lib"
+local lib = os.getenv("HOME").."/dotfiles/lib/fennel/lib"
+
+local width = 640
+local height = 320
 
 function obj:show(opts)
     local frame = hs.screen.primaryScreen():fullFrame()
     local rect = hs.geometry.rect(
-    frame["x"] + (3 * frame["w"] / 8),
-    frame["y"] + 3 * (frame["h"] / 8),
-    2 * frame["w"] / 8,
-    2 * frame["h"] / 8)
+    frame["x"] + (frame["w"] / 2) - (width / 2),
+    frame["y"] + (frame["h"] / 2) - (height / 2),
+    width, height)
     local uc = hs.webview.usercontent.new("HammerSpoon") -- jsPortName
     local browser
     local pickedDuration = false
