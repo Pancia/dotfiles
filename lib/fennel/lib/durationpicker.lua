@@ -2,7 +2,7 @@ local obj = {}
 
 local lib = os.getenv("HOME").."/dotfiles/lib/fennel/lib"
 
-local width = 640
+local width = 640 + 20
 local height = 320
 
 function obj:show(opts)

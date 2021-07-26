@@ -14,7 +14,7 @@
    :config {:default_run 1.0}})
 
 (local cmus (require :seeds.cmus))
-(cmus.bind-media-keys)
+(cmus.start)
 
 (local homeboard (require :seeds.homeboard.core))
 (homeboard.start

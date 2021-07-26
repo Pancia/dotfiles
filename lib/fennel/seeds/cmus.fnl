@@ -1,3 +1,5 @@
+(local obj {})
+
 (local cmus-remote-path
   (: (hs.execute "which cmus-remote" true)
      :gsub "%s+$" ""))
@@ -107,6 +109,9 @@
   (when (is-active?)
     (hs.execute "cmselect --filter-by-tags" true)))
 
+(fn start []
+  (bind-media-keys))
+
 {: play-or-pause
  : prev-track
  : next-track
@@ -114,7 +119,7 @@
  : seek-backwards
  : inc-volume
  : dec-volume
- : bind-media-keys
  : edit-track
  : select-by-playlist
- : select-by-tags}
+ : select-by-tags
+ : start}

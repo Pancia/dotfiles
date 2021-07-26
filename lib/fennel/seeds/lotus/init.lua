@@ -141,11 +141,11 @@ end
 
 function watchSystem(eventType)
     if eventType == hs.caffeinate.watcher.systemDidWake then
-        obj._logger.df("systemDidWake")
+        obj._logger.df("systemDidWake -> %s", obj._prevState)
         obj._state = obj._prevState
         obj._prevState = nil
     elseif eventType == hs.caffeinate.watcher.systemWillSleep then
-        obj._logger.df("systemWillSleep")
+        obj._logger.df("systemWillSleep <- %s", obj._state)
         obj._prevState = obj._state
         obj._state = "sleeping"
     end
@@ -161,7 +161,7 @@ function obj:start(config)
         ["timeLeft"] = hs.settings.get("timeLeft"),
     }
 
-    obj._logger.f("Started with: %s", hs.inspect(saved))
+    -- obj._logger.df("Started with: %s", hs.inspect(saved))
 
     obj._state = saved["state"] or "countdown"
     obj._numTimesSoundPlayed = 0
@@ -178,7 +178,7 @@ function obj:start(config)
 
     obj:renderMenuBar()
 
-    obj._logger.f("obj = %s", hs.inspect(obj))
+    -- obj._logger.df("obj = %s", hs.inspect(obj))
 
     return self
 end
