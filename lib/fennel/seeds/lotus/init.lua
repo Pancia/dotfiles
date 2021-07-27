@@ -1,4 +1,5 @@
 local durp = require("lib/durationpicker")
+local wake = require("lib/wakeDialog")
 
 local obj = {}
 
@@ -41,7 +42,7 @@ function obj:renderMenuBar()
     obj._menubar:setIcon(obj.spoonPath.."/lotus-flower.png")
     local soundTitle = sound.name or sound.path:match("[^/]+$"):match("[^.]+")
     local timeLeft = math.ceil(obj._timeLeft)
-    local title = timeLeft .. "->[" .. obj._soundIdx .. "/" .. #obj.sounds .."]#" .. soundTitle
+    local title = obj._state == "sleeping" and "zzz" or timeLeft .. "->[" .. obj._soundIdx .. "/" .. #obj.sounds .."]#" .. soundTitle
     obj._menubar:setTitle(title)
 end
 
@@ -139,16 +140,18 @@ function obj:heartbeat()
     obj:renderMenuBar()
 end
 
-function watchSystem(eventType)
-    if eventType == hs.caffeinate.watcher.systemDidWake then
-        obj._logger.df("systemDidWake -> %s", obj._prevState)
-        obj._state = obj._prevState
-        obj._prevState = nil
-    elseif eventType == hs.caffeinate.watcher.systemWillSleep then
-        obj._logger.df("systemWillSleep <- %s", obj._state)
-        obj._prevState = obj._state
-        obj._state = "sleeping"
-    end
+function onSleep()
+    obj._logger.df("systemWillSleep <- %s", obj._state)
+    obj._prevState = obj._state
+    obj._state = "sleeping"
+    obj:renderMenuBar()
+end
+
+function onWake()
+    obj._logger.df("systemDidWake -> %s", obj._prevState)
+    obj._state = obj._prevState
+    obj._prevState = nil
+    obj:renderMenuBar()
 end
 
 function obj:start(config)
@@ -174,7 +177,8 @@ function obj:start(config)
 
     obj._menubar = hs.menubar.new():setMenu(renderMenu)
     obj._heartbeat = hs.timer.doEvery(timeConfig(obj).refreshRate, obj.heartbeat)
-    obj._systemWatcher = hs.caffeinate.watcher.new(watchSystem):start()
+
+    wake:onSleep(onSleep):onWake(onWake):start()
 
     obj:renderMenuBar()
 

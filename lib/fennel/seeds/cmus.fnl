@@ -109,7 +109,16 @@
   (when (is-active?)
     (hs.execute "cmselect --filter-by-tags" true)))
 
+(local wake (require "lib/wakeDialog"))
+
+(fn on-sleep []
+  (when (is-playing?)
+    (play-or-pause)))
+
 (fn start []
+  (-> wake
+      (: :onSleep on-sleep)
+      (: :start))
   (bind-media-keys))
 
 {: play-or-pause

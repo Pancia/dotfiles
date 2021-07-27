@@ -1,4 +1,5 @@
 local durp = require("lib/durationpicker")
+local wake = require("lib/wakeDialog")
 
 local obj = {}
 
@@ -151,7 +152,7 @@ end
 
 function obj:renderMenuBar()
     obj._menubar:setIcon(obj.spoonPath.."/home.png")
-    obj._menubar:setTitle(math.ceil(obj._minutesLeft or 0))
+    obj._menubar:setTitle(obj._state == "sleeping" and "zzz" or math.ceil(obj._minutesLeft or 0))
 end
 
 function obj:notifCallback()
@@ -189,16 +190,19 @@ function obj:heartbeat()
     obj:renderMenuBar()
 end
 
-function watchSystem(eventType)
-    if eventType == hs.caffeinate.watcher.systemDidWake then
-        obj._logger.df("systemDidWake -> %s", obj._prevState)
-        obj._state = obj._prevState
-        obj._prevState = nil
-    elseif eventType == hs.caffeinate.watcher.systemWillSleep then
-        obj._logger.df("systemWillSleep <- %s", obj._state)
-        obj._prevState = obj._state
-        obj._state = "sleeping"
-    end
+function onWake()
+    obj._logger.df("systemDidWake -> %s", obj._prevState)
+    obj._state = obj._prevState
+    obj._prevState = nil
+    obj:renderMenuBar()
+end
+
+
+function onSleep()
+    obj._logger.df("systemWillSleep <- %s", obj._state)
+    obj._prevState = obj._state
+    obj._state = "sleeping"
+    obj:renderMenuBar()
 end
 
 function obj:start(config)
@@ -216,7 +220,7 @@ function obj:start(config)
     obj._minutesLeft = 180
     obj:renderMenuBar()
     obj._heartbeat = hs.timer.doEvery(60, obj.heartbeat)
-    obj._systemWatcher = hs.caffeinate.watcher.new(watchSystem):start()
+    wake:onSleep(onSleep):onWake(onWake):start()
 end
 
 function obj:stop()
