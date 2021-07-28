@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  12
+// @version  13
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @grant    none
@@ -33,9 +33,9 @@
 
     function waitForElementToBeLoaded(selector, callback) {
         var tid = setInterval(function() {
-            // wait for x element to have been loaded, ie: not null
+            // wait for x element to have been loaded, ie: not null & has width
             var x = $(selector)[0]
-            if (x == null) { return }
+            if (x == null || $(x).width() <= 0) { return }
             // x was loaded, go ahead!
             clearInterval(tid)
             callback(x)
@@ -44,12 +44,14 @@
 
     function MAIN() {
         if (window.location.host == "www.youtube.com") {
-            waitForElementToBeLoaded("#comments #comment", () => {
-                addOverlay("#comments", "STOP! is it really worth it?");
-            });
-            waitForElementToBeLoaded("#related", () => {
-                addOverlay("#related");
-            });
+            if (window.location.pathname == "/watch") {
+                waitForElementToBeLoaded("#comments #comment", () => {
+                    addOverlay("#comments", "STOP! is it really worth it?");
+                });
+                waitForElementToBeLoaded("#related", () => {
+                    addOverlay("#related");
+                });
+            }
         }
 
         if (window.location.host == "www.linkedin.com") {
