@@ -1,31 +1,17 @@
 == MAIN ==
-- [ ] :greasemonkey: not working script blocked (just linkedin)... `>:(`
 - [ ] :nvim: :easymotion:
     - [ ] ??? add lispy chars to jump targets ???
     - [ ] https://github.com/easymotion/vim-easymotion#bonus-fuzzy-search-with-easymotion
-- [ ] different karabiner.json for minimac (how? maybe without whole new file?)
-- [ ] :nvim: marker to resume work (move cursor to it on buffer load) COMEHERE
 - [ ] install script (manual -> auto, & validate step success)
-- [ ] :nvim: ? autocmd buffer delete no name if others
+- [ ] :nvim: marker to resume work (theme & move cursor to it on buffer load) RESUMEHERE
+- [ ] :git: add to pre-commit hook check for RESUMEHERE
 - [ ] :git: fix pre-commit hook, does not only check staged files for TASK markers
-- [ ] minimac differences
-    - [ ] zsh/extra.zsh IS_IMAC / IS_MINIMAC
-    - [ ] core.fnl when IS_IMAC
-    - [ ] luarocks path into zsh/extra.zsh
-    - [ ] cmus.fnl mediakeys when IS_IMAC
-    - [ ] link /private/home -> $HOME (add to install steps)
-    - [ ] fix zshenv eval brew shellenv, bin not at path
+- [ ] luarocks path into zsh/extra.zsh
+- [ ] fix zshenv eval brew shellenv, bin not at path
 
 == BACKLOG (in alphabetical order) ==
-- [ ] :cljfmt: compare with IDEA/Cursive && ? conjure-ify
-- [ ] :clojure: ? cljfmt: format {} & bindings
-- [ ] :deoplete: :nvim: :conjure: lags if (?) not connected to repl (or was not started ?)
 - [ ] :clojure: :reveal: https://github.com/vlaaad/reveal/blob/master/src/vlaaad/reveal/nrepl.clj#L11-L13
 - [ ] :nvim: :clojure: gray out unused params #"_\w+"
-- [ ] :nvim: buffer/tab names stutter when switching
 - [ ] :nvim: terminal buffer names empty
 - [ ] :nvim: try `set diffopt+=internal,algorithm:patience`
-- [ ] :nvim: vim-plug lazy load plugins `vim --startuptime`
 - [ ] :zsh: antigen: install using brew
-- [ ] :zsh: silence antigen bundle on `.zshrc`
-- [ ] :zsh: zcompile my .zsh files? (profile impact)

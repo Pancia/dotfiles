@@ -24,14 +24,14 @@ fi
 git flow config &> /dev/null \
   || echo "[pre-commit/WARNING]: Not a gitflow-enabled repo yet. Please run 'git flow init' first."
 
-local dev_branch="$(git flow config 2> /dev/null | ag -o 'development: (\w+)' | ag -o '\w+$' || echo 'master')"
-
-local markers="$(git diff $dev_branch...HEAD | ag '^\+' | ag 'TASK')"
-if [[ -n "$markers" ]]; then
-    echo "[pre-commit/ERROR]: Found TASK markers in branch:"
-    echo $markers
-    exit 15
-fi
+#local dev_branch="$(git flow config 2> /dev/null | ag -o 'development: (\w+)' | ag -o '\w+$' || echo 'master')"
+#
+#local markers="$(git diff $dev_branch...HEAD | ag '^\+' | ag 'TASK')"
+#if [[ -n "$markers" ]]; then
+#    echo "[pre-commit/ERROR]: Found TASK markers in branch:"
+#    echo $markers
+#    exit 15
+#fi
 
 if [[ `cmds list` =~ 'pre_commit' ]]; then
     cmds pre_commit
