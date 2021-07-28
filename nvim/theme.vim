@@ -49,6 +49,9 @@ hi MyProjectContext   guifg=#DF447B gui=standout
 hi MyProjectTranslate guifg=#F244E7 gui=standout
 " TRANSLATE asdf TRANSLATE: asdf asdf
 
+hi MyProjectResumeHere guifg=#0000E7 gui=standout
+" RESUMEHERE asdf RESUMEHERE: asdf asdf
+
 call onedark#set_highlight("MyProjectFixme", {"fg": g:onedark_color_overrides.yellow
             \                                ,"bg": g:onedark_color_overrides.white
             \                                ,"gui": "standout"})

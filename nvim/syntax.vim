@@ -10,6 +10,8 @@ augroup ProjectMarkers
           \ containedin=.*Comment,vimCommentTitle
     au Syntax * syn match MyProjectTranslate /\v<(TRANSLATE)(:.*)?/
           \ containedin=.*Comment,vimCommentTitle
+    au Syntax * syn match MyProjectResumeHere /\v<(RESUMEHERE)(:.*)?/
+          \ containedin=.*Comment,vimCommentTitle
     au Syntax * call matchadd('MyProjectTodo', '\v<(TODO)(:.*)?', 100)
     au Syntax * call matchadd('MyProjectFixme', '\v<(FIXME)(:.*)?', 100)
 augroup END

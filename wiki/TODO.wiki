@@ -3,9 +3,8 @@
     - [ ] ??? add lispy chars to jump targets ???
     - [ ] https://github.com/easymotion/vim-easymotion#bonus-fuzzy-search-with-easymotion
 - [ ] install script (manual -> auto, & validate step success)
-- [ ] :nvim: marker to resume work (theme & move cursor to it on buffer load) RESUMEHERE
+- [ ] :nvim: move cursor to RESUMEHERE
 - [ ] :git: add to pre-commit hook check for RESUMEHERE
-- [ ] :git: fix pre-commit hook, does not only check staged files for TASK markers
 - [ ] luarocks path into zsh/extra.zsh
 - [ ] fix zshenv eval brew shellenv, bin not at path
 

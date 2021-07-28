@@ -1,6 +1,12 @@
 function! SetCursorToLastKnownPosition()
     if &filetype !~ 'git\|commit\c'
-        if line("'\"") > 1 && line("'\"") <= line("$")
+        let first = search("RESUMEHERE")
+        " TASK: FIXME does not go to the line
+        if l:first >= 0
+            echomsg "GOTO: " . l:first
+            exe "normal! " . l:first . "G"
+        elseif line("'\"") > 1 && line("'\"") <= line("$")
+            echomsg "go back"
             exe "normal! g`\""
         endif
     endif
@@ -11,12 +17,6 @@ augroup Essentials
     au BufReadPost * call SetCursorToLastKnownPosition()
     au BufEnter * silent! lcd %:p:h " Eqv to `set autochdir`
 augroup END
-
-" TASK: NOTE: CONTEXT: should all be TASK color
-" NOTE:
-" LANDMARK:
-" CONTEXT:
-" FOO: what is this?
 
 " Bit me in the ass as it remembers mappings by default
 " should not so I can change plugin config & have it fully update
