@@ -142,14 +142,14 @@ end
 
 function onSleep()
     obj._logger.df("systemWillSleep <- %s", obj._state)
-    obj._prevState = obj._state
+    obj._prevState = (obj._state ~= "sleeping" and obj._state or obj._prevState)
     obj._state = "sleeping"
     obj:renderMenuBar()
 end
 
 function onWake()
     obj._logger.df("systemDidWake -> %s", obj._prevState)
-    obj._state = obj._prevState
+    obj._state = (obj._prevState or obj._state)
     obj._prevState = nil
     obj:renderMenuBar()
 end

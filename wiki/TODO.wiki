@@ -4,7 +4,6 @@
     - [ ] https://github.com/easymotion/vim-easymotion#bonus-fuzzy-search-with-easymotion
 - [ ] install script (manual -> auto, & validate step success)
 - [ ] :nvim: move cursor to RESUMEHERE
-- [ ] :git: add to pre-commit hook check for RESUMEHERE
 - [ ] luarocks path into zsh/extra.zsh
 - [ ] fix zshenv eval brew shellenv, bin not at path
 
