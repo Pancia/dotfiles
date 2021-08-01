@@ -14,19 +14,27 @@ function callAll(cbs)
     hs.fnutils.each(cbs, function(cb) cb() end)
 end
 
-function showWakeDialog()
-    local frame = hs.screen.primaryScreen():fullFrame()
-    local x = (frame["w"] / 2) - 50
-    local y = (frame["h"] / 2) - 50
-    hs.dialog.alert(1, 1
-        , function() callAll(obj.wakeCBs) end
-        , "Wake up HammerSpoon?")
+function obj:showWakeNotif()
+    notification = {title = "Wake up hammerspoon?", withdrawAfter = 0 }
+    obj._notif = hs.notify.new(nil, notification):send()
+    clearCheck = hs.timer.doEvery(3, function()
+        if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
+            if obj._notif:activationType() == hs.notify.activationTypes.none then
+                callAll(obj.wakeCBs)
+            end
+            if clearCheck then
+                clearCheck:stop()
+                clearCheck = nil
+            end
+            obj._notif = nil
+        end
+    end)
 end
 
 function watchSystem(eventType)
     if eventType == hs.caffeinate.watcher.systemWillSleep then
         callAll(obj.sleepCBs)
-        showWakeDialog()
+        obj:showWakeNotif()
     end
 end
 

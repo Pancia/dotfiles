@@ -141,14 +141,14 @@ function obj:heartbeat()
 end
 
 function onSleep()
-    obj._logger.df("systemWillSleep <- %s", obj._state)
+    obj._logger.df("systemWillSleep, state: %s, prev: %s", obj._state, obj._prevState)
     obj._prevState = (obj._state ~= "sleeping" and obj._state or obj._prevState)
     obj._state = "sleeping"
     obj:renderMenuBar()
 end
 
 function onWake()
-    obj._logger.df("systemDidWake -> %s", obj._prevState)
+    obj._logger.df("systemDidWake -> state: %s, prev: %s", obj._state, obj._prevState)
     obj._state = (obj._prevState or obj._state)
     obj._prevState = nil
     obj:renderMenuBar()
@@ -166,7 +166,7 @@ function obj:start(config)
 
     -- obj._logger.df("Started with: %s", hs.inspect(saved))
 
-    obj._state = saved["state"] or "countdown"
+    obj._state = ("sleeping" ~= saved["state"] and saved["state"] or "countdown")
     obj._numTimesSoundPlayed = 0
     obj._soundIdx = saved["soundIdx"] or #obj.sounds
     obj._timeLeft = saved["timeLeft"] or timeConfig(obj).interval
