@@ -1,12 +1,9 @@
 function! SetCursorToLastKnownPosition()
-    if &filetype !~ 'git\|commit\c'
+    if &filetype !~ '' && &filetype !~ 'git\|help\|commit\c'
         let first = search("RESUMEHERE")
-        " TASK: FIXME does not go to the line
         if l:first >= 0
-            echomsg "GOTO: " . l:first
-            exe "normal! " . l:first . "G"
+            call feedkeys("\<C-\>\<C-n>".l:first."G^", 'n')
         elseif line("'\"") > 1 && line("'\"") <= line("$")
-            echomsg "go back"
             exe "normal! g`\""
         endif
     endif
@@ -14,7 +11,7 @@ endfunction
 
 augroup Essentials
     au!
-    au BufReadPost * call SetCursorToLastKnownPosition()
+    au BufEnter * call SetCursorToLastKnownPosition()
     au BufEnter * silent! lcd %:p:h " Eqv to `set autochdir`
 augroup END
 
