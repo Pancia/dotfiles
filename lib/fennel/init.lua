@@ -6,3 +6,5 @@ fennel.path = LIB.."/?.fnl;"..LIB.."/lib/?.fnl;"..LIB.."/seeds/?.fnl;"..LIB.."/s
 table.insert(package.loaders or package.searchers, fennel.searcher)
 require("core")
 dbg = require("lib/dbg")
+require("hs.ipc")
+hs.ipc.cliInstall("/Users/"..os.getenv("USER").."/Developer/")

@@ -115,7 +115,7 @@
   (when (is-playing?)
     (play-or-pause)))
 
-(fn start []
+(fn start [config]
   (-> wake
       (: :onSleep on-sleep)
       (: :start))

@@ -13,6 +13,13 @@ module CMD
       }
     }
   end
+  def test(opts)
+    lambda { |*args|
+      EXE.system %{
+        bin/kaocha --watch
+      }
+    }
+  end
 end
 
 trap "SIGINT" do

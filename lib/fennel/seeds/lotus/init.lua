@@ -187,14 +187,14 @@ function obj:start(config)
     return self
 end
 
-function saveState()
+function obj:saveState()
     hs.settings.set("state", obj._state)
     hs.settings.set("soundIdx", obj._soundIdx)
     hs.settings.set("timeLeft", obj._timeLeft)
 end
 
 function obj:stop()
-    saveState()
+    obj:saveState()
     if obj._notif then
         obj._notif:withdraw()
     end

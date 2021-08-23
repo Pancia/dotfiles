@@ -207,6 +207,10 @@ end
 function obj:start(config)
     obj._logger = hs.logger.new("HomeBoard", "debug")
     for k,v in pairs(config) do obj[k] = v end
+    local saved = {
+        ["state"] = hs.settings.get("state"),
+        ["minutesLeft"] = hs.settings.get("minutesLeft"),
+    }
     obj.videos = {}
     for line in hs.execute("find "..obj.videosPath.." -type f -not -path '*/\\.*'"):gmatch("[^\n]+") do
         table.insert(obj.videos, line)
@@ -215,16 +219,23 @@ function obj:start(config)
     obj._notif = hs.notify.new(obj.notifCallback, notification)
     obj._menubar = hs.menubar.new()
     obj._menubar:setClickCallback(obj.notifCallback)
-    obj._state = "countdown"
-    obj._minutesLeft = 180
+    obj._state = ("sleeping" ~= saved["state"] and saved["state"] or "countdown")
+    obj._minutesLeft = saved["minutesLeft"] or obj.defaultDuration
     obj:renderMenuBar()
     obj._heartbeat = hs.timer.doEvery(60, obj.heartbeat)
     wake:onSleep(onSleep):onWake(onWake):start()
+    return self
+end
+
+function obj:saveState()
+    hs.settings.set("state", obj._state)
+    hs.settings.set("minutesLeft", obj._minutesLeft)
 end
 
 function obj:stop()
+    obj:saveState()
     obj._menubar:delete()
-    if obj._notif then
+    if obj._notif and obj._notif:delivered() then
         obj._notif:withdraw()
     end
     obj._heartbeat:stop()
