@@ -45,9 +45,9 @@ nnoremap ,tt :call KaochaRunTest()<CR>
 
 nnoremap <buffer><silent> ,cs :ConjureConnect 9000<CR>
 
-nnoremap <buffer><silent> ,fg :ConjureEval (require 'development)(in-ns 'development)(start)<CR>
-nnoremap <buffer><silent> ,fs :ConjureEval (require 'development)(in-ns 'development)(stop)<CR>
-nnoremap <buffer><silent> ,fr :ConjureEval (require 'development)(in-ns 'development)(restart)<CR>
+nnoremap <buffer><silent> ,fg :call RunCLJDevEval("start")<CR>
+nnoremap <buffer><silent> ,fs :call RunCLJDevEval("stop")<CR>
+nnoremap <buffer><silent> ,fr :call RunCLJDevEval("restart")<CR>
 
 nnoremap <buffer><silent> ,vc :ConjureEval {:vlaaad.reveal/command '(clear-output)}<CR>
 

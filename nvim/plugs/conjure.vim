@@ -14,3 +14,10 @@ let g:conjure#client#clojure#nrepl#test#current_form_names = ['deftest', 'specif
 let g:conjure#filetype#fennel = "conjure.client.fennel.stdio"
 let g:conjure#client#fennel#stdio#command = "hs-fennel"
 let g:conjure#debug = v:false
+
+let g:clj_dev_ns="development"
+let g:clj_dev_cmd_suffix=""
+
+function! RunCLJDevEval(cmd)
+    execute "ConjureEval (require '".g:clj_dev_ns.")(in-ns '".g:clj_dev_ns.")(".a:cmd.g:clj_dev_cmd_suffix.")"
+endfunction
