@@ -115,3 +115,11 @@ nnoremap <buffer><silent> ,gcf :call copilot#check_current_file()<CR>
 nnoremap <buffer><silent> ,gcF :call copilot#refresh_and_check_current_file()<CR>
 nnoremap <buffer><silent> ,gcr :call copilot#check_root_form()<CR>
 nnoremap <buffer><silent> ,gcR :call copilot#refresh_and_check_root_form()<CR>
+
+" LANDMARK: ======== FILAMENT ========
+
+function! FilamentOpenDocForWord()
+  call luaeval("require('conjure.client')['with-filetype']('clojure', require('conjure.eval')['eval-str'], { origin = 'dotfiles/clojuredocs', code = '(dev.filament.plugin.built-ins.wikidocs/doc ".expand("<cword>").")', ['passive?'] = true})")
+endfunction
+
+nnoremap ,fk :call FilamentOpenDocForWord()<CR>

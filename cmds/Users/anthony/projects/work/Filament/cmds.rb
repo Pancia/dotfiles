@@ -9,14 +9,17 @@ module CMD
   def repl(opts)
     lambda { |*args|
       EXE.system %{
-        clj -A:nREPL:dev
+        clj -A:local/nREFL:dev:test #{args.join " "}
       }
     }
   end
   def test(opts)
     lambda { |*args|
       EXE.system %{
-        bin/kaocha --watch
+        clojure -A:dev:test:spec-dev \
+          -m kaocha.runner \
+          --watch \
+          #{args.join " "}
       }
     }
   end
