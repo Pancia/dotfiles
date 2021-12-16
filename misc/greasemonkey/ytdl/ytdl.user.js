@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     YTDL
-// @version  2
+// @version  3
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @grant    none
 // ==/UserScript==
@@ -35,20 +35,33 @@ function waitForElementToBeLoaded(selector, callback) {
     }, 100);
 }
 
+waitForElementToBeLoaded("ytd-mini-guide-renderer > #items", () => {
+    $("ytd-mini-guide-renderer > #items")
+        .after($(`<a id="endpoint" tabindex="-1" class="yt-simple-endpoint style-scope ytd-mini-guide-entry-renderer" title="Library" href="/playlist?list=WL"><span style="font-size:24px">🕓</span><span class="title style-scope ytd-mini-guide-entry-renderer">Watch Later</span></a>`))
+})
+
 waitForElementToBeLoaded(".ytd-masthead", () => {
     waitForElementToBeLoaded("#avatar-btn", () => {
         $(".ytd-masthead > #end")
             .before(
-                $("<a>ytdl(AUDIO)</a>")
+                $("<div>ytdl(</div>")
+                .css({"color": "red"
+                    , "font-size": "16px"}))
+            .before(
+                $("<a>🎵</a>")
                 .css({"color": "red"
                     , "font-size": "16px"
                     , "cursor": "pointer"})
                 .click(() => YTDL("audio")))
             .before(
-                $("<a>ytdl(VIDEO)</a>")
+                $("<a>📺</a>")
                 .css({"color": "red"
                     , "font-size": "16px"
                     , "cursor": "pointer"})
                 .click(() => YTDL("video")))
+            .before(
+                $("<div>)</div>")
+                .css({"color": "red"
+                    , "font-size": "16px"}))
     })
 })
