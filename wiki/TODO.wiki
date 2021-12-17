@@ -3,7 +3,6 @@
     - [ ] ??? add lispy chars to jump targets ???
     - [ ] https://github.com/easymotion/vim-easymotion#bonus-fuzzy-search-with-easymotion
 - [ ] install script (manual -> auto, & validate step success)
-- [ ] :nvim: move cursor to RESUMEHERE
 - [ ] luarocks path into zsh/extra.zsh
 - [ ] fix zshenv eval brew shellenv, bin not at path
 

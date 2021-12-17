@@ -1,9 +1,10 @@
 function! SetCursorToLastKnownPosition()
-    if &filetype !~ '' && &filetype !~ 'git\|help\|commit\c'
-        let first = search("RESUMEHERE")
-        if l:first >= 0
-            call feedkeys("\<C-\>\<C-n>".l:first."G^", 'n')
-        elseif line("'\"") > 1 && line("'\"") <= line("$")
+    let [line,column] = searchpos("RESUMEHERE")
+    if l:line >= 0
+        "escape, go to line, go to column 0 then go right l:column times
+        call feedkeys("\<C-\>\<C-n>".l:line."G0".(l:column-1)."l", 'n')
+    elseif &filetype !~ '' && &filetype !~ 'git\|help\|commit\c'
+        if line("'\"") > 1 && line("'\"") <= line("$")
             exe "normal! g`\""
         endif
     endif
