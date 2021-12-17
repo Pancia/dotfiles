@@ -2,16 +2,19 @@ source ~/dotfiles/antigen/antigen.zsh
 
 autoload -Uz compinit && compinit
 function __eval_completion { IFS='&'; $($@); unset IFS; }
-function _ENSURE_COMPLETIONS {
-    for f in $(ls $HOME/dotfiles/bin/*); do
-        local compdef="$(cat $f | sed -n '2p')"
-        if [[ $compdef =~ 'zsh-completion' ]]; then
-            local completion="$(echo "$compdef" | sed -E 's/.*<\[zsh-completion\]>:(.*)/\1/')"
-            compdef "__eval_completion $completion" $(basename $f)
-        fi
-    done
-}
-_ENSURE_COMPLETIONS
+#
+# NOTES: [[~/dotfiles/wiki/zsh_completion.wiki]]
+#
+#function _ENSURE_COMPLETIONS {
+#    for f in $(ls $HOME/dotfiles/bin/*); do
+#        local compdef="$(cat $f | sed -n '2p')"
+#        if [[ $compdef =~ 'zsh-completion' ]]; then
+#            local completion="$(echo "$compdef" | sed -E 's/.*<\[zsh-completion\]>:(.*)/\1/')"
+#            compdef "__eval_completion $completion" $(basename $f)
+#        fi
+#    done
+#}
+#_ENSURE_COMPLETIONS
 
 antigen use oh-my-zsh
 

@@ -48,8 +48,7 @@ class CMDS
   end
 end
 
-# https://mads-hartmann.com/2017/08/06/writing-zsh-completion-scripts.html
-# https://github.com/zsh-users/zsh-completions/blob/master/zsh-completions-howto.org#user-content-actions
+# NOTE: [[~/dotfiles/wiki/zsh_completion.wiki]]
 CLI.parse!(CMDS) { |opts|
   opts.on("-z", "--zsh-completions", "print zsh completion") do
     registers = Dir["#{$home_dir}/.config/q/*"].map{|r|File.basename r}.join " "

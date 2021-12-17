@@ -1,0 +1,47 @@
+#!/usr/bin/env ruby
+
+require "cli.rb"
+
+$notes_base_dir = "/Users/#{%x[whoami].strip}/dotfiles/wiki/notes/"
+system("mkdir -p #{$notes_base_dir}")
+
+class CMDS
+  def self.list(opts)
+    opts.info = "List available notes."
+    lambda { |*args|
+      puts Dir["#{$notes_base_dir}/*"].map{|r|File.basename(r, File.extname(r))}.join " "
+    }
+  end
+  def self.edit(opts)
+    opts.info = "Edit notes for a command."
+    lambda { |name|
+      system("nvim #{$notes_base_dir}/#{name}.wiki")
+    }
+  end
+  def self.show(opts)
+    opts.info = "Show notes for a command."
+    lambda { |name|
+      system("bat #{$notes_base_dir}/#{name}.wiki")
+    }
+  end
+  def self.trash(opts)
+    opts.info = "Trash notes for a command."
+    lambda { |name|
+      system("trash #{$notes_base_dir}/#{name}.wiki")
+    }
+  end
+end
+
+# NOTE: [[~/dotfiles/wiki/zsh_completion.wiki]]
+CLI.parse!(CMDS) { |opts|
+  opts.on("-z", "--zsh-completions", "print zsh completion") do
+    cmds = (CMDS.methods - Object.methods).map(&:to_s).join " "
+    notes = Dir["#{$notes_base_dir}/*"].map{|r|File.basename(r, File.extname(r))}.join " "
+    puts ["_arguments", "-s", "-S",
+          "-h[Print this help document]",
+          "--help[Print this help document]",
+          "1:cmd:(#{cmds})", "2::note:(#{notes})"
+    ].join "&"
+    $options[:helped] = true
+  end
+}

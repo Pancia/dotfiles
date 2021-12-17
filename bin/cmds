@@ -1,5 +1,4 @@
 #!/usr/bin/env ruby
-#<[zsh-completion]>: cmds --zsh-completions
 
 require "cli.rb"
 
@@ -56,8 +55,7 @@ end
 $old_methods = CMDS.methods
 begin require $cmds_file if File.file? $cmds_file; rescue Exception => e; p e end
 
-# https://mads-hartmann.com/2017/08/06/writing-zsh-completion-scripts.html
-# https://github.com/zsh-users/zsh-completions/blob/master/zsh-completions-howto.org#user-content-actions
+# NOTE: [[~/dotfiles/wiki/zsh_completion.wiki]]
 CLI.parse!(CMDS) { |opts|
   opts.on("-z", "--zsh-completions", "print zsh completion") do
     cmds = (CMDS.methods - Object.methods).map(&:to_s).join " "

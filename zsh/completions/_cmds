@@ -1,0 +1,2 @@
+#compdef _cmds		cmds
+function _cmds { __eval_completion cmds --zsh-completions }
