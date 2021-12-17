@@ -3,11 +3,11 @@ function _not_same_inode {
 }
 
 function _ENSURE_RCS {
-    for rc in $(ls $HOME/dotfiles/rcs); do
-        local rc_dest="$(head -n 1 $HOME/dotfiles/rcs/$rc | sed -E 's/.*<\[(.*)\]>.*/\1/' )"
-        if [[ ! -f "$HOME/$rc_dest" ]] || $(_not_same_inode "$HOME/$rc_dest" "$HOME/dotfiles/rcs/$rc") ; then
+    for rc in $(find $HOME/dotfiles/rcs -type f); do
+        local rc_dest="$(head -n 1 $rc | sed -E 's/.*<\[(.*)\]>.*/\1/' )"
+        if [[ ! -f "$HOME/$rc_dest" ]] || $(_not_same_inode "$HOME/$rc_dest" "$rc") ; then
             mkdir -p "$(dirname $HOME/$rc_dest)"
-            ln -f "$HOME/dotfiles/rcs/$rc" "$HOME/$rc_dest"
+            ln -f "$rc" "$HOME/$rc_dest"
         fi
     done
 }

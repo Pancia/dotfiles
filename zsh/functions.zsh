@@ -12,6 +12,8 @@ function ls { command ls -h "$@" }
 function cat { bat "$@" }
 function less { bat "$@" }
 
+function home { itermocil home; cmus }
+
 function meditate {
     local T="$((60*${1:-5}))"
     echo "sleeping for $T seconds"
