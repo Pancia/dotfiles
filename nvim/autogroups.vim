@@ -1,6 +1,6 @@
 function! SetCursorToLastKnownPosition()
     let [line,column] = searchpos("RESUMEHERE")
-    if l:line >= 0
+    if l:line !~ 0
         "escape, go to line, go to column 0 then go right l:column times
         call feedkeys("\<C-\>\<C-n>".l:line."G0".(l:column-1)."l", 'n')
     elseif &filetype !~ '' && &filetype !~ 'git\|help\|commit\c'
