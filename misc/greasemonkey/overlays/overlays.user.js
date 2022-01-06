@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  13
+// @version  14
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @grant    none
@@ -48,7 +48,7 @@
                 waitForElementToBeLoaded("#comments #comment", () => {
                     addOverlay("#comments", "STOP! is it really worth it?");
                 });
-                waitForElementToBeLoaded("#related", () => {
+                waitForElementToBeLoaded("#related #items", () => {
                     addOverlay("#related");
                 });
             }
