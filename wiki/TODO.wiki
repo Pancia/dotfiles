@@ -1,14 +1,10 @@
 == MAIN ==
-- [ ] :nvim: :easymotion:
-    - [ ] ??? add lispy chars to jump targets ???
-    - [ ] https://github.com/easymotion/vim-easymotion#bonus-fuzzy-search-with-easymotion
 - [ ] install script (manual -> auto, & validate step success)
 - [ ] luarocks path into zsh/extra.zsh
 - [ ] fix zshenv eval brew shellenv, bin not at path
+- [ ] ? disable other characters in spacehammer (is it possible?)
 
 == BACKLOG (in alphabetical order) ==
-- [ ] :clojure: :reveal: https://github.com/vlaaad/reveal/blob/master/src/vlaaad/reveal/nrepl.clj#L11-L13
 - [ ] :nvim: :clojure: gray out unused params #"_\w+"
 - [ ] :nvim: terminal buffer names empty
-- [ ] :nvim: try `set diffopt+=internal,algorithm:patience`
 - [ ] :zsh: antigen: install using brew

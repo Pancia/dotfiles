@@ -1,7 +1,7 @@
 ;<[.config/clj-kondo/config.edn]>
 {:skip-comments true
 
- :config-paths ["/Users/pancia/dotfiles/lib/clojure/my-kondo"]
+ ;:config-paths ["/Users/pancia/dotfiles/lib/clojure/my-kondo"]
 
  :linters {:unused-binding {:level :off}}
 
@@ -26,5 +26,6 @@
            taoensso.encore/if-let                                   clojure.core/let
            taoensso.encore/when-let                                 clojure.core/let
            fulcro-spec.check/checker                                clojure.core/fn
+           dev.filament.ui.component/defsc                          clojure.core/defn
            }
  }
