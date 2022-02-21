@@ -21,10 +21,10 @@ class CMDS
     }
   end
   def self.getreg(opts)
-    opts.info = "Prints a register."
+    opts.info = "Prints the register file path."
     lambda { |name|
       if File.exists? reg_file(name)
-        puts File.read(reg_file(name))
+        puts reg_file(name)
       else
         STDERR.puts "Register #{name} does not exist yet!"
       end
