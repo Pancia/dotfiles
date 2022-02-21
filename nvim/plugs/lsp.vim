@@ -24,3 +24,13 @@ inoremap <silent><expr> <cr> pumvisible() ? coc#_select_confirm()
                               \: "\<C-g>u\<CR>\<c-r>=coc#on_enter()\<CR>"
 
 "call deoplete#custom#source('_', 'matchers', ['matcher_full_fuzzy'])
+
+call SEMICOLON_GROUP('s', '+lsp')
+
+call SEMICOLON_CMD('ss', ':CocRestart', 'restart')
+call SEMICOLON_CMD('sa', ':CocAction', 'actions')
+call SEMICOLON_CMD('sd', ':CocDiagnostics', 'diagnostics')
+call SEMICOLON_CMD('sc', ':CocCommand', 'commands')
+call SEMICOLON_CMD('so', ':CocOutline', 'outline')
+call SEMICOLON_CMD('sg', ':CocOpenLog', 'debug log')
+

@@ -91,9 +91,6 @@ Plug 'calviken/vim-gdscript3'
 
 call plug#end()
 
-" SEMICOLON WHICH KEY {{{
-let g:semicolon_which_key_map = get(g:, 'semicolon_which_key_map', {})
-
 function! AssocIn(dict, key, value) abort
     if a:key == []
         if string(a:dict) !~ '{}' && string(a:dict) !=# string(a:value)
@@ -108,14 +105,35 @@ function! AssocIn(dict, key, value) abort
     return a:dict
 endfunction
 
-function! WhichKey_CMD(path, name, cmd) abort
-    call AssocIn(g:semicolon_which_key_map, split(a:path, '\zs'), [a:cmd, a:name])
+" SEMICOLON WHICH KEY {{{
+let g:semicolon_which_key_map = get(g:, 'semicolon_which_key_map', {})
+
+call which_key#register(';', "g:semicolon_which_key_map")
+
+function! SEMICOLON_CMD(path, cmd, ...) abort
+    let tag = a:0 >= 1 ? a:1 : a:cmd
+    call AssocIn(g:semicolon_which_key_map, split(a:path, '\zs'), [a:cmd, l:tag])
 endfunction
 
-function! WhichKey_GROUP(path, name) abort
+function! SEMICOLON_GROUP(path, name) abort
     call AssocIn(g:semicolon_which_key_map, split(a:path, '\zs')+['name'], a:name)
 endfunction
 " }}} SEMICOLON WHICH KEY
+
+" COMMA WHICH KEY {{{
+let g:comma_which_key_map = get(g:, 'comma_which_key_map', {})
+
+call which_key#register(',', "g:comma_which_key_map")
+
+function! COMMA_CMD(path, cmd, ...) abort
+    let tag = a:0 >= 1 ? a:1 : a:cmd
+    call AssocIn(g:comma_which_key_map, split(a:path, '\zs'), [a:cmd, l:tag])
+endfunction
+
+function! COMMA_GROUP(path, name) abort
+    call AssocIn(g:comma_which_key_map, split(a:path, '\zs')+['name'], a:name)
+endfunction
+" }}} COMMA WHICH KEY
 
 for plug_conf in split(globpath(expand("<sfile>:p:h"), 'plugs/*.vim'), '\n')
     execute 'source ' . plug_conf
@@ -129,12 +147,10 @@ for ftp in split(globpath('~/dotfiles/nvim/ftplugin', '*.vim'), '\n')
     endif
 endfor
 
-call WhichKey_GROUP('p', '+vim-plug')
-call WhichKey_CMD('pi', 'PlugInstall', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugInstall')
-call WhichKey_CMD('pc', 'PlugClean!', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugClean!')
-call WhichKey_CMD('pu', 'PlugUpdate', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugUpdate')
-call WhichKey_CMD('po', 'open nvim/plugins.vim', ':e ~/dotfiles/nvim/plugins.vim')
-call WhichKey_CMD('ps', 'PlugStatus', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugStatus')
-call WhichKey_CMD('pd', 'PlugDiff', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugDiff')
-
-call which_key#register(';', "g:semicolon_which_key_map")
+call SEMICOLON_GROUP('p', '+vim-plug')
+call SEMICOLON_CMD('pi', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugInstall', 'PlugInstall')
+call SEMICOLON_CMD('pc', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugClean!', 'PlugClean!')
+call SEMICOLON_CMD('pu', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugUpdate', 'PlugUpdate')
+call SEMICOLON_CMD('po', ':e ~/dotfiles/nvim/plugins.vim', 'open nvim/plugins.vim')
+call SEMICOLON_CMD('ps', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugStatus', 'PlugStatus')
+call SEMICOLON_CMD('pd', ':e ~/dotfiles/nvim/plugins.vim | :source % | :PlugDiff', 'PlugDiff')

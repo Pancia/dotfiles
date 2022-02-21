@@ -21,6 +21,8 @@ let g:clojure_fuzzy_indent_blacklist = []
 
 " LANDMARK: ======== CONJURE =========
 
+call COMMA_GROUP('v', '+ view / reveal')
+
 function! ResolveSymbol()
   call luaeval("require('conjure.client')['with-filetype']('clojure', require('conjure.eval')['eval-str'], { origin = 'dotfiles/clojuredocs', code = '(do {:conjure-highlight/silent true} `".expand("<cword>").")', ['passive?'] = true, ['on-result'] = function(sym) vim.api.nvim_command('call OpenClojureDocs(\"'..sym..'\")') end})")
 endfunction
@@ -35,21 +37,26 @@ function! OpenClojureDocs(fqsym)
   endif
 endfunction
 
-nnoremap ,vd :call ResolveSymbol()<CR>
+call COMMA_CMD('vd', 'ResolveSymbol()', 'open clojuredocs for symbol at cursor')
+
+call COMMA_CMD('vc', ":ConjureEval {:vlaaad.reveal/command '(clear-output)}", 'clear reveal output')
 
 function! KaochaRunTest()
   call luaeval("require('conjure.client')['with-filetype']('clojure', require('conjure.eval')['eval-str'], { origin = 'dotfiles/run_specification', code = '(require (symbol \"kaocha.repl\"))(kaocha.repl/run '..require('conjure.extract')['form']({['root?'] = true})['content']..' (if (.exists (new java.io.File \"tests.local.edn\")) {:config-file \"tests.local.edn\"} {}))' })")
 endfunction
 
+call COMMA_GROUP('t', '+ tests')
+call COMMA_CMD('tt', 'KaochaRunTest()')
 nnoremap ,tt :call KaochaRunTest()<CR>
 
+call COMMA_GROUP('c', '+ connections')
+call COMMA_CMD('cs', ':ConjureConnect 9000', 'connect conjure to shadow')
 nnoremap <buffer><silent> ,cs :ConjureConnect 9000<CR>
 
-nnoremap <buffer><silent> ,fg :call RunCLJDevEval("start")<CR>
-nnoremap <buffer><silent> ,fs :call RunCLJDevEval("stop")<CR>
-nnoremap <buffer><silent> ,fr :call RunCLJDevEval("restart")<CR>
-
-nnoremap <buffer><silent> ,vc :ConjureEval {:vlaaad.reveal/command '(clear-output)}<CR>
+call COMMA_GROUP('f', '+ filament / fulcro')
+call COMMA_CMD('fg', 'RunCLJDevEval("start")')
+call COMMA_CMD('fs', 'RunCLJDevEval("stop")')
+call COMMA_CMD('fr', 'RunCLJDevEval("restart")')
 
 nnoremap <buffer><expr> <esc> bufname('') =~ 'conjure-log-\d\+.cljc' ? ':normal ,lq<CR>' : '<esc>'
 
@@ -87,34 +94,36 @@ function! LSP_exe_here(cmd, ...) abort
   call CocRequest('clojure-lsp', 'workspace/executeCommand', { 'command': a:cmd, 'arguments': [s:Expand('%:p'), line('.') - 1, col('.') - 1] + a:000 })
 endfunction
 
-call WhichKey_GROUP('s', '+lsp')
-call WhichKey_CMD('ss', 'restart', 'CocRestart')
+call SEMICOLON_GROUP('sl', '+linting')
+call SEMICOLON_CMD('slr', 'LSP_exe_here("resolve-macro-as", input("Resolve as?"), input("kondo config absolute path"))', 'resolve-as')
 
-call WhichKey_GROUP('sr', '+refactorings')
+call SEMICOLON_GROUP('sr', '+refactorings')
 
-call WhichKey_GROUP('srt', '+threading')
-call WhichKey_CMD('srtf', 'thread-first', 'LSP_exe_here("thread-first")')
-call WhichKey_CMD('srtt', 'thread-last', 'LSP_exe_here("thread-last")')
-call WhichKey_CMD('srtF', 'thread-first-all', 'LSP_exe_here("thread-first-all")')
-call WhichKey_CMD('srtT', 'thread-last-all', 'LSP_exe_here("thread-last-all")')
-call WhichKey_CMD('srtu', 'unwind-thread', 'LSP_exe_here("unwind-thread")')
-call WhichKey_CMD('srtU', 'unwind-all', 'LSP_exe_here("unwind-all")')
+call SEMICOLON_GROUP('srt', '+threading')
+call SEMICOLON_CMD('srtf', 'LSP_exe_here("thread-first")', 'thread-first')
+call SEMICOLON_CMD('srtt', 'LSP_exe_here("thread-last")', 'thread-last')
+call SEMICOLON_CMD('srtF', 'LSP_exe_here("thread-first-all")', 'thread-first-all')
+call SEMICOLON_CMD('srtT', 'LSP_exe_here("thread-last-all")', 'thread-last-all')
+call SEMICOLON_CMD('srtu', 'LSP_exe_here("unwind-thread")', 'unwind-thread')
+call SEMICOLON_CMD('srtU', 'LSP_exe_here("unwind-all")', 'unwind-all')
 
-call WhichKey_GROUP('srr', '+requires')
-call WhichKey_CMD('srra', 'add-missing-libspec', 'LSP_exe_here("add-missing-libspec")')
+call SEMICOLON_GROUP('srr', '+requires')
+call SEMICOLON_CMD('srra', 'LSP_exe_here("add-missing-libspec")', 'add-missing-libspec')
 
-call WhichKey_GROUP('srl', '+let')
-call WhichKey_CMD('srle', 'expand-let', 'LSP_exe_here("expand-let")')
-call WhichKey_CMD('srlm', 'move-to-let', 'LSP_exe_here("move-to-let", input("Binding name: "))')
-call WhichKey_CMD('srli', 'introduce-let', 'LSP_exe_here("introduce-let", input("Binding name: "))')
-call WhichKey_CMD('su', 'find usages', '<Plug>(coc-references)')
+call SEMICOLON_GROUP('srl', '+let')
+call SEMICOLON_CMD('srle', 'LSP_exe_here("expand-let")', 'expand-let')
+call SEMICOLON_CMD('srlm', 'LSP_exe_here("move-to-let", input("Binding name: "))', 'move-to-let')
+call SEMICOLON_CMD('srli', 'LSP_exe_here("introduce-let", input("Binding name: "))', 'introduce-let')
+call SEMICOLON_CMD('su', '<Plug>(coc-references)', 'find usages')
 
 " LANDMARK: ======== COPILOT =========
 
-nnoremap <buffer><silent> ,gcf :call copilot#check_current_file()<CR>
-nnoremap <buffer><silent> ,gcF :call copilot#refresh_and_check_current_file()<CR>
-nnoremap <buffer><silent> ,gcr :call copilot#check_root_form()<CR>
-nnoremap <buffer><silent> ,gcR :call copilot#refresh_and_check_root_form()<CR>
+call COMMA_GROUP('g', '+ extra (copilot)')
+call COMMA_GROUP('gc', 'copilot')
+call COMMA_CMD('gcf', 'copilot#check_current_file()')
+call COMMA_CMD('gcF', 'copilot#refresh_and_check_current_file()')
+call COMMA_CMD('gcr', 'copilot#check_root_form()')
+call COMMA_CMD('gcR', 'copilot#refresh_and_check_root_form()')
 
 " LANDMARK: ======== FILAMENT ========
 
@@ -122,4 +131,4 @@ function! FilamentOpenDocForWord()
   call luaeval("require('conjure.client')['with-filetype']('clojure', require('conjure.eval')['eval-str'], { origin = 'dotfiles/clojuredocs', code = '(dev.filament.plugin.built-ins.wikidocs/doc ".expand("<cword>").")', ['passive?'] = true})")
 endfunction
 
-nnoremap ,fk :call FilamentOpenDocForWord()<CR>
+call COMMA_CMD('fk', 'FilamentOpenDocForWord()')

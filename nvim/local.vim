@@ -9,5 +9,6 @@ endfunction
 
 silent! execute "source " . VimLocalCWD() . "/local.vim"
 
-call WhichKey_GROUP('v', '+vim')
-call WhichKey_CMD('vl', 'Open current vimlocal file', ':call VimLocalEdit()')
+call SEMICOLON_GROUP('v', '+vim')
+call SEMICOLON_CMD('vl', ':call VimLocalEdit()', 'Open current vimlocal file')
+

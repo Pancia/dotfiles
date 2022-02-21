@@ -1,12 +1,13 @@
 nnoremap ; :WhichKey ';'<CR>
-call WhichKey_CMD('%', 'source vimrc', ':source ~/dotfiles/nvim/init.vim')
+call SEMICOLON_CMD('%', ':source ~/dotfiles/nvim/init.vim', 'source vimrc')
 
-call WhichKey_GROUP('d', '+dotfiles')
-call WhichKey_CMD('dv', 'vimrc dotfiles', ':e ~/dotfiles/nvim/init.vim | cd ~/dotfiles/nvim')
-call WhichKey_CMD('dz', 'edit zshrc init', ':cd ~/dotfiles/zsh | edit init.zsh')
-call WhichKey_CMD('dZ', 'edit zshrc', ':cd ~/dotfiles/zsh | edit zshrc')
+call SEMICOLON_GROUP('d', '+dotfiles')
+call SEMICOLON_CMD('dv', ':e ~/dotfiles/nvim/init.vim | cd ~/dotfiles/nvim', 'vimrc dotfiles')
+call SEMICOLON_CMD('dz', ':cd ~/dotfiles/zsh | edit init.zsh', 'edit zshrc init')
+call SEMICOLON_CMD('dZ', ':cd ~/dotfiles/zsh | edit zshrc', 'edit zshrc')
 
-call WhichKey_GROUP('b', '+dotfiles')
-call WhichKey_CMD('bD', 'delete all buffers', ':%bd')
-call WhichKey_CMD('bd', 'delete this buffer', ':bd')
-call WhichKey_CMD('bb', 'delete buffer and go to last buffer (without closing window)', ':b# | :bd#')
+call SEMICOLON_GROUP('b', '+dotfiles')
+call SEMICOLON_CMD('bD', ':%bd', 'delete all buffers')
+call SEMICOLON_CMD('bd', ':bd', 'delete this buffer')
+call SEMICOLON_CMD('bb', ':b# | :bd#', 'delete buffer and go to last buffer (without closing window)')
+

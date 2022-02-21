@@ -1,14 +1,14 @@
 let g:ale_linters = {
-      \ 'clojure': ['clj-kondo', 'copilot']
+      \ 'clojure': ['copilot']
       \}
 
-let g:ale_echo_msg_format = '[%linter%/%severity%]: %s'
+let g:ale_echo_msg_format = '[ALE:%linter%/%severity%]: %s'
 
 nmap <silent> gen <Plug>(ale_next_wrap)
 nmap <silent> gep <Plug>(ale_previous_wrap)
 
-call WhichKey_GROUP('l', '+ALE linters')
-call WhichKey_CMD('ln', 'Go to next message', ':normal <Plug>(ale_next_wrap)')
-call WhichKey_CMD('lp', 'Go to previous message', ':normal <Plug>(ale_previous_wrap)')
-call WhichKey_CMD('lr', 'Restart All Linters', ':ALEStopAllLSPs | :ALELint')
-call WhichKey_CMD('lt', 'Toggle Linting', ':ALEToggle')
+call SEMICOLON_GROUP('l', '+ALE linters')
+call SEMICOLON_CMD('ln', ':normal <Plug>(ale_next_wrap)', 'Go to next message')
+call SEMICOLON_CMD('lp', ':normal <Plug>(ale_previous_wrap)', 'Go to previous message')
+call SEMICOLON_CMD('lr', ':ALEStopAllLSPs | :ALELint', 'Restart All Linters')
+call SEMICOLON_CMD('lt', ':ALEToggle', 'Toggle Linting')

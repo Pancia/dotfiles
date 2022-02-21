@@ -1,6 +1,7 @@
-call WhichKey_GROUP('t', '+theme')
-call WhichKey_CMD('tt', 'open color picker', ':VCoolor')
-call WhichKey_CMD('ta', 'show syntax attribute', ":echo synIDattr(synID(line('.'), col('.'), 0), 'name')")
-call WhichKey_CMD('td', 'debug syntax', ":echo ('hi<' . synIDattr(synID(line('.'),col('.'),1),'name') . '> trans<' . synIDattr(synID(line('.'),col(' '),0),'name') . '> lo<' . synIDattr(synIDtrans(synID(line('.'),col('.'),1)),'name') . '>')")
-call WhichKey_CMD('ts', 'show syntax stack', ":echo map(synstack(line('.'), col('.')), 'synIDattr(v:val, \"name\")')")
-call WhichKey_CMD('tl', 'list syntax rules', ":exec 'syn list '.synIDattr(synID(line('.'), col('.'), 0), 'name')")
+call SEMICOLON_GROUP('t', '+theme')
+call SEMICOLON_CMD('tt', ':VCoolor', 'open color picker')
+call SEMICOLON_CMD('ta', ":echo synIDattr(synID(line('.'), col('.'), 0), 'name')", 'show syntax attribute')
+call SEMICOLON_CMD('td', ":echo ('hi<' . synIDattr(synID(line('.'),col('.'),1),'name') . '> trans<' . synIDattr(synID(line('.'),col(' '),0),'name') . '> lo<' . synIDattr(synIDtrans(synID(line('.'),col('.'),1)),'name') . '>')", 'debug syntax')
+call SEMICOLON_CMD('ts', ":echo map(synstack(line('.'), col('.')), 'synIDattr(v:val, \"name\")')", 'show syntax stack')
+call SEMICOLON_CMD('tl', ":exec 'syn list '.synIDattr(synID(line('.'), col('.'), 0), 'name')", 'list syntax rules')
+
