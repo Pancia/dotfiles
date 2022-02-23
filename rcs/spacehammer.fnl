@@ -20,7 +20,7 @@
 (local common-keys
        [{:mods [:ctrl]
          :key :space
-         :action "lib.modal:activate-modal"}
+         :action "lib.modal:toggle-modal"}
         {:mods [:alt]
          :key :tab
          :action "apps:next-app"}
