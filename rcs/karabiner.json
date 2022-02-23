@@ -33,7 +33,7 @@
                         ]
                     },
                     {
-                        "description": "right shift alone = escape",
+                        "description": "right shift alone = right control + spacebar",
                         "manipulators": [
                             {
                                 "from": {
@@ -45,27 +45,6 @@
                                     }
                                 ],
                                 "to_if_alone": [
-                                    {
-                                        "key_code": "escape"
-                                    }
-                                ],
-                                "type": "basic"
-                            }
-                        ]
-                    },
-                    {
-                        "description": "right shift + space = ctrl + space",
-                        "manipulators": [
-                            {
-                                "from": {
-                                    "key_code": "spacebar",
-                                    "modifiers": {
-                                        "mandatory": [
-                                            "right_shift"
-                                        ]
-                                    }
-                                },
-                                "to": [
                                     {
                                         "key_code": "spacebar",
                                         "modifiers": ["right_control"]
