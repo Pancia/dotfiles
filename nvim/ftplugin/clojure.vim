@@ -56,7 +56,8 @@ nnoremap <buffer><silent> ,cs :ConjureConnect 9000<CR>
 call COMMA_GROUP('f', '+ filament / fulcro')
 call COMMA_CMD('fg', 'RunCLJDevEval("start")')
 call COMMA_CMD('fs', 'RunCLJDevEval("stop")')
-call COMMA_CMD('fr', 'RunCLJDevEval("restart")')
+call COMMA_CMD('fR', 'RunCLJDevEval("restart")')
+call COMMA_CMD('fr', 'RunCLJDevEval("suspend-and-resume")')
 
 nnoremap <buffer><expr> <esc> bufname('') =~ 'conjure-log-\d\+.cljc' ? ':normal ,lq<CR>' : '<esc>'
 
