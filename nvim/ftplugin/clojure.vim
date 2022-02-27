@@ -49,7 +49,16 @@ call COMMA_GROUP('t', '+ tests')
 call COMMA_CMD('tt', 'KaochaRunTest()')
 nnoremap ,tt :call KaochaRunTest()<CR>
 
+function! ShadowBuilds(A,L,P)
+    return system("shadow-builds")
+endfunction
+
+function! ConnectToShadowBuild(input) abort
+  execute ':ConjureShadowSelect '. a:input
+endfunction
+
 call COMMA_GROUP('c', '+ connections')
+call COMMA_CMD('cc', 'ConnectToShadowBuild(input("ShadowBuild: ", "", "custom,ShadowBuilds"))', 'select shadow build to connect to')
 call COMMA_CMD('cs', ':ConjureConnect 9000', 'connect conjure to shadow')
 nnoremap <buffer><silent> ,cs :ConjureConnect 9000<CR>
 

@@ -1,0 +1,9 @@
+#!/bin/bash
+
+function main {
+    local gitroot=$(git rev-parse --show-toplevel "$@")
+    find "${gitroot}/.shadow-cljs" -name '*.status' \
+        -exec basename {} .status \;
+}
+
+main 2> /dev/null
