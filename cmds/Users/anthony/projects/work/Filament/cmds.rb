@@ -2,7 +2,14 @@ module CMD
   def shadow(opts)
     lambda { |*args|
       EXE.system %{
-        shadow-cljs watch main
+        shadow-cljs watch electron-main electron-renderer
+      }
+    }
+  end
+  def electron(opts)
+    lambda { |*args|
+      EXE.system %{
+        wait-for .shadow-cljs/electron-renderer.status electron .
       }
     }
   end
