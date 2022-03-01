@@ -1,4 +1,5 @@
 == MAIN ==
+- [X] 'd'ir or 'b'ookmark command for cd to paths
 - [ ] install script (manual -> auto, & validate step success)
 - [ ] luarocks path into zsh/extra.zsh
 - [ ] fix zshenv eval brew shellenv, bin not at path
