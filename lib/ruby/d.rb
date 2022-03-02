@@ -36,7 +36,16 @@ class CMDS
       bookmarks = Dir["#{$home_dir}/.config/d/#{args[0] or "*"}"].map{|r|File.basename(r)}.sort
       max_len = bookmarks.max_by(&:length).length
       bookmarks.each { |bookmark|
-        puts("%-#{max_len}s -> %s" % [bookmark, File.read("#{bookmark_file(bookmark)}")])
+        puts("%-#{max_len}s -> %s" % [bookmark, File.read(bookmark_file(bookmark))])
+      }
+    }
+  end
+  def self.export(opts)
+    opts.info = "Export bookmarks for zsh."
+    lambda { |*args|
+      bookmarks = Dir["#{$home_dir}/.config/d/#{args[0] or "*"}"].map{|r|File.basename(r)}
+      bookmarks.each { |b|
+        puts("d_%s=%s" % [b, File.read(bookmark_file(b)).chomp])
       }
     }
   end
