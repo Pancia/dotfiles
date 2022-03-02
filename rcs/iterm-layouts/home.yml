@@ -4,5 +4,5 @@ windows:
     root: ~
     layout: even-horizontal
     panes:
-      - q dot && vim wiki/TODO.wiki
-      - q dropbox && vim wiki/Tasks.wiki homeboard/TODO.wiki
+      - d dot && vim wiki/TODO.wiki
+      - d dropbox && vim wiki/Tasks.wiki homeboard/TODO.wiki
