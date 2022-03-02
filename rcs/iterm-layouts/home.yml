@@ -1,6 +1,11 @@
 # <[.itermocil/home.yml]>
 windows:
-  - name: home
+  - name: home_1
+    root: ~
+    layout: even-horizontal
+    panes:
+      - cmus
+  - name: home_2
     root: ~
     layout: even-horizontal
     panes:
