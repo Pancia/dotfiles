@@ -23,22 +23,6 @@ let g:clojure_fuzzy_indent_blacklist = []
 
 call COMMA_GROUP('v', '+ view / reveal')
 
-function! ResolveSymbol()
-  call luaeval("require('conjure.client')['with-filetype']('clojure', require('conjure.eval')['eval-str'], { origin = 'dotfiles/clojuredocs', code = '(do {:conjure-highlight/silent true} `".expand("<cword>").")', ['passive?'] = true, ['on-result'] = function(sym) vim.api.nvim_command('call OpenClojureDocs(\"'..sym..'\")') end})")
-endfunction
-
-function! OpenClojureDocs(fqsym)
-  echomsg "open clojure docs for: " . a:fqsym
-  let [l:ns, l:sym] = split(a:fqsym, "/")
-  if l:ns =~? 'clojure\..*'
-    execute "!open 'https://clojuredocs.org/".l:ns."/".l:sym."'"
-  else
-    execute "!open 'https://www.google.com/search?q=".a:fqsym."'"
-  endif
-endfunction
-
-call COMMA_CMD('vd', 'ResolveSymbol()', 'open clojuredocs for symbol at cursor')
-
 call COMMA_CMD('vc', ":ConjureEval {:vlaaad.reveal/command '(clear-output)}", 'clear reveal output')
 
 function! KaochaRunTest()

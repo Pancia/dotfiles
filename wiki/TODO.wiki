@@ -1,10 +1,14 @@
 == MAIN ==
+- [ ] disable other keybinds in spacehammer
+    - [ ] filter static list of all keys with to bind
+- [ ] remove fennel usage, is not worth it
+- [ ] cmus menubar to pause/play
+- [ ] which-key still always showing menu even if quick typing
+
+== BACKLOG (in alphabetical order) ==
 - [ ] install script (manual -> auto, & validate step success)
 - [ ] luarocks path into zsh/extra.zsh
 - [ ] fix zshenv eval brew shellenv, bin not at path
-- [ ] ? disable other characters in spacehammer (is it possible?)
-
-== BACKLOG (in alphabetical order) ==
 - [ ] :nvim: :clojure: gray out unused params #"_\w+"
 - [ ] :nvim: terminal buffer names empty
 - [ ] :zsh: antigen: install using brew

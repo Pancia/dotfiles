@@ -7,7 +7,7 @@
 
 (defn is-user-eval? [{:keys [op file code]}]
   (and file (= op "eval")
-    (not (.startsWith code "(do {:conjure-highlight/silent true}"))))
+    (not (.startsWith code "(do {:silent? true}"))))
 
 (defn tee-transport [{:as msg :keys [transport]}]
   (assoc msg :transport

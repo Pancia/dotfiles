@@ -33,4 +33,3 @@ call SEMICOLON_CMD('sd', ':CocDiagnostics', 'diagnostics')
 call SEMICOLON_CMD('sc', ':CocCommand', 'commands')
 call SEMICOLON_CMD('so', ':CocOutline', 'outline')
 call SEMICOLON_CMD('sg', ':CocOpenLog', 'debug log')
-

@@ -1,0 +1,10 @@
+{"__rc_loc": "<[.config/nvim/coc-settings.json]>",
+    "languageserver": {
+        "clojure-lsp": {
+            "command": "clojure-lsp",
+            "filetypes": ["clojure"],
+            "rootPatterns": ["deps.clj"]
+        }
+    },
+    "semanticTokens.filetypes": ["clojure"]
+}

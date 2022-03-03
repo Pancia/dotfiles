@@ -67,11 +67,10 @@ Plug 'neoclide/coc.nvim', {'branch': 'release'}
 " }}}
 
 " CLOJURE {{{
-Plug 'Olical/conjure', {'for': ['clojure', 'fennel'], 'tag': 'v4.18.0'}
+Plug 'Olical/conjure', {'for': ['clojure', 'fennel'], 'tag': 'v4.30.1'}
 Plug 'guns/vim-clojure-static', {'for': 'clojure'}
 Plug 'guns/vim-sexp', {'for': ['clojure', 'fennel']}
 Plug 'luochen1990/rainbow'
-Plug '~/dotfiles/lib/vim/conjure-highlight'
 Plug '~/projects/work/copilot/editor-plugins/vim'
 " }}}
 

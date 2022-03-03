@@ -10,4 +10,4 @@ windows:
     layout: even-horizontal
     panes:
       - d dot && vim wiki/TODO.wiki
-      - d dropbox && vim wiki/Tasks.wiki homeboard/TODO.wiki
+      - d dot && gs
