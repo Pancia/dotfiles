@@ -1,6 +1,6 @@
 local obj = {}
 
-local lib = os.getenv("HOME").."/dotfiles/lib/fennel/lib"
+local lib = os.getenv("HOME").."/dotfiles/lib/lua/lib"
 
 local width = 640 + 20
 local height = 320

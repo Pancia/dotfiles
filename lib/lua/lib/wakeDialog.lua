@@ -44,7 +44,7 @@ end
 
 function obj:start()
     if not obj._systemWatcher then
-        obj._systemWatcher = hs.caffeinate.watcher.new(watchSystem):start()
+        -- FIXME obj._systemWatcher = hs.caffeinate.watcher.new(watchSystem):start()
     end
 end
 

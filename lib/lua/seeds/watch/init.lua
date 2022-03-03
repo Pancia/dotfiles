@@ -1,6 +1,6 @@
 local obj = {}
 
-obj.spoonPath = os.getenv("HOME").."/dotfiles/lib/fennel/seeds/watch/"
+obj.spoonPath = os.getenv("HOME").."/dotfiles/lib/lua/seeds/watch/"
 
 obj.scripts = {}
 obj.interval = 60

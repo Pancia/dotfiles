@@ -14,8 +14,8 @@
 
 (fn toggle-console []
   (if-let [console (hs.console.hswindow)]
-   (hs.closeConsole)
-   (hs.openConsole)))
+    (hs.closeConsole)
+    (hs.openConsole)))
 
 (local common-keys
        [{:mods [:ctrl]
@@ -178,54 +178,54 @@
        [return
         {:key :c
          :title "Play or Pause"
-         :action cmus.play-or-pause}
+         :action cmus.playOrPause}
         {:key :e
          :title "Edit Track"
-         :action cmus.edit-track}
+         :action cmus.editTrack}
         {:key :s
          :title "Select Track by Playlist"
-         :action cmus.select-by-playlist}
+         :action cmus.selectByPlaylist}
         {:key :t
          :title "Select Track by Tags"
-         :action cmus.select-by-tags}
+         :action cmus.selectByTags}
         {:key :n
          :title "Next Track"
-         :action cmus.next-track
+         :action cmus.nextTrack
          :repeatable true
          :timeout false}
         {:key :p
          :title "Prev Track"
-         :action cmus.prev-track
+         :action cmus.prevTrack
          :repeatable true
          :timeout false}
         {:key :l
          :title "Seek 10 Forwards"
-         :action (cmus.seek-forwards 10)
+         :action (cmus:seekForwards 10)
          :repeatable true
          :timeout false}
         {:key :h
          :title "Seek 10 Backwards"
-         :action (cmus.seek-backwards 10)
+         :action (cmus:seekBackwards 10)
          :repeatable true
          :timeout false}
         {:key "."
          :title "Seek 30 Forwards"
-         :action (cmus.seek-forwards 30)
+         :action (cmus:seekForwards 30)
          :repeatable true
          :timeout false}
         {:key ","
          :title "Seek 30 Backwards"
-         :action (cmus.seek-backwards 30)
+         :action (cmus:seekBackwards 30)
          :repeatable true
          :timeout false}
         {:key :j
          :title "Volume Down"
-         :action cmus.dec-volume
+         :action cmus.decVolume
          :repeatable true
          :timeout false}
         {:key :k
          :title "Volume Up"
-         :action cmus.inc-volume
+         :action cmus.incVolume
          :repeatable true
          :timeout false}])
 

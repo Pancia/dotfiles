@@ -3,7 +3,7 @@ local wake = require("lib/wakeDialog")
 
 local obj = {}
 
-obj.spoonPath = os.getenv("HOME").."/dotfiles/lib/fennel/seeds/lotus/"
+obj.spoonPath = os.getenv("HOME").."/dotfiles/lib/lua/seeds/lotus/"
 
 obj.interval = { minutes = 30 }
 
