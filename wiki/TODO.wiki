@@ -1,6 +1,4 @@
 == MAIN ==
-- [ ] disable other keybinds in spacehammer
-    - [ ] filter static list of all keys with to bind
 
 == BACKLOG (in alphabetical order) ==
 - [ ] install script (manual -> auto, & validate step success)
