@@ -86,7 +86,7 @@ function obj:incVolume()
     if isActive() and isPlaying() then
         cmusRemote("--volume +5")
     else
-        incOSXVolume()
+        obj:incOSXVolume()
     end
 end
 
@@ -94,7 +94,7 @@ function obj:decVolume()
     if isActive() and isPlaying() then
         cmusRemote("--volume -5")
     else
-        decOSXVolume()
+        obj:decOSXVolume()
     end
 end
 
