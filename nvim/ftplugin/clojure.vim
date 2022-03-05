@@ -122,7 +122,7 @@ call COMMA_CMD('gcR', 'copilot#refresh_and_check_root_form()')
 " LANDMARK: ======== FILAMENT ========
 
 function! FilamentOpenDocForWord()
-  call luaeval("require('conjure.client')['with-filetype']('clojure', require('conjure.eval')['eval-str'], { origin = 'dotfiles/clojuredocs', code = '(dev.filament.plugin.built-ins.wikidocs/doc ".expand("<cword>").")', ['passive?'] = true})")
+  call luaeval("require('conjure.client')['with-filetype']('clojure', require('conjure.eval')['eval-str'], { origin = 'dotfiles/clojuredocs', code = '(dev.filament.plugin.built-ins.wikidocs/doc! ".expand("<cword>").")', ['passive?'] = true})")
 endfunction
 
 call COMMA_CMD('fk', 'FilamentOpenDocForWord()')

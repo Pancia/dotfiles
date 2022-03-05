@@ -14,7 +14,7 @@ Plug 'tpope/vim-dispatch'
 " ESSENTIALS {{{
 Plug 'liuchengxu/vim-which-key'
 Plug 'w0rp/ale' "Async Lint Engine
-Plug 'bling/vim-airline' " Status Bar
+Plug 'vim-airline/vim-airline' " Status Bar
 Plug 'ntpeters/vim-better-whitespace'
 Plug 'tpope/vim-repeat'
 Plug 'tpope/vim-speeddating'

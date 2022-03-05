@@ -1,7 +1,6 @@
 == MAIN ==
 - [ ] disable other keybinds in spacehammer
     - [ ] filter static list of all keys with to bind
-- [ ] which-key still always showing menu even if quick typing
 
 == BACKLOG (in alphabetical order) ==
 - [ ] install script (manual -> auto, & validate step success)
