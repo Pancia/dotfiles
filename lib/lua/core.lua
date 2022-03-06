@@ -43,18 +43,18 @@ local lotus = engage("seeds.lotus.init", {
     {
       name  = "short",
       path  = "bowl.wav",
-      notif = notif("Quick Stretch! #short")
+      notif = notif("Change position! #short")
     },
     {
       name  = "short",
       path  = "bowl.wav",
-      notif = notif("Quick Stretch! #short")
+      notif = notif("Change position! #short")
     },
     {
       name   = "long",
       path   = "gong.wav",
       volume = .5,
-      notif  = notif("Take a walk! #long")
+      notif  = notif("Do some squats! #long")
     }
   }
 })

@@ -21,7 +21,11 @@ module MusicCMD
     when edit_me.include?(field) || ["tags", "marked"].include?(field)
       RbReadline.prefill_prompt(edit_me[field].to_s)
       new_entry = Readline.readline((field+">?:").reverse).chomp
-      edit_me[field] = new_entry
+      if new_entry.empty? then
+        edit_me.delete(field)
+      else
+        edit_me[field] = new_entry
+      end
     when "" == field
       return
     else
