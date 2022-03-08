@@ -114,6 +114,18 @@ function obj:editTrack()
     end
 end
 
+function obj:openInAudacity()
+    if isActive() and isPlaying() then
+        hs.execute("cmaudacity", true)
+    end
+end
+
+function obj:ytdlTrack()
+    if isActive() and isPlaying() then
+        hs.execute("cmytdl", true)
+    end
+end
+
 function obj:selectByPlaylist()
     if isActive() then
         hs.execute("cmselect", true)

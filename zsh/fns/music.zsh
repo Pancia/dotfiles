@@ -1,3 +1,4 @@
+# NOTE used by [[~/dotfiles/lib/lua/seeds/cmus.lua]]
 function __ytdl_id() {
     search="$(music show -f '.id' --yt-search $1)"
     echo $search

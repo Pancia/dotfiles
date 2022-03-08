@@ -208,6 +208,12 @@
      {:key :e
       :title "Edit Track"
       :action cmus.editTrack}
+     {:key :y
+      :title "Redownload from Youtube"
+      :action cmus.ytdlTrack}
+     {:key :a
+      :title "Open Track in Audacity"
+      :action cmus.openInAudacity}
      {:key :s
       :title "Select Track by Playlist"
       :action cmus.selectByPlaylist}

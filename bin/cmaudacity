@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+uuid=$(cmus-remote --raw status \
+    | ag 'file ' \
+    | sed 's/file //' \
+    | xargs basename \
+    | sed 's/\..*$//')
+
+open -a audacity $MUSIC_DIR/$uuid.m4a
