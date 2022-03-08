@@ -28,13 +28,13 @@ end
 
 function obj:playOrPause()
     if isActive() then
+        -- NOTE: --pause toggles play/pause
+        cmusRemote("--pause")
         if isPlaying() then
             obj._menubar:setTitle("🎵▶️")
         else
             obj._menubar:setTitle("🎵⏸")
         end
-        -- NOTE: --pause toggles play/pause
-        cmusRemote("--pause")
     end
 end
 

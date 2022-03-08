@@ -193,7 +193,11 @@
     (each [i letter (ipairs alphabet)]
       (if (not (. tbl letter))
         (tset tbl letter (empty letter))))
-    (icollect [k v (pairs tbl)] v)))
+    (let [coll (icollect [k v (pairs tbl)] v)]
+      (table.sort coll
+        (fn [x y]
+          (< (. x :key) (. y :key))))
+      coll)))
 
 (local media-bindings
   (without-remaining-keys
