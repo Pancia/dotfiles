@@ -44,7 +44,7 @@ endfunction
 call COMMA_GROUP('c', '+ connections')
 call COMMA_CMD('cc', 'ConnectToShadowBuild(input("ShadowBuild: ", "", "custom,ShadowBuilds"))', 'select shadow build to connect to')
 call COMMA_CMD('cs', ':ConjureConnect 9000', 'connect conjure to shadow')
-nnoremap <buffer><silent> ,cs :ConjureConnect 9000<CR>
+call COMMA_CMD('cq', ':ConjureCljSessionClose', 'close current conjure session')
 
 call COMMA_GROUP('f', '+ filament / fulcro')
 call COMMA_CMD('fg', 'RunCLJDevEval("start")')
@@ -122,7 +122,7 @@ call COMMA_CMD('gcR', 'copilot#refresh_and_check_root_form()')
 " LANDMARK: ======== FILAMENT ========
 
 function! FilamentOpenDocForWord()
-  call luaeval("require('conjure.client')['with-filetype']('clojure', require('conjure.eval')['eval-str'], { origin = 'dotfiles/clojuredocs', code = '(dev.filament.plugin.built-ins.wikidocs/doc! ".expand("<cword>").")'})")
+  execute "ConjureEval (dev.freeformsoftware.filament.plugin.built-ins.wikidocs/doc! ".expand("<cword>").")"
 endfunction
 
 call COMMA_CMD('fk', 'FilamentOpenDocForWord()')
