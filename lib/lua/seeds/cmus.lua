@@ -109,19 +109,19 @@ function bindMediaKeys()
 end
 
 function obj:editTrack()
-    if isActive() and isPlaying() then
+    if isActive() then
         hs.execute("cmedit", true)
     end
 end
 
 function obj:openInAudacity()
-    if isActive() and isPlaying() then
+    if isActive() then
         hs.execute("cmaudacity", true)
     end
 end
 
 function obj:ytdlTrack()
-    if isActive() and isPlaying() then
+    if isActive() then
         hs.execute("cmytdl", true)
     end
 end
