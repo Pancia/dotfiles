@@ -23,7 +23,7 @@ Plug 'mbbill/undotree'
 Plug 'kshenoy/vim-signature' " Marks
 Plug 'junegunn/vim-peekaboo' " Preview Registers
 Plug 'RRethy/vim-illuminate' " Highlight cursor word matches
-Plug 'mhinz/vim-signify' " git gutter
+Plug 'airblade/vim-gitgutter'
 Plug 'junegunn/vim-easy-align'
 " }}}
 
