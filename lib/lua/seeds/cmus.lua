@@ -31,9 +31,9 @@ function obj:playOrPause()
         -- NOTE: --pause toggles play/pause
         cmusRemote("--pause")
         if isPlaying() then
-            obj._menubar:setTitle("🎵▶️")
+            obj._playPauseMenu:setTitle("🎵▶️")
         else
-            obj._menubar:setTitle("🎵⏸")
+            obj._playPauseMenu:setTitle("🎵⏸")
         end
     end
 end
@@ -149,9 +149,15 @@ end
 function obj:start(config)
     wake:onSleep(onSleep):start()
     bindMediaKeys()
-    obj._menubar = hs.menubar.new()
-    obj._menubar:setTitle("🎵⏸")
-    obj._menubar:setClickCallback(obj.playOrPause)
+    obj._nextMenu = hs.menubar.new()
+    obj._nextMenu:setTitle("⏭")
+    obj._nextMenu:setClickCallback(obj.nextTrack)
+    obj._playPauseMenu = hs.menubar.new()
+    obj._playPauseMenu:setTitle("🎵⏸")
+    obj._playPauseMenu:setClickCallback(obj.playOrPause)
+    obj._prevMenu = hs.menubar.new()
+    obj._prevMenu:setTitle("⏮")
+    obj._prevMenu:setClickCallback(obj.prevTrack)
 end
 
 return obj
