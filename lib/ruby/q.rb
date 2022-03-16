@@ -46,6 +46,12 @@ class CMDS
       execute("zsh -ic 'trash #{reg_file(name)}'")
     }
   end
+  def self.editreg(opts)
+    opts.info = "Edit a register using $EDITOR."
+    lambda { |name|
+      execute("$EDITOR #{reg_file(name)}")
+    }
+  end
 end
 
 # NOTE: [[~/dotfiles/wiki/zsh_completion.wiki]]

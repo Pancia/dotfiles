@@ -55,6 +55,12 @@ class CMDS
       execute("zsh -ic 'trash #{bookmark_file(name)}'")
     }
   end
+  def self.editbookmark(opts)
+    opts.info = "Edit a bookmark using $EDITOR."
+    lambda { |name|
+      execute("$EDITOR #{bookmark_file(name)}")
+    }
+  end
 end
 
 # NOTE: [[~/dotfiles/wiki/zsh_completion.wiki]]
