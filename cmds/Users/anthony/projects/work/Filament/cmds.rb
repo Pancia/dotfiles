@@ -16,7 +16,7 @@ module CMD
   def repl(opts)
     lambda { |*args|
       EXE.system %{
-        clj -A:local/nREFL:dev:test #{args.join " "}
+        clj -A:local/nREPL:dev:test #{args.join " "}
       }
     }
   end
