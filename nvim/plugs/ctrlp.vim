@@ -8,3 +8,8 @@ let g:ctrlp_mruf_relative = 1
 
 nmap <C-R> :CtrlPBuffer<CR>
 nmap <C-T> :CtrlPTag<CR>
+
+let g:ctrlp_prompt_mappings = {
+            \ 'PrtSelectMove("j")': ['<c-j>'],
+            \ 'PrtSelectMove("k")': ['<c-k>'],
+            \}

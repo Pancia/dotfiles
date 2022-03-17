@@ -1,5 +1,5 @@
 == MAIN ==
-- [ ] :nvim: disable arrows in ctrlp
+- [X] :nvim: disable arrows in ctrlp
 
 == BACKLOG (in alphabetical order) ==
 - [ ] :install: how to backup system preferences? eg keyboard shortcuts?
