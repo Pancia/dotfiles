@@ -13,6 +13,13 @@ module CMD
       }
     }
   end
+  def vim(opts)
+    lambda { |*args|
+      EXE.system %{
+        nvim --listen filament.socket #{args.join " "}
+      }
+    }
+  end
   def repl(opts)
     lambda { |*args|
       EXE.system %{
@@ -23,9 +30,9 @@ module CMD
   def test(opts)
     lambda { |*args|
       EXE.system %{
-        clojure -A:dev:test:spec-dev \
+        clj -A:dev:test:local/spec-dev \
           -m kaocha.runner \
-          --watch \
+          :clojure-unit \
           #{args.join " "}
       }
     }

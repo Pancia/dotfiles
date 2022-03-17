@@ -1,9 +1,11 @@
 == MAIN ==
+- [ ] :nvim: disable arrows in ctrlp
 
 == BACKLOG (in alphabetical order) ==
-- [ ] install script (manual -> auto, & validate step success)
-- [ ] luarocks path into zsh/extra.zsh
-- [ ] fix zshenv eval brew shellenv, bin not at path
+- [ ] :install: how to backup system preferences? eg keyboard shortcuts?
+- [ ] :install: install script (manual -> auto, & validate step success)
+- [ ] :lua: :zsh: luarocks path into zsh/extra.zsh
+- [ ] :zsh: fix zshenv eval brew shellenv, bin not at path
 - [ ] :nvim: :clojure: gray out unused params #"_\w+"
 - [ ] :nvim: terminal buffer names empty
 - [ ] :zsh: antigen: install using brew
