@@ -41,10 +41,14 @@ function! ConnectToShadowBuild(input) abort
   execute ':ConjureShadowSelect '. a:input
 endfunction
 
+function! ConnectToShadow() abort
+    execute ':ConjureConnect '. readfile(trim(system("git rev-parse --show-toplevel"))."/.shadow-cljs/nrepl.port")[0]
+endfunction
+
 call COMMA_GROUP('c', '+ connections')
 call COMMA_CMD('cc', 'ConnectToShadowBuild(input("ShadowBuild: ", "", "custom,ShadowBuilds"))', 'select shadow build to connect to')
-call COMMA_CMD('cs', ':ConjureConnect 9000', 'connect conjure to shadow')
-call COMMA_CMD('cq', ':ConjureCljSessionClose', 'close current conjure session')
+call COMMA_CMD('cs', 'ConnectToShadow()', 'connect conjure to shadow')
+call COMMA_CMD('cq', ':ConjureEval :cljs/quit', 'quit current shadow build')
 
 call COMMA_GROUP('f', '+ filament / fulcro')
 call COMMA_CMD('fg', 'RunCLJDevEval("start")')
