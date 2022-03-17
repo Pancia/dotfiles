@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
 echo "file: $1"
 echo "line: $2"
-nvr --servername filament.socket --remote-send ":e $1<CR>" -c "${2:-0}"
+nvr --servername /tmp/filament.socket --remote-send ":e $1<CR>" -c "${2:-0}"
 osascript -e 'tell application "iTerm" to activate'
