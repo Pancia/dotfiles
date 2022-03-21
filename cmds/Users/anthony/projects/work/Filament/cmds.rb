@@ -2,7 +2,9 @@ module CMD
   def shadow(opts)
     lambda { |*args|
       EXE.system %{
-        shadow-cljs watch test electron-main electron-renderer
+        shadow-cljs watch test \
+          electron-background electron-renderer \
+          electron-meta-devtools
       }
     }
   end
