@@ -1,4 +1,6 @@
 == MAIN ==
+- [ ] disable spacehammer other keys on keyboard
+    - [ ] ie: nums & symbols ,./;'[]-=`1234567890
 
 == BACKLOG (in alphabetical order) ==
 - [ ] :install: how to backup system preferences? eg keyboard shortcuts?

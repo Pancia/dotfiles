@@ -1,9 +1,5 @@
 function reset { tput reset }
 
-function vim { TERM_TYPE=nvim nvim --listen /tmp/`basename $(pwd)`.socket "$@" }
-
-function vimrc { vim ~/dotfiles/nvim/init.vim }
-function zshrc { vim ~/dotfiles/zsh/zshrc }
 function .zshrc { exec zsh }
 function .zsh { exec zsh }
 

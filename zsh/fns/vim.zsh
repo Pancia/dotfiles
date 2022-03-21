@@ -1,3 +1,12 @@
+function vim {
+    if [[ -e .nvim.listen ]]; then
+        local socket="$(cat .nvim.listen)"
+    else
+        local socket="/tmp/`basename $(pwd)`.socket"
+    fi
+    TERM_TYPE=nvim nvim --listen $socket "$@"
+}
+
 function vim_startuptime {
     local timestamp="$(date +%s%N)"
     local log_file="/tmp/vim-startup/$timestamp.log"
