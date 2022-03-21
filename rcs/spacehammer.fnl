@@ -182,15 +182,17 @@
    :timeout false
    :action nothing})
 
-(local alphabet
+(local ignore-keys
   [:a :b :c :d :e :f :g :h :i :j :k :l :m
-   :n :o :p :q :r :s :t :u :v :w :x :y :z])
+   :n :o :p :q :r :s :t :u :v :w :x :y :z
+   "`" "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "-" "="
+   "," "." "/" ";" "'" "[" "]" "\\"])
 
 (fn without-remaining-keys [keybinds]
   (let [tbl {}]
     (each [i bind (ipairs keybinds)]
       (tset tbl (. bind :key) bind))
-    (each [i letter (ipairs alphabet)]
+    (each [i letter (ipairs ignore-keys)]
       (if (not (. tbl letter))
         (tset tbl letter (empty letter))))
     (let [coll (icollect [k v (pairs tbl)] v)]
