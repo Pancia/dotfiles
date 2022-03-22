@@ -1,15 +1,19 @@
-nmap <C-P> :GFiles<CR>
+command! Project :GFiles --other --exclude-standard --cached
+
+nmap <C-P> :Project<CR>
+
+call SEMICOLON_CMD(';', ':Commands', 'FZF Commands')
 
 call SEMICOLON_GROUP('f', '+fzf')
 
 call SEMICOLON_CMD('f:', ':Commands', 'FZF Commands')
 call SEMICOLON_CMD('fb', ':Buffers', 'FZF Buffers')
 call SEMICOLON_CMD('ff', ':Files', 'FZF Files')
-call SEMICOLON_CMD('fg', ':GFiles', 'FZF Git files')
+call SEMICOLON_CMD('fg', ':Project', 'FZF Git files')
 call SEMICOLON_CMD('fh', ':Helptags', 'FZF Helptags')
 call SEMICOLON_CMD('fk', ':Marks', 'FZF Marks')
 call SEMICOLON_CMD('fm', ':Maps', 'FZF Mappings')
-call SEMICOLON_CMD('fp', ':GFiles', 'FZF TODO WIP Project')
+call SEMICOLON_CMD('fp', ':Project', 'FZF Project files')
 call SEMICOLON_CMD('fw', ':Windows', 'FZF Windows')
 
 call SEMICOLON_GROUP('fH', 'FZF History')
