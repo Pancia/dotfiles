@@ -26,6 +26,13 @@ call SEMICOLON_GROUP('gg', '+git gutter')
 call SEMICOLON_CMD('ggp', ':GitGutterPreviewHunk', 'View Changes')
 call SEMICOLON_CMD('gga', ':GitGutterStageHunk', 'Stage Hunk')
 
+call SEMICOLON_GROUP('gh', '+git history')
+call SEMICOLON_CMD('gha', ':Commits', 'FZF all Git Commits')
+call SEMICOLON_CMD('ghb', ':BCommits', 'FZF Git Commits involving buffer')
+
+
+call SEMICOLON_CMD('gl', ':Git log --graph --all --abbrev-commit | normal gg', 'view log')
+
 
 call SEMICOLON_GROUP('gp', '+git push')
 call SEMICOLON_CMD('gpp', ':Git push', 'Push')

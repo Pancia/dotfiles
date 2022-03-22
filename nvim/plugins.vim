@@ -37,7 +37,9 @@ Plug 'dyng/ctrlsf.vim' " -> plugs/grep.vim
 " }}}
 
 " WIKI {{{
-Plug 'vimwiki/vimwiki', {'for': 'vimwiki'}
+Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
+Plug 'junegunn/fzf.vim'
+Plug 'vimwiki/vimwiki'
 " }}}
 
 " {{{ GIT
@@ -59,7 +61,6 @@ Plug 'norcalli/nvim-colorizer.lua'
 Plug 'ncm2/float-preview.nvim'
 Plug 'Shougo/neco-syntax'
 Plug 'Shougo/neco-vim'
-Plug 'ctrlpvim/ctrlp.vim'
 Plug 'Shougo/unite.vim'
 Plug 'Shougo/unite-help'
 Plug 'Shougo/neoyank.vim'

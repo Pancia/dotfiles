@@ -1,9 +1,10 @@
 function! SetCursorToLastKnownPosition()
-    let [line,column] = searchpos("RESUMEHERE")
-    if l:line !~ 0
+    if &filetype =~ '' || &filetype =~ 'git\|help\|commit\c'
+    elseif l:line !~ 0
+        let [line,column] = searchpos("RESUMEHERE")
         "escape, go to line, go to column 0 then go right l:column times
         call feedkeys("\<C-\>\<C-n>".l:line."G0".(l:column-1)."l", 'n')
-    elseif &filetype !~ '' && &filetype !~ 'git\|help\|commit\c'
+    else
         if line("'\"") > 1 && line("'\"") <= line("$")
             exe "normal! g`\""
         endif
@@ -12,7 +13,7 @@ endfunction
 
 augroup Essentials
     au!
-    au BufEnter * call SetCursorToLastKnownPosition()
+    au BufEnter * silent! call SetCursorToLastKnownPosition()
     au BufEnter * silent! lcd %:p:h " Eqv to `set autochdir`
 augroup END
 
@@ -33,11 +34,11 @@ augroup END
 augroup Terminal
     au!
     au TermOpen * setlocal bufhidden=hide
-    autocmd BufLeave term://* if len(get(b:, 'term_title', ''))
-                \| execute 'file '
-                \. matchstr(expand('<afile>'), 'term://(.{-}//(\d+:)?)?\ze.*')
-                \. escape('term://'.b:terminal_job_pid.'/'.b:term_title, ' ')
-                \| endif
+   "autocmd BufLeave term://* if len(get(b:, 'term_title', ''))
+   "            \| execute 'file '
+   "            \. matchstr(expand('<afile>'), 'term://(.{-}//(\d+:)?)?\ze.*')
+   "            \. escape('term://'.b:terminal_job_pid.'/'.b:term_title, ' ')
+   "            \| endif
     au TermOpen * redraw
 augroup END
 

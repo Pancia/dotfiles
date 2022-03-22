@@ -5,12 +5,7 @@ call which_key#register('\', "g:unite_which_key_map")
 let g:unite_which_key_map = {
             \ 'name' : '+unite' ,
             \ ' ' : [':Unite source', '#source'],
-            \ '/' : [':Unite grep/git:/', 'git grep at project root'],
-            \ ':' : [':Unite command mapping', 'search #commands'],
-            \ 'b' : [':Unite buffer', '#buffer'],
-            \ 'h' : [':Unite help', '#help'],
             \ 'p' : [':Unite history/yank', '#yank #paste'],
-            \ 's' : [':Unite grep/git:/', 'git grep at project root'],
             \ 'u' : [':UndotreeToggle', 'UndoTree'],
             \ 'y' : [':Unite history/yank', '#yank #paste'],
             \ }

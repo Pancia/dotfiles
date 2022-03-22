@@ -1,6 +1,6 @@
 let g:vimwiki_list = [
             \{'path': '~/Dropbox/wiki', 'path_html': '~/Dropbox/wiki', 'auto_tags': 1, 'auto_export': 1 },
-            \{'path': '~/dotfiles/wiki', 'auto_tags': 1 }
+            \{'path': '~/dotfiles/wiki', 'auto_tags': 1, 'ext': '.wiki' }
             \]
 
 let g:vimwiki_map_prefix = ','

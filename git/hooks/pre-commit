@@ -25,8 +25,8 @@ if [[ -n "$markers" ]]; then
     exit 15
 fi
 
-git flow config &> /dev/null \
-  || echo "[pre-commit/WARNING]: Not a gitflow-enabled repo yet. Please run 'git flow init' first."
+#git flow config &> /dev/null \
+#  || echo "[pre-commit/WARNING]: Not a gitflow-enabled repo yet. Please run 'git flow init' first."
 
 #local dev_branch="$(git flow config 2> /dev/null | ag -o 'development: (\w+)' | ag -o '\w+$' || echo 'master')"
 #

@@ -27,5 +27,5 @@ nmap <c-k> :bnext<CR>
 nmap <c-j> :bprevious<CR>
 command! BD b#|bd#
 " terminal helpers
-tnoremap <Esc> <C-\><C-n>
+tnoremap <expr> <Esc> (&filetype == "fzf") ? "<Esc>" : "<C-\><C-n>"
 nnoremap ! :!
