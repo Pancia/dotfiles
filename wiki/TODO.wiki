@@ -1,5 +1,6 @@
 == MAIN ==
 - [ ] :watch: timers can go negative, should not happen, refactor to use heartbeat timer instead
+- [ ] :fzf.vim: vertical layout, like ctrlp
 
 == BACKLOG (in alphabetical order) ==
 - [ ] :install: how to backup system preferences? eg keyboard shortcuts?
