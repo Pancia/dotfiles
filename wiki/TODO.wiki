@@ -1,12 +1,19 @@
 == MAIN ==
 - [ ] :watch: timers can go negative, should not happen, refactor to use heartbeat timer instead
 - [ ] add completion for / easymotion (currently only for raw / eg: ,/)
-- [ ] "let g:coc_global_extensions = ['coc-conjure']
+- [ ] nvim-cmp for conjure "let g:coc_global_extensions = ['coc-conjure']
+- [ ] fzf lsp commands ??
 - [ ] https://github.com/tzachar/cmp-fuzzy-buffer
 - [ ] https://github.com/tzachar/cmp-fuzzy-path
 - [ ] https://github.com/phaazon/hop.nvim
 - [ ] https://github.com/rlane/pounce.nvim
 - [ ] https://github.com/rockerBOO/awesome-neovim#terminal-integration
+- [ ] :clojure-lsp: command 'add-import-to-namespace'
+- [ ] :fzf: how to search by file basename (not full path)
+    - [ ] or how to search for continous not fuzzy?
+    - [ ] https://github.com/junegunn/fzf/blob/master/README-VIM.md
+- [ ] show filename not long paths
+    - [ ] https://github.com/junegunn/fzf/issues/1534
 
 
 == BACKLOG (in alphabetical order) ==
