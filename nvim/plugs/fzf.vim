@@ -1,3 +1,6 @@
+let g:fzf_layout = { 'window': { 'width': 1.0, 'height': 0.8 } }
+let g:fzf_preview_window = ['up:50%', 'ctrl-/']
+
 command! Project :GFiles --other --exclude-standard --cached
 
 nmap <C-P> :Project<CR>
