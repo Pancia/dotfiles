@@ -24,6 +24,7 @@ Plug 'junegunn/vim-peekaboo' " Preview Registers
 Plug 'RRethy/vim-illuminate' " Highlight cursor word matches
 Plug 'airblade/vim-gitgutter'
 Plug 'junegunn/vim-easy-align'
+Plug 'numToStr/FTerm.nvim'
 " }}}
 
 " DIR/FILE VIEWER {{{

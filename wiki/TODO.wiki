@@ -3,7 +3,7 @@
 - [ ] https://github.com/tzachar/cmp-fuzzy-path
 - [ ] https://github.com/phaazon/hop.nvim
 - [ ] https://github.com/rlane/pounce.nvim
-- [ ] https://github.com/rockerBOO/awesome-neovim#terminal-integration
+- [ ] https://github.com/wbthomason/packer.nvim
 - [ ] :clojure-lsp: command 'add-import-to-namespace'
 - [ ] :fzf: how to search by file basename (not full path)
     - [ ] or how to search for continous not fuzzy?
