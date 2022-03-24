@@ -3,7 +3,7 @@ let g:vimwiki_list = [
             \{'path': '~/dotfiles/wiki', 'auto_tags': 1, 'ext': '.wiki' }
             \]
 
-let g:vimwiki_map_prefix = ','
+let g:vimwiki_map_prefix = ',w'
 
 function! VimwikiLinkHandler(link)
     " Use Vim to open external files with the 'vfile:' scheme.  E.g.:

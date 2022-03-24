@@ -1,8 +1,4 @@
 == MAIN ==
-- [ ] :watch: timers can go negative, should not happen, refactor to use heartbeat timer instead
-- [ ] add completion for / easymotion (currently only for raw / eg: ,/)
-- [X] nvim-cmp for conjure "let g:coc_global_extensions = ['coc-conjure']
-- [ ] fzf lsp commands ??
 - [ ] https://github.com/tzachar/cmp-fuzzy-buffer
 - [ ] https://github.com/tzachar/cmp-fuzzy-path
 - [ ] https://github.com/phaazon/hop.nvim
@@ -14,9 +10,11 @@
     - [ ] https://github.com/junegunn/fzf/blob/master/README-VIM.md
 - [ ] show filename not long paths
     - [ ] https://github.com/junegunn/fzf/issues/1534
-
+- [ ] add completion for / easymotion (currently only for raw / eg: ,/)
+- [ ] fzf lsp commands ??
 
 == BACKLOG (in alphabetical order) ==
+- [ ] :watch: timers can go negative, should not happen, refactor to use heartbeat timer instead
 - [ ] :install: how to backup system preferences? eg keyboard shortcuts?
 - [ ] :install: install script (manual -> auto, & validate step success)
 - [ ] :lua: :zsh: luarocks path into zsh/extra.zsh
