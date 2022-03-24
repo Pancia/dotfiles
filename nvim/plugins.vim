@@ -13,7 +13,6 @@ Plug 'tpope/vim-dispatch'
 
 " ESSENTIALS {{{
 Plug 'liuchengxu/vim-which-key'
-Plug 'w0rp/ale' "Async Lint Engine
 Plug 'vim-airline/vim-airline' " Status Bar
 Plug 'ntpeters/vim-better-whitespace'
 Plug 'tpope/vim-repeat'
@@ -64,7 +63,16 @@ Plug 'Shougo/neco-vim'
 Plug 'Shougo/unite.vim'
 Plug 'Shougo/unite-help'
 Plug 'Shougo/neoyank.vim'
-Plug 'neoclide/coc.nvim', {'branch': 'release'}
+" }}}
+
+" LSP {{{
+Plug 'neovim/nvim-lspconfig'
+Plug 'gfanto/fzf-lsp.nvim'
+Plug 'hrsh7th/cmp-nvim-lsp'
+Plug 'hrsh7th/cmp-buffer'
+Plug 'hrsh7th/cmp-path'
+Plug 'hrsh7th/cmp-cmdline'
+Plug 'hrsh7th/nvim-cmp'
 " }}}
 
 " CLOJURE {{{

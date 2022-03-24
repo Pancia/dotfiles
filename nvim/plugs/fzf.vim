@@ -6,6 +6,7 @@ command! Project :GFiles --other --exclude-standard --cached
 nmap <C-P> :Project<CR>
 
 call SEMICOLON_CMD(';', ':Commands', 'FZF Commands')
+call SEMICOLON_CMD('h', ':Helptags', 'FZF Helptags')
 
 call SEMICOLON_GROUP('f', '+fzf')
 
