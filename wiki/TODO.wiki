@@ -1,7 +1,7 @@
 == MAIN ==
 - [ ] :watch: timers can go negative, should not happen, refactor to use heartbeat timer instead
 - [ ] add completion for / easymotion (currently only for raw / eg: ,/)
-- [ ] nvim-cmp for conjure "let g:coc_global_extensions = ['coc-conjure']
+- [X] nvim-cmp for conjure "let g:coc_global_extensions = ['coc-conjure']
 - [ ] fzf lsp commands ??
 - [ ] https://github.com/tzachar/cmp-fuzzy-buffer
 - [ ] https://github.com/tzachar/cmp-fuzzy-path

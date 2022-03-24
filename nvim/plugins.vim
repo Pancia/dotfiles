@@ -80,6 +80,7 @@ Plug 'Olical/conjure', {'for': ['clojure', 'fennel'], 'tag': 'v4.30.1'}
 Plug 'guns/vim-clojure-static', {'for': 'clojure'}
 Plug 'guns/vim-sexp', {'for': ['clojure', 'fennel']}
 Plug 'luochen1990/rainbow'
+Plug 'PaterJason/cmp-conjure'
 Plug '~/projects/work/copilot/editor-plugins/vim'
 " }}}
 

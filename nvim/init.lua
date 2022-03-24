@@ -1,5 +1,6 @@
 local HOME = os.getenv("HOME")
 package.path = HOME.."/dotfiles/nvim/lua/?.lua;" .. package.path
+package.path = HOME.."/.config/nvim/plugged/conjure/lua/?.lua;" .. package.path
 
 -- https://github.com/hrsh7th/nvim-cmp#recommended-configuration
 -- https://github.com/neovim/nvim-lspconfig/wiki/Autocompletion#nvim-cmp
@@ -38,6 +39,7 @@ cmp.setup({
     -- https://github.com/hrsh7th/nvim-cmp/wiki/List-of-sources
     sources = cmp.config.sources({
         { name = 'nvim_lsp' },
+        { name = 'conjure' },
         -- { name = 'vsnip' }, -- For vsnip users.
     }, {
         { name = 'buffer' },
