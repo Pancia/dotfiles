@@ -9,6 +9,7 @@ set start_view=sorted
 # %{genre} is used because %{comment} is not recognized
 set format_playlist= %-15{album} | %-15%{artist} > %{title}%= %{?genre?%g} %{duration} .
 set format_current= %{album} | %{artist} > %{title}%=%{?genre?%g}
+set status_display_program=cmus-status-display
 
 unbind -f common t
 unbind -f common m

@@ -1,0 +1,41 @@
+#!/bin/sh
+#
+# NOTE sourced from /opt/homebrew/Cellar/cmus/2.9.1_1/share/doc/cmus/examples
+#
+# cmus-status-display
+#
+# Usage:
+#   in cmus command ":set status_display_program=cmus-status-display"
+#
+# This scripts is executed by cmus when status changes:
+#   cmus-status-display key1 val1 key2 val2 ...
+#
+# All keys contain only chars a-z. Values are UTF-8 strings.
+#
+# Keys: status file url artist album discnumber tracknumber title date
+#   - status (stopped, playing, paused) is always given
+#   - file or url is given only if track is 'loaded' in cmus
+#   - other keys/values are given only if they are available
+#
+
+output() {
+    printf -v args "%q" "$*"
+    local escaped="$(echo $args | sed 's/\\//g')"
+    local command="local port = hs.ipc.remotePort(\"cmus\"); port:sendMessage(\"$escaped\", 123); port:delete()"
+    hs -c "$command"
+}
+
+while test $# -ge 2
+do
+	eval _$1='$2'
+	shift
+	shift
+done
+
+local message=""
+if test -n "$_file"; then
+	printf -v message "%.20s - %.20s" "$_artist" "$_title"
+elif test -n "$_url"; then
+	printf -v message "%.20s - %.20s" "$_url" "$_title"
+fi
+output $message

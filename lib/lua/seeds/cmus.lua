@@ -16,39 +16,22 @@ function isPlaying()
     return string.match(status, "status playing")
 end
 
-function notify()
-    res, status = cmusRemote("--raw status")
-    if status then
-        artist = string.match(res, "tag artist ([^\n]+)")
-        album = string.match(res, "tag album ([^\n]+)")
-        title = string.match(res, "tag title ([^\n]+)")
-        hs.notify.show(title, artist, album)
-    end
-end
-
 function obj:playOrPause()
     if isActive() then
         -- NOTE: --pause toggles play/pause
         cmusRemote("--pause")
-        if isPlaying() then
-            obj._playPauseMenu:setTitle("🎵▶️")
-        else
-            obj._playPauseMenu:setTitle("🎵⏸")
-        end
     end
 end
 
 function obj:prevTrack()
     if isActive() then
         cmusRemote("--prev")
-        notify()
     end
 end
 
 function obj:nextTrack()
     if isActive() then
         cmusRemote("--next")
-        notify()
     end
 end
 
@@ -146,14 +129,33 @@ function onSleep()
     end
 end
 
+function obj:onIPCMessage(_id, msg)
+    if isPlaying() then
+        obj._playPauseMenu:setTitle(string.format("🎵%s ⏸", msg))
+    else
+        obj._playPauseMenu:setTitle(string.format("🎵%s ▶️", msg))
+    end
+end
+
+function obj:initMenuTitle()
+    res, status = cmusRemote("--raw status")
+    artist = ""; title = ""
+    if status then
+        artist = string.match(res, "tag artist ([^\n]+)")
+        title = string.match(res, "tag title ([^\n]+)")
+    end
+    obj:onIPCMessage(0, string.format("%.20s - %.20s", artist, title))
+end
+
 function obj:start(config)
     wake:onSleep(onSleep):start()
     bindMediaKeys()
+    obj._ipcPort = hs.ipc.localPort("cmus", obj.onIPCMessage)
     obj._nextMenu = hs.menubar.new()
     obj._nextMenu:setTitle("⏭")
     obj._nextMenu:setClickCallback(obj.nextTrack)
     obj._playPauseMenu = hs.menubar.new()
-    obj._playPauseMenu:setTitle("🎵⏸")
+    obj:initMenuTitle()
     obj._playPauseMenu:setClickCallback(obj.playOrPause)
     obj._prevMenu = hs.menubar.new()
     obj._prevMenu:setTitle("⏮")
