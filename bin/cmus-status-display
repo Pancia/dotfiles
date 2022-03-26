@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env zsh
 #
 # NOTE sourced from /opt/homebrew/Cellar/cmus/2.9.1_1/share/doc/cmus/examples
 #
@@ -20,7 +20,7 @@
 
 output() {
     printf -v args "%q" "$*"
-    local escaped="$(echo $args | sed 's/\\//g')"
+    local escaped="$(iconv -s -c -t ascii <(echo $args) | sed 's/\\//g' )"
     local command="local port = hs.ipc.remotePort(\"cmus\"); port:sendMessage(\"$escaped\", 123); port:delete()"
     hs -c "$command"
 }
@@ -32,7 +32,7 @@ do
 	shift
 done
 
-local message=""
+message=""
 if test -n "$_file"; then
 	printf -v message "%.20s - %.20s" "$_artist" "$_title"
 elif test -n "$_url"; then

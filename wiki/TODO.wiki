@@ -1,16 +1,6 @@
 == MAIN ==
-- [ ] https://github.com/phaazon/hop.nvim
-- [ ] https://github.com/rlane/pounce.nvim
-- [ ] https://github.com/tzachar/cmp-fuzzy-buffer
-- [ ] https://github.com/tzachar/cmp-fuzzy-path
-- [ ] https://github.com/wbthomason/packer.nvim
+- [X] cmus-status-display remove all non ascii chars (eg 「Nightcore」)
 - [ ] :clojure-lsp: command 'add-import-to-namespace'
-- [ ] :fzf: how to search by file basename (not full path)
-    - [ ] or how to search for continous not fuzzy?
-    - [ ] https://github.com/junegunn/fzf/blob/master/README-VIM.md
-- [ ] show filename not long paths
-    - [ ] https://github.com/junegunn/fzf/issues/1534
-- [ ] add completion for / easymotion (currently only for raw / eg: ,/)
 - [ ] fzf lsp commands ??
 
 == BACKLOG (in alphabetical order) ==
