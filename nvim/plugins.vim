@@ -49,6 +49,7 @@ Plug 'tpope/vim-fugitive'
 
 " MOVEMENT {{{
 Plug 'Lokaltog/vim-easymotion'
+Plug 'phaazon/hop.nvim'
 " }}}
 
 " THEME {{{
