@@ -9,5 +9,5 @@ windows:
     root: ~
     layout: even-horizontal
     panes:
-      - d dot && vim wiki/TODO.wiki
       - d dot && gs
+      - d dot && vim wiki/TODO.wiki

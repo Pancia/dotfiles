@@ -1,5 +1,5 @@
 == MAIN ==
-- [X] :nvim: fix tab in insert mode prints errors
+- [ ] :git: ?try ftplugin git 99<c-w>+
 - [ ] :clojure-lsp: command 'add-import-to-namespace'
 - [ ] fzf lsp commands ??
 

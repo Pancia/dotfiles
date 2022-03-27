@@ -30,6 +30,7 @@ task_neovim () {
     pip3 install neovim-remote
     # pip install --upgrade neovim
     mkdir -p ~/.config/nvim/ftplugin
+    mkdir -p ~/.config/nvim/after/ftplugin
     mkdir -p ~/.config/nvim/undo
 }
 

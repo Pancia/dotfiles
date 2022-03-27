@@ -1,3 +1,5 @@
+command! -buffer Zprint call zprint#apply()
+
 set shiftwidth=2
 set tabstop=2
 
