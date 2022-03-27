@@ -1,5 +1,5 @@
 == MAIN ==
-- [X] cmus-status-display remove all non ascii chars (eg 「Nightcore」)
+- [X] :nvim: fix tab in insert mode prints errors
 - [ ] :clojure-lsp: command 'add-import-to-namespace'
 - [ ] fzf lsp commands ??
 
