@@ -1,5 +1,4 @@
 == MAIN ==
-- [X] :git: ?try ftplugin git 99<c-w>+
 - [ ] :clojure-lsp: command 'add-import-to-namespace'
 - [ ] fzf lsp commands ??
 

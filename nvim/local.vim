@@ -9,6 +9,5 @@ endfunction
 
 silent! execute "source " . VimLocalCWD() . "/local.vim"
 
-call SEMICOLON_GROUP('v', '+vim')
-call SEMICOLON_CMD('vl', ':call VimLocalEdit()', 'Open current vimlocal file')
-
+call SEMICOLON_GROUP('v', '+vim(local)')
+call SEMICOLON_CMD('vl', 'VimLocalEdit()', 'Open current vimlocal file')

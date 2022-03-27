@@ -1,3 +1,2 @@
 ;<[.zprint.edn]>
-{:map {:comma? false}
- :width 76}
+{:style [:no-hang] :map {:comma? false} :width 76}

@@ -8,4 +8,6 @@ if bufname('') =~ 'conjure-log-\d\+.cljc'
     finish
 endif
 
-call zprint#apply()
+if exists("g:zprint_should_apply")
+    call zprint#apply()
+endif
