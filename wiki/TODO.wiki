@@ -1,6 +1,8 @@
 == MAIN ==
+- [ ] spacehammer menu item to go to logseq
 - [ ] :clojure-lsp: command 'add-import-to-namespace'
 - [ ] fzf lsp commands ??
+- [X] ZPRINT under ;zz
 
 == BACKLOG (in alphabetical order) ==
 - [ ] :watch: timers can go negative, should not happen, refactor to use heartbeat timer instead
