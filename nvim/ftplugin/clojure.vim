@@ -1,4 +1,4 @@
-command! -buffer Zprint call zprint#apply()
+command! -buffer ZPRINT call zprint#apply()
 
 set shiftwidth=2
 set tabstop=2
@@ -108,3 +108,6 @@ call SEMICOLON_GROUP('srl', '+let')
 call SEMICOLON_CMD('srle', 'LSP_exe_here("expand-let")', 'expand-let')
 call SEMICOLON_CMD('srlm', 'LSP_exe_here("move-to-let", input("Binding name: "))', 'move-to-let')
 call SEMICOLON_CMD('srli', 'LSP_exe_here("introduce-let", input("Binding name: "))', 'introduce-let')
+
+call SEMICOLON_GROUP('z', '+zprint')
+call SEMICOLON_CMD('zz', 'ZPRINT', 'run zprint on the current file')
