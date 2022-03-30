@@ -4,6 +4,9 @@
  {:block/name "b",
   :block/created-at 1648423085784,
   :block/updated-at 1648423085784}
+ {:block/name "backlog",
+  :block/created-at 1648639275759,
+  :block/updated-at 1648639275759}
  {:block/name "c",
   :block/created-at 1648423085784,
   :block/updated-at 1648423085784}
@@ -13,6 +16,12 @@
  {:block/name "card",
   :block/created-at 1648467464590,
   :block/updated-at 1648467464590}
+ {:block/name "clojure",
+  :block/created-at 1648641206631,
+  :block/updated-at 1648641206631}
+ {:block/name "clojure-lsp",
+  :block/created-at 1648641206631,
+  :block/updated-at 1648641206631}
  {:block/name "contents",
   :block/created-at 1648423085784,
   :block/updated-at 1648423085784}
@@ -28,27 +37,69 @@
  {:block/name "favorites",
   :block/created-at 1648423085784,
   :block/updated-at 1648423085784}
+ {:block/name "fzf",
+  :block/created-at 1648641206631,
+  :block/updated-at 1648641206631}
+ {:block/name "hammerspoon",
+  :block/created-at 1648638762466,
+  :block/updated-at 1648638772145}
  {:block/name "in-progress",
   :block/created-at 1648423085784,
   :block/updated-at 1648423085784}
+ {:block/name "install",
+  :block/created-at 1648641206631,
+  :block/updated-at 1648641206631}
+ {:block/name "karabiner",
+  :block/created-at 1648638664934,
+  :block/updated-at 1648638688921}
  {:block/name "later",
   :block/created-at 1648423085784,
   :block/updated-at 1648423085784}
+ {:block/name "lsp",
+  :block/created-at 1648641206631,
+  :block/updated-at 1648641206631}
+ {:block/name "lua",
+  :block/created-at 1648641206631,
+  :block/updated-at 1648641206631}
  {:block/name "mar 28th, 2022",
   :block/created-at 1648422716399,
-  :block/updated-at 1648472001905}
+  :block/updated-at 1648639184314}
  {:block/name "mar 30th, 2022",
   :block/created-at 1648597520959,
-  :block/updated-at 1648597520959}
+  :block/updated-at 1648639645654}
  {:block/name "now",
   :block/created-at 1648423085784,
   :block/updated-at 1648423085784}
+ {:block/name "nvim-terminus",
+  :block/created-at 1648638717495,
+  :block/updated-at 1648638741839}
+ {:block/name "spacehammer",
+  :block/created-at 1648638458530,
+  :block/updated-at 1648638458530}
  {:block/name "todo",
   :block/created-at 1648423085784,
   :block/updated-at 1648423085784}
+ {:block/name "vfile_~/.local/share/nvim/view",
+  :block/created-at 1648638610260,
+  :block/updated-at 1648638610260}
+ {:block/name "vim",
+  :block/created-at 1648638610263,
+  :block/updated-at 1648638634606}
  {:block/name "wait",
   :block/created-at 1648423085784,
   :block/updated-at 1648423085784}
  {:block/name "waiting",
-  :block/created-at 1648423085784, 
-  :block/updated-at 1648423085784}]
+  :block/created-at 1648423085784,
+  :block/updated-at 1648423085784}
+ {:block/name "watch",
+  :block/created-at 1648641206631,
+  :block/updated-at 1648641206631}
+ {:block/name "zprint",
+  :block/created-at 1648639627381,
+  :block/updated-at 1648639627381}
+ {:block/name "zsh",
+  :block/created-at 1648638796392,
+  :block/updated-at 1648638901742}
+ {:block/name "zsh/completion",
+  :block/created-at 1648638926363, 
+  :block/updated-at 1648639219756}]

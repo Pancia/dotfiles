@@ -1,2 +1,14 @@
 ;<[.zprint.edn]>
-{:style [:no-hang] :map {:comma? false} :width 76}
+{:style  [:no-hang]
+ :map    {:comma? false
+          :key-order [:id :type :kind]}
+ :fn-map {:default-not-none :wrap
+          "->" :arg1
+          "->>" :arg1
+          "assoc" :wrap
+          "postwalk" :force-nl
+          "prewalk" :force-nl
+          "postwalk-replace" :force-nl
+          ">defn" :arg1-force-nl
+          "defsc" [:arg1-force-nl {:vector {:wrap? false}}]}
+ :width  80}
