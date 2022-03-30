@@ -22,6 +22,7 @@ set number
 set ruler
 set showcmd
 set showtabline=2 "always
+set title " set the term title to the current file + dir
 set visualbell "Dont make noise
 set wildmode=list:longest,full
 
