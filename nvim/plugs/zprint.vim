@@ -19,12 +19,17 @@ function zprint#apply()
 
     let current_col = col('.')
 
+
     let l:cmd = 'zprint < ' . l:tmpname1 . ' > ' . l:tmpname2
     let l:out = zprint#System(l:cmd)
 
     let diff_offset = len(readfile(l:tmpname2)) - line('$')
 
-    call zprint#update_file(l:tmpname2, fname)
+    if v:shell_error
+      echomsg l:out
+    else
+      call zprint#update_file(l:tmpname2, fname)
+    endif
 
     " clean up
     call delete(l:tmpname1)
@@ -91,9 +96,6 @@ endfunction
 
 " update_file updates the target file with the given formatted source
 function! zprint#update_file(source, target)
-    " remove undo point caused via BufWritePre
-    try | silent undojoin | catch | endtry
-
     let old_fileformat = &fileformat
     if exists("*getfperm")
         " save file permissions
