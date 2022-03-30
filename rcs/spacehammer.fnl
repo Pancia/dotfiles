@@ -5,6 +5,7 @@
 (local slack (require :slack))
 (local vim (require :vim))
 (local cmus (require :cmus))
+(local hermes (: (require :hermes) :start))
 
 (local {:concat concat :logf logf} (require :lib.functional))
 
@@ -268,19 +269,19 @@
     [{:key :space
       :title "LaunchPad"
       :action (activator "LaunchPad")}
-     {:key :w
-      :title "Window"
-      :items window-bindings}
      {:key :a
       :title "Apps"
       :items app-bindings}
-     {:key :j
-      :title "Jump"
-      :action "windows:jump"}
+     {:key :f
+      :title "Hermes (fzf windows)"
+      :action hermes.show}
      {:key :m
       :title "Media"
       :items media-bindings
-      :timeout false}]))
+      :timeout false}
+     {:key :w
+      :title "Window"
+      :items window-bindings}]))
 
 (local browser-keys
   [{:mods [:cmd :shift]

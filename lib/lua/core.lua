@@ -83,7 +83,7 @@ local watch = engage("seeds.watch.init", {
   }
 })
 
-local seeds = {lotus = lotus, watch = watch}
+local seeds = {lotus = lotus, watch = watch, hermes = hermes}
 
 local hs_global_modifier = {"cmd", "ctrl"}
 
