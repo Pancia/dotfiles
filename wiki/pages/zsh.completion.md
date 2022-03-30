@@ -1,3 +1,5 @@
+title:: zsh/completion
+
 - # Steps
 - implement `--zsh-completion` for your `example` command
 - copy a file in `zsh/completions/`, rename & edit to `_example`
