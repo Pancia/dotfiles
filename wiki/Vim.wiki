@@ -1,5 +1,0 @@
-== TIL ==
-- debug mappings with `:verbose map ...`
-- mkview &viewoptions puts sessions in [[vfile:~/.local/share/nvim/view/]]
-- :sort /pattern/r
-- http://learnvimscriptthehardway.stevelosh.com/

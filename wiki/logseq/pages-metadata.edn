@@ -13,9 +13,6 @@
  {:block/name "card",
   :block/created-at 1648467464590,
   :block/updated-at 1648467464590}
- {:block/name "command",
-  :block/created-at 1648467945280,
-  :block/updated-at 1648467945280}
  {:block/name "contents",
   :block/created-at 1648423085784,
   :block/updated-at 1648423085784}
@@ -40,6 +37,9 @@
  {:block/name "mar 28th, 2022",
   :block/created-at 1648422716399,
   :block/updated-at 1648472001905}
+ {:block/name "mar 30th, 2022",
+  :block/created-at 1648597520959,
+  :block/updated-at 1648597520959}
  {:block/name "now",
   :block/created-at 1648423085784,
   :block/updated-at 1648423085784}

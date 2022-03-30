@@ -1,0 +1,3 @@
+- https://karabiner-elements.pqrs.org/docs/json/
+- https://karabiner-elements.pqrs.org/docs/json/complex-modifications-manipulator-definition/to/modifiers/
+- https://github.com/pqrs-org/Karabiner-Elements/issues/925#issuecomment-323984568

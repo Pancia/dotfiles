@@ -1,4 +1,4 @@
-= Learn =
+- # Learn
 - https://learnxinyminutes.com/docs/lua/
 - https://zzamboni.org/post/just-enough-lua-to-be-productive-in-hammerspoon-part-1/
 - https://zzamboni.org/post/just-enough-lua-to-be-productive-in-hammerspoon-part-2/

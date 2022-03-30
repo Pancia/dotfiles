@@ -1,6 +1,0 @@
-= TODOS =
-- [ ] [[vfile:~/dotfiles/nvim/plugs/vimwiki.vim]] fix 'vimlink:' html link function
-- [ ] play nice with vim-repeat & undo
-- [ ] vimwiki build tags file to show line contents
-- [ ] folding, how to?
-- [ ] flatten, use tags instead?

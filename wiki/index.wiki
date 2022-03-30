@@ -1,9 +1,0 @@
-= Dotfiles Wiki =
-    * [[TODO|Todos]]
-    * [[Vim]]
-    * [[Zsh]]
-    * [[HammerSpoon]]
-    * [[Karabiner]]
-    * [[Scratchpad]]
-== Other Wikis: ==
-    * [[wiki0:index|~/Dropbox/wiki]]
