@@ -13,7 +13,7 @@ function obj:populateChooser()
   for _, w in pairs(windows) do
     local app = w:application():name()
     local title = w:title()
-    table.insert(menuData, {text=title.." #"..app, window=w})
+    table.insert(menuData, {text=title.." #"..app, subText=app, window=w})
   end
   return menuData
 end

@@ -43,6 +43,9 @@
  {:block/name "hammerspoon",
   :block/created-at 1648638762466,
   :block/updated-at 1648638772145}
+ {:block/name "idea",
+  :block/created-at 1648646338742,
+  :block/updated-at 1648646338742}
  {:block/name "in-progress",
   :block/created-at 1648423085784,
   :block/updated-at 1648423085784}
@@ -67,12 +70,15 @@
  {:block/name "mar 30th, 2022",
   :block/created-at 1648597520959,
   :block/updated-at 1648639645654}
+ {:block/name "mar 31st, 2022",
+  :block/created-at 1648718170090,
+  :block/updated-at 1648718170090}
  {:block/name "now",
   :block/created-at 1648423085784,
   :block/updated-at 1648423085784}
- {:block/name "nvim-terminus",
-  :block/created-at 1648638717495,
-  :block/updated-at 1648638741839}
+ {:block/name "plugin ideas",
+  :block/created-at 1648718170003,
+  :block/updated-at 1648718170003}
  {:block/name "spacehammer",
   :block/created-at 1648638458530,
   :block/updated-at 1648638458530}

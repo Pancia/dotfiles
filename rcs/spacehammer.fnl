@@ -27,10 +27,7 @@
     :action "apps:next-app"}
    {:mods [:alt :shift]
     :key :tab
-    :action "apps:prev-app"}
-   {:mods [:cmd :ctrl]
-    :key "`"
-    :action toggle-console}])
+    :action "apps:prev-app"}])
 
 (local return
   {:key :space

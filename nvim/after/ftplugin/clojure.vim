@@ -10,7 +10,8 @@ endif
 if bufname('') =~ '.jar::'
   finish
 endif
-
-if exists("g:zprint_should_apply")
-    call zprint#apply()
+if !exists("g:zprint_should_apply")
+  finish
 endif
+
+call zprint#apply()
