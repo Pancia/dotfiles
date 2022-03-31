@@ -5,7 +5,9 @@
     :default-not-none :wrap
     ">defn" :arg1-force-nl
     "assoc" :wrap
+    "defmutation" :arg1-force-nl
     "defsc" [:arg1-force-nl {:vector {:wrap? false}}]
+    "keys" :pair-fn
     "postwalk" :force-nl
     "postwalk-replace" :force-nl
     "prewalk" :force-nl}
