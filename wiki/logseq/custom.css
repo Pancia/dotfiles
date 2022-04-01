@@ -1,7 +1,7 @@
+@import url('https://raw.githack.com/PiotrSss/logseq-bujo-theme/main/main.css');
+@import url('https://raw.githack.com/PiotrSss/logseq-bujo-theme/main/dark-coffee.css');
+@import url('https://raw.githack.com/PiotrSss/logseq-bujo-theme/main/light-sepia.css');
+
 * {
   font-size: 1.2rem;
-}
-
-body {
-  zoom: 130%;
 }
