@@ -33,6 +33,7 @@ module CMD
     lambda { |*args|
       EXE.system %{
         clj -A:dev:test:local/spec-dev \
+          -J-Dguardrails.config=guardrails-test.edn \
           -m kaocha.runner \
           :clojure-unit \
           #{args.join " "}

@@ -100,8 +100,13 @@ function! s:my_vim_sexp_mappings()
     nmap <buffer> <(   <Plug>(sexp_capture_prev_element)
     nmap <buffer> >)   <Plug>(sexp_capture_next_element)
 
-    nmap <buffer> ==   <Plug>(sexp_indent)
-    nmap <buffer> =-   <Plug>(sexp_indent_top)
+    if !exists("g:zprint_should_apply")
+        nmap <buffer> ==   <Plug>(sexp_indent)
+        nmap <buffer> =-   <Plug>(sexp_indent_top)
+    else
+        nnoremap <buffer> == :ZPRINT<CR>
+        nnoremap <buffer> =- :ZPRINT<CR>
+    endif
 
     imap <buffer> <BS> <Plug>(sexp_insert_backspace)
     imap <buffer> "    <Plug>(sexp_insert_double_quote)
