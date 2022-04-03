@@ -2,7 +2,7 @@ syntax on
 set termguicolors "enables gui*
 
 " NOTE: MUST BE BEFORE `colorscheme onedark`
-let g:onedark_color_overrides = {
+let g:my_colors = {
 \ "black":          {"gui": "#FFFFFF", "cterm": "NONE"},
 \ "white":          {"gui": "#000000", "cterm": "NONE"},
 \ "blue":           {"gui": "#2653F0", "cterm": "NONE"},
@@ -20,6 +20,12 @@ let g:onedark_color_overrides = {
 \ "visual_black":   {"gui": "#000000", "cterm": "NONE"},
 \ "visual_grey":    {"gui": "#AEC0EC", "cterm": "NONE"},
 \}
+call system("defaults read -g AppleInterfaceStyle")
+if v:shell_error
+    let g:onedark_color_overrides = g:my_colors
+else
+    let g:onedark_color_overrides = {}
+endif
 colorscheme onedark
 
 hi Folded guifg=#67EAEA guibg=#808080
@@ -49,10 +55,10 @@ hi MyProjectContext   guifg=#DF447B gui=standout
 hi MyProjectTranslate guifg=#F244E7 gui=standout
 " TRANSLATE asdf TRANSLATE: asdf asdf
 
-hi MyProjectResumeHere guifg=#0000E7 gui=standout
+hi MyProjectResumeHere guifg=#0000E7 guibg=#E0E0E0 gui=standout
 " RESUMEHERE asdf RESUMEHERE: asdf asdf
 
-call onedark#set_highlight("MyProjectFixme", {"fg": g:onedark_color_overrides.yellow
-            \                                ,"bg": g:onedark_color_overrides.white
+call onedark#set_highlight("MyProjectFixme", {"fg": g:my_colors.yellow
+            \                                ,"bg": g:my_colors.white
             \                                ,"gui": "standout"})
 " FIXME asdf FIXME: asdf asdf
