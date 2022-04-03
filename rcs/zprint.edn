@@ -12,5 +12,5 @@
     "postwalk-replace" :force-nl
     "prewalk" :force-nl}
  :map {:comma? false :key-order [:id :type :kind]}
- :style [:no-hang]
+ :style [:require-pair :ns-justify :no-hang]
  :width 80}
