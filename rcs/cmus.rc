@@ -13,3 +13,6 @@ set status_display_program=cmus-status-display
 
 unbind -f common t
 unbind -f common m
+
+bind -f common , seek -30s
+bind -f common . seek +30s
