@@ -22,6 +22,10 @@
   [{:mods [:ctrl]
     :key :space
     :action "lib.modal:toggle-modal"}
+   {:key :tab
+    :mods [:cmd :ctrl]
+    :title "Hermes (fzf windows)"
+    :action hermes.show}
    {:mods [:alt]
     :key :tab
     :action "apps:next-app"}
