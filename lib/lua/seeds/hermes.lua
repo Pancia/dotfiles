@@ -5,11 +5,13 @@ function selectItem(item)
     item.window:focus()
   end
   obj._chooser:query(nil)
+  for _, b in pairs(obj._bindings) do
+    b:disable()
+  end
 end
 
 function obj:navdown()
   obj._chooser:selectedRow(obj._chooser:selectedRow()+1)
-
 end
 
 function obj:navup()
@@ -30,14 +32,18 @@ end
 function obj:show()
   obj._chooser:refreshChoicesCallback()
   obj._chooser:show()
+  for _, b in pairs(obj._bindings) do
+    b:enable()
+  end
 end
 
 function obj:start()
   obj._wf = hs.window.filter.new(true):setCurrentSpace(nil):keepActive()
   obj._chooser = hs.chooser.new(selectItem)
   obj._chooser:choices(obj.populateChooser)
-  hs.hotkey.bindSpec({{"ctrl"}, "j"}, obj.navdown)
-  hs.hotkey.bindSpec({{"ctrl"}, "k"}, obj.navup)
+  obj._bindings = {}
+  table.insert(obj._bindings, hs.hotkey.new({"ctrl"}, "j", obj.navdown))
+  table.insert(obj._bindings, hs.hotkey.new({"ctrl"}, "k", obj.navup))
   return obj
 end
 
