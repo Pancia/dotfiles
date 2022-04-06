@@ -30,15 +30,12 @@ function obj:populateChooser()
 end
 
 function obj:show()
-  if obj._chooser:isVisible() then
-    obj:navdown()
-  else
-    obj._chooser:refreshChoicesCallback()
-    obj._chooser:show()
-    for _, b in pairs(obj._bindings) do
-      b:enable()
-    end
+  obj._chooser:refreshChoicesCallback()
+  obj._chooser:show()
+  for _, b in pairs(obj._bindings) do
+    b:enable()
   end
+  obj:navdown()
 end
 
 function obj:showOrNext()
