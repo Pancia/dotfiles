@@ -30,10 +30,30 @@ function obj:populateChooser()
 end
 
 function obj:show()
-  obj._chooser:refreshChoicesCallback()
-  obj._chooser:show()
-  for _, b in pairs(obj._bindings) do
-    b:enable()
+  if obj._chooser:isVisible() then
+    obj:navdown()
+  else
+    obj._chooser:refreshChoicesCallback()
+    obj._chooser:show()
+    for _, b in pairs(obj._bindings) do
+      b:enable()
+    end
+  end
+end
+
+function obj:showOrNext()
+  if obj._chooser:isVisible() then
+    obj:navdown()
+  else
+    obj:show()
+  end
+end
+
+function obj:showOrPrev()
+  if obj._chooser:isVisible() then
+    obj:navup()
+  else
+    obj:show()
   end
 end
 

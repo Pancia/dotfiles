@@ -25,7 +25,11 @@
    {:key :tab
     :mods [:cmd :ctrl]
     :title "Hermes (fzf windows)"
-    :action hermes.show}
+    :action hermes.showOrNext}
+   {:key :tab
+    :mods [:cmd :ctrl :shift]
+    :title "Hermes (fzf windows)"
+    :action hermes.showOrPrev}
    {:mods [:alt]
     :key :tab
     :action "apps:next-app"}
