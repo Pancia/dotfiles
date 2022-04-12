@@ -4,7 +4,6 @@ function exe(command, arguments)
         command = command,
         arguments = arguments,
     }
-    -- vim.lsp.buf_request_sync(bufnr, "workspace/executeCommand", params, 500)
     vim.lsp.buf.execute_command(params)
 end
 

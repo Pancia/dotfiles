@@ -84,30 +84,37 @@ function! s:Expand(exp) abort
     return l:result ==# '' ? '' : "file://" . l:result
 endfunction
 
-function! LSP_exe_here(cmd, ...) abort
+function! Lsp_exe_here(cmd, ...) abort
   let l:args = [s:Expand('%:p'), line('.') - 1, col('.') - 1] + a:000
   silent! call luaeval('require("lsp").exe(_A[1], _A[2])', [a:cmd, l:args])
 endfunction
 
+function! CleanNamespace() abort
+    let l:args = [s:Expand('%:p'), 0, 0]
+    call luaeval('require("lsp").exe(_A[1], _A[2])', ['clean-ns', l:args])
+endfunction
+
 call SEMICOLON_GROUP('sl', '+linting')
-call SEMICOLON_CMD('slr', 'LSP_exe_here("resolve-macro-as", input("Resolve as?"), input("kondo config absolute path"))', 'resolve-as')
+call SEMICOLON_CMD('slr', 'Lsp_exe_here("resolve-macro-as", input("Resolve as?"), input("kondo config absolute path"))', 'resolve-as')
 
 call SEMICOLON_GROUP('sr', '+refactorings')
+call SEMICOLON_CMD('src', 'CleanNamespace()', 'clean namespace & zprint format')
+
 call SEMICOLON_GROUP('srt', '+threading')
-call SEMICOLON_CMD('srtf', 'LSP_exe_here("thread-first")', 'thread-first')
-call SEMICOLON_CMD('srtt', 'LSP_exe_here("thread-last")', 'thread-last')
-call SEMICOLON_CMD('srtF', 'LSP_exe_here("thread-first-all")', 'thread-first-all')
-call SEMICOLON_CMD('srtT', 'LSP_exe_here("thread-last-all")', 'thread-last-all')
-call SEMICOLON_CMD('srtu', 'LSP_exe_here("unwind-thread")', 'unwind-thread')
-call SEMICOLON_CMD('srtU', 'LSP_exe_here("unwind-all")', 'unwind-all')
+call SEMICOLON_CMD('srtf', 'Lsp_exe_here("thread-first")', 'thread-first')
+call SEMICOLON_CMD('srtt', 'Lsp_exe_here("thread-last")', 'thread-last')
+call SEMICOLON_CMD('srtF', 'Lsp_exe_here("thread-first-all")', 'thread-first-all')
+call SEMICOLON_CMD('srtT', 'Lsp_exe_here("thread-last-all")', 'thread-last-all')
+call SEMICOLON_CMD('srtu', 'Lsp_exe_here("unwind-thread")', 'unwind-thread')
+call SEMICOLON_CMD('srtU', 'Lsp_exe_here("unwind-all")', 'unwind-all')
 
 call SEMICOLON_GROUP('srr', '+requires')
-call SEMICOLON_CMD('srra', 'LSP_exe_here("add-missing-libspec")', 'add-missing-libspec')
+call SEMICOLON_CMD('srra', 'Lsp_exe_here("add-missing-libspec")', 'add-missing-libspec')
 
 call SEMICOLON_GROUP('srl', '+let')
-call SEMICOLON_CMD('srle', 'LSP_exe_here("expand-let")', 'expand-let')
-call SEMICOLON_CMD('srlm', 'LSP_exe_here("move-to-let", input("Binding name: "))', 'move-to-let')
-call SEMICOLON_CMD('srli', 'LSP_exe_here("introduce-let", input("Binding name: "))', 'introduce-let')
+call SEMICOLON_CMD('srle', 'Lsp_exe_here("expand-let")', 'expand-let')
+call SEMICOLON_CMD('srlm', 'Lsp_exe_here("move-to-let", input("Binding name: "))', 'move-to-let')
+call SEMICOLON_CMD('srli', 'Lsp_exe_here("introduce-let", input("Binding name: "))', 'introduce-let')
 
 call SEMICOLON_GROUP('z', '+zprint')
 call SEMICOLON_CMD('zz', 'ZPRINT', 'run zprint on the current file')

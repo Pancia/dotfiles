@@ -15,13 +15,6 @@ module CMD
       }
     }
   end
-  def vim(opts)
-    lambda { |*args|
-      EXE.system %{
-        nvim --listen filament.socket #{args.join " "}
-      }
-    }
-  end
   def repl(opts)
     lambda { |*args|
       EXE.system %{

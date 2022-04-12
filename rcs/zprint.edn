@@ -8,10 +8,13 @@
     "assoc" :wrap
     "defmutation" :arg1-force-nl
     "defsc" [:arg1-force-nl {:vector {:wrap? false}}]
+    "do!" :force-nl
     "keys" :pair-fn
     "postwalk" :force-nl
     "postwalk-replace" :force-nl
-    "prewalk" :force-nl}
+    "prewalk" :force-nl
+    "some->" :arg1
+    "write-handler" :force-nl}
  :map {:comma? false :key-order [:id :type :kind]}
  :style [:require-pair :ns-justify :no-hang]
  :width 80}
