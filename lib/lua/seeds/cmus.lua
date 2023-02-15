@@ -130,11 +130,14 @@ function onSleep()
 end
 
 function obj:onIPCMessage(_id, msg)
+  local title = ""
     if isPlaying() then
-        obj._playPauseMenu:setTitle(string.format("🎵%s ⏸", msg))
+        title = string.format("🎵%43s ⏸", msg)
     else
-        obj._playPauseMenu:setTitle(string.format("🎵%s ▶️", msg))
+        title = string.format("🎵%43s ▶️", msg)
     end
+    local styledTitle = hs.styledtext.new(title, {["font"] = {["name"] = "Menlo-Regular"}})
+    obj._playPauseMenu:setTitle(styledTitle)
 end
 
 function obj:initMenuTitle()
