@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  15
+// @version  22
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @grant    none
@@ -88,10 +88,40 @@
         }
     }
 
+    function addOverlayTo(element, overlayID) {
+        var $overlay = $(`<div id='${overlayID}'></div>`)
+            .width($(element).width())
+            .css({
+                'opacity' : 1,
+                'position': 'absolute',
+                'background-color': 'black',
+                'height': '100%',
+                'z-index': 2200
+            });
+        $('<button>', {}).css({
+            'height': '100px',
+            'width': '100%',
+            'font-size': '22px',
+            'background-color': 'white'
+        }).pressAndHold({holdTime: 3000}).on("complete.pressAndHold", () => {
+            element.setAttribute("data-overlay", "disabled");
+            $(`[id='${overlayID}']`).remove();
+        }).appendTo($overlay);
+        $overlay.prependTo(element);
+    }
+
     var pageURLCheckTimer = setInterval(function() {
         if (this.lastUrl !== location.href || ! this.lastUrl) {
             this.lastUrl = location.href;
             MAIN();
+        }
+        if (window.location.host == "www.youtube.com" && window.location.pathname == "/") {
+            Array.from(document.querySelectorAll("#contents.ytd-rich-grid-row")).forEach((row, idx) => {
+                if (!row.getAttribute("data-overlay")) {
+                    addOverlayTo(row, `yt-row-${idx}`);
+                    row.setAttribute("data-overlay", "initialized");
+                }
+            });
         }
     }, 222);
 })(jQuery);
