@@ -6,14 +6,23 @@
     ">defn" :arg1-force-nl
     "assertions" :force-nl
     "assoc" :wrap
+    "behavior" :arg1-force-nl
+    "chain" :force-nl
     "defmutation" :arg1-force-nl
+    "defresolver" :arg1-force-nl
     "defsc" [:arg1-force-nl {:vector {:wrap? false}}]
     "do!" :force-nl
+    "finally" :force-nl
     "keys" :pair-fn
+    "plet" :binding
     "postwalk" :force-nl
     "postwalk-replace" :force-nl
     "prewalk" :force-nl
+    "provided" :arg1-force-nl
     "some->" :arg1
+    "specification" :arg1-force-nl
+    "try!" :arg1-force-nl
+    "when-mocking" :force-nl
     "write-handler" :force-nl}
  :map {:comma? false :key-order [:id :type :kind]}
  :style [:require-pair :ns-justify :no-hang]

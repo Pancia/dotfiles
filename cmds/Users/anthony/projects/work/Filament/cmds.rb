@@ -2,7 +2,7 @@ module CMD
   def shadow(opts)
     lambda { |*args|
       EXE.system %{
-        shadow-cljs watch test \
+        npx shadow-cljs watch test ci-tests \
           electron-background electron-renderer \
           electron-meta-devtools
       }
@@ -22,14 +22,28 @@ module CMD
       }
     }
   end
-  def test(opts)
+  def clean(opts)
     lambda { |*args|
       EXE.system %{
-        clj -A:dev:test:local/spec-dev \
+        trash .shadow-cljs resources/public/js/
+      }
+    }
+  end
+  def test_clojure(opts)
+    lambda { |*args|
+      EXE.system %{
+        clojure -A:dev:test:local/spec-dev \
           -J-Dguardrails.config=guardrails-test.edn \
           -m kaocha.runner \
           :clojure-unit \
           #{args.join " "}
+      }
+    }
+  end
+  def test_cljs(opts)
+    lambda { |*args|
+      EXE.system %{
+        wait-for .shadow-cljs/ci-tests.status npx karma start #{args.join " "}
       }
     }
   end

@@ -11,7 +11,7 @@ let g:clojure_maxlines=300
 let g:clojure_align_multiline_strings=1
 let g:clojure_syntax_keywords = {
       \ 'clojureMacro': [
-      \   'defsc', '>defn', 'defmutation',
+      \   'defsc', '>defn', 'defmutation', 'defresolver',
       \   'specification', 'behavior', 'provided', 'assertions', 'component',
       \   'provided', 'when-mocking', 'provided!', 'when-mocking!',
       \   ]
