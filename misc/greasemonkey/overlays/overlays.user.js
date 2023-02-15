@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  14
+// @version  15
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @grant    none
@@ -42,8 +42,20 @@
         }, 100);
     }
 
+    function addGlobalStyle(css) {
+        var head, style;
+        head = document.getElementsByTagName('head')[0];
+        if (!head) { return; }
+        style = document.createElement('style');
+        style.type = 'text/css';
+        style.innerHTML = css;
+        head.appendChild(style);
+    }
+
     function MAIN() {
         if (window.location.host == "www.youtube.com") {
+            // greyscale everything except the video
+            addGlobalStyle('#contents { filter: grayscale(1); }');
             if (window.location.pathname == "/watch") {
                 waitForElementToBeLoaded("#comments #comment", () => {
                     addOverlay("#comments", "STOP! is it really worth it?");
