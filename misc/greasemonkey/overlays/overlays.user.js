@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  22
+// @version  23
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @grant    none
@@ -27,7 +27,6 @@
         }).pressAndHold({holdTime: 3000}).on("complete.pressAndHold", () => {
             $(`[id='${selector}']`).remove();
         }).appendTo($overlay);
-
         $overlay.prependTo(selector)
     }
 
@@ -52,6 +51,23 @@
         head.appendChild(style);
     }
 
+    function addOverlayTo(element, overlayID, button, opts) {
+      console.log("addOverlayTo", overlayID);
+        var $overlay = $(`<div id='${overlayID}'></div>`)
+            .width($(element).width())
+            .css({
+                'opacity' : 1,
+                'position': 'absolute',
+                'background-color': 'black',
+                'height': '100%',
+                'z-index': 2200
+            });
+        button.pressAndHold(opts).on("complete.pressAndHold", () => {
+            try{ element.setAttribute("data-overlay", "disabled"); }catch(e){}
+            $(`[id='${overlayID}']`).remove();
+        }).appendTo($overlay);
+        $overlay.prependTo(element);
+    }
     function MAIN() {
         if (window.location.host == "www.youtube.com") {
             // greyscale everything except the video
@@ -62,6 +78,20 @@
                 });
                 waitForElementToBeLoaded("#related #items", () => {
                     addOverlay("#related");
+                });
+                waitForElementToBeLoaded("#movie_player", () => {
+                    var button = $('<button>')
+                        .html($('<span />')
+                            .css({'background-color': '#fff5'})
+                            .html('Are you sure you should be watching this?'))
+                        .css({
+                            'height': '100%',
+                            'width': '100%',
+                            'background-size': 'cover',
+                            'background-image': "url('https://cdn.donmai.us/original/f0/49/__amano_nene_production_kawaii_drawn_by_oreazu__f04956b57e752aec17c9b4cb07449c28.jpg')"
+                        });
+                    var opts = {holdTime: 3000, progressIndicatorColor: "#ff00ff", progressIndicatorOpacity: 0.3};
+                    addOverlayTo("#movie_player", "player_overlay", button, opts);
                 });
             }
         }
@@ -88,27 +118,6 @@
         }
     }
 
-    function addOverlayTo(element, overlayID) {
-        var $overlay = $(`<div id='${overlayID}'></div>`)
-            .width($(element).width())
-            .css({
-                'opacity' : 1,
-                'position': 'absolute',
-                'background-color': 'black',
-                'height': '100%',
-                'z-index': 2200
-            });
-        $('<button>', {}).css({
-            'height': '100px',
-            'width': '100%',
-            'font-size': '22px',
-            'background-color': 'white'
-        }).pressAndHold({holdTime: 3000}).on("complete.pressAndHold", () => {
-            element.setAttribute("data-overlay", "disabled");
-            $(`[id='${overlayID}']`).remove();
-        }).appendTo($overlay);
-        $overlay.prependTo(element);
-    }
 
     var pageURLCheckTimer = setInterval(function() {
         if (this.lastUrl !== location.href || ! this.lastUrl) {
@@ -116,12 +125,21 @@
             MAIN();
         }
         if (window.location.host == "www.youtube.com" && window.location.pathname == "/") {
-            Array.from(document.querySelectorAll("#contents.ytd-rich-grid-row")).forEach((row, idx) => {
+          Array.from(document.querySelectorAll("#contents.ytd-rich-grid-row")).forEach((row, idx) => {
                 if (!row.getAttribute("data-overlay")) {
-                    addOverlayTo(row, `yt-row-${idx}`);
+                    var button = $('<button>').css({
+                        'height': '100%',
+                        'width': '100%',
+                        'background-size': 'contain',
+                        'background-image': "url('https://cdn.donmai.us/original/a8/b9/__amano_nene_production_kawaii_drawn_by_yukiunag1__a8b9ff28553daa1ac80889e4d8880773.jpg')"
+
+                    });
+                    var opts = {holdTime: 3000};
+                    addOverlayTo(row, `yt-row-${idx}`, button, opts);
                     row.setAttribute("data-overlay", "initialized");
                 }
             });
         }
     }, 222);
 })(jQuery);
+
