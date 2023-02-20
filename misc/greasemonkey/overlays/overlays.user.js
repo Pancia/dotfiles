@@ -1,12 +1,16 @@
 // ==UserScript==
 // @name     Overlays
-// @version  23
+// @version  24
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
+// @require  https://cdn.jsdelivr.net/npm/js-cookie@3.0.1/dist/js.cookie.min.js
 // @grant    none
 // ==/UserScript==
 
 (function($) {
+    var allowedSID = ["Tgj-ekOCwCi_OleM-4hoe_bHlnr5KhO7FLIe2ZFckZ4BEILfAdCLMihDLqmTjrZZZtchvA.",
+        "TgjWefg6Ny46o5hoL7vxIgGBB_A36dmLO4bm0F_SxIf8YwjWjbKRNjoR_2sw0q8o8kWuRg."];
+
     function addOverlay(selector, text) {
         var $overlay = $(`<div id='${selector}'></div>`)
             .width($(selector).width())
@@ -52,7 +56,6 @@
     }
 
     function addOverlayTo(element, overlayID, button, opts) {
-      console.log("addOverlayTo", overlayID);
         var $overlay = $(`<div id='${overlayID}'></div>`)
             .width($(element).width())
             .css({
@@ -68,10 +71,9 @@
         }).appendTo($overlay);
         $overlay.prependTo(element);
     }
+
     function MAIN() {
         if (window.location.host == "www.youtube.com") {
-            // greyscale everything except the video
-            addGlobalStyle('#contents { filter: grayscale(1); }');
             if (window.location.pathname == "/watch") {
                 waitForElementToBeLoaded("#comments #comment", () => {
                     addOverlay("#comments", "STOP! is it really worth it?");
@@ -79,19 +81,24 @@
                 waitForElementToBeLoaded("#related #items", () => {
                     addOverlay("#related");
                 });
+            }
+            if (!allowedSID.includes(Cookies.get("SID"))) {
+                addGlobalStyle('#contents { filter: grayscale(1); }'); // greyscale everything except the video
                 waitForElementToBeLoaded("#movie_player", () => {
-                    var button = $('<button>')
-                        .html($('<span />')
-                            .css({'background-color': '#fff5'})
-                            .html('Are you sure you should be watching this?'))
-                        .css({
-                            'height': '100%',
-                            'width': '100%',
-                            'background-size': 'cover',
-                            'background-image': "url('https://cdn.donmai.us/original/f0/49/__amano_nene_production_kawaii_drawn_by_oreazu__f04956b57e752aec17c9b4cb07449c28.jpg')"
-                        });
-                    var opts = {holdTime: 3000, progressIndicatorColor: "#ff00ff", progressIndicatorOpacity: 0.3};
-                    addOverlayTo("#movie_player", "player_overlay", button, opts);
+                    waitForElementToBeLoaded("video", () => {
+                        var button = $('<button>')
+                            .html($('<span />')
+                                .css({'background-color': '#fff5'})
+                                .html('Are you sure you should be watching this?'))
+                            .css({
+                                'height': '100%',
+                                'width': '100%',
+                                'background-size': 'cover',
+                                'background-image': "url('https://cdn.donmai.us/original/f0/49/__amano_nene_production_kawaii_drawn_by_oreazu__f04956b57e752aec17c9b4cb07449c28.jpg')"
+                            });
+                        var opts = {holdTime: 3000, progressIndicatorColor: "#ff00ff", progressIndicatorOpacity: 0.3};
+                        addOverlayTo("#movie_player", "player_overlay", button, opts);
+                    });
                 });
             }
         }
@@ -118,27 +125,27 @@
         }
     }
 
-
     var pageURLCheckTimer = setInterval(function() {
         if (this.lastUrl !== location.href || ! this.lastUrl) {
             this.lastUrl = location.href;
             MAIN();
         }
         if (window.location.host == "www.youtube.com" && window.location.pathname == "/") {
-          Array.from(document.querySelectorAll("#contents.ytd-rich-grid-row")).forEach((row, idx) => {
-                if (!row.getAttribute("data-overlay")) {
-                    var button = $('<button>').css({
-                        'height': '100%',
-                        'width': '100%',
-                        'background-size': 'contain',
-                        'background-image': "url('https://cdn.donmai.us/original/a8/b9/__amano_nene_production_kawaii_drawn_by_yukiunag1__a8b9ff28553daa1ac80889e4d8880773.jpg')"
-
-                    });
-                    var opts = {holdTime: 3000};
-                    addOverlayTo(row, `yt-row-${idx}`, button, opts);
-                    row.setAttribute("data-overlay", "initialized");
-                }
-            });
+            if (!allowedSID.includes(Cookies.get("SID"))) {
+                Array.from(document.querySelectorAll("#contents.ytd-rich-grid-row")).forEach((row, idx) => {
+                    if (!row.getAttribute("data-overlay")) {
+                        var button = $('<button>').css({
+                            'height': '100%',
+                            'width': '100%',
+                            'background-size': 'contain',
+                            'background-image': "url('https://cdn.donmai.us/original/a8/b9/__amano_nene_production_kawaii_drawn_by_yukiunag1__a8b9ff28553daa1ac80889e4d8880773.jpg')"
+                        });
+                        var opts = {holdTime: 4000};
+                        addOverlayTo(row, `yt-row-${idx}`, button, opts);
+                        row.setAttribute("data-overlay", "initialized");
+                    }
+                });
+            }
         }
     }, 222);
 })(jQuery);
