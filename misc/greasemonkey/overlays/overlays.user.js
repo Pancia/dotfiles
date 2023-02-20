@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  24
+// @version  25
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @require  https://cdn.jsdelivr.net/npm/js-cookie@3.0.1/dist/js.cookie.min.js
@@ -8,8 +8,9 @@
 // ==/UserScript==
 
 (function($) {
-    var allowedSID = ["Tgj-ekOCwCi_OleM-4hoe_bHlnr5KhO7FLIe2ZFckZ4BEILfAdCLMihDLqmTjrZZZtchvA.",
-        "TgjWefg6Ny46o5hoL7vxIgGBB_A36dmLO4bm0F_SxIf8YwjWjbKRNjoR_2sw0q8o8kWuRg."];
+    function isEnabledForUser() {
+      return Cookies.get("overlays:isDisabled") != "true";
+    }
 
     function addOverlay(selector, text) {
         var $overlay = $(`<div id='${selector}'></div>`)
@@ -74,6 +75,10 @@
 
     function MAIN() {
         if (window.location.host == "www.youtube.com") {
+            if (Cookies.get("overlays:isDisabled") == null) {
+                var shouldDisable = confirm("Disable for this session?");
+                Cookies.set("overlays:isDisabled", shouldDisable);
+            }
             if (window.location.pathname == "/watch") {
                 waitForElementToBeLoaded("#comments #comment", () => {
                     addOverlay("#comments", "STOP! is it really worth it?");
@@ -82,7 +87,7 @@
                     addOverlay("#related");
                 });
             }
-            if (!allowedSID.includes(Cookies.get("SID"))) {
+            if (isEnabledForUser()) {
                 addGlobalStyle('#contents { filter: grayscale(1); }'); // greyscale everything except the video
                 waitForElementToBeLoaded("#movie_player", () => {
                     waitForElementToBeLoaded("video", () => {
@@ -131,7 +136,7 @@
             MAIN();
         }
         if (window.location.host == "www.youtube.com" && window.location.pathname == "/") {
-            if (!allowedSID.includes(Cookies.get("SID"))) {
+            if (isEnabledForUser()) {
                 Array.from(document.querySelectorAll("#contents.ytd-rich-grid-row")).forEach((row, idx) => {
                     if (!row.getAttribute("data-overlay")) {
                         var button = $('<button>').css({
