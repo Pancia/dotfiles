@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name     Overlays
-// @version  26
+// @version  27
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @require  https://cdn.jsdelivr.net/npm/js-cookie@3.0.1/dist/js.cookie.min.js
+// @require  https://raw.githubusercontent.com/jashkenas/underscore/master/underscore.js
 // @grant    none
 // ==/UserScript==
 
