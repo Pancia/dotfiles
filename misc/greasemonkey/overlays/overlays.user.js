@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  25
+// @version  26
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @require  https://cdn.jsdelivr.net/npm/js-cookie@3.0.1/dist/js.cookie.min.js
@@ -130,7 +130,7 @@
         }
     }
 
-    var pageURLCheckTimer = setInterval(function() {
+    var onMutationsFinished = _.debounce((_) => {
         if (this.lastUrl !== location.href || ! this.lastUrl) {
             this.lastUrl = location.href;
             MAIN();
@@ -138,20 +138,23 @@
         if (window.location.host == "www.youtube.com" && window.location.pathname == "/") {
             if (isEnabledForUser()) {
                 Array.from(document.querySelectorAll("#contents.ytd-rich-grid-row")).forEach((row, idx) => {
-                    if (!row.getAttribute("data-overlay")) {
+                    if (row.getAttribute("data-overlay") != "disabled" && !row.querySelector("[data-is-overlay]")) {
                         var button = $('<button>').css({
                             'height': '100%',
                             'width': '100%',
                             'background-size': 'contain',
                             'background-image': "url('https://cdn.donmai.us/original/a8/b9/__amano_nene_production_kawaii_drawn_by_yukiunag1__a8b9ff28553daa1ac80889e4d8880773.jpg')"
                         });
-                        var opts = {holdTime: 4000};
+                        button.attr("data-is-overlay", true);
+                        var opts = {holdTime: row.children.length * 1000};
                         addOverlayTo(row, `yt-row-${idx}`, button, opts);
                         row.setAttribute("data-overlay", "initialized");
                     }
                 });
             }
         }
-    }, 222);
+    }, 100);
+    var observer = new MutationObserver(onMutationsFinished);
+    observer.observe(document, {subtree: true, childList: true});
 })(jQuery);
 
