@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  29
+// @version  30
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @require  https://cdn.jsdelivr.net/npm/js-cookie@3.0.1/dist/js.cookie.min.js
@@ -104,7 +104,7 @@
                                 'height': '100%',
                                 'width': '100%',
                                 'background-size': 'cover',
-                                'background-image': "url('"+video_image_overlay+"')"
+                                'background-image': "url('"+video_overlay_image_url+"')"
                             });
                         var opts = {holdTime: 3000, progressIndicatorColor: "#ff00ff", progressIndicatorOpacity: 0.3};
                         addOverlayTo("#movie_player", "player_overlay", button, opts);
