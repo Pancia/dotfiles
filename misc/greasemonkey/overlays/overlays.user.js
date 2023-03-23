@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  28
+// @version  29
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://raw.githubusercontent.com/santhony7/pressAndHold/master/jquery.pressAndHold.js
 // @require  https://cdn.jsdelivr.net/npm/js-cookie@3.0.1/dist/js.cookie.min.js
@@ -9,6 +9,9 @@
 // ==/UserScript==
 
 (function($) {
+    var video_overlay_image_url = "https://cdnb.artstation.com/p/assets/images/images/005/165/059/large/nise-stars-talk-through-me-by-dniseb-sml.jpg";
+    var home_row_overlay_image_url = "https://cdn.donmai.us/original/a8/b9/__amano_nene_production_kawaii_drawn_by_yukiunag1__a8b9ff28553daa1ac80889e4d8880773.jpg";
+
     function isEnabledForUser() {
       return Cookies.get("overlays:isDisabled") != "true";
     }
@@ -92,15 +95,16 @@
                 addGlobalStyle('#contents { filter: grayscale(1); }'); // greyscale everything except the video
                 waitForElementToBeLoaded("#movie_player", () => {
                     waitForElementToBeLoaded("video", () => {
+                        document.querySelectorAll('#player_overlay').forEach((i) => {i.remove()});
                         var button = $('<button>')
                             .html($('<span />')
-                                .css({'background-color': '#fff5'})
+                                .css({'background-color': '#fff5', 'position': 'absolute', 'bottom': '22px', 'left': '38%'})
                                 .html('Are you sure you should be watching this?'))
                             .css({
                                 'height': '100%',
                                 'width': '100%',
                                 'background-size': 'cover',
-                                'background-image': "url('https://cdn.donmai.us/original/f0/49/__amano_nene_production_kawaii_drawn_by_oreazu__f04956b57e752aec17c9b4cb07449c28.jpg')"
+                                'background-image': "url('"+video_image_overlay+"')"
                             });
                         var opts = {holdTime: 3000, progressIndicatorColor: "#ff00ff", progressIndicatorOpacity: 0.3};
                         addOverlayTo("#movie_player", "player_overlay", button, opts);
@@ -145,7 +149,7 @@
                             'height': '100%',
                             'width': '100%',
                             'background-size': 'contain',
-                            'background-image': "url('https://cdn.donmai.us/original/a8/b9/__amano_nene_production_kawaii_drawn_by_yukiunag1__a8b9ff28553daa1ac80889e4d8880773.jpg')"
+                            'background-image': "url('"+home_row_overlay_image_url+"')"
                         });
                         button.attr("data-is-overlay", true);
                         var opts = {holdTime: row.children.length * 1000};
