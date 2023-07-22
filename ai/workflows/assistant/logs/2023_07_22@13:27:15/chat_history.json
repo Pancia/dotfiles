@@ -1,0 +1,1 @@
+[{"role": "user", "content": "set a timer for 46 seconds"}, {"role": "function", "name": "start_timer", "content": "timer started! {'time': 46}"}]

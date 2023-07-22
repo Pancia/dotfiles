@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+
+from record import record_audio_as_text
+import subprocess
+
+text = record_audio_as_text()
+subprocess.run(f"echo \"{text}\" | pbcopy", shell=True, text=True)

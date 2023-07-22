@@ -1,0 +1,15 @@
+[
+    {
+        "role": "user",
+        "content": "set a timer for 98235 seconds"
+    },
+    {
+        "role": "function",
+        "name": "start_timer",
+        "content": "timer started! {'time': 98235}"
+    },
+    {
+        "role": "assistant",
+        "content": "The timer has been set for 98,235 seconds."
+    }
+]

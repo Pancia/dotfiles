@@ -269,6 +269,26 @@
       :repeatable true
       :timeout false}]))
 
+(fn record_audio_to_clipboard []
+  (hs.execute "open-iterm-with pb-record" true))
+
+(fn talk_to_ai [prompt]
+  (fn []
+    (hs.execute (.. "open-iterm-with ai-chat " prompt) true)))
+
+(local ai-audio
+  [
+     {:key :.
+      :title "Record audio to clipboard."
+      :action record_audio_to_clipboard}
+     {:key :/
+      :title "Talk to chatGPT"
+      :action (talk_to_ai "")}
+     {:key :j
+      :title "Journal with chatGPT"
+      :action (talk_to_ai "reflective-journaling.txt")}
+   ])
+
 (local menu-items
   (without-remaining-keys
     [{:key :space
@@ -286,7 +306,11 @@
       :timeout false}
      {:key :w
       :title "Window"
-      :items window-bindings}]))
+      :items window-bindings}
+     {:key :/
+      :title "AI & Audio"
+      :items ai-audio}
+     ]))
 
 (local browser-keys
   [{:mods [:cmd :shift]
@@ -302,11 +326,6 @@
     :repeat true}])
 
 (local browser-items menu-items)
-
-(local chrome-config
-  {:key "Google Chrome"
-   :keys browser-keys
-   :items browser-items})
 
 (local firefox-config
   {:key "Firefox"
@@ -325,59 +344,9 @@
               :action hs.console.clearConsole}])
    :keys []})
 
-(local slack-config
-  {:key "Slack"
-   :keys [{:mods [:cmd]
-           :key  :g
-           :action "slack:scroll-to-bottom"}
-          {:mods [:ctrl]
-           :key :r
-           :action "slack:add-reaction"}
-          {:mods [:ctrl]
-           :key :h
-           :action "slack:prev-element"}
-          {:mods [:ctrl]
-           :key :l
-           :action "slack:next-element"}
-          {:mods [:ctrl]
-           :key :t
-           :action "slack:thread"}
-          {:mods [:ctrl]
-           :key :p
-           :action "slack:prev-day"}
-          {:mods [:ctrl]
-           :key :n
-           :action "slack:next-day"}
-          {:mods [:ctrl]
-           :key :e
-           :action "slack:scroll-up"
-           :repeat true}
-          {:mods [:ctrl]
-           :key :y
-           :action "slack:scroll-down"
-           :repeat true}
-          {:mods [:ctrl]
-           :key :i
-           :action "slack:next-history"
-           :repeat true}
-          {:mods [:ctrl]
-           :key :o
-           :action "slack:prev-history"
-           :repeat true}
-          {:mods [:ctrl]
-           :key :j
-           :action "slack:down"
-           :repeat true}
-          {:mods [:ctrl]
-           :key :k
-           :action "slack:up"
-           :repeat true}]})
-
 (local apps
-  [chrome-config
-   firefox-config
-   hammerspoon-config
-   slack-config])
+  [firefox-config
+   hammerspoon-config])
 
 (local config
   {:title "Main Menu"

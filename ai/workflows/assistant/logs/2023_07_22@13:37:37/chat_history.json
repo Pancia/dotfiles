@@ -1,0 +1,28 @@
+[
+    {
+        "role": "user",
+        "content": "set a timer for 47 seconds to remind me to take a break"
+    },
+    {
+        "role": "function",
+        "name": "start_timer",
+        "content": "timer started! {'time': 47, 'reminder': 'Take a break!'}"
+    },
+    {
+        "role": "assistant",
+        "content": "Your timer is set for 47 seconds. I will remind you to take a break when the time is up."
+    },
+    {
+        "role": "user",
+        "content": "in 26 seconds remind me to take out the trash"
+    },
+    {
+        "role": "function",
+        "name": "start_timer",
+        "content": "timer started! {'time': 26, 'reminder': 'Take out the trash!'}"
+    },
+    {
+        "role": "assistant",
+        "content": "Your timer is set for 26 seconds. I will remind you to take out the trash when the time is up."
+    }
+]
