@@ -1,51 +1,53 @@
 // ==UserScript==
 // @name anime watched tracker
-// @version 0.1
+// @version 3
 // @require https://raw.githubusercontent.com/jashkenas/underscore/master/underscore.js
 // ==/UserScript==
 
 (function() {
-  function addListItem(listName, item) {
-    var list = JSON.parse(localStorage.getItem(listName) || "[]");
-    list.push(item);
-    localStorage.setItem(listName, JSON.stringify(_.uniq(list)));
-  }
-
-  const crossOutCSS = `
-background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' version='1.1' preserveAspectRatio='none' viewBox='0 0 100 100'><path d='M100 0 L0 100 ' stroke='white' stroke-width='3'/><path d='M0 0 L100 100 ' stroke='white' stroke-width='3'/></svg>");
-background-repeat:no-repeat;
-background-position:center center;
-background-size: 100% 100%, auto;
-`;
-  const currentCSS = `
-border: 2px solid red;
-`;
-
-  var onMutationsFinished = _.debounce((_) => {
-    if (window.location.pathname.startsWith('/category')) {
-      const target_ep = Number(new URLSearchParams(window.location.search).get("ep"));
-      document.querySelectorAll("ul#episode_related a").forEach((a) => {
-        ep = Number(a.children[0].innerText.match(/\d+/)[0]);
-        if (ep < target_ep) {
-          a.setAttribute("style", crossOutCSS);
-        } else if (ep == target_ep) {
-          a.setAttribute("style", currentCSS);
+    let host = 'http://localhost:3142'
+    async function send(url, onSuccess) {
+        let response = await fetch(`${host}/${url}`, {
+            method: "post"
+        }).catch(function(err) {
+            console.error('Fetch Error', err, 'response', response)
+            alert(`Fetch error, check the console!`)
+        })
+        if (!response.ok) {
+            console.error('Fetch Error', response)
+            alert(`Fetch error: ${response.status}. Check the console!`)
+        } else {
+            onSuccess(response)
         }
-      });
-    } else {
-      var button = document.createElement('button');
-      button.innerHTML = 'watched';
-      button.className = 'watched'
-      button.addEventListener('click', function() {
-        var url = window.location.href;
-        fetch(`http://localhost:3145/tv-board/${url}`, {method: "post"});
-        button.disabled = true;
-      });
-      if (! document.querySelector("button.watched")) {
-        document.querySelector(".anime_video_body_episodes").appendChild(button);
-      }
     }
-  }, 100);
-  var observer = new MutationObserver(onMutationsFinished);
-  observer.observe(document, {subtree: true, childList: true});
-})();
+    var onMutationsFinished = _.debounce((_) => {
+        if (! document.querySelector("button.watched") && document.querySelector(".anime_video_body_episodes")) {
+            var button = document.createElement('button')
+            button.style = 'float: right;'
+            button.innerHTML = 'watched'
+            button.className = 'watched'
+            button.addEventListener('click', function() {
+                var url = window.location.href
+                send(`/tv-board/watch/${url}`, (res) => {
+                    button.disabled = true
+                })
+            })
+            document.querySelector(".anime_video_body_episodes").appendChild(button)
+        }
+        if (location.pathname.match("/category") && ! document.querySelector("button.follow")) {
+            var button = document.createElement('button')
+            button.innerHTML = 'follow'
+            button.className = 'follow'
+            button.addEventListener('click', async function() {
+                var url = window.location.href
+                let img = document.querySelector(".anime_info_body_bg img").src
+                send(`/tv-board/follow/${url}?img=${img}`, (res) => {
+                    button.disabled = true
+                })
+            })
+            document.querySelector(".anime_info_episodes").append(button)
+        }
+    }, 100)
+    var observer = new MutationObserver(onMutationsFinished)
+    observer.observe(document, {subtree: true, childList: true})
+})()
