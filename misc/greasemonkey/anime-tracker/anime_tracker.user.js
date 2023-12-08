@@ -1,16 +1,16 @@
 // ==UserScript==
 // @name anime watched tracker
-// @version 3
+// @version 4
 // @require https://raw.githubusercontent.com/jashkenas/underscore/master/underscore.js
 // ==/UserScript==
 
 (function() {
-    let host = 'http://localhost:3142'
+    let host = 'http://192.168.0.100:3142'
     async function send(url, onSuccess) {
         let response = await fetch(`${host}/${url}`, {
             method: "post"
         }).catch(function(err) {
-            console.error('Fetch Error', err, 'response', response)
+            console.error('Fetch Error', err)
             alert(`Fetch error, check the console!`)
         })
         if (!response.ok) {
