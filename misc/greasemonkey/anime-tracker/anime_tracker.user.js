@@ -1,51 +1,27 @@
 // ==UserScript==
 // @name anime watched tracker
-// @version 4
+// @version 6
 // @require https://raw.githubusercontent.com/jashkenas/underscore/master/underscore.js
 // ==/UserScript==
 
 (function() {
     let host = 'http://192.168.0.100:3142'
-    async function send(url, onSuccess) {
-        let response = await fetch(`${host}/${url}`, {
-            method: "post"
-        }).catch(function(err) {
-            console.error('Fetch Error', err)
-            alert(`Fetch error, check the console!`)
-        })
-        if (!response.ok) {
-            console.error('Fetch Error', response)
-            alert(`Fetch error: ${response.status}. Check the console!`)
-        } else {
-            onSuccess(response)
-        }
-    }
     var onMutationsFinished = _.debounce((_) => {
-        if (! document.querySelector("button.watched") && document.querySelector(".anime_video_body_episodes")) {
-            var button = document.createElement('button')
-            button.style = 'float: right;'
-            button.innerHTML = 'watched'
-            button.className = 'watched'
-            button.addEventListener('click', function() {
-                var url = window.location.href
-                send(`/tv-board/watch/${url}`, (res) => {
-                    button.disabled = true
-                })
-            })
-            document.querySelector(".anime_video_body_episodes").appendChild(button)
+        if (document.querySelector("iframe.anime_tracker")) {
+            return
         }
-        if (location.pathname.match("/category") && ! document.querySelector("button.follow")) {
-            var button = document.createElement('button')
-            button.innerHTML = 'follow'
-            button.className = 'follow'
-            button.addEventListener('click', async function() {
-                var url = window.location.href
-                let img = document.querySelector(".anime_info_body_bg img").src
-                send(`/tv-board/follow/${url}?img=${img}`, (res) => {
-                    button.disabled = true
-                })
-            })
-            document.querySelector(".anime_info_episodes").append(button)
+        var iframe = document.createElement('iframe')
+        iframe.className = 'anime_tracker'
+        iframe.width = 81
+        iframe.height = 42
+        iframe.style = 'float: right;'
+        if (document.querySelector(".anime_video_body_episodes")) {
+            iframe.src = host + `/tracker.html?kind=watch&url=${window.location.href}`
+            document.querySelector(".anime_video_body_episodes").appendChild(iframe)
+        } else if (location.pathname.match("/category")) {
+            let img = document.querySelector(".anime_info_body_bg img").src
+            iframe.src = host + `/tracker.html?kind=follow&url=${window.location.href}&img=${img}`
+            document.querySelector(".anime_info_episodes").appendChild(iframe)
         }
     }, 100)
     var observer = new MutationObserver(onMutationsFinished)
