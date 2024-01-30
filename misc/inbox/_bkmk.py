@@ -1,0 +1,115 @@
+from datetime import datetime
+from urllib.parse import urlparse, parse_qs
+from urllib.request import urlopen, Request
+import json
+import os
+import re
+import subprocess
+import sys
+
+def escape_title(title):
+    return re.sub(r'[^a-zA-Z0-9]', '_', title)
+
+def get_transcript_for(path, title):
+    filename = path+"/transcript%2F{title}.txt".format(title=escape_title(title))
+    with open(filename, 'r') as file:
+        return file.read()
+
+def format_transcript(text):
+    result = []
+    current_group = []
+    for string in text.split('\n'):
+        if string == '':
+            if current_group:
+                result.append(current_group)
+                current_group = []
+        else:
+            current_group.append(string)
+    if current_group:
+        result.append(current_group)
+    formatted_result = []
+    for group in result:
+        if len(group) > 1:
+            formatted_result.append(' '*4 + f'- {group[0]}')
+            formatted_result.extend([' '*4 + item for item in group[1:]])
+        else:
+            formatted_result.append(' '*4 + f'- {group[0]}')
+    return '\n'.join(formatted_result)
+
+def _ask_user(prompt):
+    while True:
+        user_input = input(prompt)
+        if user_input != '':
+            return user_input
+        else:
+            print("Invalid input, please try again.")
+
+note_template="""
+note/source:: [[note/source/{source}]]
+note/author:: [[note/author/{author}]]
+note/link:: {link}
+note/date:: [[{date}]]
+note/para:: [[para/{para}]]
+
+- {{{{embed [[note/internal-context/v1]]}}}}
+    - LATER [[note/internal-context/v1]] #note/context
+- {{{{embed [[note/external-context/v1]]}}}}
+    - LATER [[note/internal-context/v1]] #note/context
+- {{{{embed [[note/social-context/v1]]}}}}
+    - LATER [[note/social-context/v1]] #note/context
+- {{{{embed [[note/current-status/v1]]}}}}
+    - LATER [[note/current-status/v1]] #note/context
+- #note/transcript title: {title}
+{transcript}
+"""
+
+def print_yt_channel_name(url):
+    if "youtube.com" in url:
+        req = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        html = urlopen(req).read().decode('utf-8')
+        print(re.findall(r'"channelName":"[^,]*",', html))
+        print(re.findall(r'"author":"[^,]*",', html))
+
+def clear_terminal():
+    subprocess.run(r"printf '\e]1337;ClearScrollback\a'", shell=True)
+
+def main():
+    print(sys.argv[1])
+    assets_path = sys.argv[2]
+    with open(sys.argv[1], 'r') as file:
+        bookmarks = json.load(file)
+    for entry in reversed(bookmarks):
+        title = entry['title']
+        note_filename = "notes/notes%2F{title}.md".format(title=escape_title(title))
+        print(note_filename)
+        if os.path.exists(note_filename):
+            continue
+        date = datetime.fromtimestamp(int(entry['date'])).strftime("%Y_%m_%d")
+        url = entry['url']
+        transcript = format_transcript(get_transcript_for(assets_path, title))
+        print(transcript)
+        print('date:', date)
+        print('title:', title)
+        print('url:', url)
+        print_yt_channel_name(url)
+        author = input('AUTHOR:')
+        source = input('SOURCE:')
+        os.system("ag '\[\[para/(.*)\]\]' notes/ -o --no-filename | sort | uniq")
+        para = input('PARA: What Project/Area/Resource?')
+        values={
+                'title': title,
+                'link': url,
+                'date': date,
+                'transcript': transcript,
+                'source': source,
+                'author': author,
+                'para': para,
+                }
+        note_content = note_template.format(**values)
+        with open(note_filename, 'w') as file:
+            file.write(note_content)
+        input('continue? [Enter|<C-C>|<C-D>]:')
+        clear_terminal()
+
+if __name__ == '__main__':
+    main()

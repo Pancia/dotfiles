@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+watchexec --clear --restart bin/start
