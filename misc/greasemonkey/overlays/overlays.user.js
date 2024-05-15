@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  32
+// @version  33
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://cdn.jsdelivr.net/npm/js-cookie@3.0.1/dist/js.cookie.min.js
 // @require  https://raw.githubusercontent.com/jashkenas/underscore/master/underscore.js
@@ -183,7 +183,7 @@
                         $delay.text(`⏰: ${displayTime(until)}`);
                         document.querySelectorAll('.yt-row-overlay').forEach((i) => {i.remove()});
                     });
-                $(".ytd-masthead > #end").before($delay);
+                //$(".ytd-masthead > #end").before($delay);
             }
 
             if (Cookies.get("overlays:isDisabled") == null) {
@@ -192,10 +192,10 @@
             }
             if (window.location.pathname == "/watch") {
                 waitForElementToBeLoaded("#comments #comment", () => {
-                    addOverlay("#comments", "STOP! is it really worth it?", 20000);
+                    addOverlay("#comments", "STOP! is it really worth it?", 10000);
                 });
                 waitForElementToBeLoaded("#related #items", () => {
-                    addOverlay("#related", "related videos", 20000);
+                    addOverlay("#related", "related videos", 10000);
                 });
             }
             if (isEnabledForUser()) {
