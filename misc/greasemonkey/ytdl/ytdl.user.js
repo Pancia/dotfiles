@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     YTDL
-// @version  4
+// @version  7
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @grant    none
 // ==/UserScript==
@@ -43,25 +43,21 @@ waitForElementToBeLoaded("ytd-mini-guide-renderer > #items", () => {
 waitForElementToBeLoaded(".ytd-masthead", () => {
     waitForElementToBeLoaded("#avatar-btn", () => {
         var $ytdl = $("<div>");
-        $ytdl.append($("<span>ytdl(</span>")
-            .css({"color": "red"
-                , "font-size": "16px"}));
         $ytdl.append($("<a>🎵</a>")
             .css({"color": "red"
                 , "font-size": "16px"
                 , "cursor": "pointer"})
-            .click(() => YTDL("audio")));
-        $ytdl.append($("<span> | </span>")
+            .click(() => YTDL("music")));
+        $ytdl.append($("<a>🎧</a>")
             .css({"color": "red"
-                , "font-size": "16px"}));
+                , "font-size": "16px"
+                , "cursor": "pointer"})
+            .click(() => YTDL("audio")));
         $ytdl.append($("<a>📺</a>")
             .css({"color": "red"
                 , "font-size": "16px"
                 , "cursor": "pointer"})
             .click(() => YTDL("video")));
-        $ytdl.append($("<span>)</span>")
-            .css({"color": "red"
-                , "font-size": "16px"}));
         $(".ytd-masthead > #end").before($ytdl);
     })
 })
