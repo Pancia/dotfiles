@@ -41,7 +41,7 @@ class MusicDB
   @meta_to_db = {"artist"=>"artist", "title"=>"name", "album"=>"playlist", "genre" => "tags"}
 
   def self.metadata(item)
-    metadata = JSON.parse(%x[ ffprobe -v quiet -print_format json -show_format $MUSIC_DIR/#{item["id"]}.m4a])
+    metadata = JSON.parse(%x[ ffprobe -v quiet -print_format json -show_format "$MUSIC_DIR/#{item["id"]}.m4a"])
     fmt = metadata.fetch("format", nil)
     return {} if not fmt
     return fmt["tags"]
@@ -74,7 +74,7 @@ class MusicDB
           file = i["id"]+".m4a"
           tmp = i["id"]+".tmp.m4a"
           log = i["id"]+".log.m4a"
-          system("ffmpeg -v warning -i $MUSIC_DIR/#{file} #{meta_str} $MUSIC_DIR/#{tmp} 2>&1 | tee -a $MUSIC_DIR/#{log} && mv $MUSIC_DIR/#{tmp} $MUSIC_DIR/#{file}")
+          system("ffmpeg -v warning -i $MUSIC_DIR/#{file} #{meta_str} $MUSIC_DIR/#{tmp} 2>&1 | tee -a $MUSIC_DIR/#{log} && mv $MUSIC_DIR/#{tmp} $MUSIC_DIR/#{file} &")
         end
       end
     end

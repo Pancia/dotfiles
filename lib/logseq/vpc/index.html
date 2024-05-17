@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VPC Logseq Hello World</title>
+    <script src="https://cdn.jsdelivr.net/npm/@logseq/libs/dist/lsplugin.user.min.js"></script>
+  </head>
+  <body>
+    <script>
+        logseq.ready(() => {
+            logseq.App.showMsg("VPC Hello World Logseq!");
+            logseq.Editor.getBlock("647d39db-2d40-4af8-867a-c7dfcbf0681b", {includeChildren: true}).then(block => console.log(block))
+            logseq.DB.q("(task now)").then(result => { console.log(result) })
+            logseq.DB.datascriptQuery("[:find (pull ?b [*]) :where (or [?b :block/marker \"LATER\"] [?b :block/marker \"NOW\"]) [?b :block/refs ?r] [?r :block/name \"harmony/spirit\"]  ]").then(result => { console.log(result) }) // TODO does not get nested children blocks
+
+            // TASK start http server to serve blocks & queries
+            var http = require('http');
+            http.createServer(function (req, res) {
+                res.writeHead(200, {'Content-Type': 'text/plain'});
+                res.end("TEST RESPONSE");
+            }).listen(3333);
+        }).catch(console.error);
+    </script>
+  </body>
+</html>

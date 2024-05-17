@@ -8,6 +8,7 @@ import json
 import textwrap
 import os
 import re
+import requests
 import sys
 
 def _get_article_text(url):
@@ -67,19 +68,27 @@ def format_text(text, width=80):
     else:
         return text
 
+def get_title_of(url):
+    response = requests.get(url)
+    if response.status_code != 200:
+        print(response)
+        raise Exception("failed to get url "+ url)
+    soup = BeautifulSoup(response.content, "html.parser")
+    title = soup.title.string
+    return title
+
 def main():
     with open(sys.argv[1], 'r') as file:
-        bookmarks = json.load(file)
-    for entry in bookmarks:
-        title = entry['title']
-        transcript_filename = "transcript%2F{title}.txt".format(title=re.sub(r'[^a-zA-Z0-9]', '_', title))
-        if os.path.exists(transcript_filename):
-            continue
-        url = entry['url']
-        transcript = format_text(get_transcript_for(url))
-        print(transcript_filename)
-        with open(transcript_filename, 'w') as file:
-            file.write(transcript)
+        for line in file:
+            url = line.strip()
+            title = get_title_of(url)
+            transcript_filename = "transcripts/transcript%2F{title}.txt".format(title=re.sub(r'[^a-zA-Z0-9]', '_', title))
+            if os.path.exists(transcript_filename):
+                continue
+            transcript = format_text(get_transcript_for(url))
+            print(transcript_filename)
+            with open(transcript_filename, 'w') as file:
+                file.write(transcript)
 
 if __name__ == '__main__':
     main()

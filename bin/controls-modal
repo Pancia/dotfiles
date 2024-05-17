@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+commands = {
+        'c': ('CAT', 'echo cat'),
+        'm': {
+            '_desc': 'music',
+            'c': ("Play or Pause", 'cmus-remote --pause'),
+            'e': ("Edit Track", 'cmedit'),
+            'y': ("Redownload from Youtube", 'cmytdl'),
+            'a': ("Open Track in Audacity", 'cmaudacity'),
+            's': ("Select Track by Playlist", 'cmselect'),
+            't': ("Select Track by Tags", 'cmselect --filter-by-tags'),
+            'n': ("Next Track", 'cmus-remote --next'),
+            'p': ("Prev Track", 'cmus-remote --prev'),
+            'l': ("Seek 10 Forwards", 'cmus-remote --seek +10'),
+            'h': ("Seek 10 Backwards", 'cmus-remote --seek -10'),
+            '.': ("Seek 30 Forwards", 'cmus-remote --seek +30'),
+            ',': ("Seek 30 Backwards", 'cmus-remote --seek -30'),
+            'j': ("Volume Down", 'cmus-remote --volume -5'),
+            'k': ("Volume Up", 'cmus-remote --volume +5')
+            }
+        }
+
+import sys, tty, termios
+def getch():
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        return sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+def print_commands(commands_list, command_history):
+    for shortcut, content in commands_list.items():
+        if shortcut[0] == '_':
+            pass
+        elif isinstance(content, tuple):
+            (description, command) = content
+            print(f"{shortcut} - {description:<25} - {command}")
+        else:
+            description = content["_desc"]
+            print(f"{shortcut} - {description:<25}")
+    if command_history:
+        print("<DEL> - Go back up a level")
+    print("<ESC> <Ctrl-C> <Ctrl-D> - EXIT")
+
+import subprocess
+def execute_command(command):
+    print(f"Running command: {command}")
+    try:
+        subprocess.run(command, shell=True, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Command '{command}' failed with error: {e}")
+
+import os
+def main():
+    current_commands = commands
+    command_history = []
+    while True:
+        os.system('clear')
+        print_commands(current_commands, command_history)
+        user_input = getch()
+        print(f"Command {user_input} {user_input.encode().hex()}")
+        if user_input in current_commands:
+            action = current_commands[user_input]
+            if isinstance(action, tuple):
+                execute_command(action[1])
+            else:
+                command_history.append(current_commands)
+                current_commands = action
+        elif user_input in ['\x1b', '\x03', '\x04']:
+            print("Exiting program...")
+            break
+        elif user_input in ['\x7f', '\x08']:
+            if command_history:
+                current_commands = command_history.pop()
+        else:
+            print(f"Command {user_input} {user_input.encode().hex()} not found. Please try again.")
+
+if __name__ == '__main__':
+    main()

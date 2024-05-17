@@ -1,3 +1,4 @@
+__pycache__
 .zcompdump
 extra.*
 .tags
@@ -7,3 +8,4 @@ vimlocal/Users/pancia/projects/work/
 vimlocal/Users/anthony/projects/work/
 services
 wiki/logseq/bak/
+ai/workflows/*/logs

@@ -47,48 +47,24 @@ function obj:seekBackwards(num)
     end
 end
 
-function updateOSXVolume(num)
-    local output = hs.audiodevice.defaultOutputDevice()
-    output:setVolume(output:volume() + num)
-    hs.sound.getByName("Pop"):play()
-    hs.eventtap.event.newSystemKeyEvent("MUTE", true):post()
-    hs.eventtap.event.newSystemKeyEvent("MUTE", false):post()
-    hs.eventtap.event.newSystemKeyEvent("MUTE", true):post()
-    hs.eventtap.event.newSystemKeyEvent("MUTE", false):post()
-end
-
-function obj:incOSXVolume()
-    updateOSXVolume(100 / 15)
-end
-
-function obj:decOSXVolume()
-    updateOSXVolume(-100 / 15)
-end
-
 function obj:incVolume()
     if isActive() and isPlaying() then
         cmusRemote("--volume +5")
-    else
-        obj:incOSXVolume()
     end
 end
 
 function obj:decVolume()
     if isActive() and isPlaying() then
         cmusRemote("--volume -5")
-    else
-        obj:decOSXVolume()
     end
 end
 
 function bindMediaKeys()
-  hs.hotkey.bind({}, "f7", obj.prevTrack)
-  hs.hotkey.bind({}, "f8", obj.playOrPause)
-  hs.hotkey.bind({}, "f9", obj.nextTrack)
-  hs.hotkey.bind({}, "f13", obj.decVolume)
-  hs.hotkey.bind({}, "f14", obj.incVolume)
-  hs.hotkey.bind("cmd", "f13", obj.decOSXVolume)
-  hs.hotkey.bind("cmd", "f14", obj.incOSXVolume)
+    hs.hotkey.bind({}, "f7", obj.prevTrack)
+    hs.hotkey.bind({}, "f8", obj.playOrPause)
+    hs.hotkey.bind({}, "f9", obj.nextTrack)
+    hs.hotkey.bind({}, "f13", obj.decVolume)
+    hs.hotkey.bind({}, "f14", obj.incVolume)
 end
 
 function obj:editTrack()

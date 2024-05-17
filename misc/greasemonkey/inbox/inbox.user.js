@@ -117,10 +117,10 @@ note/para:: [[para/HERE]]
 
 - {{embed [[note/summary/v1]]}}
     - LATER [[note/summary/v1]] #note/summary
-- {{embed [[note/context/internalv1]]}}
+- {{embed [[note/context/internal/v1]]}}
     - LATER [[note/context/internal/v1]] #note/context
 - {{embed [[note/context/external/v1]]}}
-    - LATER [[note/context/externalv1]] #note/context
+    - LATER [[note/context/external/v1]] #note/context
 - {{embed [[note/context/social/v1]]}}
     - LATER [[note/context/social/v1]] #note/context
 - {{embed [[note/context/current-status/v1]]}}

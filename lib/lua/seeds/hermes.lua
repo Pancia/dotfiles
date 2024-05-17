@@ -55,6 +55,8 @@ function obj:showOrPrev()
 end
 
 function obj:start()
+  hs.hotkey.bindSpec({{"alt", "ctrl"}, "tab"}, obj.showOrNext)
+  hs.hotkey.bindSpec({{"alt", "ctrl", "shift"}, "tab"}, obj.showOrPrev)
   obj._wf = hs.window.filter.new(true):setCurrentSpace(nil):keepActive()
   obj._chooser = hs.chooser.new(selectItem)
   obj._chooser:choices(obj.populateChooser)

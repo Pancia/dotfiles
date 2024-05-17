@@ -3,8 +3,7 @@
 from datetime import datetime
 from pathlib import Path
 from prompt_toolkit import prompt
-from prompt_toolkit.completion import WordCompleter
-from record import record_audio_as_text
+from prompt_toolkit.completion import FuzzyWordCompleter
 import importlib
 import json
 import openai
@@ -13,6 +12,30 @@ import readline
 import shutil
 import subprocess
 import sys
+import tempfile
+import whisper
+
+model = None
+
+def record_audio_as_text():
+    global model
+    temp_audio_file = tempfile.mkstemp(suffix=".wav")[1]
+    if model == None:
+        model = whisper.load_model("small.en")
+    rec_process = subprocess.Popen(['rec', '-r', '48000', '-c', '1', '-b', '16', temp_audio_file], stderr=subprocess.DEVNULL)
+    print("Recording audio. Press Enter to stop.")
+    input()
+    rec_process.terminate()
+    print(f"Recording stopped. Saved as {temp_audio_file}.")
+    result = model.transcribe(temp_audio_file)
+    print('[User]:', result["text"])
+    # TODO we may want it to repeat it back if we dont want to or cant show the text
+    #subprocess.Popen(['say', '--rate', '200', txt_content], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    user_input = input("(Y/n)?")
+    if user_input == 'n':
+        return record_audio_as_text()
+    else:
+        return result['text']
 
 openai.api_key = os.environ['OPENAI_API_KEY']
 
@@ -28,7 +51,7 @@ def module_execute(module, fun, *args):
         return module[fun](*args)
 
 def validate_module(module):
-    api = ['init', 'system_prompt', 'response', 'state', 'functions', 'function_call', 'ask_user', 'log']
+    api = ['init', 'system_prompt', 'response', 'state', 'functions', 'function_call', 'user_command', 'log']
     for fun in api:
         if fun not in module:
             raise NotImplementedError(f"Module <{module['__file__']}> must implement <{fun}>")
@@ -69,18 +92,38 @@ def send_message_to_chatbot(state, module, context, message):
 
 def dir_glob(directory):
     file_list = []
-    for entry in os.listdir(directory):
+    for entry in os.listdir(os.path.expanduser(directory)):
         file_list.append(os.path.join(directory, entry))
     return file_list
 
-def input_with_tab_completion(valid_entries):
-    completer = WordCompleter(valid_entries, ignore_case=True, sentence=True)
+def input_autocomplete(valid_entries):
+    completer = FuzzyWordCompleter(valid_entries)
     while True:
-        print(valid_entries)
-        print("<ctrl-c> or <ctrl-d> to cancel")
-        user_input = prompt("Pick a Prompt: ", completer=completer)
-        if user_input == '' or user_input in valid_entries:
+        print(f"[Options]: {', '.join(valid_entries)}")
+        print(f"Press <CTRL-D> with no text to cancel.")
+        try:
+            user_input = prompt("Pick an option: ", completer=completer)
+        except EOFError:
+            return None
+        if user_input in valid_entries:
             return user_input
+        else:
+            print("Invalid input, please try again.")
+
+def input_commands(global_commands, module_commands):
+    valid_entries_dict = {}
+    valid_entries_dict |= global_commands
+    valid_entries_dict |= module_commands
+    valid_entries = valid_entries_dict.keys()
+    completer = FuzzyWordCompleter(valid_entries)
+    while True:
+        print()
+        print("[Available Commands]:")
+        print('[Global]:', ', '.join(global_commands.keys()))
+        print('[Module]:', ', '.join(module_commands.keys()))
+        user_input = prompt("Select a command: ", completer=completer)
+        if user_input in valid_entries:
+            return valid_entries_dict[user_input]
         else:
             print("Invalid input, please try again.")
 
@@ -98,46 +141,68 @@ def make_logs_dir(state, module):
         os.makedirs(logs_dir)
     return logs_dir
 
-def main():
-    if len(sys.argv) != 2:
-        print("Workflow argument required, for now TODO")
-        sys.exit(1)
-    state = {"history": [],
-             "workflow": sys.argv[1],
-             "timestamp": datetime.now().strftime("%Y_%m_%d@%H:%M:%S")}
+global_commands = {
+        "quit": "quit",
+        "change workflow": "workflow",
+        "compose message in editor": "editor",
+        "record audio": "audio",
+        "write message directly": "text",
+        }
+
+def init_workflow(state):
+    state["history"] = []
+    state["timestamp"] = datetime.now().strftime("%Y_%m_%d@%H:%M:%S")
     module = import_module(state["workflow"])
     validate_module(module)
     state["logs_dir"] = make_logs_dir(state, module)
-    module_name = module_execute(module, 'init')
+    module_commands = module_execute(module, 'init')
     system_prompt = module_execute(module, 'system_prompt')
     if system_prompt != None:
         state["history"].append({"role": "system", "content": system_prompt})
         log_history(state, module, "system")
+    return module, module_commands
+
+def main():
+    state = {}
+    if len(sys.argv) != 2:
+        workflows = [os.path.basename(w) for w in dir_glob("~/dotfiles/ai/workflows/")]
+        user_choice = input_autocomplete(workflows)
+        if not user_choice:
+            print("Workflow required, terminating!")
+            sys.exit(1)
+        state["workflow"] = user_choice
+    else:
+        state["workflow"] = sys.argv[1]
+    module, module_commands = init_workflow(state)
     try:
         while True:
+            print()
             print()
             print("current timestamp:", state["timestamp"])
             print("current workflow:", state["workflow"])
             print("module state:", module_execute(module, 'state'))
-            user_input = input(f"[.]{module_name}\n[Q]uit, [W]orkflow, [E]ditor, [R]ecord, [Enter]Type:\n")
+            user_input = input_commands(global_commands, module_commands)
             print()
-            if user_input == 'q':
+            if user_input == 'quit':
                 break
-            elif user_input == 'w':
-                print("TODO")
-            elif user_input == 'e':
+            elif user_input == 'workflow':
+                workflows = [os.path.basename(w) for w in dir_glob("~/dotfiles/ai/workflows/")]
+                user_choice = input_autocomplete(workflows)
+                if not user_choice: continue
+                state["workflow"] = user_choice
+                init_workflow(state)
+            elif user_input == 'editor':
                 print("Edit message in editor")
-            elif user_input == 'r':
+            elif user_input == 'audio':
                 user_message = record_audio_as_text()
                 context = "audio"
                 send_user_message(state, module, context, user_message)
-            elif user_input == '':
+            elif user_input == 'text':
                 user_message = input("Press [Enter] to submit.\n")
                 context = "text"
                 send_user_message(state, module, context, user_message)
-
-            elif user_input == '.':
-                module_return = module_execute(module, 'ask_user')
+            else:
+                module_return = module_execute(module, 'user_command', user_input)
                 if module_return == None: continue
                 context, user_message = module_return
                 send_user_message(state, module, context, user_message)
@@ -145,4 +210,5 @@ def main():
         print('\nExiting...')
         sys.exit(0)
 
-main()
+if __name__ == "__main__":
+   main()

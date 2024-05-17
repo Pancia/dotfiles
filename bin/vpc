@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+date
+
+space=$(jq '.space' $1 2>&1)
+curl -X POST "http://localhost:31415/vpc/${space}"; ret=$?
+if [[! $ret -eq 0]]; then
+    echo "FAILED TO CONNECT TO VPC SERVER"
+    exit 404
+fi
+
+if  jq --exit-status '.iterm' $1 ; then
+    term_dir="$(jq '.iterm.dir' $1)"
+    term_tabs="$(jq -c '.iterm.tabs' $1)"
+    echo python3 $HOME/dotfiles/bin/iterm.py ${term_dir} "${term_tabs}"
+    python3 $HOME/dotfiles/bin/iterm.py ${term_dir} "${term_tabs}"
+fi
+
+if  jq --exit-status '.firefox' $1 ; then
+    ff_tabs="$(jq -c '.firefox' $1 | tr ',' ' ' | tr '[' ' ' | tr ']' ' ' | tr '"' ' ')"
+    echo osascript ${ff_tabs}
+    osascript - ${ff_tabs} <<END
+on run argv
+    tell application "Firefox" to activate
+    tell application "System Events" to keystroke "n" using {command down}
+    delay 1
+    repeat with arg in argv
+        tell application "System Events"
+            keystroke "t" using command down
+            keystroke arg
+            keystroke return
+            delay 1
+        end tell
+    end repeat
+end run
+END
+fi
+
+echo

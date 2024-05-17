@@ -6,7 +6,7 @@ function __yt_lookup() {
 
 function __ytdl_dl() {
     mv $MUSIC_DIR/$1.m4a $MUSIC_DIR/$1.old.m4a
-    youtube-dl -f 140 $ytid -o $MUSIC_DIR/$1.m4a $2
+    yt-dlp -f 140 $ytid -o $MUSIC_DIR/$1.m4a $2
     music mtag $1
 }
 

@@ -1,0 +1,11 @@
+{
+    "space": 9,
+    "firefox" : ["www.google.com"],
+    "iterm": {
+        "dir": "$HOME/dotfiles/vpc/",
+        "tabs": [
+            "echo Hello World!",
+            "cp template.vpc untitled.vpc && vim untitled.vpc"
+        ]
+    }
+}

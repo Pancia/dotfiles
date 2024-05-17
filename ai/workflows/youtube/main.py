@@ -1,10 +1,11 @@
+from urllib.parse import urlparse, parse_qs
 from youtube_transcript_api import YouTubeTranscriptApi
 import sys
 import yt_dlp
 
 VIDEO_ID = None
 
-def extract_chapters(video_id):
+def _extract_chapters(video_id):
     URL = 'https://www.youtube.com/watch?v='+video_id
     ydl_opts = {'quiet': True}
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -12,50 +13,70 @@ def extract_chapters(video_id):
         chapters = info["chapters"]
     return chapters
 
-def raw_transcript(video_id):
+def _raw_transcript(video_id):
     return YouTubeTranscriptApi.get_transcript(video_id)
 
-def text_transcript(video_id):
-    return " ".join(map(lambda x: x['text'], raw_transcript(video_id)))
+def _text_transcript(video_id):
+    return " ".join(map(lambda x: x['text'], _raw_transcript(video_id)))
 
 def system_prompt(): None
 
-def init(): # EXPORT
+def _ask_user(prompt):
+    while True:
+        user_input = input(prompt)
+        if user_input != '':
+            return user_input
+        else:
+            print("Invalid input, please try again.")
+
+def init():
     global VIDEO_ID
-    print("[YOUTUBE] INIT!", sys.argv)
-    VIDEO_ID = input("Youtube video id:")
-    return 'youtube'
+    user_input = _ask_user("Youtube video id:")
+    try:
+        parsed = urlparse(user_input)
+        qp = parse_qs(parsed.query)
+        VIDEO_ID = qp['v'][0]
+    except:
+        VIDEO_ID = user_input
+    return {
+            "display transcript": "transcript",
+            "pretty formatted transcript": "pretty_transcript",
+            "summary": "summary",
+            "chapter summary": "chapter_summary",
+            }
 
-def response(command, text): # EXPORT
-    print('[chatgpt]:', command, text)
+def response(command, text):
+    print('[YOUTUBE]:', command, text)
 
-def state(): # EXPORT
+def state():
     global VIDEO_ID
     return {'video_id': VIDEO_ID}
 
-def log(*args): None
+def functions(): return []
 
-def ask_user(): # EXPORT
+def function_call(): pass
+
+def log(*args): pass
+
+def user_command(command):
     global VIDEO_ID
-    print("[YOUTUBE] SELECT COMMAND:")
-    cmd = input("[t] transcript, [s] summary, [c] chapter summary, [p] pretty transcript:")
-    if cmd == 't':
-        print(text_transcript(VIDEO_ID))
+    if command == 'transcript':
+        print(_text_transcript(VIDEO_ID))
         # TODO pbcopy it ?
         return
-    elif cmd == 'p':
-        return cmd, "Format the following text without changing any of words, only affect the formatting: \n" + text_transcript(VIDEO_ID)
-    elif cmd == 'c':
-        chapters = extract_chapters(VIDEO_ID)
+    elif command == 'pretty_transcript':
+        return command, "Format the following text without changing any of words, only affect the formatting: \n" + _text_transcript(VIDEO_ID)
+    elif command == 'chapter_summary':
+        chapters = _extract_chapters(VIDEO_ID)
         if chapters:
             transcript_by_chapters = []
             for chapter in chapters:
                 transcript_by_chapters.append(f"[chapter] {chapter['title']}:\n")
-            for item in raw_transcript(VIDEO_ID):
+            for item in _raw_transcript(VIDEO_ID):
                 for i, chapter in enumerate(chapters):
                     if item['start'] >= chapter['start_time'] and item['start'] <= chapter['end_time']:
                         transcript_by_chapters[i] += " " + item['text']
-            return cmd, """
+            return command, """
             Summarize each [chapter] in their own section.
 
             An example summary:
@@ -69,8 +90,8 @@ def ask_user(): # EXPORT
 
             [transcript]:
             \n""" + '\n\n'.join(transcript_by_chapters)
-    elif cmd == 's':
-        return cmd, """
+    elif command == 'summary':
+        return command, """
         Summarize the [transcript] into a single paragraph.
         Then create up to 10 bullet point summaries of key points or important moments, each should start with an appropriate emoji.
 
@@ -86,4 +107,4 @@ def ask_user(): # EXPORT
         Make sure to include both the summary and the emoji bullet points.
 
         [transcript]:\n
-        """ + text_transcript(VIDEO_ID)
+        """ + _text_transcript(VIDEO_ID)

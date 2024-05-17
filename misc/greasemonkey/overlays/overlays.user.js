@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  33
+// @version  34
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://cdn.jsdelivr.net/npm/js-cookie@3.0.1/dist/js.cookie.min.js
 // @require  https://raw.githubusercontent.com/jashkenas/underscore/master/underscore.js

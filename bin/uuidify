@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+
+Dir.entries(ARGV[0]).reject{|f| f[0] == '.' or f.match?(/\h{8}-(\h{4}-){3}\h{12}/)}.each{|f|
+  Dir.chdir(ARGV[0]) {
+    nf = %x< uuidgen >.strip + File.extname(f)
+    puts f + " -> " + nf
+    File.rename f, nf
+  }
+}

@@ -1,0 +1,9 @@
+{
+    "space": 2,
+    "iterm": {
+        "dir": "$HOME/Downloads/ytdl",
+        "tabs": [
+            "open . && echo music import"
+        ]
+    }
+}

@@ -1,0 +1,9 @@
+{
+    "space": 9,
+    "iterm": {
+        "dir": "$HOME",
+        "tabs": [
+            "q remote-sync"
+        ]
+    }
+}

@@ -40,7 +40,6 @@ brew 'watchexec'
 brew 'watchman'
 brew 'wget'
 brew 'yarn'
-brew 'youtube-dl'
 brew 'zsh'
 
 brew 'borkdude/brew/babashka'

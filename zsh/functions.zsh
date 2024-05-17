@@ -1,4 +1,4 @@
-function reset { tput reset }
+function reset { printf '\e]1337;ClearScrollback\a' }
 
 function .zshrc { exec zsh }
 function .zsh { exec zsh }
@@ -7,6 +7,9 @@ function ls { command ls -h "$@" }
 
 function cat { bat "$@" }
 function less { bat "$@" }
+
+function ydl { yt-dlp "$@" }
+function gdl { gallery-dl "$@" }
 
 function meditate {
     local T="$((60*${1:-5}))"

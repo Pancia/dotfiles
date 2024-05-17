@@ -22,15 +22,14 @@ function engage(seed_path, config)
   seed:start(config)
 end
 
+local hermes = engage("seeds.hermes", {})
+
 local cmus = engage("seeds.cmus", {})
 
---(local homeboard
---(when false
---(engage :seeds.homeboard.core
---{:defaultDuration 180
---:homeBoardPath   (.. HOME "/Dropbox/HomeBoard/")
---:videosPath      (.. HOME "/Movies/HomeBoard")
---})))
+local homeboard = engage("seeds.homeboard.init", {
+    homeBoardPath = HOME.."/Dropbox/HomeBoard/",
+    videosPath = HOME.."/Movies/HomeBoard"
+})
 
 function notif(title)
   return function()
@@ -85,7 +84,7 @@ local watch = engage("seeds.watch.init", {
   }
 })
 
-local seeds = {lotus = lotus, watch = watch}
+local seeds = {lotus = lotus, watch = watch, homeboard = homeboard}
 
 local hs_global_modifier = {"cmd", "ctrl"}
 

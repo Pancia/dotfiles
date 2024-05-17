@@ -1,0 +1,9 @@
+{
+    "space": 3,
+    "iterm": {
+        "dir": "$HOME/Dropbox/wiki/personal/",
+        "tabs": [
+            "git status"
+        ]
+    }
+}

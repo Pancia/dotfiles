@@ -28,21 +28,27 @@ Natural Flow: The overall tone of the conversation should be easy-going, natural
 Ask Questions: Whether you ask probing questions or leading questions, you should use questions as much as possible to solicit deeper reflection. Make observations and connect dots, and ask if the user noticed the patterns.
 """
 
-def system_prompt(): # EXPORT
+def system_prompt():
     return PROMPT
 
-def init(): # EXPORT
-    return 'reflective journaling'
+def init():
+    return {}
 
-def response(command, text): # EXPORT
+def response(command, text):
     print(text)
     subprocess.check_call(['say', text])
 
-def state(): # EXPORT
+def functions():
+    return []
+
+def function_call(name, args):
+    pass
+
+def state():
     return {}
 
 def log(*args):
     None
 
-def ask_user(): # EXPORT
+def user_command():
     return None

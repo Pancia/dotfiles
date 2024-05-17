@@ -27,6 +27,12 @@ Plug 'junegunn/vim-easy-align'
 Plug 'numToStr/FTerm.nvim'
 " }}}
 
+Plug 'MunifTanjim/nui.nvim'
+Plug 'nvim-lua/plenary.nvim'
+Plug 'nvim-telescope/telescope.nvim'
+
+Plug 'jackMort/ChatGPT.nvim'
+
 " DIR/FILE VIEWER {{{
 Plug 'romgrk/vimfiler-prompt'
 Plug 'Shougo/vimfiler.vim'
@@ -86,10 +92,18 @@ Plug 'PaterJason/cmp-conjure', {'commit': 'ca39e595a0a64150a3fbad340635b0179fe27
 Plug '~/projects/work/copilot/editor-plugins/vim'
 " }}}
 
+" JAVASCRIPT {{{
+Plug 'leafOfTree/vim-svelte-plugin'
+"}}}
+
 " LUA {{{
 "Plug 'xolox/vim-misc', {'for': 'lua'}
 "Plug 'xolox/vim-lua-ftplugin', {'for': 'lua'}
 Plug 'bakpakin/fennel.vim'
+" }}}
+
+" PYTHON {{{
+Plug 'numirias/semshi', { 'do': ':UpdateRemotePlugins' }
 " }}}
 
 " RUBY {{{

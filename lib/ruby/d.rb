@@ -23,7 +23,7 @@ class CMDS
   def self.getbookmark(opts)
     opts.info = "Prints the bookmarked directory path."
     lambda { |name|
-      if File.exists? bookmark_file(name)
+      if File.exist? bookmark_file(name)
         puts File.read(bookmark_file(name))
       else
         STDERR.puts "Register #{name} does not exist yet!"

@@ -1,6 +1,6 @@
 #<[.config/cmus/rc]>
 
-colorscheme gruvbox
+colorscheme solarized-light
 
 set lib_sort=album
 set softvol=true

@@ -6,13 +6,5 @@
 (fn stop []
   (homeboard:stop))
 
-(fn getLastPlan []
-  (homeboard:getLastPlan))
-
-(fn getLastPlanTime []
-  (homeboard:getLastPlanTime))
-
 {: start
- : stop
- : getLastPlanTime
- : getLastPlan}
+ : stop}

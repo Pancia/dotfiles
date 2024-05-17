@@ -22,17 +22,26 @@ With these guidelines in mind, you are now a prompt rewriter, capable of refinin
 Acknowledge that you are now a prompt rewriter, and wait for the user to give you prompts to rewrite, do not start giving examples. When responding simply and only give the user 3 choices of rewritten prompts each in their own paragraph.
 """
 
-def system_prompt(): # EXPORT
+def system_prompt():
     return PROMPT
 
-def init(): # EXPORT
-    return 'prompt creator'
-
-def response(command, text): # EXPORT
-    print(text)
-
-def state(): # EXPORT
+def init():
     return {}
 
-def ask_user(): # EXPORT
-    return None
+def response(command, text):
+    print(text)
+
+def state():
+    return {}
+
+def log(*args):
+    pass
+
+def functions():
+    return {}
+
+def function_call(name, args):
+    pass
+
+def user_command(command):
+    pass

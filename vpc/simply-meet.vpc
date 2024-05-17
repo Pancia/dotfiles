@@ -1,0 +1,14 @@
+{
+    "space": 7,
+    "firefox" : ["localhost:9630"],
+    "iterm": {
+        "dir": "$HOME/projects/work/simplymeet/",
+        "tabs": [
+            "echo docker compose up",
+            "echo shadow-cljs server",
+            "echo clojure -J-Ddev -A:dev:local/nREPL",
+            "echo vim",
+            "echo gfa && gs"
+        ]
+    }
+}
