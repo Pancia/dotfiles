@@ -14,7 +14,7 @@ def escape_title(title):
     return re.sub(r'[^a-zA-Z0-9]', '_', title)
 
 def get_transcript_for(path, title):
-    filename = path+"/transcripts/transcript%2F{title}.txt".format(title=escape_title(title))
+    filename = path+"/transcript%2F{title}.txt".format(title=escape_title(title))
     with open(filename, 'r') as file:
         return file.read()
 
@@ -79,7 +79,7 @@ def clear_terminal():
     subprocess.run(r"printf '\e]1337;ClearScrollback\a'", shell=True)
 
 def get_title_of(url):
-    response = requests.get(url)
+    response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
     if response.status_code != 200:
         raise Exception("failed to get url "+ url)
     soup = BeautifulSoup(response.content, "html.parser")
@@ -88,18 +88,19 @@ def get_title_of(url):
 
 def main():
     print(sys.argv[1])
-    assets_path = sys.argv[2]
+    transcripts_path = sys.argv[2]
+    output_path = sys.argv[3]
     with open(sys.argv[1], 'r') as file:
         for line in file:
             url = line.strip()
             title = get_title_of(url)
-            note_filename = "notes/notes%2F{title}.md".format(title=escape_title(title))
+            note_filename = "{path}/notes%2F{title}.md".format(title=escape_title(title),path=output_path)
             print(note_filename)
             if os.path.exists(note_filename):
                 continue
             date = datetime.fromtimestamp(time.time()).strftime("%Y_%m_%d")
-            transcript = format_transcript(get_transcript_for(assets_path, title))
-            print(transcript)
+            transcript = format_transcript(get_transcript_for(transcripts_path, title))
+            #print(transcript)
             print('date:', date)
             print('title:', title)
             print('url:', url)
@@ -121,7 +122,7 @@ def main():
             with open(note_filename, 'w') as file:
                 file.write(note_content)
             #input('continue? [Enter|<C-C>|<C-D>]:')
-            clear_terminal()
+            #clear_terminal()
 
 if __name__ == '__main__':
     main()

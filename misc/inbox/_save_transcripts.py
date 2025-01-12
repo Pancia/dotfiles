@@ -69,7 +69,7 @@ def format_text(text, width=80):
         return text
 
 def get_title_of(url):
-    response = requests.get(url)
+    response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
     if response.status_code != 200:
         print(response)
         raise Exception("failed to get url "+ url)
@@ -78,11 +78,12 @@ def get_title_of(url):
     return title
 
 def main():
+    output_path = sys.argv[2]
     with open(sys.argv[1], 'r') as file:
         for line in file:
             url = line.strip()
             title = get_title_of(url)
-            transcript_filename = "transcripts/transcript%2F{title}.txt".format(title=re.sub(r'[^a-zA-Z0-9]', '_', title))
+            transcript_filename = "{output_path}/transcript%2F{title}.txt".format(title=re.sub(r'[^a-zA-Z0-9]', '_', title), output_path=output_path)
             if os.path.exists(transcript_filename):
                 continue
             transcript = format_text(get_transcript_for(url))

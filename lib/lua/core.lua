@@ -22,6 +22,8 @@ function engage(seed_path, config)
   seed:start(config)
 end
 
+local monitor = engage("seeds.monitor", {})
+
 local hermes = engage("seeds.hermes", {})
 
 local cmus = engage("seeds.cmus", {})
@@ -84,7 +86,7 @@ local watch = engage("seeds.watch.init", {
   }
 })
 
-local seeds = {lotus = lotus, watch = watch, homeboard = homeboard}
+local seeds = {lotus = lotus, watch = watch, homeboard = homeboard, monitor = monitor}
 
 local hs_global_modifier = {"cmd", "ctrl"}
 

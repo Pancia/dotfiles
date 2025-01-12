@@ -7,11 +7,13 @@ import json
 
 directory = sys.argv[1]
 tabs = json.loads(sys.argv[2])
+print(directory, tabs)
 
 AppKit.NSWorkspace.sharedWorkspace().launchApplication_("iterm")
 
 async def main(connection):
     app = await iterm2.async_get_app(connection)
+    print(app)
     await app.async_activate()
     window = await iterm2.Window.async_create(connection, command=f"/bin/zsh")
     await window.current_tab.current_session.async_send_text(f"cd {directory} && {tabs[0]}\n")
