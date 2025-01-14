@@ -18,13 +18,16 @@ function writeToLog(text)
     io.open(log_file, "a"):write(output):close()
 end
 
-function createEntry(window, allwindows)
+function createEntry(window, visibleWindows)
     if window:application():title() == "loginwindow" then
-        return ""
+        return "<LOGINWINDOW>\n\n"
     end
+    realWindows = hs.fnutils.filter(visibleWindows, function (x)
+        return x:title() ~= "" and x ~= window
+    end)
     local text = ""
     text = text .. "focused window, app: " .. window:application():title() .. "; title: " .. window:title().. "\n"
-    text = text .. "visible windows:\n" .. table.concat(hs.fnutils.map(allwindows, function(w)
+    text = text .. "visible windows:\n" .. table.concat(hs.fnutils.map(realWindows, function(w)
         return "    app: " .. w:application():title() .. "; title: " .. w:title() .. "\n"
     end))
     text = text .. "\n"
