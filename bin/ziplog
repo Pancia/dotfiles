@@ -1,0 +1,12 @@
+#!/bin/bash
+
+pushd ~/private/logs/monitor/
+find . -name "*.log" -type f -mtime +6d | while read -r file; do
+    if [ ! -f "${file}.zip" ]; then
+        echo "Zipping $file..."
+        zip --move -9 "${file}.zip" "$file"
+    else
+        echo "Zip file already exists for $file, skipping..."
+    fi
+done
+popd

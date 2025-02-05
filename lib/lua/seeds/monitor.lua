@@ -4,41 +4,52 @@ local HOME = os.getenv("HOME")
 local log_path = HOME .. "/private/logs/monitor/"
 local interval = 60
 
-function writeToLog(text)
+function writeToLog(entry)
     local output
-    if obj._prevLogEntry == text then
-        output = "<NOCHANGE>\n\n"
-        print("TRUE", output)
+    if obj._prevLogEntry ~= nil and obj._prevLogEntry["focused"] == entry["focused"] and obj._prevLogEntry["visible"] == entry["visible"] then
+        output = "<NOCHANGE "..entry["focused"]..">\n"
     else
-        output = text
-        obj._prevLogEntry = text
+        output = entry["focused"].."\n"..(entry["visible"] or "")
+        obj._prevLogEntry = entry
     end
-    output = "now: " .. os.date("%Y_%m_%d__%H:%M:%S") .. "\n" .. output
-    local log_file = log_path .. "/" .. os.date("%Y_%m_%d") .. ".log"
+    output = "NOW: "..os.date("%Y_%m_%d__%H:%M:%S").."\n"..output.."\n\n"
+    local log_file = log_path.."/"..os.date("%Y_%m_%d")..".log"
     io.open(log_file, "a"):write(output):close()
 end
 
 function createEntry(window, visibleWindows)
-    if window:application():title() == "loginwindow" then
-        return "<LOGINWINDOW>\n\n"
+    if window == nil or window:application():title() == "loginwindow" or window:application():title() == "ScreenSaverEngine" then
+        return {["focused"] = "<SLEEPING>"}
     end
     realWindows = hs.fnutils.filter(visibleWindows, function (x)
         return x:title() ~= "" and x ~= window
     end)
-    local text = ""
-    text = text .. "focused window, app: " .. window:application():title() .. "; title: " .. window:title().. "\n"
-    text = text .. "visible windows:\n" .. table.concat(hs.fnutils.map(realWindows, function(w)
-        return "    app: " .. w:application():title() .. "; title: " .. w:title() .. "\n"
+    local entry = {}
+    entry["focused"] = "FOCUSED: " .. window:application():title() .. " => " .. window:title()
+    entry["visible"] = "VISIBLE:\n" .. table.concat(hs.fnutils.map(realWindows, function(w)
+        return "\t- " .. w:application():title() .. " => " .. w:title() .. "\n"
     end))
-    text = text .. "\n"
-    return text
+    return entry
+end
+
+function executeWriteLogEntry()
+    local success, error = pcall(function()
+        writeToLog(createEntry(hs.window.focusedWindow(), hs.window.visibleWindows()))
+    end)
+    if not success then
+        print("Monitor Error executing log write:")
+        print("tostring(error):" .. tostring(error))
+        print("hs.inspect(error):" .. hs.inspect(error))
+        hs.notify.new(nil, {
+            ["title"] = "Monitor Error",
+            ["withdrawAfter"] = 0
+        }):send()
+    end
 end
 
 function obj:start(config)
-    writeToLog(createEntry(hs.window.focusedWindow(), hs.window.visibleWindows()))
-    obj._loop = hs.timer.doEvery(interval, function()
-        writeToLog(createEntry(hs.window.focusedWindow(), hs.window.visibleWindows()))
-    end)
+    executeWriteLogEntry()
+    obj._loop = hs.timer.doEvery(interval, executeWriteLogEntry)
     return self
 end
 

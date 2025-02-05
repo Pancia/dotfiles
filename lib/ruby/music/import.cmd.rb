@@ -7,10 +7,10 @@ module MusicCMD
     opts.info = "Imports all music ytdl from downloads"
     lambda { ||
       Dir.chdir("#{%x[echo $HOME].strip}/Downloads/ytdl/music") {
-        Dir["*"].each { |folder|
-          options = {
-            :playlist => folder,
-          }
+        files = Dir["*"].filter(&File.method(:file?))
+        _import_files({:playlist => "TODO"}, files)
+        Dir["*"].reject(&File.method(:file?)).each { |folder|
+          options = {:playlist => folder}
           _import_files(options, Dir["#{folder}/*"])
         }
       }
