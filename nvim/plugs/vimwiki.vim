@@ -3,6 +3,7 @@ let g:vimwiki_list = [
             \{'path': '~/dotfiles/wiki', 'auto_tags': 1, 'ext': '.wiki' }
             \]
 
+let g:vimwiki_global_ext = 0
 let g:vimwiki_map_prefix = ',w'
 
 function! VimwikiLinkHandler(link)

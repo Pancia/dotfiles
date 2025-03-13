@@ -11,7 +11,7 @@ noremap Y y$
 " U redoes
 nnoremap U <c-r>
 " ctrl-e removes last search highlighting
-nnoremap <c-e> /reset\.search<CR>:nohlsearch<CR>
+nnoremap <silent> <c-e> /reset\.search<CR>:nohlsearch<CR>
 " Use BS to navigate cursor history
 noremap <BS>   <c-o>zz
 noremap <S-BS> <c-i>zz
@@ -23,8 +23,10 @@ nnoremap # #zz
 nnoremap g* g*zz
 nnoremap g# g#zz
 " buffer nav
-nmap <c-k> :bnext<CR>
-nmap <c-j> :bprevious<CR>
+if !exists('g:vscode')
+  nmap <c-k> :bnext<CR>
+  nmap <c-j> :bprevious<CR>
+endif
 command! BD b#|bd#
 " terminal helpers
 tnoremap <expr> <Esc> (&filetype == "fzf") ? "<Esc>" : "<C-\><C-n>"

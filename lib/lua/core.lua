@@ -5,10 +5,13 @@ local HOME = os.getenv("HOME")
 local install = hs.loadSpoon("SpoonInstall")
 install.use_syncinstall = true
 
-install:andUse("TextClipboardHistory", {
+install:andUse("ClipboardTool", {
   start = true,
   hotkeys = {
     toggle_clipboard = {{"cmd", "ctrl"}, "p"}
+  },
+  config = {
+      display_max_length = 50
   }
 })
 

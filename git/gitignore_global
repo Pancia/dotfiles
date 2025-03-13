@@ -9,3 +9,4 @@
 .session.vim
 .syntastic_javac_config
 *.local.*
+anthony.adoc

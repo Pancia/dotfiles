@@ -1,6 +1,9 @@
 #!/bin/bash
 
 pushd ~/private/logs/monitor/
+ls -lh
+echo "GO AHEAD? OR CTRL-C"
+read empty
 find . -name "*.log" -type f -mtime +6d | while read -r file; do
     if [ ! -f "${file}.zip" ]; then
         echo "Zipping $file..."
@@ -9,4 +12,5 @@ find . -name "*.log" -type f -mtime +6d | while read -r file; do
         echo "Zip file already exists for $file, skipping..."
     fi
 done
+ls -lh
 popd
