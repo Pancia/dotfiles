@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+(cd $1 && ${@:2}) 2> >(sed 's/^/[stderr]: /' >&1)

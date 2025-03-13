@@ -1,1 +1,1 @@
-cd ~/private/vpc/ && ruby server.rb
+~/dotfiles/bin/service-wrapper ~/private/vpc/ ruby server.rb

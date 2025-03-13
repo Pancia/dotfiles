@@ -13,8 +13,8 @@
         <key>KeepAlive</key>
         <true/>
         <key>StandardOutPath</key>
-        <string>/tmp/service.vpc.log</string>
+        <string>/Users/anthony/.log/services/vpc.log</string>
         <key>StandardErrorPath</key>
-        <string>/tmp/service.vpc.error.log</string>
+        <string>/Users/anthony/.log/services/vpc.log</string>
     </dict>
 </plist>

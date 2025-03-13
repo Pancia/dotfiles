@@ -12,8 +12,20 @@ function _ENSURE_RCS {
     done
 }
 
+function _ENSURE_SERVICES {
+    for s in $(find $HOME/dotfiles/services -type f -name '*.plist'); do
+        local dest=$HOME/Library/LaunchAgents/
+        if [[ ! -f "$dest/$s" ]] || $(_not_same_inode "$dest/$s" "$s") ; then
+            ln -f "$s" "$dest/$(basename $s)"
+            launchctl load ~/Library/LaunchAgents/$(basename $s)
+            launchctl start $(basename $s)
+        fi
+    done
+}
+
 function ZSHRC {
     (_ENSURE_RCS &)
+    (_ENSURE_SERVICES &)
 
     source ~/dotfiles/zsh/init.zsh
     [ -e ~/dotfiles/zsh/extra.zsh ] && source ~/dotfiles/zsh/extra.zsh
