@@ -13,12 +13,15 @@ function _ENSURE_RCS {
 }
 
 function _ENSURE_SERVICES {
-    for s in $(find $HOME/dotfiles/services -type f -name '*.plist'); do
-        local dest=$HOME/Library/LaunchAgents/
-        if [[ ! -f "$dest/$s" ]] || $(_not_same_inode "$dest/$s" "$s") ; then
-            ln -f "$s" "$dest/$(basename $s)"
-            launchctl load ~/Library/LaunchAgents/$(basename $s)
-            launchctl start $(basename $s)
+    local dest=$HOME/Library/LaunchAgents/
+    for service_path in $(find $HOME/dotfiles/services -type f -name '*.plist'); do
+        local plist=$(basename $service_path)
+        local service_name=$(basename $plist .plist)
+        if [[ ! -f "$dest/$plist" ]] || $(_not_same_inode "$dest/$plist" "$service_path") ; then
+            echo "[zshrc/SERVICE]: (re)loading $service_path"
+            ln -f "$service_path" "$dest/$(basename $service_path)"
+            launchctl load ~/Library/LaunchAgents/$plist
+            launchctl start "$(basename $plist .plist)"
         fi
     done
 }
