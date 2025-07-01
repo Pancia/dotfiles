@@ -59,12 +59,37 @@ function obj:decVolume()
     end
 end
 
+function obj:spotifyplayOrPause()
+    hs.spotify.playpause()
+end
+
+function obj:spotifyprevTrack()
+    hs.spotify.previous()
+end
+
+function obj:spotifynextTrack()
+    hs.spotify.next()
+end
+
+function obj:spotifyincVolume()
+    hs.spotify.volumeUp()
+end
+
+function obj:spotifydecVolume()
+    hs.spotify.volumeDown()
+end
+
 function bindMediaKeys()
     hs.hotkey.bind({}, "f7", obj.prevTrack)
     hs.hotkey.bind({}, "f8", obj.playOrPause)
     hs.hotkey.bind({}, "f9", obj.nextTrack)
     hs.hotkey.bind({}, "f13", obj.decVolume)
     hs.hotkey.bind({}, "f14", obj.incVolume)
+    hs.hotkey.bind({"cmd"}, "f7", obj.spotifyprevTrack)
+    hs.hotkey.bind({"cmd"}, "f8", obj.spotifyplayOrPause)
+    hs.hotkey.bind({"cmd"}, "f9", obj.spotifynextTrack)
+    hs.hotkey.bind({"cmd"}, "f13", obj.spotifydecVolume)
+    hs.hotkey.bind({"cmd"}, "f14", obj.spotifyincVolume)
 end
 
 function obj:editTrack()
@@ -105,6 +130,7 @@ function onSleep()
     end
 end
 
+-- see bin/cmus-status-display
 function obj:onIPCMessage(_id, msg)
   local title = ""
     if isPlaying() then

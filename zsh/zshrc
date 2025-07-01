@@ -67,6 +67,10 @@ function ZSHRC {
     fi
 
     chpwd # Best to check, new shell (new term window or `zsh`) does not trigger chpwd
+
+    export NVM_DIR="$HOME/.config/nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 }
 
 local ZSH_PROF_LOG="/tmp/zsh-profiling.$$.log"

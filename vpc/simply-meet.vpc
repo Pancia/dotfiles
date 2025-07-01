@@ -1,6 +1,6 @@
 {
     "space": 7,
-    "firefox" : ["localhost:9630"],
+    "chrome" : ["localhost:9630"],
     "iterm": {
         "dir": "$HOME/projects/work/simplymeet/",
         "tabs": [

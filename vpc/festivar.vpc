@@ -1,0 +1,21 @@
+{
+    "space": 5,
+    "chrome" : [
+        "https://claude.ai/new",
+        "http://localhost:9630/build/main",
+        "http://localhost:3000/",
+        "https://book.fulcrologic.com/RAD.html",
+        "https://book.fulcrologic.com/"
+    ],
+    "iterm": {
+        "dir": "$HOME/projects/work/festivar-webapp/",
+        "tabs": [
+            "$ server",
+            "$ browser",
+            "$ vim",
+            "claude",
+            "gs"
+        ]
+    },
+    "board": "$HOME/Dropbox/wiki/personal/pages/work%2Ffestivar.md"
+}

@@ -62,3 +62,6 @@ call onedark#set_highlight("MyProjectFixme", {"fg": g:my_colors.yellow
             \                                ,"bg": g:my_colors.white
             \                                ,"gui": "standout"})
 " FIXME asdf FIXME: asdf asdf
+
+highlight Pmenu guibg=#C0C0C0
+highlight NormalFloat guibg=#C0C0C0

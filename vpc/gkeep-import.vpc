@@ -1,6 +1,6 @@
 {
     "space": 6,
-    "firefox" : ["takeout.google.com"],
+    "brave" : ["takeout.google.com"],
     "iterm": {
         "dir": "$HOME/dotfiles/misc/gkeep-import",
         "tabs": [

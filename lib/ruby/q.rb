@@ -22,7 +22,7 @@ class CMDS
   end
   def self.getreg(opts)
     opts.info = "Prints the register file path."
-    lambda { |name, *args|
+    lambda { |name|
       if File.exist? reg_file(name)
         puts reg_file(name)
       else

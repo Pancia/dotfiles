@@ -5,9 +5,10 @@ import AppKit
 import sys
 import json
 
+print("[iterm.py/debug]: args:", sys.argv)
 directory = sys.argv[1]
 tabs = json.loads(sys.argv[2])
-print(directory, tabs)
+print("[iterm.py/debug]: dir & tabs", directory, tabs)
 
 AppKit.NSWorkspace.sharedWorkspace().launchApplication_("iterm")
 

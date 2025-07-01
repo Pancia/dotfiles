@@ -1,6 +1,6 @@
 {
     "space": 9,
-    "firefox" : ["www.google.com"],
+    "brave" : ["www.google.com"],
     "iterm": {
         "dir": "$HOME/dotfiles/vpc/",
         "tabs": [
@@ -8,5 +8,5 @@
             "cp template.vpc untitled.vpc && vim untitled.vpc"
         ]
     },
-    "board": "Dropbox/wiki/personal/pages/dashboard%2Fhome.md"
+    "board": "$HOME/Dropbox/wiki/personal/pages/dashboard%2Fhome.md"
 }

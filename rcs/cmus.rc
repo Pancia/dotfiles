@@ -5,9 +5,10 @@ colorscheme solarized-light
 set lib_sort=album
 set softvol=true
 set start_view=sorted
+set scroll_offset=7
 
 # %{genre} is used because %{comment} is not recognized
-set format_playlist= %-15{album} | %-15%{artist} > %{title}%= %{?genre?%g} %{duration} .
+set format_playlist= %-15{album} | %-15%{artist} > %{title}%= %{?genre?%g} %{duration} #%{play_count} .
 set format_current= %{album} | %{artist} > %{title}%=%{?genre?%g}
 set status_display_program=cmus-status-display
 

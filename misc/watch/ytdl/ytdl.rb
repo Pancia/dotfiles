@@ -7,7 +7,7 @@ $home_dir = %x[echo $HOME].strip
 
 $playlist_fmt = "%(playlist_title)s"
 $audio_code = "bestaudio[ext=m4a]"
-$video_code = "bestvideo[ext=mp4][height<=480][protocol=https]+bestaudio[ext=m4a]"
+$video_code = "bestvideo[ext=mp4][height<=480][protocol=https]+bestaudio"
 
 Dir["#{$home_dir}/Downloads/*.ytdl"].each { |f|
   ytid, videoType, downloadType, _ = File.basename(f).split(".")

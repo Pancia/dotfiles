@@ -6,8 +6,7 @@ if empty(glob('~/.config/nvim/autoload/plug.vim'))
 endif
 call plug#begin('~/.config/nvim/plugged')
 
-if exists('g:vscode')
-else
+if !exists('g:vscode')
     " LIBS {{{
     Plug 'Shougo/vimproc.vim', {'do' : 'make'}
     Plug 'tpope/vim-dispatch'
@@ -21,8 +20,7 @@ Plug 'tpope/vim-speeddating'
 Plug 'tpope/vim-surround'
 " }}}
 
-if exists('g:vscode')
-else
+if !exists('g:vscode')
     Plug 'liuchengxu/vim-which-key'
     Plug 'vim-airline/vim-airline' " Status Bar
     Plug 'mbbill/undotree'
@@ -64,8 +62,7 @@ Plug 'Lokaltog/vim-easymotion'
 Plug 'smoka7/hop.nvim'
 " }}}
 
-if exists('g:vscode')
-else
+if !exists('g:vscode')
     " THEME {{{
     Plug 'KabbAmine/vCoolor.vim'
     Plug 'joshdick/onedark.vim'
@@ -74,8 +71,7 @@ else
 endif
 
 " AUTOCOMPLETE {{{
-if exists('g:vscode')
-else
+if !exists('g:vscode')
     Plug 'ncm2/float-preview.nvim'
     Plug 'Shougo/neco-syntax'
     Plug 'Shougo/neco-vim'
@@ -86,8 +82,7 @@ endif
 " }}}
 
 " LSP {{{
-if exists('g:vscode')
-else
+if !exists('g:vscode')
     Plug 'neovim/nvim-lspconfig'
     Plug 'gfanto/fzf-lsp.nvim'
     Plug 'hrsh7th/cmp-nvim-lsp'
@@ -99,8 +94,7 @@ endif
 " }}}
 
 " CLOJURE {{{
-if exists('g:vscode')
-else
+if !exists('g:vscode')
     Plug 'Olical/conjure', {'for': ['clojure', 'fennel'], 'tag': 'v4.30.1'}
     Plug 'PaterJason/cmp-conjure', {'commit': 'ca39e595a0a64150a3fbad340635b0179fe275ec'}
 endif
@@ -110,8 +104,7 @@ Plug 'luochen1990/rainbow'
 " Plug '~/projects/work/copilot/editor-plugins/vim'
 " }}}
 
-if exists('g:vscode')
-else
+if !exists('g:vscode')
     " JAVASCRIPT {{{
     Plug 'leafOfTree/vim-svelte-plugin'
     "}}}
@@ -137,51 +130,56 @@ endif
 
 call plug#end()
 
-if !exists('g:vscode')
-    function! AssocIn(dict, key, value) abort
-        if a:key == []
-            if string(a:dict) !~ '{}' && string(a:dict) !=# string(a:value)
-                echoerr "WARNING: overriding existing value ".string(a:dict)." with ".string(a:value)
-            endif
-            return a:value
-        elseif has_key(a:dict, a:key[0])
-            let a:dict[a:key[0]] = AssocIn(a:dict[a:key[0]], a:key[1:], a:value)
-        else
-            let a:dict[a:key[0]] = AssocIn({}, a:key[1:], a:value)
+function! AssocIn(dict, key, value) abort
+    if a:key == []
+        if string(a:dict) !~ '{}' && string(a:dict) !=# string(a:value)
+            echoerr "WARNING: overriding existing value ".string(a:dict)." with ".string(a:value)
         endif
-        return a:dict
-    endfunction
+        return a:value
+    elseif has_key(a:dict, a:key[0])
+        let a:dict[a:key[0]] = AssocIn(a:dict[a:key[0]], a:key[1:], a:value)
+    else
+        let a:dict[a:key[0]] = AssocIn({}, a:key[1:], a:value)
+    endif
+    return a:dict
+endfunction
 
-    " SEMICOLON WHICH KEY {{{
-    let g:semicolon_which_key_map = get(g:, 'semicolon_which_key_map', {})
+" SEMICOLON WHICH KEY {{{
+let g:semicolon_which_key_map = get(g:, 'semicolon_which_key_map', {})
 
+
+if !exists('g:vscode')
     call which_key#register(';', "g:semicolon_which_key_map")
+end
 
-    function! SEMICOLON_CMD(path, cmd, ...) abort
-        let tag = a:0 >= 1 ? a:1 : a:cmd
-        call AssocIn(g:semicolon_which_key_map, split(a:path, '\zs'), [a:cmd, l:tag])
-    endfunction
+function! SEMICOLON_CMD(path, cmd, ...) abort
+    let tag = a:0 >= 1 ? a:1 : a:cmd
+    call AssocIn(g:semicolon_which_key_map, split(a:path, '\zs'), [a:cmd, l:tag])
+endfunction
 
-    function! SEMICOLON_GROUP(path, name) abort
-        call AssocIn(g:semicolon_which_key_map, split(a:path, '\zs')+['name'], a:name)
-    endfunction
-    " }}} SEMICOLON WHICH KEY
+function! SEMICOLON_GROUP(path, name) abort
+    call AssocIn(g:semicolon_which_key_map, split(a:path, '\zs')+['name'], a:name)
+endfunction
+" }}} SEMICOLON WHICH KEY
 
-    " COMMA WHICH KEY {{{
-    let g:comma_which_key_map = get(g:, 'comma_which_key_map', {})
+" COMMA WHICH KEY {{{
+let g:comma_which_key_map = get(g:, 'comma_which_key_map', {})
 
+if !exists('g:vscode')
     call which_key#register(',', "g:comma_which_key_map")
+end
 
-    function! COMMA_CMD(path, cmd, ...) abort
-        let tag = a:0 >= 1 ? a:1 : a:cmd
-        call AssocIn(g:comma_which_key_map, split(a:path, '\zs'), [a:cmd, l:tag])
-    endfunction
+function! COMMA_CMD(path, cmd, ...) abort
+    let tag = a:0 >= 1 ? a:1 : a:cmd
+    call AssocIn(g:comma_which_key_map, split(a:path, '\zs'), [a:cmd, l:tag])
+endfunction
 
-    function! COMMA_GROUP(path, name) abort
-        call AssocIn(g:comma_which_key_map, split(a:path, '\zs')+['name'], a:name)
-    endfunction
-    " }}} COMMA WHICH KEY
+function! COMMA_GROUP(path, name) abort
+    call AssocIn(g:comma_which_key_map, split(a:path, '\zs')+['name'], a:name)
+endfunction
+" }}} COMMA WHICH KEY
 
+if !exists('g:vscode')
     for plug_conf in split(globpath(expand("<sfile>:p:h"), 'plugs/*.vim'), '\n')
         execute 'source ' . plug_conf
     endfor

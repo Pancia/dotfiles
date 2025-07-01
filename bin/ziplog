@@ -13,4 +13,6 @@ find . -name "*.log" -type f -mtime +6d | while read -r file; do
     fi
 done
 ls -lh
+echo "log size"
+du -ha ~/private/logs/ | sort -h
 popd
