@@ -9,31 +9,45 @@ local keyboardEventTypes = {hs.eventtap.event.types.keyDown}
 local mouseEventTypes = {hs.eventtap.event.types.leftMouseDown, hs.eventtap.event.types.rightMouseDown, hs.eventtap.event.types.mouseMoved}
 
 function writeToLog(entry)
-    local output
-    if obj._prevLogEntry ~= nil and 
-       obj._prevLogEntry["focused"] == entry["focused"] and 
+    local jsonEntry = {
+        timestamp = os.date("%Y_%m_%d__%H:%M:%S"),
+        focused = entry["focused"],
+        visible = entry["visible"],
+        active = entry["active"]
+    }
+
+    -- Check if this is a "no change" entry
+    if obj._prevLogEntry ~= nil and
+       obj._prevLogEntry["focused"] == entry["focused"] and
        obj._prevLogEntry["visible"] == entry["visible"] then
-        output = "<NOCHANGE "..entry["focused"]..">"
-        if entry["active"] then
-            output = output .. " <ACTIVE>"
-        else
-            output = output .. " <INACTIVE>"
-        end
-        output = output .. "\n"
+       jsonEntry.noChange = true
     else
-        output = entry["focused"].."\n"..(entry["visible"] or "")
-        if entry["active"] then
-            output = output .. "<ACTIVE>\n"
-        else
-            output = output .. "<INACTIVE>\n"
-        end
         obj._prevLogEntry = entry
     end
-    output = "NOW: "..os.date("%Y_%m_%d__%H:%M:%S").."\n"..output.."\n\n"
-    
+
+    -- Convert to JSON string
+    local jsonString = hs.json.encode(jsonEntry)
+
     -- Reset activity flag after logging
     obj._wasActive = false
-    local log_file = log_path.."/"..os.date("%Y_%m_%d")..".log"
+    local log_file = log_path.."/"..os.date("%Y_%m_%d")..".log.json"
+
+    -- Check if file has content to determine if we need a leading comma
+    local file = io.open(log_file, "r")
+    local needsComma = false
+    if file then
+        local content = file:read("*a")
+        needsComma = content and #content > 0
+        file:close()
+    end
+
+    local output = ""
+    if needsComma then
+        output = ",\n" .. jsonString
+    else
+        output = jsonString
+    end
+
     io.open(log_file, "a"):write(output):close()
 end
 
@@ -45,10 +59,10 @@ function createEntry(window, visibleWindows)
         return x:title() ~= "" and x ~= window
     end)
     local entry = {}
-    entry["focused"] = "FOCUSED: " .. window:application():title() .. " => " .. window:title()
-    entry["visible"] = "VISIBLE:\n" .. table.concat(hs.fnutils.map(realWindows, function(w)
-        return "\t- " .. w:application():title() .. " => " .. w:title() .. "\n"
-    end))
+    entry["focused"] = window:application():title() .. " => " .. window:title()
+    entry["visible"] = hs.fnutils.map(realWindows, function(w)
+        return w:application():title() .. " => " .. w:title()
+    end)
     entry["active"] = obj._wasActive
     return entry
 end
@@ -77,35 +91,35 @@ end
 function obj:start(config)
     -- Initialize activity flag
     obj._wasActive = false
-    
+
     -- Create event taps for keyboard and mouse
     obj._keyboardWatcher = hs.eventtap.new(keyboardEventTypes, activityCallback)
     obj._mouseWatcher = hs.eventtap.new(mouseEventTypes, activityCallback)
-    
+
     -- Start watching for activity
     obj._keyboardWatcher:start()
     obj._mouseWatcher:start()
-    
+
     -- Start the monitoring loop
     executeWriteLogEntry()
     obj._loop = hs.timer.doEvery(interval, executeWriteLogEntry)
-    
+
     return self
 end
 
 function obj:stop()
     -- Stop the monitoring loop
     obj._loop:stop()
-    
+
     -- Stop activity watchers
     if obj._keyboardWatcher then
         obj._keyboardWatcher:stop()
     end
-    
+
     if obj._mouseWatcher then
         obj._mouseWatcher:stop()
     end
-    
+
     return self
 end
 

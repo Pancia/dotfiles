@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
 date
 
-space=$(jq '.space' $1 2>&1)
-curl -X POST "http://localhost:31415/vpc/${space}"; ret=$?
-if [[ $ret -ne 0 ]]; then
-    echo "FAILED TO CONNECT TO VPC SERVER"
-    exit 404
+space=$(jq -r '.space' $1 2>&1)
+
+# Only switch spaces if space is specified and not "current"
+if [[ "$space" != "null" && "$space" != "current" ]]; then
+    curl -X POST "http://localhost:31415/vpc/${space}"; ret=$?
+    if [[ $ret -ne 0 ]]; then
+        echo "FAILED TO CONNECT TO VPC SERVER"
+        exit 404
+    fi
+else
+    echo "Using current space (no switch)"
 fi
 
 if jq --exit-status '.iterm' $1 ; then

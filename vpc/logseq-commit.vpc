@@ -1,5 +1,5 @@
 {
-    "space": 3,
+    "space": "current",
     "iterm": {
         "dir": "$HOME/Dropbox/wiki/personal/",
         "tabs": [

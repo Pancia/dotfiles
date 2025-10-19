@@ -1,0 +1,37 @@
+#!/bin/bash
+
+if [ -z "$1" ]; then
+    echo "Enter the ytdl type:"
+    echo "music audio video text notes"
+    read -r ytdl_type
+elif [ "$1" == "clipboard" ]; then
+    arg2="$(pbpaste)"
+    echo "Enter the ytdl type:"
+    echo "music audio video text notes"
+    read -r ytdl_type
+else
+    echo ACCEPTABLE 2nd ARG VALUES:
+    echo music audio video text notes
+    ytdl_type="$1"
+fi
+
+if [ "$1" == "clipboard" ]; then
+    echo null
+elif [ -z "$2" ]; then
+    echo "Please enter the youtube ID:"
+    read -r arg2
+else
+    arg2="$2"
+fi
+
+if [[ "$arg2" =~ ^(https|www|youtube) ]]; then
+    video_id=$(echo "$arg2" | sed 's/.*v=\([^&]*\).*/\1/')
+else
+    video_id="$arg2"
+fi
+
+echo DOWNLOADING TO ~/Downloads/$video_id.single.$ytdl_type.ytdl
+
+echo 'please ignore' > ~/Downloads/"$video_id.single.$ytdl_type.ytdl"
+
+ruby ~/dotfiles/misc/watch/ytdl/ytdl.rb

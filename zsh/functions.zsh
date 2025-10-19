@@ -11,6 +11,8 @@ function less { bat "$@" }
 function ydl { yt-dlp "$@" }
 function gdl { gallery-dl "$@" }
 
+function cmus { LC_ALL=C.UTF-8 command cmus "$@" }
+
 function meditate {
     local T="$((60*${1:-5}))"
     echo "sleeping for $T seconds"

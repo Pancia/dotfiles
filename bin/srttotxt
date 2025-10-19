@@ -1,0 +1,4 @@
+#!/bin/bash
+
+awk '/^[0-9]+$/ {next} /-->/ {next} NF {print}' "$1" \
+    | fold -w 80 -s > "${1%.srt}.txt"

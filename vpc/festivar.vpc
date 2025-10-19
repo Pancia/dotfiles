@@ -1,7 +1,6 @@
 {
     "space": 5,
     "chrome" : [
-        "https://claude.ai/new",
         "http://localhost:9630/build/main",
         "http://localhost:3000/",
         "https://book.fulcrologic.com/RAD.html",

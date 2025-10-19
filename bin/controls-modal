@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 commands = {
         'c': ('CAT', 'echo cat'),
+        'y': {
+            '_desc': 'ytdl',
+            'i': ("ytdl interactive", 'ytdl'),
+            'y': ("ytdl clipboard", 'ytdl clipboard'),
+            },
         'm': {
             '_desc': 'music',
             'c': ("Play or Pause", 'cmus-remote --pause'),

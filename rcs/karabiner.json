@@ -33,14 +33,15 @@
                         ]
                     },
                     {
-                        "description": "f7 + cmd = osx media rewind",
+                        "description": "f7 + cmd + shift = osx media rewind",
                         "manipulators": [
                             {
                                 "from": {
                                     "key_code": "f7",
                                     "modifiers": {
                                         "mandatory": [
-                                            "left_command"
+                                            "left_command",
+                                            "left_shift"
                                         ]
                                     }
                                 },
@@ -52,14 +53,15 @@
                         ]
                     },
                     {
-                        "description": "f8 + cmd = osx media playpause",
+                        "description": "f8 + cmd + shift = osx media playpause",
                         "manipulators": [
                             {
                                 "from": {
                                     "key_code": "f8",
                                     "modifiers": {
                                         "mandatory": [
-                                            "left_command"
+                                            "left_command",
+                                            "left_shift"
                                         ]
                                     }
                                 },
@@ -71,14 +73,15 @@
                         ]
                     },
                     {
-                        "description": "f9 + cmd = osx media fastforward",
+                        "description": "f9 + cmd + shift = osx media fastforward",
                         "manipulators": [
                             {
                                 "from": {
                                     "key_code": "f9",
                                     "modifiers": {
                                         "mandatory": [
-                                            "left_command"
+                                            "left_command",
+                                            "left_shift"
                                         ]
                                     }
                                 },
@@ -171,7 +174,7 @@
                                     "key_code": "eject"
                                 },
                                 "to": {
-                                    "shell_command": "osascript <<EOF\ntell application \"iterm2\"\ncreate window with default profile command \"zsh -ic 'controls-modal'\"\nend tell\nEOF"
+                                    "shell_command": "osascript <<EOF\ntell application \"iterm2\"\ncreate window with default profile command \"~/dotfiles/bin/controls-modal\"\nend tell\nEOF"
                                 },
                                 "type": "basic"
                             }

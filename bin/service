@@ -5,18 +5,10 @@ require "cli.rb"
 require "shellwords"
 
 $home_dir = "/Users/#{%x[whoami].strip}/"
-$command_dir = "./dotfiles/services/"
-$service_dir = "./.config/services/"
-
-system("mkdir -p #{$home_dir}/#{$command_dir}")
-system("mkdir -p #{$home_dir}/#{$service_dir}")
+$services_dir = "./dotfiles/services/"
 
 def log_for(name)
   "#{$home_dir}/#{$service_dir}/#{name}.log"
-end
-
-def pid_for(name)
-  "#{$home_dir}/#{$service_dir}/#{name}.pid"
 end
 
 def execute(cmd)
@@ -24,34 +16,22 @@ def execute(cmd)
   system(cmd)
 end
 
-for pidf in %x[find #{$home_dir}/#{$service_dir}/*.pid 2> /dev/null].split
-  is_running = %x[ps -p $(cat #{pidf}) > /dev/null \; echo $?].strip
-  if is_running != "0" then
-    name = %x[ basename #{pidf} .pid ].strip
-    execute("rm #{log_for(name)} #{pid_for(name)}")
-  end
-end
-
 class ServiceCMDS
   def self.list(opts)
-    opts.info = "Start a service."
-    lambda { execute("find #{$home_dir}/#{$command_dir}/* -exec basename {} \\;") }
+    opts.info = "List my services"
+    lambda { execute("launchctl list | ag org.pancia") }
   end
   def self.start(opts)
     opts.info = "Start a service."
     lambda { |name|
-      if File.exists? pid_for(name)
-        puts "[ERROR]: #{name} already started!"
-        exit 1
-      else
-        execute("#{$home_dir}/#{$command_dir}/#{name} > #{log_for(name)} 2>&1 & echo $! > #{pid_for(name)}")
-        puts "Started #{%x[cat #{pid_for name}]}"
-      end
+      execute("")
     }
   end
   def self.stop(opts)
     opts.info = "Stop a service."
-    lambda { |name| execute("kill $(cat #{pid_for(name)}) && rm #{log_for(name)} #{pid_for(name)}") }
+    lambda { |name|
+      execute("")
+    }
   end
   def self.restart(opts)
     opts.info = "Restart a service."
@@ -61,12 +41,9 @@ class ServiceCMDS
     }
   end
   def self.status(opts)
-    opts.info = "Show the logs for a service."
+    opts.info = "status of all services"
     lambda {
-      for pidf in %x[find #{$home_dir}/#{$service_dir}/*.pid 2> /dev/null].split
-        puts %x[cat #{pidf}].strip() +
-          "\t" + %x[basename #{pidf} .pid].strip()
-      end
+      execute("")
     }
   end
   def self.log(opts)

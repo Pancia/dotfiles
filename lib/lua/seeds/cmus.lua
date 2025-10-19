@@ -80,16 +80,17 @@ function obj:spotifydecVolume()
 end
 
 function bindMediaKeys()
-    hs.hotkey.bind({}, "f7", obj.prevTrack)
-    hs.hotkey.bind({}, "f8", obj.playOrPause)
-    hs.hotkey.bind({}, "f9", obj.nextTrack)
+    hs.hotkey.bind({}, "f7",  obj.prevTrack)
+    hs.hotkey.bind({}, "f8",  obj.playOrPause)
+    hs.hotkey.bind({}, "f9",  obj.nextTrack)
     hs.hotkey.bind({}, "f13", obj.decVolume)
     hs.hotkey.bind({}, "f14", obj.incVolume)
-    hs.hotkey.bind({"cmd"}, "f7", obj.spotifyprevTrack)
-    hs.hotkey.bind({"cmd"}, "f8", obj.spotifyplayOrPause)
-    hs.hotkey.bind({"cmd"}, "f9", obj.spotifynextTrack)
+    hs.hotkey.bind({"cmd"}, "f7",  obj.spotifyprevTrack)
+    hs.hotkey.bind({"cmd"}, "f8",  obj.spotifyplayOrPause)
+    hs.hotkey.bind({"cmd"}, "f9",  obj.spotifynextTrack)
     hs.hotkey.bind({"cmd"}, "f13", obj.spotifydecVolume)
     hs.hotkey.bind({"cmd"}, "f14", obj.spotifyincVolume)
+    -- cmd+shift f7/8/9 are bound from karabiner.json
 end
 
 function obj:editTrack()
@@ -132,11 +133,13 @@ end
 
 -- see bin/cmus-status-display
 function obj:onIPCMessage(_id, msg)
-  local title = ""
+    local title = ""
     if isPlaying() then
-        title = string.format("🎵%43s ⏸", msg)
+        title = string.format("🎵%23s ⏸", msg)
+    elseif string.len(msg) == 0 then
+        title = string.format("🎵nil▶️")
     else
-        title = string.format("🎵%43s ▶️", msg)
+        title = string.format("🎵%23s ▶️", msg)
     end
     local styledTitle = hs.styledtext.new(title, {["font"] = {["name"] = "Menlo-Regular"}})
     obj._playPauseMenu:setTitle(styledTitle)
@@ -149,7 +152,11 @@ function obj:initMenuTitle()
         artist = string.match(res, "tag artist ([^\n]+)")
         title = string.match(res, "tag title ([^\n]+)")
     end
-    obj:onIPCMessage(0, string.format("%.20s - %.20s", artist, title))
+    if title == "" then
+        obj:onIPCMessage(0, "")
+    else
+        obj:onIPCMessage(0, string.format("%.10s - %.10s", artist, title))
+    end
 end
 
 function obj:start(config)

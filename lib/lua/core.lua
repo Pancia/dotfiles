@@ -31,6 +31,8 @@ local hermes = engage("seeds.hermes", {})
 
 local cmus = engage("seeds.cmus", {})
 
+local snippets = engage("seeds.snippets", {})
+
 local homeboard = engage("seeds.homeboard.init", {
     homeBoardPath = HOME.."/Dropbox/HomeBoard/",
     videosPath = HOME.."/Movies/HomeBoard"
@@ -89,13 +91,20 @@ local watch = engage("seeds.watch.init", {
   }
 })
 
-local seeds = {lotus = lotus, watch = watch, homeboard = homeboard, monitor = monitor}
+local seeds = {lotus = lotus, watch = watch, homeboard = homeboard, monitor = monitor, snippets = snippets}
 
 local hs_global_modifier = {"cmd", "ctrl"}
 
 hs.hotkey.bindSpec({hs_global_modifier, "c"}, hs.toggleConsole)
 
 hs.hotkey.bindSpec({hs_global_modifier, "r"}, function()
+  local reload_flag = "/tmp/hs_reloading"
+  local file = io.open(reload_flag, "w")
+  if file then
+    file:write("true")
+    file:close()
+  end
+
   for name, seed in pairs(seeds) do
     if seed.stop then
       ok, err = pcall(function() seed.stop() end)
@@ -106,3 +115,18 @@ hs.hotkey.bindSpec({hs_global_modifier, "r"}, function()
   end
   hs.reload()
 end)
+
+local function is_reloading()
+  local reload_flag = "/tmp/hs_reloading"
+  local file = io.open(reload_flag, "r")
+  if file then
+    file:close()
+    os.remove(reload_flag)
+    return true
+  end
+  return false
+end
+
+if not is_reloading() then
+  dofile("/Users/anthony/projects/sanctuary/sanctuary-hammerspoon.lua")
+end

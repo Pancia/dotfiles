@@ -39,20 +39,34 @@ function restore { # restore from ~/.Trash
             command cat -n $TRASH_CACHE_HISTORY | tail -r \
                 | search --on-cancel error > $selected && restore $selected
             ;;
-        *)
-            line_num="$(cat $1 | cut -f1)"
+        *) line_num="$(cat $1 | cut -f1)"
             [ -z "$line_num" ] && >&2 echo "[ERROR][restore]: Must select a line" && return 1
             local line="$(awk "{ if (NR == $line_num) { print \$0 } }" $TRASH_CACHE_HISTORY)"
-            local file="$(basename `echo $line | cut -f4` | sed -E 's/(>>>)|(<<<)/\\t/g')"
-            local folder="$(echo $file | cut -f1 | sed 's/%/\//g')"
-            local fname="$(echo $file | cut -f2 | sed 's/%/\//g')"
-            local src="$(echo $line | cut -f4)"
-            if [[ "$fname" =~ "^/" ]]; then
+            local src="$(echo "$line" | cut -f4)"
+
+            # Extract the filename from the trash path
+            local trash_basename="$(basename "$src")"
+
+            # Parse the encoded filename: prefix>>>filename<<<timestamp
+            local prefix_encoded="$(echo "$trash_basename" | sed 's/>>>.*//')"
+            local fname_encoded="$(echo "$trash_basename" | sed 's/.*>>>//; s/<<<.*//')"
+
+            # Decode the prefix (folder) and filename
+            local folder="$(echo "$prefix_encoded" | sed 's/%/\//g')"
+            local fname="$(echo "$fname_encoded" | sed 's/%/\//g')"
+
+            # Construct destination path
+            if [[ "$fname" =~ ^/ ]]; then
                 local dest="$fname"
             else
                 local dest="$folder/$fname"
             fi
+
             echo "[dotfiles/restore] INFO: moving $src -> $dest"
+
+            # Create destination directory if it doesn't exist
+            mkdir -p "$(dirname "$dest")"
+
             mv "$src" "$dest" \
                 && sed -i '' "${line_num}d" $TRASH_CACHE_HISTORY
             ;;
