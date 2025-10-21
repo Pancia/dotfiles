@@ -38,8 +38,10 @@ call SEMICOLON_CMD('ghb', ':BCommits', 'FZF Git Commits involving buffer')
 call SEMICOLON_CMD('gl', ':Git log --graph --all --abbrev-commit | normal gg', 'view log')
 
 
-call SEMICOLON_GROUP('gp', '+git push')
-call SEMICOLON_CMD('gpp', ':Git push', 'Push')
+call SEMICOLON_GROUP('gp', '+git pull/push')
+call SEMICOLON_GROUP('gpp', '+git push')
+call SEMICOLON_CMD('gppp', ':Git push', 'Push')
+call SEMICOLON_CMD('gppf', ':Git push --force-with-lease --force-if-includes', 'Push force++')
 call SEMICOLON_CMD('gpl', ':Git pull', 'Pull')
 
 call SEMICOLON_CMD('gs', ':Git', 'git status')
