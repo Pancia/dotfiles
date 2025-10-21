@@ -18,8 +18,8 @@ call SEMICOLON_CMD('gcp', ':Git commit --patch', 'commit interactively')
 
 
 call SEMICOLON_GROUP('gd', '+git diff')
-call SEMICOLON_CMD('gdd', ':Git diff', 'diff')
-call SEMICOLON_CMD('gds', ':Git diff --staged', 'diff staged')
+call SEMICOLON_CMD('gdd', ':Git diff --ignore-all-space', 'diff')
+call SEMICOLON_CMD('gds', ':Git diff --staged --ignore-all-space', 'diff staged')
 
 call SEMICOLON_GROUP('gf', '+git fetch')
 call SEMICOLON_CMD('gff', ':Git fetch --all --prune', 'Fetch')

@@ -5,7 +5,13 @@ do shell script "echo '=== Starting activation ===' >> " & logFile
 
 # Check if Whispering is already frontmost - if so, minimize it and toggle recording off
 do shell script "echo 'Checking if Whispering is frontmost...' >> " & logFile
-set hsCheckResult to do shell script "/Users/anthony/Developer/bin/hs -c 'local app = hs.application.find(\"Whispering\"); if app and app:isFrontmost() then return \"frontmost\" else return \"not_frontmost\" end' 2>&1"
+set checkScript to "local app = hs.application.find('Whispering'); " & ¬
+    "if app and app:isFrontmost() then " & ¬
+    "return 'frontmost' " & ¬
+    "else " & ¬
+    "return 'not_frontmost' " & ¬
+    "end"
+set hsCheckResult to do shell script "/Users/anthony/Developer/bin/hs -c " & quoted form of checkScript & " 2>&1"
 do shell script "echo 'Frontmost check result: " & hsCheckResult & "' >> " & logFile
 
 if hsCheckResult is "frontmost" then
@@ -18,10 +24,22 @@ if hsCheckResult is "frontmost" then
 
     delay 0.1
 
-    tell application "System Events"
-        keystroke "m" using {command down}
-        do shell script "echo 'Triggered minimize' >> " & logFile
-    end tell
+    # Use Hammerspoon to minimize the window (works regardless of focus)
+    do shell script "echo 'Calling hammerspoon to minimize window...' >> " & logFile
+    set minimizeScript to "local app = hs.application.find('Whispering'); " & ¬
+        "if app then " & ¬
+        "local wins = app:allWindows(); " & ¬
+        "if #wins > 0 then " & ¬
+        "wins[1]:minimize(); " & ¬
+        "return 'minimized' " & ¬
+        "else " & ¬
+        "return 'no windows' " & ¬
+        "end " & ¬
+        "else " & ¬
+        "return 'app not found' " & ¬
+        "end"
+    set hsMinimizeResult to do shell script "/Users/anthony/Developer/bin/hs -c " & quoted form of minimizeScript & " 2>&1"
+    do shell script "echo 'Hammerspoon minimize result: " & hsMinimizeResult & "' >> " & logFile
 
     delay 0.1
 
@@ -41,7 +59,27 @@ else
 
     # Use Hammerspoon to focus and raise the window
     do shell script "echo 'Calling hammerspoon to focus window...' >> " & logFile
-    set hsResult to do shell script "/Users/anthony/Developer/bin/hs -c 'local app = hs.application.find(\"Whispering\"); if not app then hs.printf(\"[activate-whisper]: App not running, launching...\"); hs.application.open(\"Whispering\"); hs.timer.usleep(1000000); app = hs.application.find(\"Whispering\"); if not app then return \"failed to launch\" end end; local wins = app:allWindows(); hs.printf(\"[activate-whisper]: Found %d windows\", #wins); if #wins > 0 then local win = wins[1]; hs.printf(\"[activate-whisper]: Focusing window: %s\", win:title() or \"nil\"); if win:isMinimized() then win:unminimize() end; win:focus(); win:raise(); return \"focused and raised window\" else return \"no windows found after launch\" end' 2>&1"
+    set focusScript to "local app = hs.application.find('Whispering'); " & ¬
+        "if not app then " & ¬
+        "hs.printf('[activate-whisper]: App not running, launching...'); " & ¬
+        "hs.application.open('Whispering'); " & ¬
+        "hs.timer.usleep(1000000); " & ¬
+        "app = hs.application.find('Whispering'); " & ¬
+        "if not app then return 'failed to launch' end " & ¬
+        "end; " & ¬
+        "local wins = app:allWindows(); " & ¬
+        "hs.printf('[activate-whisper]: Found %d windows', #wins); " & ¬
+        "if #wins > 0 then " & ¬
+        "local win = wins[1]; " & ¬
+        "hs.printf('[activate-whisper]: Focusing window: %s', win:title() or 'nil'); " & ¬
+        "if win:isMinimized() then win:unminimize() end; " & ¬
+        "win:focus(); " & ¬
+        "win:raise(); " & ¬
+        "return 'focused and raised window' " & ¬
+        "else " & ¬
+        "return 'no windows found after launch' " & ¬
+        "end"
+    set hsResult to do shell script "/Users/anthony/Developer/bin/hs -c " & quoted form of focusScript & " 2>&1"
     do shell script "echo 'Hammerspoon result: " & hsResult & "' >> " & logFile
 
     delay 0.2

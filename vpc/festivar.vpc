@@ -1,5 +1,5 @@
 {
-    "space": 5,
+    "space": "current",
     "chrome" : [
         "http://localhost:9630/build/main",
         "http://localhost:3000/",
@@ -10,8 +10,8 @@
         "dir": "$HOME/projects/work/festivar-webapp/",
         "tabs": [
             "$ mcp",
-            "$ server",
             "$ browser",
+            "$ server",
             "$ vim",
             "$ claude",
             "git status"
