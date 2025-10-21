@@ -3,23 +3,53 @@
 set logFile to "/tmp/activate-whispering.log"
 do shell script "echo '=== Starting activation ===' >> " & logFile
 
-# Trigger cmd-alt-shift-t at start
-tell application "System Events"
-    keystroke "t" using {command down, option down, shift down}
-    do shell script "echo 'Triggered cmd-alt-shift-t at start' >> " & logFile
-end tell
+# Check if Whispering is already frontmost - if so, minimize it and toggle recording off
+do shell script "echo 'Checking if Whispering is frontmost...' >> " & logFile
+set hsCheckResult to do shell script "/Users/anthony/Developer/bin/hs -c 'local app = hs.application.find(\"Whispering\"); if app and app:isFrontmost() then return \"frontmost\" else return \"not_frontmost\" end' 2>&1"
+do shell script "echo 'Frontmost check result: " & hsCheckResult & "' >> " & logFile
 
-delay 0.1
+if hsCheckResult is "frontmost" then
+    do shell script "echo 'Whispering is frontmost, minimizing and stopping recording...' >> " & logFile
 
-# Use Hammerspoon to focus and raise the window (since it's on all desktops, we can see it)
-do shell script "echo 'Calling hammerspoon to focus window...' >> " & logFile
-set hsResult to do shell script "/Users/anthony/Developer/bin/hs -c 'local app = hs.application.find(\"Whispering\"); if not app then hs.printf(\"[activate-whisper]: App not running, launching...\"); hs.application.open(\"Whispering\"); hs.timer.usleep(1000000); app = hs.application.find(\"Whispering\"); if not app then return \"failed to launch\" end end; local wins = app:allWindows(); hs.printf(\"[activate-whisper]: Found %d windows\", #wins); if #wins > 0 then local win = wins[1]; hs.printf(\"[activate-whisper]: Focusing window: %s\", win:title() or \"nil\"); if win:isMinimized() then win:unminimize() end; win:focus(); win:raise(); return \"focused and raised window\" else return \"no windows found after launch\" end' 2>&1"
-do shell script "echo 'Hammerspoon result: " & hsResult & "' >> " & logFile
+    tell application "System Events"
+        keystroke "z" using {command down, option down, shift down}
+        do shell script "echo 'Triggered recording toggle (stop)' >> " & logFile
+    end tell
 
-delay 0.2
-tell application "System Events"
-    keystroke "z" using {command down, option down, shift down}
-    do shell script "echo 'Triggered keystroke' >> " & logFile
-end tell
+    delay 0.1
+
+    tell application "System Events"
+        keystroke "m" using {command down}
+        do shell script "echo 'Triggered minimize' >> " & logFile
+    end tell
+
+    delay 0.1
+
+    tell application "System Events"
+        keystroke "t" using {command down, option down, shift down}
+        do shell script "echo 'Triggered tuple mic toggle (mute)' >> " & logFile
+    end tell
+else
+    do shell script "echo 'Whispering is not frontmost, activating...' >> " & logFile
+
+    tell application "System Events"
+        keystroke "t" using {command down, option down, shift down}
+        do shell script "echo 'Triggered tuple mic toggle (unmute)' >> " & logFile
+    end tell
+
+    delay 0.1
+
+    # Use Hammerspoon to focus and raise the window
+    do shell script "echo 'Calling hammerspoon to focus window...' >> " & logFile
+    set hsResult to do shell script "/Users/anthony/Developer/bin/hs -c 'local app = hs.application.find(\"Whispering\"); if not app then hs.printf(\"[activate-whisper]: App not running, launching...\"); hs.application.open(\"Whispering\"); hs.timer.usleep(1000000); app = hs.application.find(\"Whispering\"); if not app then return \"failed to launch\" end end; local wins = app:allWindows(); hs.printf(\"[activate-whisper]: Found %d windows\", #wins); if #wins > 0 then local win = wins[1]; hs.printf(\"[activate-whisper]: Focusing window: %s\", win:title() or \"nil\"); if win:isMinimized() then win:unminimize() end; win:focus(); win:raise(); return \"focused and raised window\" else return \"no windows found after launch\" end' 2>&1"
+    do shell script "echo 'Hammerspoon result: " & hsResult & "' >> " & logFile
+
+    delay 0.2
+
+    tell application "System Events"
+        keystroke "z" using {command down, option down, shift down}
+        do shell script "echo 'Triggered recording toggle (start)' >> " & logFile
+    end tell
+end if
 
 do shell script "echo '=== Completed ===' >> " & logFile
