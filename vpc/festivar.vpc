@@ -13,8 +13,8 @@
             "$ server",
             "$ browser",
             "$ vim",
-            "claude",
-            "gs"
+            "$ claude",
+            "git status"
         ]
     },
     "board": "$HOME/Dropbox/wiki/personal/pages/work%2Ffestivar.md"
