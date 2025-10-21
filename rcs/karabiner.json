@@ -179,6 +179,39 @@
                                 "type": "basic"
                             }
                         ]
+                    },
+                    {
+                        "description": "alt-space -> activate Whispering and trigger Command+Option+Shift+Z",
+                        "manipulators": [
+                            {
+                                "from": {
+                                    "key_code": "spacebar",
+                                    "modifiers": {
+                                        "mandatory": [
+                                            "left_alt"
+                                        ]
+                                    }
+                                },
+                                "to": {
+                                    "shell_command": "/Users/anthony/dotfiles/bin/activate-whispering"
+                                },
+                                "type": "basic"
+                            },
+                            {
+                                "from": {
+                                    "key_code": "spacebar",
+                                    "modifiers": {
+                                        "mandatory": [
+                                            "right_alt"
+                                        ]
+                                    }
+                                },
+                                "to": {
+                                    "shell_command": "/Users/anthony/dotfiles/bin/activate-whispering"
+                                },
+                                "type": "basic"
+                            }
+                        ]
                     }
                 ]
             },

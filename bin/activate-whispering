@@ -1,0 +1,17 @@
+#!/usr/bin/osascript
+
+set logFile to "/tmp/activate-whispering.log"
+do shell script "echo '=== Starting activation ===' > " & logFile
+
+# Use Hammerspoon to focus and raise the window (since it's on all desktops, we can see it)
+do shell script "echo 'Calling hammerspoon to focus window...' >> " & logFile
+set hsResult to do shell script "/Users/anthony/Developer/bin/hs -c 'local app = hs.application.find(\"Whispering\"); if not app then hs.printf(\"App not running, launching...\"); hs.application.open(\"Whispering\"); hs.timer.usleep(1000000); app = hs.application.find(\"Whispering\"); if not app then return \"failed to launch\" end end; local wins = app:allWindows(); hs.printf(\"Found %d windows\", #wins); if #wins > 0 then local win = wins[1]; hs.printf(\"Focusing window: %s\", win:title() or \"nil\"); if win:isMinimized() then win:unminimize() end; win:focus(); win:raise(); return \"focused and raised window\" else return \"no windows found after launch\" end' 2>&1"
+do shell script "echo 'Hammerspoon result: " & hsResult & "' >> " & logFile
+
+delay 0.2
+tell application "System Events"
+    keystroke "z" using {command down, option down, shift down}
+    do shell script "echo 'Triggered keystroke' >> " & logFile
+end tell
+
+do shell script "echo '=== Completed ===' >> " & logFile
