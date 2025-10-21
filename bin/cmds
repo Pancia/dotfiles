@@ -9,7 +9,10 @@ module EXE
   def self.system(command, opts={silent: false})
     temp = "/tmp/command.zsh"
     pretty_command = command.lstrip.split(/\s\s+/).join(" \\\n")
-    opts[:silent] or Kernel.system("echo '#{pretty_command}' > #{temp} && bat -P #{temp}")
+    unless opts[:silent]
+      File.write(temp, pretty_command)
+      Kernel.system("bat -P #{temp}")
+    end
     Kernel.system("export DISABLE_AUTO_TITLE='true'")
     Kernel.system("printf '\e]1;#{command.strip.split(/\s\s+/).join(" ")}\a'")
     Kernel.system(command)

@@ -1,11 +1,26 @@
 #!/usr/bin/env bash
 
-echo "[wait-for]: Waiting for \`test -e $1\`, will execute \`${@:2}\`"
+SILENT=false
+if [ "$1" = "--silent" ]; then
+  SILENT=true
+  shift
+fi
+
+if [ "$SILENT" = false ]; then
+  echo "[wait-for]: Waiting for \`test -e $1\`, will execute \`${@:2}\`"
+fi
+
 i=0
 while [ ! -e "$1" ]; do
   sleep 1
   ((i++))
-  printf "\rWaited: $i seconds"
+  if [ "$SILENT" = false ]; then
+    printf "\rWaited: $i seconds"
+  fi
 done
-echo; echo "Done waiting for \`$1\`"; echo "Executing: \`${@:2}\`:"
+
+if [ "$SILENT" = false ]; then
+  echo; echo "Done waiting for \`$1\`"; echo "Executing: \`${@:2}\`:"
+fi
+
 "${@:2}"

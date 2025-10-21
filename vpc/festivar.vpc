@@ -9,6 +9,7 @@
     "iterm": {
         "dir": "$HOME/projects/work/festivar-webapp/",
         "tabs": [
+            "$ mcp",
             "$ server",
             "$ browser",
             "$ vim",

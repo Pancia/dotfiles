@@ -11,7 +11,17 @@ function less { bat "$@" }
 function ydl { yt-dlp "$@" }
 function gdl { gallery-dl "$@" }
 
-function cmus { LC_ALL=C.UTF-8 command cmus "$@" }
+function cmus {
+    (sleep 1 && cmus-remote -C rand) &
+    LC_ALL=C.UTF-8 command cmus "$@"
+}
+
+function find { # find but prefer fd
+    if [ -n $PS1 ]; then
+        >&2 echo "[find] REMEMBER: use \`fd\`"
+    fi
+    command find "$@"
+}
 
 function meditate {
     local T="$((60*${1:-5}))"

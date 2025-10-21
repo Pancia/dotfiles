@@ -52,14 +52,32 @@ function writeToLog(entry)
 end
 
 function createEntry(window, visibleWindows)
-    if window == nil or window:application():title() == "loginwindow" or window:application():title() == "ScreenSaverEngine" then
+    local app = window and window:application()
+
+    if window == nil then
+        return {["focused"] = "<ERROR: window is nil>", ["active"] = obj._wasActive, ["error"] = "Window object is nil"}
+    end
+
+    if app == nil then
+        return {["focused"] = "<ERROR: app is nil>", ["active"] = obj._wasActive, ["error"] = "Application object is nil"}
+    end
+
+    if app:title() == "loginwindow" or app:title() == "ScreenSaverEngine" then
         return {["focused"] = "<SLEEPING>", ["active"] = obj._wasActive}
     end
     realWindows = hs.fnutils.filter(visibleWindows, function (x)
         return x:title() ~= "" and x ~= window
     end)
     local entry = {}
-    entry["focused"] = window:application():title() .. " => " .. window:title()
+
+    -- Handle case where app becomes nil between the check and here
+    if app == nil then
+        entry["focused"] = "<ERROR: app is nil>"
+        entry["error"] = "Application object became nil"
+    else
+        entry["focused"] = app:title() .. " => " .. window:title()
+    end
+
     entry["visible"] = hs.fnutils.map(realWindows, function(w)
         return w:application():title() .. " => " .. w:title()
     end)

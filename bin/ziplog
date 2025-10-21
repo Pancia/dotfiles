@@ -4,7 +4,7 @@ pushd ~/private/logs/monitor/
 ls -lh
 echo "GO AHEAD? OR CTRL-C"
 read empty
-find . -name "*.log" -type f -mtime +6d | while read -r file; do
+find . -name "*.log.json" -type f -mtime +6d | while read -r file; do
     if [ ! -f "${file}.zip" ]; then
         echo "Zipping $file..."
         zip --move -9 "${file}.zip" "$file"

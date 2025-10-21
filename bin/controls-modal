@@ -53,7 +53,7 @@ import subprocess
 def execute_command(command):
     print(f"Running command: {command}")
     try:
-        subprocess.run(command, shell=True, check=True)
+        subprocess.run(f"zsh -ic '{command}'", shell=True, check=True)
     except subprocess.CalledProcessError as e:
         print(f"Command '{command}' failed with error: {e}")
 

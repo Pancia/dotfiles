@@ -1,6 +1,12 @@
 ;<[.config/clojure/deps.edn]>
 {:aliases
-   {:local/cider {:extra-deps {cider/cider-nrepl {:mvn/version "0.25.8"}}}
+   {:local/mcp {:deps {org.slf4j/slf4j-nop {:mvn/version "2.0.16"} ;; Required for stdio server
+                       com.bhauman/clojure-mcp {:git/url "https://github.com/bhauman/clojure-mcp.git"
+                                                :git/tag "v0.1.11-alpha"
+                                                :git/sha "7739dba"}}
+                :exec-fn clojure-mcp.main/start-mcp-server
+                :exec-args {:port 7888}}
+    :local/cider {:extra-deps {cider/cider-nrepl {:mvn/version "0.25.8"}}}
     :local/f3-dev
       {:override-deps
          {com.fulcrologic/fulcro
@@ -30,7 +36,7 @@
          {cider/cider-nrepl {:mvn/version "0.28.7"}
           tee/tee {:local/root "/private/links/dotfiles/lib/clojure/tee"}}
        :main-opts
-         ["-m" "nrepl.cmdline" "--interactive" "--middleware"
+         ["-m" "nrepl.cmdline" "--port" "7888" "--interactive" "--middleware"
           "[cider.nrepl/cider-middleware,tee.core/middleware]"]}
     :local/nREVL
       {:extra-deps

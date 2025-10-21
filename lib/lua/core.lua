@@ -91,7 +91,20 @@ local watch = engage("seeds.watch.init", {
   }
 })
 
-local seeds = {lotus = lotus, watch = watch, homeboard = homeboard, monitor = monitor, snippets = snippets}
+local function is_reloading()
+  local reload_flag = "/tmp/hs_reloading"
+  local file = io.open(reload_flag, "r")
+  if file then
+    file:close()
+    os.remove(reload_flag)
+    return true
+  end
+  return false
+end
+
+local sanctuary = engage("seeds.sanctuary", {})
+
+local seeds = {lotus = lotus, watch = watch, homeboard = homeboard, monitor = monitor, snippets = snippets, sanctuary = sanctuary}
 
 local hs_global_modifier = {"cmd", "ctrl"}
 
@@ -115,18 +128,3 @@ hs.hotkey.bindSpec({hs_global_modifier, "r"}, function()
   end
   hs.reload()
 end)
-
-local function is_reloading()
-  local reload_flag = "/tmp/hs_reloading"
-  local file = io.open(reload_flag, "r")
-  if file then
-    file:close()
-    os.remove(reload_flag)
-    return true
-  end
-  return false
-end
-
-if not is_reloading() then
-  dofile("/Users/anthony/projects/sanctuary/sanctuary-hammerspoon.lua")
-end
