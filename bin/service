@@ -31,6 +31,23 @@ def plist_path_in_launch_agents(name)
   "#{$launch_agents_dir}#{name}.plist"
 end
 
+def service_dir(name)
+  short = short_name(name)
+  "#{$services_dir}#{short}/"
+end
+
+def detect_main_script(name)
+  dir = service_dir(name)
+  # Prefer script.sh, then other common script files
+  candidates = ["script.sh", "server.rb", "listener.rb", "listener.swift", "script.py"]
+  candidates.each do |candidate|
+    path = "#{dir}#{candidate}"
+    return path if File.exist?(path)
+  end
+  # Fallback to any .sh, .rb, .swift, .py file
+  Dir.glob("#{dir}*.{sh,rb,swift,py}").first
+end
+
 def execute(cmd)
   puts cmd if $options[:verbose]
   system(cmd)
@@ -130,6 +147,109 @@ class ServiceCMDS
     lambda { |name|
       # Become that process, so we can  to stop +F paging & look around with less
       Kernel.exec("command less +GF #{log_for(name)}")
+    }
+  end
+  def self.create(opts)
+    opts.info = "Create a new service."
+    lambda { |name|
+      return puts "Usage: service create <name>" unless name
+
+      full_name = normalize_service_name(name)
+      short = short_name(full_name)
+      dir = service_dir(full_name)
+
+      if Dir.exist?(dir)
+        return puts "Error: Service '#{short}' already exists at #{dir}"
+      end
+
+      puts "Creating service '#{short}'..."
+
+      # Create directory
+      execute("mkdir -p #{dir.shellescape}")
+
+      # Create plist
+      plist_content = <<~PLIST
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+            <dict>
+                <key>Label</key>
+                <string>#{full_name}</string>
+                <key>ProgramArguments</key>
+                <array>
+                    <string>#{$home_dir}dotfiles/services/#{short}/dotfiles-services-#{short}.sh</string>
+                </array>
+                <key>RunAtLoad</key>
+                <true/>
+                <key>KeepAlive</key>
+                <true/>
+                <key>StandardOutPath</key>
+                <string>#{$home_dir}.log/services/#{short}.log</string>
+                <key>StandardErrorPath</key>
+                <string>#{$home_dir}.log/services/#{short}.log</string>
+            </dict>
+        </plist>
+      PLIST
+      File.write("#{dir}#{full_name}.plist", plist_content)
+
+      # Create wrapper script
+      wrapper_content = "~/dotfiles/bin/service-wrapper ~/dotfiles/services/#{short}/ ./script.sh\n"
+      File.write("#{dir}dotfiles-services-#{short}.sh", wrapper_content)
+      execute("chmod +x #{dir}dotfiles-services-#{short}.sh")
+
+      # Create main script
+      script_content = <<~SCRIPT
+        #!/usr/bin/env bash
+
+        echo "$(date): #{short} service started"
+
+        # Your service logic here
+        while true; do
+            echo "$(date): Running..."
+            sleep 60
+        done
+      SCRIPT
+      File.write("#{dir}script.sh", script_content)
+      execute("chmod +x #{dir}script.sh")
+
+      puts "Created service '#{short}' at #{dir}"
+      puts "  - #{full_name}.plist"
+      puts "  - dotfiles-services-#{short}.sh"
+      puts "  - script.sh"
+      puts ""
+      puts "Next steps:"
+      puts "  1. Edit: service edit #{short}"
+      puts "  2. Start: service start #{short}"
+      puts "  3. Logs: service log #{short}"
+    }
+  end
+  def self.edit(opts)
+    opts.info = "Edit a service's script and plist."
+    lambda { |name|
+      return puts "Usage: service edit <name>" unless name
+
+      full_name = normalize_service_name(name)
+      short = short_name(full_name)
+      dir = service_dir(full_name)
+
+      unless Dir.exist?(dir)
+        return puts "Error: Service '#{short}' not found at #{dir}"
+      end
+
+      script = detect_main_script(full_name)
+      plist = plist_path_in_services(full_name)
+
+      unless script
+        return puts "Error: No main script found in #{dir}"
+      end
+
+      unless File.exist?(plist)
+        return puts "Error: Plist not found at #{plist}"
+      end
+
+      editor = ENV["EDITOR"] || "vim"
+      puts "Opening #{short} in #{editor}..."
+      Kernel.exec("#{editor} #{script.shellescape} #{plist.shellescape}")
     }
   end
 end
