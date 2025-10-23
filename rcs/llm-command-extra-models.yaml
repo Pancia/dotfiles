@@ -1,0 +1,8 @@
+#<[Library/Application Support/io.datasette.llm/extra-openai-models.yaml]>
+- model_id: gemini-2.5-flash
+  model_name: google/gemini-2.5-flash
+  api_base: "https://openrouter.ai/api/v1"
+  api_key_name: openrouter
+  headers:
+    HTTP-Referer: "https://llm.datasette.io/"
+    X-Title: LLM

@@ -222,7 +222,7 @@
                         "key_code": "f1"
                     },
                     "to": {
-                        "shell_command": "curl --request POST 'http://localhost:31415/vpc/1'"
+                        "shell_command": "/Users/anthony/dotfiles/bin/toggle-space 1"
                     }
                 },
                 {
@@ -230,7 +230,7 @@
                         "key_code": "f2"
                     },
                     "to": {
-                        "shell_command": "curl --request POST 'http://localhost:31415/vpc/2'"
+                        "shell_command": "/Users/anthony/dotfiles/bin/toggle-space 2"
                     }
                 },
                 {

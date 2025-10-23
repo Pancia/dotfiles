@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+#
+# current-space - Get the current Mission Control space number
+#
+# This wrapper calls the C binary to get the space ID, then parses
+# ~/Library/Preferences/com.apple.spaces.plist to map it to the
+# Mission Control display order.
+
+set -euo pipefail
+
+# Get the directory where this script lives
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+C_BINARY="$DOTFILES_ROOT/lib/c/current-space/current-space"
+
+# Check if C binary exists
+if [[ ! -x "$C_BINARY" ]]; then
+    echo "Error: C binary not found at $C_BINARY" >&2
+    echo "Run: cd $DOTFILES_ROOT/lib/c/current-space && make" >&2
+    exit 1
+fi
+
+# Get current space ID from C binary
+CURRENT_SPACE_ID=$("$C_BINARY")
+if [[ -z "$CURRENT_SPACE_ID" ]]; then
+    echo "Error: Could not get current space ID" >&2
+    exit 1
+fi
+
+# Parse plist to get spaces in Mission Control order
+PLIST="$HOME/Library/Preferences/com.apple.spaces.plist"
+
+if [[ ! -f "$PLIST" ]]; then
+    echo "Error: Spaces plist not found at $PLIST" >&2
+    exit 1
+fi
+
+# Convert plist to JSON and extract space IDs in order for the main display
+# The first monitor in the Monitors array is the main display
+SPACE_IDS=$(plutil -convert json -o - "$PLIST" 2>/dev/null | \
+    jq -r '.SpacesDisplayConfiguration."Management Data".Monitors[0].Spaces[].id64' 2>/dev/null)
+
+if [[ -z "$SPACE_IDS" ]]; then
+    echo "Error: Could not parse spaces from plist" >&2
+    exit 1
+fi
+
+# Find the index of the current space ID
+SPACE_NUMBER=0
+INDEX=1
+
+while IFS= read -r space_id; do
+    if [[ "$space_id" == "$CURRENT_SPACE_ID" ]]; then
+        SPACE_NUMBER=$INDEX
+        break
+    fi
+    ((INDEX++))
+done <<< "$SPACE_IDS"
+
+if [[ "$SPACE_NUMBER" -eq 0 ]]; then
+    echo "Error: Current space ID $CURRENT_SPACE_ID not found in spaces list" >&2
+    echo "This may happen if you're in a fullscreen app space" >&2
+    exit 1
+fi
+
+echo "$SPACE_NUMBER"

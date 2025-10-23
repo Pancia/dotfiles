@@ -1,12 +1,6 @@
 ;<[.config/clojure/deps.edn]>
 {:aliases
-   {:local/mcp {:deps {org.slf4j/slf4j-nop {:mvn/version "2.0.16"} ;; Required for stdio server
-                       com.bhauman/clojure-mcp {:git/url "https://github.com/bhauman/clojure-mcp.git"
-                                                :git/tag "v0.1.11-alpha"
-                                                :git/sha "7739dba"}}
-                :exec-fn clojure-mcp.main/start-mcp-server
-                :exec-args {:port 7888}}
-    :local/cider {:extra-deps {cider/cider-nrepl {:mvn/version "0.25.8"}}}
+   {:local/cider {:extra-deps {cider/cider-nrepl {:mvn/version "0.25.8"}}}
     :local/f3-dev
       {:override-deps
          {com.fulcrologic/fulcro
@@ -16,6 +10,16 @@
       {:override-deps
          {com.fulcrologic/guardrails
             {:local/root "/private/links/projects/lib/guardrails"}}}
+    :local/mcp
+      {:deps
+         {org.slf4j/slf4j-nop {:mvn/version "2.0.16"} ;; Required for stdio
+                                                      ;; server
+          com.bhauman/clojure-mcp
+            {:git/sha "7739dba"
+             :git/tag "v0.1.11-alpha"
+             :git/url "https://github.com/bhauman/clojure-mcp.git"}}
+       :exec-args {:port 7888}
+       :exec-fn clojure-mcp.main/start-mcp-server}
     :local/nREFL
       {:extra-deps
          {cider/cider-nrepl {:mvn/version "0.25.8"}

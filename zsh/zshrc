@@ -3,7 +3,7 @@ function _not_same_inode {
 }
 
 function _ENSURE_RCS {
-    for rc in $(find $HOME/dotfiles/rcs -type f); do
+    for rc in $(find $HOME/dotfiles/rcs -type f -not -name '.*'); do
         local rc_dest="$(head -n 1 $rc | sed -E 's/.*<\[(.*)\]>.*/\1/' )"
         if [[ ! -f "$HOME/$rc_dest" ]] || $(_not_same_inode "$HOME/$rc_dest" "$rc") ; then
             mkdir -p "$(dirname $HOME/$rc_dest)"

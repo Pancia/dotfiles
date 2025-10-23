@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+
+# Smart desktop space toggle for macOS
+# Usage: toggle-space <space_number>
+# First press: go to target space, remember current space
+# Second press: return to previous space
+
+set -euo pipefail
+
+# Configuration
+STATE_DIR="${HOME}/.cache/desktop-space-toggle"
+CONFIG_FILE="${STATE_DIR}/config.json"
+LOG_FILE="${STATE_DIR}/toggle-space.log"
+DEBOUNCE_MS=500
+
+# Logging function
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "${LOG_FILE}"
+}
+
+# Parse arguments
+if [[ $# -ne 1 ]]; then
+    echo "Usage: toggle-space <space_number>" >&2
+    exit 1
+fi
+
+TARGET_SPACE="$1"
+STATE_FILE="${STATE_DIR}/f${TARGET_SPACE}-state.json"
+
+# Ensure state directory exists
+mkdir -p "${STATE_DIR}"
+
+log "========== Started toggle-space ${TARGET_SPACE} =========="
+
+# Load or create config
+if [[ -f "${CONFIG_FILE}" ]]; then
+    TIMEOUT_SECONDS=$(jq -r '.timeout_seconds // 300' "${CONFIG_FILE}" 2>/dev/null || echo "300")
+else
+    TIMEOUT_SECONDS=300
+    echo '{"timeout_seconds": 300}' > "${CONFIG_FILE}"
+fi
+
+# Function to get current space using our C utility
+get_current_space() {
+    log "Getting current space using current-space utility..."
+
+    # Get the directory where this script lives
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local current_space_bin="${script_dir}/current-space"
+
+    # Check if current-space binary exists
+    if [[ ! -x "${current_space_bin}" ]]; then
+        log "ERROR: current-space binary not found at ${current_space_bin}"
+        echo "error"
+        return 1
+    fi
+
+    # Get current space number
+    local space_number
+    space_number=$("${current_space_bin}" 2>/dev/null)
+    local ret=$?
+
+    if [[ ${ret} -eq 0 ]] && [[ -n "${space_number}" ]] && [[ "${space_number}" =~ ^[0-9]+$ ]]; then
+        log "Current space detected: ${space_number}"
+        echo "${space_number}"
+        return 0
+    else
+        log "ERROR: Failed to detect current space (ret=${ret}, output='${space_number}')"
+        echo "error"
+        return 1
+    fi
+}
+
+# Function to switch to a space
+switch_to_space() {
+    local space="$1"
+    log "Switching to space ${space}..."
+    local output
+    output=$(curl -X POST "http://localhost:31415/vpc/${space}" 2>&1)
+    local ret=$?
+    if [[ ${ret} -eq 0 ]]; then
+        log "Successfully switched to space ${space}"
+    else
+        log "Failed to switch to space ${space}. Return code: ${ret}, Output: ${output}"
+    fi
+    return ${ret}
+}
+
+# Function to load state
+load_state() {
+    if [[ -f "${STATE_FILE}" ]]; then
+        cat "${STATE_FILE}"
+    else
+        echo '{"current_target": null, "previous_space": null, "last_switch_time": 0}'
+    fi
+}
+
+# Function to save state
+save_state() {
+    local current_target="$1"
+    local previous_space="$2"
+    local timestamp
+    timestamp=$(date +%s)
+
+    echo "{\"current_target\": ${current_target}, \"previous_space\": ${previous_space}, \"last_switch_time\": ${timestamp}}" > "${STATE_FILE}"
+}
+
+# Main logic
+main() {
+    local current_space
+    current_space=$(get_current_space)
+
+    if [[ "${current_space}" == "error" ]]; then
+        log "ERROR: Can't detect current space, falling back to simple switch"
+        # Can't detect current space, just switch to target
+        switch_to_space "${TARGET_SPACE}"
+        return 0
+    fi
+
+    log "Current space: ${current_space}"
+
+    # Load previous state
+    local state
+    state=$(load_state)
+    log "Loaded state: ${state}"
+    local previous_space
+    previous_space=$(echo "${state}" | jq -r '.previous_space // "null"')
+    local last_switch_time
+    last_switch_time=$(echo "${state}" | jq -r '.last_switch_time // 0')
+
+    log "Previous space: ${previous_space}, Last switch: ${last_switch_time}"
+
+    # Check for debouncing
+    local current_time
+    current_time=$(date +%s)
+    local time_diff=$((current_time - last_switch_time))
+
+    log "Time since last switch: ${time_diff}s (timeout: ${TIMEOUT_SECONDS}s)"
+
+    if [[ ${time_diff} -lt 1 ]]; then
+        # Too soon, ignore (debounce)
+        log "Debouncing: ignoring press (too soon)"
+        exit 0
+    fi
+
+    # Check for timeout
+    if [[ ${time_diff} -gt ${TIMEOUT_SECONDS} ]]; then
+        # Timeout exceeded, reset state
+        log "Timeout exceeded, resetting state"
+        previous_space="null"
+    fi
+
+    # Determine action
+    if [[ "${current_space}" == "${TARGET_SPACE}" ]] && [[ "${previous_space}" != "null" ]]; then
+        log "On target space with previous space stored - toggling back"
+        # We're on target space and have a previous space to return to
+        # Verify the previous space is different from target
+        if [[ "${previous_space}" != "${TARGET_SPACE}" ]]; then
+            switch_to_space "${previous_space}"
+            # Clear state after returning
+            save_state "${TARGET_SPACE}" "null"
+        else
+            # Previous space same as target, just stay here
+            log "Previous space same as target, staying"
+            exit 0
+        fi
+    else
+        # Either not on target space, or no previous space to return to
+        # Go to target space and remember where we came from
+        if [[ "${current_space}" != "${TARGET_SPACE}" ]]; then
+            log "Going to target space, remembering current space ${current_space}"
+            switch_to_space "${TARGET_SPACE}"
+            save_state "${TARGET_SPACE}" "${current_space}"
+        else
+            # Already on target space but no previous to return to
+            log "Already on target space with no previous, staying"
+            # Just stay here
+            exit 0
+        fi
+    fi
+    log "========== Finished =========="
+}
+
+main "$@"
