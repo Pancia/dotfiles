@@ -8,6 +8,15 @@ module CMD
       }
     }
   end
+  def vim(opts)
+    opts.banner = "Usage: vim"
+    opts.info = "vim"
+    lambda { |*args|
+      EXE.system %{
+        nvim documents/hello-world.md index.html
+      }
+    }
+  end
 end
 
 trap "SIGINT" do

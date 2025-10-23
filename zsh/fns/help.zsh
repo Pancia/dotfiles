@@ -18,5 +18,3 @@ function man {
         *) command -p man "$@";;
     esac
 }
-
-alias '?'='help' # search local functions/aliases or use cheat.sh
