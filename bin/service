@@ -5,10 +5,30 @@ require "cli.rb"
 require "shellwords"
 
 $home_dir = "/Users/#{%x[whoami].strip}/"
-$services_dir = "./dotfiles/services/"
+$services_dir = "#{$home_dir}/dotfiles/services/"
+$log_dir = "#{$home_dir}/.log/services/"
+$launch_agents_dir = "#{$home_dir}/Library/LaunchAgents/"
 
 def log_for(name)
-  "#{$home_dir}/#{$service_dir}/#{name}.log"
+  "#{$log_dir}#{name}.log"
+end
+
+def normalize_service_name(name)
+  # Accept "vpc" or "org.pancia.vpc"
+  name.start_with?("org.pancia.") ? name : "org.pancia.#{name}"
+end
+
+def short_name(full_name)
+  full_name.sub("org.pancia.", "")
+end
+
+def plist_path_in_services(name)
+  short = short_name(name)
+  "#{$services_dir}#{short}/#{name}.plist"
+end
+
+def plist_path_in_launch_agents(name)
+  "#{$launch_agents_dir}#{name}.plist"
 end
 
 def execute(cmd)
@@ -24,26 +44,85 @@ class ServiceCMDS
   def self.start(opts)
     opts.info = "Start a service."
     lambda { |name|
-      execute("")
+      return puts "Usage: service start <name>" unless name
+
+      full_name = normalize_service_name(name)
+      plist_dest = plist_path_in_launch_agents(full_name)
+
+      # Try to install if not present (fallback)
+      unless File.exist?(plist_dest)
+        plist_src = plist_path_in_services(full_name)
+        if File.exist?(plist_src)
+          puts "Installing #{full_name}..."
+          execute("ln -f #{plist_src.shellescape} #{plist_dest.shellescape}")
+        else
+          return puts "Error: Service '#{name}' not found in #{$services_dir}"
+        end
+      end
+
+      puts "Loading #{full_name}..."
+      execute("launchctl load #{plist_dest.shellescape}")
+      execute("launchctl start #{full_name.shellescape}")
+      puts "Started #{full_name}"
     }
   end
   def self.stop(opts)
     opts.info = "Stop a service."
     lambda { |name|
-      execute("")
+      return puts "Usage: service stop <name>" unless name
+
+      full_name = normalize_service_name(name)
+      plist_dest = plist_path_in_launch_agents(full_name)
+
+      unless File.exist?(plist_dest)
+        return puts "Error: Service '#{name}' is not installed"
+      end
+
+      puts "Stopping #{full_name}..."
+      execute("launchctl stop #{full_name.shellescape}")
+      execute("launchctl unload #{plist_dest.shellescape}")
+      puts "Stopped #{full_name}"
     }
   end
   def self.restart(opts)
     opts.info = "Restart a service."
     lambda { |name|
-      self.stop(name)
-      self.start(name)
+      return puts "Usage: service restart <name>" unless name
+
+      full_name = normalize_service_name(name)
+      plist_dest = plist_path_in_launch_agents(full_name)
+
+      unless File.exist?(plist_dest)
+        return puts "Error: Service '#{name}' is not installed"
+      end
+
+      puts "Restarting #{full_name}..."
+      execute("launchctl stop #{full_name.shellescape}")
+      execute("launchctl unload #{plist_dest.shellescape}")
+      sleep 0.5
+      execute("launchctl load #{plist_dest.shellescape}")
+      execute("launchctl start #{full_name.shellescape}")
+      puts "Restarted #{full_name}"
     }
   end
   def self.status(opts)
     opts.info = "status of all services"
     lambda {
-      execute("")
+      output = %x[launchctl list | grep org.pancia]
+      if output.empty?
+        puts "No org.pancia services found"
+      else
+        puts "%-30s %-10s %s" % ["SERVICE", "PID", "STATUS"]
+        puts "-" * 60
+        output.each_line do |line|
+          parts = line.strip.split(/\s+/)
+          pid = parts[0] == "-" ? "not running" : parts[0]
+          exit_code = parts[1]
+          name = parts[2].sub("org.pancia.", "")
+          status = pid == "not running" ? "stopped" : (exit_code == "0" ? "running" : "error (#{exit_code})")
+          puts "%-30s %-10s %s" % [name, pid, status]
+        end
+      end
     }
   end
   def self.log(opts)

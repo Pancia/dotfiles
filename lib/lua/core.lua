@@ -102,9 +102,7 @@ local function is_reloading()
   return false
 end
 
-local sanctuary = engage("seeds.sanctuary", {})
-
-local seeds = {lotus = lotus, watch = watch, homeboard = homeboard, monitor = monitor, snippets = snippets, sanctuary = sanctuary}
+local seeds = {lotus = lotus, watch = watch, homeboard = homeboard, monitor = monitor, snippets = snippets}
 
 local hs_global_modifier = {"cmd", "ctrl"}
 
