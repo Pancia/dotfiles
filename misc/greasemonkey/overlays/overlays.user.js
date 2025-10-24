@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  36
+// @version  37
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://cdn.jsdelivr.net/npm/js-cookie@3.0.1/dist/js.cookie.min.js
 // @require  https://raw.githubusercontent.com/jashkenas/underscore/master/underscore.js
@@ -71,11 +71,13 @@
     }
 
     function addIndividualOverlays(containerSelector, itemSelector, config) {
+        console.log(`[DEBUG] addIndividualOverlays called with:`, containerSelector, itemSelector, config);
         const container = $(containerSelector)[0];
         if (!container) {
-            console.log(`Container ${containerSelector} not found`);
+            console.log(`[ERROR] Container ${containerSelector} not found`);
             return;
         }
+        console.log(`[DEBUG] Container found:`, container);
 
         const itemName = config.itemName || 'items';
         const holdTime = config.holdTime || 3000;
@@ -83,19 +85,22 @@
         const filterFunction = config.filterFunction;
         const blurEffect = config.blurEffect || false;
 
-        console.log(`Adding individual overlays to ${itemName}`);
+        console.log(`[DEBUG] Adding individual overlays to ${itemName}`);
 
         // Get all items
         let allItems = Array.from(container.querySelectorAll(itemSelector));
+        console.log(`[DEBUG] Found ${allItems.length} items before filtering`);
         if (filterFunction) {
+            const beforeFilter = allItems.length;
             allItems = allItems.filter(filterFunction);
+            console.log(`[DEBUG] Filtered from ${beforeFilter} to ${allItems.length} items`);
         }
         if (allItems.length === 0) {
-            console.log(`No ${itemName} found`);
+            console.log(`[ERROR] No ${itemName} found after filtering`);
             return;
         }
 
-        console.log(`Found ${allItems.length} ${itemName} to overlay`);
+        console.log(`[DEBUG] Found ${allItems.length} ${itemName} to overlay`);
 
         // Apply blur effect if enabled
         if (blurEffect) {
@@ -361,26 +366,35 @@
         // Process overlay configurations
         if (siteConfig.overlays) {
             siteConfig.overlays.forEach(overlayConfig => {
+                console.log(`[DEBUG] Processing overlay config:`, overlayConfig);
                 // Check if overlay applies to current path
                 if (overlayConfig.path && window.location.pathname !== overlayConfig.path) {
+                    console.log(`[DEBUG] Skipping - path mismatch: ${window.location.pathname} !== ${overlayConfig.path}`);
                     return;
                 }
                 if (overlayConfig.pathPattern && !window.location.pathname.match(overlayConfig.pathPattern)) {
+                    console.log(`[DEBUG] Skipping - path pattern mismatch`);
                     return;
                 }
 
                 // Add the overlay
                 if (overlayConfig.individual) {
+                    console.log(`[DEBUG] Individual overlay mode for ${overlayConfig.itemName}`);
                     // Individual overlays for each item
                     if (overlayConfig.waitForChild) {
+                        console.log(`[DEBUG] Waiting for child: ${overlayConfig.selector} ${overlayConfig.waitForChild}`);
                         waitForElementToBeLoaded(`${overlayConfig.selector} ${overlayConfig.waitForChild}`, () => {
+                            console.log(`[DEBUG] Child element loaded, calling addIndividualOverlays`);
                             addIndividualOverlays(overlayConfig.selector, overlayConfig.itemSelector, overlayConfig);
                         });
                     } else if (overlayConfig.waitFor) {
+                        console.log(`[DEBUG] Waiting for: ${overlayConfig.selector}`);
                         waitForElementToBeLoaded(overlayConfig.selector, () => {
+                            console.log(`[DEBUG] Element loaded, calling addIndividualOverlays`);
                             addIndividualOverlays(overlayConfig.selector, overlayConfig.itemSelector, overlayConfig);
                         });
                     } else {
+                        console.log(`[DEBUG] No wait, calling addIndividualOverlays immediately`);
                         addIndividualOverlays(overlayConfig.selector, overlayConfig.itemSelector, overlayConfig);
                     }
                 } else {
