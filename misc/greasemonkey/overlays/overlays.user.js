@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  39
+// @version  41
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://cdn.jsdelivr.net/npm/js-cookie@3.0.1/dist/js.cookie.min.js
 // @require  https://raw.githubusercontent.com/jashkenas/underscore/master/underscore.js
@@ -45,12 +45,20 @@
         $overlay.prependTo(selector)
     }
 
-    function waitForElementToBeLoaded(selector, callback) {
+    function waitForElementToBeLoaded(selector, callback, validationFn) {
         var tid = setInterval(function() {
             // wait for x element to have been loaded, ie: not null & has width
             var x = $(selector)[0]
             if (x == null || $(x).width() <= 0) { return }
-            // x was loaded, go ahead!
+
+            // Optional validation function (e.g., check for children)
+            if (validationFn && !validationFn(x)) {
+                console.log(`[DEBUG] Element ${selector} found but validation failed, waiting...`);
+                return;
+            }
+
+            // x was loaded and validated, go ahead!
+            console.log(`[DEBUG] Element ${selector} loaded and validated`);
             clearInterval(tid)
             callback(x)
         }, 100);
@@ -70,6 +78,58 @@
         return x >= (number - margin) && x <= (number + margin)
     }
 
+    function logSimplifiedHTML(element, itemSelector, maxDepth = 3) {
+        function getElementSignature(el) {
+            let sig = `<${el.tagName.toLowerCase()}`;
+            if (el.id) sig += ` id="${el.id}"`;
+            if (el.className) sig += ` class="${el.className}"`;
+            sig += '>';
+            return sig;
+        }
+
+        function buildTree(el, depth, indent = '') {
+            if (depth > maxDepth) return [];
+
+            const lines = [];
+            const children = Array.from(el.children);
+            const maxShow = 5;
+
+            children.slice(0, maxShow).forEach(child => {
+                const isMatch = itemSelector && child.matches(itemSelector);
+                const prefix = isMatch ? '✓ ' : '  ';
+                const suffix = isMatch ? ' [MATCH]' : '';
+                lines.push(indent + prefix + getElementSignature(child) + suffix);
+
+                if (depth < maxDepth) {
+                    lines.push(...buildTree(child, depth + 1, indent + '  '));
+                }
+            });
+
+            if (children.length > maxShow) {
+                const remaining = children.length - maxShow;
+                const remainingMatches = itemSelector
+                    ? children.slice(maxShow).filter(c => c.matches(itemSelector))
+                    : [];
+                const matchInfo = remainingMatches.length > 0
+                    ? ` (${remainingMatches.length} matches)`
+                    : '';
+                lines.push(indent + `  ... (${remaining} more${matchInfo})`);
+            }
+
+            return lines;
+        }
+
+        const output = [getElementSignature(element)];
+        output.push(...buildTree(element, 1, '  '));
+
+        console.log('[DEBUG] Container HTML structure:\n' + output.join('\n'));
+
+        if (itemSelector) {
+            const totalMatches = element.querySelectorAll(itemSelector).length;
+            console.log(`[DEBUG] Total matches for "${itemSelector}": ${totalMatches}`);
+        }
+    }
+
     function addIndividualOverlays(containerSelector, itemSelector, config) {
         console.log(`[DEBUG] addIndividualOverlays called with:`, containerSelector, itemSelector, config);
         const container = $(containerSelector)[0];
@@ -78,6 +138,7 @@
             return;
         }
         console.log(`[DEBUG] Container found:`, container);
+        logSimplifiedHTML(container, itemSelector, 3);
 
         const itemName = config.itemName || 'items';
         const holdTime = config.holdTime || 3000;
@@ -95,6 +156,12 @@
             allItems = allItems.filter(filterFunction);
             console.log(`[DEBUG] Filtered from ${beforeFilter} to ${allItems.length} items`);
         }
+        // Filter out items that have already been revealed
+        const beforeRevealedFilter = allItems.length;
+        allItems = allItems.filter(item => !item.classList.contains('revealed'));
+        if (beforeRevealedFilter > allItems.length) {
+            console.log(`[DEBUG] Filtered out ${beforeRevealedFilter - allItems.length} already-revealed items`);
+        }
         if (allItems.length === 0) {
             console.log(`[ERROR] No ${itemName} found after filtering`);
             return;
@@ -102,15 +169,33 @@
 
         console.log(`[DEBUG] Found ${allItems.length} ${itemName} to overlay`);
 
-        // Apply blur effect if enabled
+        // Apply blur effect if enabled - target child elements not the container
         if (blurEffect) {
+            // Split comma-separated selectors and apply blur rules to each
+            const selectors = itemSelector.split(',').map(s => s.trim());
+            const blurTargets = ['#comment', 'img', 'h3', '#dismissible'];
+
+            // Generate selectors for items that are NOT revealed (should be blurred)
+            const notRevealedSelectors = selectors.flatMap(sel =>
+                blurTargets.map(target => `${sel}:not(.revealed) ${target}`)
+            ).join(',\n                ');
+
+            // Generate selectors for revealed items (should NOT be blurred)
+            const revealedSelectors = selectors.flatMap(sel =>
+                blurTargets.map(target => `${sel}.revealed ${target}`)
+            ).join(',\n                ');
+
             addGlobalStyle(`
-                ${itemSelector} {
+                ${notRevealedSelectors} {
                     filter: blur(5px);
                     transition: filter 0.3s ease;
                 }
-                ${itemSelector}.revealed {
+                ${revealedSelectors} {
                     filter: none;
+                }
+                /* Ensure overlay stays sharp */
+                .individual-item-overlay {
+                    filter: none !important;
                 }
             `);
         }
@@ -163,15 +248,15 @@
             // Create reveal button
             const revealButton = document.createElement('button');
             const itemType = itemName === 'comments' ? 'comment' : (itemName === 'videos' ? 'video' : 'item');
-            revealButton.textContent = `Reveal this ${itemType} + ${adjacentRevealCount} nearby`;
+            revealButton.textContent = `Reveal this ${itemType} + ${adjacentRevealCount} below`;
             revealButton.style.cssText = `
                 white-space: nowrap;
                 background-color: #065fd4;
                 color: white;
                 border: none;
-                border-radius: 2px;
-                padding: 8px 14px;
-                font-size: 13px;
+                border-radius: 4px;
+                padding: 20px 30px;
+                font-size: 16px;
                 cursor: pointer;
                 position: relative;
                 z-index: 1;
@@ -197,18 +282,16 @@
                             if (adjacentOverlay) {
                                 adjacentOverlay.remove();
                             }
-                            if (blurEffect) {
-                                adjacentItem.classList.add('revealed');
-                            }
+                            // Always mark as revealed to prevent re-adding overlay
+                            adjacentItem.classList.add('revealed');
                         }
                     }
                 };
 
                 removeAdjacentOverlays(currentIndex, 1, adjacentRevealCount);  // Remove below
 
-                if (blurEffect) {
-                    item.classList.add('revealed');
-                }
+                // Always mark as revealed to prevent re-adding overlay
+                item.classList.add('revealed');
 
                 console.log(`Revealed ${itemName} item at index ${currentIndex} and adjacent items`);
             });
@@ -237,16 +320,25 @@
 
         // Set up mutation observer for dynamically added items
         const observer = new MutationObserver(_.debounce(() => {
+            console.log(`[DEBUG] Mutation detected in ${itemName} container`);
             let newItems = Array.from(container.querySelectorAll(itemSelector))
-                .filter(item => !item.querySelector('.individual-item-overlay'));
+                .filter(item => !item.querySelector('.individual-item-overlay'))
+                .filter(item => !item.classList.contains('revealed'));
+
+            console.log(`[DEBUG] Found ${newItems.length} items without overlays (after filtering revealed items)`);
 
             if (filterFunction) {
+                const beforeFilter = newItems.length;
                 newItems = newItems.filter(filterFunction);
+                console.log(`[DEBUG] Filtered from ${beforeFilter} to ${newItems.length} new items`);
             }
 
-            if (newItems.length === 0) return;
+            if (newItems.length === 0) {
+                console.log(`[DEBUG] No new ${itemName} to add overlays to`);
+                return;
+            }
 
-            console.log(`New ${itemName} detected, adding overlays to ${newItems.length} items`);
+            console.log(`[DEBUG] Adding overlays to ${newItems.length} new ${itemName}`);
 
             newItems.forEach((item, index) => {
                 if (!item.id) {
@@ -288,15 +380,15 @@
 
                 const revealButton = document.createElement('button');
                 const itemType = itemName === 'comments' ? 'comment' : (itemName === 'videos' ? 'video' : 'item');
-                revealButton.textContent = `Reveal this ${itemType} + ${adjacentRevealCount} nearby`;
+                revealButton.textContent = `Reveal this ${itemType} + ${adjacentRevealCount} below`;
                 revealButton.style.cssText = `
                     white-space: nowrap;
                     background-color: #065fd4;
                     color: white;
                     border: none;
-                    border-radius: 2px;
-                    padding: 8px 14px;
-                    font-size: 13px;
+                    border-radius: 4px;
+                    padding: 20px 30px;
+                    font-size: 16px;
                     cursor: pointer;
                     position: relative;
                     z-index: 1;
@@ -319,18 +411,16 @@
                                 if (adjacentOverlay) {
                                     adjacentOverlay.remove();
                                 }
-                                if (blurEffect) {
-                                    adjacentItem.classList.add('revealed');
-                                }
+                                // Always mark as revealed to prevent re-adding overlay
+                                adjacentItem.classList.add('revealed');
                             }
                         }
                     };
 
                     removeAdjacentOverlays(currentIndex, 1, adjacentRevealCount);
 
-                    if (blurEffect) {
-                        item.classList.add('revealed');
-                    }
+                    // Always mark as revealed to prevent re-adding overlay
+                    item.classList.add('revealed');
 
                     console.log(`Revealed ${itemName} item at index ${currentIndex} and adjacent items`);
                 });
@@ -398,10 +488,16 @@
                         });
                     } else if (overlayConfig.waitFor) {
                         console.log(`[DEBUG] Waiting for: ${overlayConfig.selector}`);
+                        // Wait for container to have matching items
+                        const validation = (container) => {
+                            const itemCount = container.querySelectorAll(overlayConfig.itemSelector).length;
+                            console.log(`[DEBUG] Validation check - found ${itemCount} ${overlayConfig.itemSelector} in container`);
+                            return itemCount > 0;
+                        };
                         waitForElementToBeLoaded(overlayConfig.selector, () => {
-                            console.log(`[DEBUG] Element loaded, calling addIndividualOverlays`);
+                            console.log(`[DEBUG] Element loaded with items, calling addIndividualOverlays`);
                             addIndividualOverlays(overlayConfig.selector, overlayConfig.itemSelector, overlayConfig);
-                        });
+                        }, validation);
                     } else {
                         console.log(`[DEBUG] No wait, calling addIndividualOverlays immediately`);
                         addIndividualOverlays(overlayConfig.selector, overlayConfig.itemSelector, overlayConfig);
@@ -440,31 +536,25 @@
             overlays: [
                 {
                     path: "/watch",
-                    selector: "#comments",
+                    selector: "#comments #contents",
                     itemSelector: "ytd-comment-thread-renderer",
                     individual: true,
                     itemName: "comments",
                     adjacentRevealCount: 2,
                     holdTime: 3000,
-                    blurEffect: false,
-                    waitFor: true,
-                    filterFunction: (element) => element.offsetHeight > 333
+                    blurEffect: true,
+                    waitFor: true
                 },
                 {
                     path: "/watch",
-                    selector: "ytd-watch-next-secondary-results-renderer",
+                    selector: "ytd-watch-next-secondary-results-renderer #contents",
                     itemSelector: ".ytd-item-section-renderer,.ytd-watch-next-secondary-results-renderer",
                     individual: true,
                     itemName: "videos",
                     adjacentRevealCount: 2,
                     holdTime: 3000,
                     blurEffect: true,
-                    waitFor: true,
-                    filterFunction: function(item) {
-                        const thumbnailEl = document.querySelector("ytd-watch-next-secondary-results-renderer a#thumbnail");
-                        if (!thumbnailEl) return false;
-                        return closeTo(item.offsetHeight, thumbnailEl.offsetHeight, 10);
-                    }
+                    waitFor: true
                 }
             ]
         }/*,
