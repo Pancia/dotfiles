@@ -7,8 +7,45 @@
 // @require  https://raw.githubusercontent.com/pancia/dotfiles/master/misc/greasemonkey/overlays/pressAndHold.js
 // @grant    none
 // ==/UserScript==
-
 (function($, window, document) {
+    const OVERLAY_CONFIG = {
+        "www.youtube.com": {
+            globalStyles: '#contents { filter: grayscale(1); }',
+            excludePaths: [/^\/embed/],
+            overlays: [
+                {
+                    path: "/watch",
+                    selector: "#comments #contents",
+                    itemSelector: "ytd-comment-thread-renderer",
+                    individual: true,
+                    itemName: "comments",
+                    adjacentRevealCount: 2,
+                    holdTime: 3000,
+                    blurEffect: true,
+                    waitFor: true
+                },
+                {
+                    path: "/watch",
+                    selector: "ytd-watch-next-secondary-results-renderer #contents",
+                    itemSelector: ".ytd-item-section-renderer,.ytd-watch-next-secondary-results-renderer",
+                    individual: true,
+                    itemName: "videos",
+                    adjacentRevealCount: 2,
+                    holdTime: 3000,
+                    blurEffect: true,
+                    waitFor: true
+                }
+            ]
+        }/*,
+        "www.linkedin.com": {
+            overlays: [
+                { selector: ".news-module", waitFor: true },
+                { path: "/feed/", selector: "#main", waitFor: true },
+                { path: "/notifications/", selector: "#main", waitFor: true },
+                { pathPattern: /^\/news\/daily-rundown\//, selector: "#main", waitFor: true }
+            ]
+        }*/
+    };
     document.addEventListener('keydown', (event) => {
         if (window.location.host == "www.youtube.com" && window.location.pathname == "/watch") {
             const activeElement = document.activeElement;
@@ -19,9 +56,6 @@
             }
         }
     });
-})(jQuery, window, document);
-
-(function($) {
     function addOverlay(selector, text, holdTime) {
         var $overlay = $(`<div id='${selector}'></div>`)
             .width($(selector).width())
@@ -263,7 +297,7 @@
             `;
 
             // Add pressAndHold behavior
-            $(revealButton).pressAndHold({ holdTime: holdTime });
+            $(revealButton).pressAndHold({ holdTime: holdTime, allowFastForward: false });
 
             // When button is held, remove this overlay and adjacent ones
             $(revealButton).on('complete.pressAndHold', () => {
@@ -394,7 +428,7 @@
                     z-index: 1;
                 `;
 
-                $(revealButton).pressAndHold({ holdTime: holdTime });
+                $(revealButton).pressAndHold({ holdTime: holdTime, allowFastForward: false });
 
                 $(revealButton).on('complete.pressAndHold', () => {
                     overlay.remove();
@@ -528,46 +562,6 @@
         }
     }
 
-    // Configuration Object
-    const OVERLAY_CONFIG = {
-        "www.youtube.com": {
-            globalStyles: '#contents { filter: grayscale(1); }',
-            excludePaths: [/^\/embed/],
-            overlays: [
-                {
-                    path: "/watch",
-                    selector: "#comments #contents",
-                    itemSelector: "ytd-comment-thread-renderer",
-                    individual: true,
-                    itemName: "comments",
-                    adjacentRevealCount: 2,
-                    holdTime: 3000,
-                    blurEffect: true,
-                    waitFor: true
-                },
-                {
-                    path: "/watch",
-                    selector: "ytd-watch-next-secondary-results-renderer #contents",
-                    itemSelector: ".ytd-item-section-renderer,.ytd-watch-next-secondary-results-renderer",
-                    individual: true,
-                    itemName: "videos",
-                    adjacentRevealCount: 2,
-                    holdTime: 3000,
-                    blurEffect: true,
-                    waitFor: true
-                }
-            ]
-        }/*,
-        "www.linkedin.com": {
-            overlays: [
-                { selector: ".news-module", waitFor: true },
-                { path: "/feed/", selector: "#main", waitFor: true },
-                { path: "/notifications/", selector: "#main", waitFor: true },
-                { pathPattern: /^\/news\/daily-rundown\//, selector: "#main", waitFor: true }
-            ]
-        }*/
-    };
-
     function MAIN() {
         // Process config-driven overlays
         const siteConfig = OVERLAY_CONFIG[window.location.host];
@@ -582,4 +576,4 @@
     }, 100);
     var observer = new MutationObserver(onMutationsFinished);
     observer.observe(document, {subtree: true, childList: true});
-})(jQuery);
+})(jQuery, window, document);

@@ -8,7 +8,8 @@
             holdTime: 700,
             progressIndicatorRemoveDelay: 300,
             progressIndicatorColor: "#ff0000",
-            progressIndicatorOpacity: 0.6
+            progressIndicatorOpacity: 0.6,
+            allowFastForward: true
 
         };
 
@@ -42,7 +43,10 @@
             $(this.element).mousedown(function(e) {
                 if(e.button == 2) { return; }
                 if(isActive) {
-                    decaCounter += 100;
+                    if(_this.settings.allowFastForward) {
+                        decaCounter += 100;
+                    }
+                    return;
                 } else {
                     $(_this.element).trigger('start.pressAndHold');
                     isActive = true;
