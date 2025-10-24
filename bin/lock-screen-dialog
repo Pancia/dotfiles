@@ -10,25 +10,20 @@
 # 6. Keyboard Shortcut: Press your desired key combination (e.g., Command+Option+Control+Q)
 #
 # This script is triggered by Command+Control+Q (mapped in karabiner.json)
-# and triggers the lock screen after user types 'jkl'
+# and triggers the lock screen after user types 'jkl' or 'lkj'
 
 echo -e "\033[41mREMEMBER: put wireless mic back in its case\033[0m"
-echo "Type 'jkl' to exit..."
+echo "Type 'jkl' or 'lkj' to exit..."
 
 input=""
 while true; do
     read -n 1 -s -r char
     input="${input}${char}"
-
-    # Clear line and show current input
     echo -ne "\r${input}"
-
-    # Check if last 3 characters are "jkl"
-    if [ "${input: -3}" = "jkl" ]; then
+    if [[ "${input: -3}" == "jkl" || "${input: -3}" == "lkj" ]]; then
         echo
         break
     fi
 done
 
-# Trigger Command+Option+Control+Q (lock screen hotkey)
 osascript -e 'tell application "System Events" to keystroke "q" using {command down, option down, control down}'
