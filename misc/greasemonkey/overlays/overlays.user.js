@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  35
+// @version  36
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://cdn.jsdelivr.net/npm/js-cookie@3.0.1/dist/js.cookie.min.js
 // @require  https://raw.githubusercontent.com/jashkenas/underscore/master/underscore.js
@@ -66,25 +66,278 @@
         head.appendChild(style);
     }
 
-    function addOverlayTo(element, overlayID, button, opts) {
-        var $overlay = $(`<div id='${overlayID}'></div>`)
-            .width($(element).width())
-            .css({
-                'opacity' : 1,
-                'position': 'absolute',
-                'background-color': 'black',
-                'height': '100%',
-                'z-index': 2200
-            });
-        button.pressAndHold(opts).on("complete.pressAndHold", () => {
-            try{ element.setAttribute("data-overlay", "disabled"); }catch(e){}
-            $(`[id='${overlayID}']`).remove();
-        }).appendTo($overlay);
-        $overlay.prependTo(element);
+    function closeTo(x, number, margin) {
+        return x >= (number - margin) && x <= (number + margin)
     }
 
-    function displayTime(date) {
-        return new Date(Number(date)).toLocaleTimeString("en-US", { hour: "numeric", minute: "numeric", hourCycle: "h24"})
+    function addIndividualOverlays(containerSelector, itemSelector, config) {
+        const container = $(containerSelector)[0];
+        if (!container) {
+            console.log(`Container ${containerSelector} not found`);
+            return;
+        }
+
+        const itemName = config.itemName || 'items';
+        const holdTime = config.holdTime || 3000;
+        const adjacentRevealCount = config.adjacentRevealCount || 2;
+        const filterFunction = config.filterFunction;
+        const blurEffect = config.blurEffect || false;
+
+        console.log(`Adding individual overlays to ${itemName}`);
+
+        // Get all items
+        let allItems = Array.from(container.querySelectorAll(itemSelector));
+        if (filterFunction) {
+            allItems = allItems.filter(filterFunction);
+        }
+        if (allItems.length === 0) {
+            console.log(`No ${itemName} found`);
+            return;
+        }
+
+        console.log(`Found ${allItems.length} ${itemName} to overlay`);
+
+        // Apply blur effect if enabled
+        if (blurEffect) {
+            addGlobalStyle(`
+                ${itemSelector} {
+                    filter: blur(5px);
+                    transition: filter 0.3s ease;
+                }
+                ${itemSelector}.revealed {
+                    filter: none;
+                }
+            `);
+        }
+
+        // Add overlay to each item
+        allItems.forEach((item, index) => {
+            if (item.querySelector('.individual-item-overlay')) {
+                return;
+            }
+
+            if (!item.id) {
+                item.id = `${itemName}-item-${index}-${Date.now()}`;
+            }
+
+            // Create overlay
+            const overlay = document.createElement('div');
+            overlay.className = 'individual-item-overlay';
+            overlay.dataset.itemType = itemName;
+            overlay.dataset.itemIndex = index;
+            overlay.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0, 0, 0, 0.8);
+                z-index: 2000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-sizing: border-box;
+                border: 2px solid #065fd4;
+                min-height: 50px;
+                backdrop-filter: blur(5px);
+                -webkit-backdrop-filter: blur(5px);
+            `;
+
+            // Add blur layer
+            const blurLayer = document.createElement('div');
+            blurLayer.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(255, 255, 255, 0.1);
+            `;
+            overlay.appendChild(blurLayer);
+
+            // Create reveal button
+            const revealButton = document.createElement('button');
+            const itemType = itemName === 'comments' ? 'comment' : (itemName === 'videos' ? 'video' : 'item');
+            revealButton.textContent = `Reveal this ${itemType} + ${adjacentRevealCount} nearby`;
+            revealButton.style.cssText = `
+                white-space: nowrap;
+                background-color: #065fd4;
+                color: white;
+                border: none;
+                border-radius: 2px;
+                padding: 8px 14px;
+                font-size: 13px;
+                cursor: pointer;
+                position: relative;
+                z-index: 1;
+            `;
+
+            // Add pressAndHold behavior
+            $(revealButton).pressAndHold({ holdTime: holdTime });
+
+            // When button is held, remove this overlay and adjacent ones
+            $(revealButton).on('complete.pressAndHold', () => {
+                overlay.remove();
+
+                // Find and remove adjacent overlays
+                const allItems = Array.from(container.querySelectorAll(itemSelector));
+                const currentIndex = allItems.indexOf(item);
+
+                const removeAdjacentOverlays = (itemIndex, direction, count) => {
+                    for (let i = 1; i <= count; i++) {
+                        const adjacentIndex = itemIndex + (direction * i);
+                        if (adjacentIndex >= 0 && adjacentIndex < allItems.length) {
+                            const adjacentItem = allItems[adjacentIndex];
+                            const adjacentOverlay = adjacentItem.querySelector('.individual-item-overlay');
+                            if (adjacentOverlay) {
+                                adjacentOverlay.remove();
+                            }
+                            if (blurEffect) {
+                                adjacentItem.classList.add('revealed');
+                            }
+                        }
+                    }
+                };
+
+                removeAdjacentOverlays(currentIndex, 1, adjacentRevealCount);  // Remove below
+
+                if (blurEffect) {
+                    item.classList.add('revealed');
+                }
+
+                console.log(`Revealed ${itemName} item at index ${currentIndex} and adjacent items`);
+            });
+
+            overlay.appendChild(revealButton);
+
+            // Make sure the item has position relative
+            const currentPosition = window.getComputedStyle(item).position;
+            if (currentPosition === 'static') {
+                item.style.position = 'relative';
+            }
+
+            item.appendChild(overlay);
+        });
+
+        console.log(`Added overlays to ${allItems.length} ${itemName}`);
+
+        // Set up mutation observer for dynamically added items
+        const observer = new MutationObserver(_.debounce(() => {
+            let newItems = Array.from(container.querySelectorAll(itemSelector))
+                .filter(item => !item.querySelector('.individual-item-overlay'));
+
+            if (filterFunction) {
+                newItems = newItems.filter(filterFunction);
+            }
+
+            if (newItems.length === 0) return;
+
+            console.log(`New ${itemName} detected, adding overlays to ${newItems.length} items`);
+
+            newItems.forEach((item, index) => {
+                if (!item.id) {
+                    item.id = `${itemName}-item-new-${index}-${Date.now()}`;
+                }
+
+                const overlay = document.createElement('div');
+                overlay.className = 'individual-item-overlay';
+                overlay.dataset.itemType = itemName;
+                overlay.dataset.itemIndex = index;
+                overlay.style.cssText = `
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background-color: rgba(0, 0, 0, 0.8);
+                    z-index: 2000;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-sizing: border-box;
+                    border: 2px solid #065fd4;
+                    min-height: 50px;
+                    backdrop-filter: blur(5px);
+                    -webkit-backdrop-filter: blur(5px);
+                `;
+
+                const blurLayer = document.createElement('div');
+                blurLayer.style.cssText = `
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background-color: rgba(255, 255, 255, 0.1);
+                `;
+                overlay.appendChild(blurLayer);
+
+                const revealButton = document.createElement('button');
+                const itemType = itemName === 'comments' ? 'comment' : (itemName === 'videos' ? 'video' : 'item');
+                revealButton.textContent = `Reveal this ${itemType} + ${adjacentRevealCount} nearby`;
+                revealButton.style.cssText = `
+                    white-space: nowrap;
+                    background-color: #065fd4;
+                    color: white;
+                    border: none;
+                    border-radius: 2px;
+                    padding: 8px 14px;
+                    font-size: 13px;
+                    cursor: pointer;
+                    position: relative;
+                    z-index: 1;
+                `;
+
+                $(revealButton).pressAndHold({ holdTime: holdTime });
+
+                $(revealButton).on('complete.pressAndHold', () => {
+                    overlay.remove();
+
+                    const allItems = Array.from(container.querySelectorAll(itemSelector));
+                    const currentIndex = allItems.indexOf(item);
+
+                    const removeAdjacentOverlays = (itemIndex, direction, count) => {
+                        for (let i = 1; i <= count; i++) {
+                            const adjacentIndex = itemIndex + (direction * i);
+                            if (adjacentIndex >= 0 && adjacentIndex < allItems.length) {
+                                const adjacentItem = allItems[adjacentIndex];
+                                const adjacentOverlay = adjacentItem.querySelector('.individual-item-overlay');
+                                if (adjacentOverlay) {
+                                    adjacentOverlay.remove();
+                                }
+                                if (blurEffect) {
+                                    adjacentItem.classList.add('revealed');
+                                }
+                            }
+                        }
+                    };
+
+                    removeAdjacentOverlays(currentIndex, 1, adjacentRevealCount);
+
+                    if (blurEffect) {
+                        item.classList.add('revealed');
+                    }
+
+                    console.log(`Revealed ${itemName} item at index ${currentIndex} and adjacent items`);
+                });
+
+                overlay.appendChild(revealButton);
+
+                const currentPosition = window.getComputedStyle(item).position;
+                if (currentPosition === 'static') {
+                    item.style.position = 'relative';
+                }
+
+                item.appendChild(overlay);
+            });
+        }, 100));
+
+        observer.observe(container, {
+            childList: true,
+            subtree: true
+        });
+
+        return observer;
     }
 
     // Process overlays from configuration
@@ -117,16 +370,32 @@
                 }
 
                 // Add the overlay
-                if (overlayConfig.waitForChild) {
-                    waitForElementToBeLoaded(`${overlayConfig.selector} ${overlayConfig.waitForChild}`, () => {
-                        addOverlay(overlayConfig.selector, overlayConfig.text, overlayConfig.holdTime);
-                    });
-                } else if (overlayConfig.waitFor) {
-                    waitForElementToBeLoaded(overlayConfig.selector, () => {
-                        addOverlay(overlayConfig.selector, overlayConfig.text, overlayConfig.holdTime);
-                    });
+                if (overlayConfig.individual) {
+                    // Individual overlays for each item
+                    if (overlayConfig.waitForChild) {
+                        waitForElementToBeLoaded(`${overlayConfig.selector} ${overlayConfig.waitForChild}`, () => {
+                            addIndividualOverlays(overlayConfig.selector, overlayConfig.itemSelector, overlayConfig);
+                        });
+                    } else if (overlayConfig.waitFor) {
+                        waitForElementToBeLoaded(overlayConfig.selector, () => {
+                            addIndividualOverlays(overlayConfig.selector, overlayConfig.itemSelector, overlayConfig);
+                        });
+                    } else {
+                        addIndividualOverlays(overlayConfig.selector, overlayConfig.itemSelector, overlayConfig);
+                    }
                 } else {
-                    addOverlay(overlayConfig.selector, overlayConfig.text, overlayConfig.holdTime);
+                    // Section-level overlay
+                    if (overlayConfig.waitForChild) {
+                        waitForElementToBeLoaded(`${overlayConfig.selector} ${overlayConfig.waitForChild}`, () => {
+                            addOverlay(overlayConfig.selector, overlayConfig.text, overlayConfig.holdTime);
+                        });
+                    } else if (overlayConfig.waitFor) {
+                        waitForElementToBeLoaded(overlayConfig.selector, () => {
+                            addOverlay(overlayConfig.selector, overlayConfig.text, overlayConfig.holdTime);
+                        });
+                    } else {
+                        addOverlay(overlayConfig.selector, overlayConfig.text, overlayConfig.holdTime);
+                    }
                 }
             });
         }
@@ -149,16 +418,30 @@
                 {
                     path: "/watch",
                     selector: "#comments",
-                    waitForChild: "#comment",
-                    text: "STOP! is it really worth it?",
-                    holdTime: 10000
+                    itemSelector: "#comment",
+                    individual: true,
+                    itemName: "comments",
+                    adjacentRevealCount: 2,
+                    holdTime: 3000,
+                    blurEffect: false,
+                    waitFor: true,
+                    filterFunction: (element) => element.offsetHeight > 333
                 },
                 {
                     path: "/watch",
-                    selector: "#related",
-                    waitForChild: "#items",
-                    text: "related videos",
-                    holdTime: 10000
+                    selector: "ytd-watch-next-secondary-results-renderer",
+                    itemSelector: ".ytd-item-section-renderer,.ytd-watch-next-secondary-results-renderer",
+                    individual: true,
+                    itemName: "videos",
+                    adjacentRevealCount: 2,
+                    holdTime: 3000,
+                    blurEffect: true,
+                    waitFor: true,
+                    filterFunction: function(item) {
+                        const thumbnailEl = document.querySelector("ytd-watch-next-secondary-results-renderer a#thumbnail");
+                        if (!thumbnailEl) return false;
+                        return closeTo(item.offsetHeight, thumbnailEl.offsetHeight, 10);
+                    }
                 }
             ]
         }/*,
