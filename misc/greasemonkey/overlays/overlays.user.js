@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Overlays
-// @version  37
+// @version  39
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://cdn.jsdelivr.net/npm/js-cookie@3.0.1/dist/js.cookie.min.js
 // @require  https://raw.githubusercontent.com/jashkenas/underscore/master/underscore.js
@@ -221,10 +221,19 @@
                 item.style.position = 'relative';
             }
 
+            console.log(`[DEBUG] Appending overlay to item:`, item);
             item.appendChild(overlay);
+            console.log(`[DEBUG] Overlay appended. Item now has ${item.children.length} children`);
+            console.log(`[DEBUG] Overlay computed styles:`, {
+                display: overlay.style.display,
+                position: overlay.style.position,
+                zIndex: overlay.style.zIndex,
+                width: overlay.offsetWidth,
+                height: overlay.offsetHeight
+            });
         });
 
-        console.log(`Added overlays to ${allItems.length} ${itemName}`);
+        console.log(`[DEBUG] Added overlays to ${allItems.length} ${itemName}`);
 
         // Set up mutation observer for dynamically added items
         const observer = new MutationObserver(_.debounce(() => {
@@ -432,7 +441,7 @@
                 {
                     path: "/watch",
                     selector: "#comments",
-                    itemSelector: "#comment",
+                    itemSelector: "ytd-comment-thread-renderer",
                     individual: true,
                     itemName: "comments",
                     adjacentRevealCount: 2,
