@@ -10,6 +10,7 @@ $home_dir = %x[echo $HOME].strip
 $playlist_fmt = "%(playlist_title)s"
 $audio_code = "bestaudio"
 $video_code = "bestvideo[ext=mp4][height<=480][vcodec^=avc]+bestaudio"
+$progress_flag = ARGV.include?('--show-progress') ? '' : '--no-progress'
 
 Dir["#{$home_dir}/Downloads/*.ytdl"].each { |f|
   ytid, videoType, downloadType, _ = File.basename(f).split(".")
@@ -17,7 +18,7 @@ Dir["#{$home_dir}/Downloads/*.ytdl"].each { |f|
     command = %{
         yt-dlp \
           -o '~/Downloads/ytdl/#{downloadType}/#{videoType == "playlist" ? $playlist_fmt : ""}/%(channel)s__$__%(title)s__#__%(id)s.%(ext)s' \
-          --no-progress \
+          #{$progress_flag} \
           -f "#{downloadType == "video" ? $video_code : $audio_code}" \
           -- "#{Shellwords.escape ytid}" 2>&1 \
           && mv "#{Shellwords.escape f}" ~/.Trash/
@@ -39,7 +40,7 @@ Dir["#{$home_dir}/Downloads/*.ytdl"].each { |f|
         -o '#{out_file}' \
         --skip-download --write-subs --write-auto-subs \
         --sub-langs en --convert-subs srt \
-        --no-progress \
+        #{$progress_flag} \
         -- "#{Shellwords.escape ytid}" 2>&1
     }
     system(command)
@@ -54,7 +55,7 @@ Dir["#{$home_dir}/Downloads/*.ytdl"].each { |f|
       download_command = %{
         yt-dlp \
           -o '#{audio_file}' \
-          --no-progress \
+          #{$progress_flag} \
           -f "#{$audio_code}" \
           -- "#{Shellwords.escape ytid}" 2>&1
       }

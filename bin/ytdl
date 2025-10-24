@@ -34,4 +34,4 @@ echo DOWNLOADING TO ~/Downloads/$video_id.single.$ytdl_type.ytdl
 
 echo 'please ignore' > ~/Downloads/"$video_id.single.$ytdl_type.ytdl"
 
-ruby ~/dotfiles/misc/watch/ytdl/ytdl.rb
+ruby ~/dotfiles/misc/watch/ytdl/ytdl.rb --show-progress
