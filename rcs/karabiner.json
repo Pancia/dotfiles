@@ -181,6 +181,26 @@
                         ]
                     },
                     {
+                        "description": "cmd+ctrl+q -> lock-screen-dialog",
+                        "manipulators": [
+                            {
+                                "from": {
+                                    "key_code": "q",
+                                    "modifiers": {
+                                        "mandatory": [
+                                            "command",
+                                            "control"
+                                        ]
+                                    }
+                                },
+                                "to": {
+                                    "shell_command": "osascript <<EOF\ntell application \"iterm2\"\ncreate window with default profile command \"~/dotfiles/bin/lock-screen-dialog\"\nend tell\nEOF"
+                                },
+                                "type": "basic"
+                            }
+                        ]
+                    },
+                    {
                         "description": "alt-space -> activate Whispering and trigger Command+Option+Shift+Z",
                         "manipulators": [
                             {
