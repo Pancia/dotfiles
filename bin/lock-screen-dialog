@@ -13,6 +13,7 @@
 # and triggers the lock screen after user types 'jkl' or 'lkj'
 
 echo -e "\033[41mREMEMBER: put wireless mic back in its case\033[0m"
+echo -e "\033[41mCHECK the hot plate\033[0m"
 echo "Type 'jkl' or 'lkj' to exit..."
 
 input=""
