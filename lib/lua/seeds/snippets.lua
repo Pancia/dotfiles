@@ -1,7 +1,7 @@
 local obj = {}
 
 -- Configuration
-obj.snippets_file = os.getenv("HOME") .. "/.hammerspoon/snippets.txt"
+obj.snippets_file = os.getenv("HOME").."/ProtonDrive/_config/snippets.txt"
 obj.paste_on_select = false
 obj.hotkey = {{"cmd", "ctrl"}, "s"} -- Default hotkey
 
