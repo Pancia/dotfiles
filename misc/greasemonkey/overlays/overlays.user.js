@@ -26,7 +26,7 @@
                 },
                 {
                     path: "/watch",
-                    selector: "ytd-watch-next-secondary-results-renderer #contents",
+                    selector: "ytd-watch-next-secondary-results-renderer #contents, ytd-watch-next-secondary-results-renderer #items",
                     itemSelector: ".ytd-item-section-renderer,.ytd-watch-next-secondary-results-renderer",
                     individual: true,
                     itemName: "videos",
