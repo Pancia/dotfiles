@@ -142,7 +142,7 @@ function obj:onIPCMessage(_id, msg)
         title = string.format("🎵%23s ▶️", msg)
     end
     local styledTitle = hs.styledtext.new(title, {["font"] = {["name"] = "Menlo-Regular"}})
-    obj._playPauseMenu:setTitle(styledTitle)
+    obj._controlsMenu:setTitle(styledTitle)
 end
 
 function obj:initMenuTitle()
@@ -159,19 +159,240 @@ function obj:initMenuTitle()
     end
 end
 
+function openInITerm(command)
+    local script = string.format([[
+        tell application "iTerm"
+            create window with default profile command "%s"
+            activate
+        end tell
+    ]], command)
+    hs.osascript.applescript(script)
+end
+
+function obj:createControlsCanvas()
+    local buttonWidth = 100
+    local buttonHeight = 40
+    local padding = 8
+    local rowHeight = buttonHeight + padding
+    local canvasWidth = (buttonWidth * 3) + (padding * 4)
+    local canvasHeight = (rowHeight * 5) + padding
+
+    obj._canvas = hs.canvas.new({x = 0, y = 0, w = canvasWidth, h = canvasHeight})
+    obj._canvas:level("popUpMenu")
+    obj._canvas:behavior({"canJoinAllSpaces", "stationary"})
+
+    -- Background
+    obj._canvas:appendElements({
+        type = "rectangle",
+        action = "fill",
+        fillColor = {hex = "#1e1e1e", alpha = 0.95},
+        roundedRectRadii = {xRadius = 8, yRadius = 8},
+    })
+
+    -- Button configurations
+    local buttons = {
+        -- Row 1: Media controls (3 buttons @ 100px)
+        {id = "prev", label = "⏮ Previous", x = padding, y = padding, w = buttonWidth},
+        {id = "playpause", label = "⏯ Play/Pause", x = padding * 2 + buttonWidth, y = padding, w = buttonWidth},
+        {id = "next", label = "⏭ Next", x = padding * 3 + buttonWidth * 2, y = padding, w = buttonWidth},
+
+        -- Row 2: Seek controls (4 buttons @ 75px)
+        {id = "seek_back_30", label = "⏪ 30s", x = padding, y = padding + rowHeight, w = 75},
+        {id = "seek_back_10", label = "⏪ 10s", x = padding * 2 + 75, y = padding + rowHeight, w = 75},
+        {id = "seek_fwd_10", label = "⏩ 10s", x = padding * 3 + 75 * 2, y = padding + rowHeight, w = 75},
+        {id = "seek_fwd_30", label = "⏩ 30s", x = padding * 4 + 75 * 3, y = padding + rowHeight, w = 75},
+
+        -- Row 3: Volume controls (2 buttons @ 155px, centered)
+        {id = "vol_down", label = "🔉 Vol -", x = padding, y = padding + rowHeight * 2, w = 155},
+        {id = "vol_up", label = "🔊 Vol +", x = padding * 2 + 155, y = padding + rowHeight * 2, w = 155},
+
+        -- Row 4: Select controls (2 buttons @ 155px)
+        {id = "select_playlist", label = "📋 Playlist", x = padding, y = padding + rowHeight * 3, w = 155},
+        {id = "select_tags", label = "🏷 Tags", x = padding * 2 + 155, y = padding + rowHeight * 3, w = 155},
+
+        -- Row 5: Edit controls (2 buttons @ 155px)
+        {id = "edit_track", label = "✏️ Edit", x = padding, y = padding + rowHeight * 4, w = 155},
+        {id = "audacity", label = "🎧 Audacity", x = padding * 2 + 155, y = padding + rowHeight * 4, w = 155},
+    }
+
+    for _, btn in ipairs(buttons) do
+        -- Button background
+        obj._canvas:appendElements({
+            id = btn.id .. "_bg",
+            type = "rectangle",
+            action = "fill",
+            fillColor = {hex = "#2d2d2d", alpha = 1},
+            strokeColor = {hex = "#3d3d3d", alpha = 1},
+            strokeWidth = 1,
+            roundedRectRadii = {xRadius = 6, yRadius = 6},
+            frame = {x = btn.x, y = btn.y, w = btn.w, h = buttonHeight},
+            trackMouseEnterExit = true,
+            trackMouseUp = true,
+        })
+
+        -- Button text
+        obj._canvas:appendElements({
+            id = btn.id .. "_text",
+            type = "text",
+            action = "fill",
+            text = btn.label,
+            textColor = {hex = "#ffffff", alpha = 1},
+            textSize = 12,
+            textAlignment = "center",
+            frame = {x = btn.x, y = btn.y + buttonHeight/4, w = btn.w, h = buttonHeight},
+            trackMouseEnterExit = true,
+            trackMouseUp = true,
+        })
+    end
+
+    -- Helper function to find element index by ID
+    local function findElementIndexById(canvas, elementId)
+        for i = 1, #canvas do
+            if canvas[i].id == elementId then
+                return i
+            end
+        end
+        return nil
+    end
+
+    -- Mouse callback for interactions
+    obj._canvas:mouseCallback(function(canvas, event, id, x, y)
+        local btnId = string.gsub(id, "_bg", ""):gsub("_text", "")
+
+        if event == "mouseEnter" and btnId ~= "_canvas_" then
+            -- Highlight on hover
+            local bgId = btnId .. "_bg"
+            local idx = findElementIndexById(canvas, bgId)
+            if idx then
+                canvas[idx].fillColor = {hex = "#3d3d3d", alpha = 1}
+            end
+        elseif event == "mouseExit" and btnId ~= "_canvas_" then
+            -- Remove highlight
+            local bgId = btnId .. "_bg"
+            local idx = findElementIndexById(canvas, bgId)
+            if idx then
+                canvas[idx].fillColor = {hex = "#2d2d2d", alpha = 1}
+            end
+        elseif event == "mouseUp" then
+            -- Row 1: Media controls
+            if btnId == "prev" then
+                obj:prevTrack()
+            elseif btnId == "playpause" then
+                obj:playOrPause()
+            elseif btnId == "next" then
+                obj:nextTrack()
+            -- Row 2: Seek controls
+            elseif btnId == "seek_back_30" then
+                obj:seekBackwards(30)()
+            elseif btnId == "seek_back_10" then
+                obj:seekBackwards(10)()
+            elseif btnId == "seek_fwd_10" then
+                obj:seekForwards(10)()
+            elseif btnId == "seek_fwd_30" then
+                obj:seekForwards(30)()
+            -- Row 3: Volume controls
+            elseif btnId == "vol_down" then
+                obj:decVolume()
+            elseif btnId == "vol_up" then
+                obj:incVolume()
+            -- Row 4: Select controls (open in iTerm)
+            elseif btnId == "select_playlist" then
+                obj:selectByPlaylist()
+                obj:hideControlsCanvas()
+            elseif btnId == "select_tags" then
+                obj:selectByTags()
+                obj:hideControlsCanvas()
+            -- Row 5: Edit controls (open in iTerm)
+            elseif btnId == "edit_track" then
+                openInITerm("cmedit")
+                obj:hideControlsCanvas()
+            elseif btnId == "audacity" then
+                openInITerm("cmaudacity")
+                obj:hideControlsCanvas()
+            elseif id == "_canvas_" then
+                -- Clicked outside buttons, close popup
+                obj:hideControlsCanvas()
+            end
+        end
+    end)
+
+    -- Enable canvas-level mouse events to detect clicks outside buttons
+    obj._canvas:canvasMouseEvents(true, true, false, false)
+end
+
+function obj:showControlsCanvas()
+    if not obj._canvas then
+        obj:createControlsCanvas()
+    end
+
+    local menuFrame = obj._controlsMenu:frame()
+    if menuFrame then
+        obj._canvas:topLeft({x = menuFrame.x, y = menuFrame.y + menuFrame.h + 2})
+        obj._canvas:show(0.2)
+
+        -- Watch for clicks outside canvas (using mouseUp to avoid interfering with button clicks)
+        if obj._eventtap then obj._eventtap:stop() end
+        obj._eventtap = hs.eventtap.new({hs.eventtap.event.types.leftMouseUp}, function(event)
+            local mousePos = hs.mouse.absolutePosition()
+            local canvasFrame = obj._canvas:frame()
+            print(string.format("[DEBUG] mousePos: x=%.2f, y=%.2f", mousePos.x, mousePos.y))
+            if canvasFrame then
+                print(string.format("[DEBUG] canvasFrame: x=%.2f, y=%.2f, w=%.2f, h=%.2f", canvasFrame.x, canvasFrame.y, canvasFrame.w, canvasFrame.h))
+                local isInside = hs.geometry.point(mousePos):inside(canvasFrame)
+                print(string.format("[DEBUG] isInside: %s", tostring(isInside)))
+                if not isInside then
+                    print("[DEBUG] Closing canvas - click was outside")
+                    obj:hideControlsCanvas()
+                else
+                    print("[DEBUG] Not closing - click was inside canvas")
+                end
+            else
+                print("[DEBUG] canvasFrame is nil")
+            end
+        end):start()
+
+        -- Watch for Escape key
+        if obj._escapeWatcher then obj._escapeWatcher:stop() end
+        obj._escapeWatcher = hs.eventtap.new({hs.eventtap.event.types.keyDown}, function(event)
+            if event:getKeyCode() == 53 then -- Escape key
+                obj:hideControlsCanvas()
+                return true
+            end
+        end):start()
+    end
+end
+
+function obj:hideControlsCanvas()
+    if obj._canvas then
+        obj._canvas:hide(0.1)
+    end
+    if obj._eventtap then
+        obj._eventtap:stop()
+        obj._eventtap = nil
+    end
+    if obj._escapeWatcher then
+        obj._escapeWatcher:stop()
+        obj._escapeWatcher = nil
+    end
+end
+
+function obj:toggleControlsCanvas()
+    if obj._canvas and obj._canvas:isShowing() then
+        obj:hideControlsCanvas()
+    else
+        obj:showControlsCanvas()
+    end
+end
+
 function obj:start(config)
     wake:onSleep(onSleep):start()
     bindMediaKeys()
     obj._ipcPort = hs.ipc.localPort("cmus", obj.onIPCMessage)
-    obj._nextMenu = hs.menubar.new()
-    obj._nextMenu:setTitle("⏭")
-    obj._nextMenu:setClickCallback(obj.nextTrack)
-    obj._playPauseMenu = hs.menubar.new()
+    obj._controlsMenu = hs.menubar.new()
     obj:initMenuTitle()
-    obj._playPauseMenu:setClickCallback(obj.playOrPause)
-    obj._prevMenu = hs.menubar.new()
-    obj._prevMenu:setTitle("⏮")
-    obj._prevMenu:setClickCallback(obj.prevTrack)
+    obj._controlsMenu:setClickCallback(function()
+        obj:toggleControlsCanvas()
+    end)
 end
 
 return obj

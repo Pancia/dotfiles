@@ -14,7 +14,7 @@
             excludePaths: [/^\/embed/],
             overlays: [
                 {
-                    path: "/watch",
+                    pathPattern: "/(watch|live)",
                     selector: "#comments #contents",
                     itemSelector: "ytd-comment-thread-renderer",
                     individual: true,
@@ -25,7 +25,7 @@
                     waitFor: true
                 },
                 {
-                    path: "/watch",
+                    pathPattern: "/(watch|live)",
                     selector: "ytd-watch-next-secondary-results-renderer #contents, ytd-watch-next-secondary-results-renderer #items",
                     itemSelector: ".ytd-item-section-renderer,.ytd-watch-next-secondary-results-renderer",
                     individual: true,
@@ -79,23 +79,70 @@
         $overlay.prependTo(selector)
     }
 
-    function waitForElementToBeLoaded(selector, callback, validationFn) {
-        var tid = setInterval(function() {
+    function waitForElementToBeLoaded(selector, callback, validationFn, config) {
+        // Default configuration
+        const defaultConfig = {
+            initialWait: 100,      // Starting wait time in ms
+            increaseAfter: 10,     // Iterations before starting to increase
+            increaseBy: 1.5,       // Multiplier (or function)
+            maxWait: 5000          // Maximum wait time in ms
+        };
+
+        const cfg = Object.assign({}, defaultConfig, config || {});
+
+        let iteration = 0;
+        let currentWait = cfg.initialWait;
+
+        function checkElement() {
+            iteration++;
+
             // wait for x element to have been loaded, ie: not null & has width
-            var x = $(selector)[0]
-            if (x == null || $(x).width() <= 0) { return }
+            var x = $(selector)[0];
+            if (x == null || $(x).width() <= 0) {
+                scheduleNextCheck();
+                return;
+            }
 
             // Optional validation function (e.g., check for children)
             if (validationFn && !validationFn(x)) {
                 console.log(`[DEBUG] Element ${selector} found but validation failed, waiting...`);
+                scheduleNextCheck();
                 return;
             }
 
             // x was loaded and validated, go ahead!
-            console.log(`[DEBUG] Element ${selector} loaded and validated`);
-            clearInterval(tid)
-            callback(x)
-        }, 100);
+            console.log(`[DEBUG] Element ${selector} loaded and validated after ${iteration} iterations`);
+            callback(x);
+        }
+
+        function scheduleNextCheck() {
+            // Update wait time if we've passed the threshold
+            if (iteration >= cfg.increaseAfter) {
+                const oldWait = currentWait;
+
+                // Calculate new wait time
+                if (typeof cfg.increaseBy === 'function') {
+                    currentWait = cfg.increaseBy(iteration, currentWait);
+                } else {
+                    // Assume it's a multiplier
+                    currentWait = currentWait * cfg.increaseBy;
+                }
+
+                // Cap at maxWait
+                currentWait = Math.min(currentWait, cfg.maxWait);
+
+                // Log if wait time changed
+                if (oldWait !== currentWait) {
+                    console.log(`[DEBUG] Increasing wait time from ${oldWait}ms to ${currentWait}ms (iteration ${iteration})`);
+                }
+            }
+
+            // Schedule next check
+            setTimeout(checkElement, currentWait);
+        }
+
+        // Start the first check
+        setTimeout(checkElement, currentWait);
     }
 
     function addGlobalStyle(css) {
