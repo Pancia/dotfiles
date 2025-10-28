@@ -1,5 +1,5 @@
 {
-    "space": 7,
+    "space": "current",
     "chrome" : ["localhost:9630"],
     "iterm": {
         "dir": "$HOME/projects/work/simplymeet/",

@@ -69,8 +69,11 @@ fi
 
 if jq --exit-status '.board' $1 ; then
     board="$(jq -r '.board' $1)"
-    echo open -n "${board}"
-    open -n "${board}"
+    # Expand $HOME and ~ to actual home directory
+    board="${board/\$HOME/$HOME}"
+    board="${board/\~/$HOME}"
+    echo open -a CotEditor -n "${board}"
+    open -a CotEditor -n "${board}"
     echo board done
 fi
 

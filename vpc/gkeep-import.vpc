@@ -1,5 +1,5 @@
 {
-    "space": 6,
+    "space": "current",
     "brave" : ["takeout.google.com"],
     "iterm": {
         "dir": "$HOME/dotfiles/misc/gkeep-import",

@@ -62,9 +62,15 @@ function renderMenu()
         {title = "restart"
         , fn = function()
             obj.stopAwarenessSound()
+            -- Clear saved settings
+            hs.settings.set("state", nil)
+            hs.settings.set("soundIdx", nil)
+            hs.settings.set("timeLeft", nil)
+            -- Reset to defaults
             obj._state = "countdown"
             obj._soundIdx = 1
             obj._numTimesSoundPlayed = 0
+            obj._timeLeft = timeConfig(obj).interval
             obj:renderMenuBar()
         end},
     }
@@ -123,7 +129,6 @@ function obj:ensureNotifDelivered()
 end
 
 function obj:heartbeat()
-    obj._logger.df("HeartBeat state = %s, ", obj._state)
     if obj._state == "countdown" then
         obj._timeLeft = obj._timeLeft - 1
         if obj._timeLeft <= 0 then

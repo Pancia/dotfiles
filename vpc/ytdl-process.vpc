@@ -1,5 +1,5 @@
 {
-    "space": 2,
+    "space": "current",
     "iterm": {
         "dir": "$HOME/Downloads/ytdl",
         "tabs": [

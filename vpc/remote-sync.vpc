@@ -1,5 +1,5 @@
 {
-    "space": 9,
+    "space": "current",
     "iterm": {
         "dir": "$HOME",
         "tabs": [

@@ -2,4 +2,4 @@
 
 echo "$(date): copyparty service started"
 
-cd ~/private/ && copyparty -c copyparty.conf
+cd ~/ProtonDrive/ && copyparty -c copyparty/copyparty.conf

@@ -29,6 +29,7 @@ augroup END
 augroup FileTypes
     au!
     au BufRead *.wiki set filetype=vimwiki
+    au BufRead,BufNewFile *.vpc set filetype=json
 augroup END
 
 augroup Terminal

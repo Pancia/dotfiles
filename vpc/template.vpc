@@ -1,5 +1,5 @@
 {
-    "space": 9,
+    "space": "current",
     "brave" : ["www.google.com"],
     "iterm": {
         "dir": "$HOME/dotfiles/vpc/",
@@ -8,5 +8,5 @@
             "cp template.vpc untitled.vpc && vim untitled.vpc"
         ]
     },
-    "board": "$HOME/Dropbox/wiki/personal/pages/dashboard%2Fhome.md"
+    "board": "$HOME/ProtonDrive/Dropbox/wiki/personal/pages/dashboard%2Fhome.md"
 }

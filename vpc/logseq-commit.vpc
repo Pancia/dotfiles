@@ -1,7 +1,7 @@
 {
     "space": "current",
     "iterm": {
-        "dir": "$HOME/Dropbox/wiki/personal/",
+        "dir": "$HOME/ProtonDrive/Dropbox/wiki/personal/",
         "tabs": [
             "git status"
         ]

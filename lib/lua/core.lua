@@ -44,28 +44,21 @@ function notif(title)
   end
 end
 
-if false then
-  local lotus = engage("seeds.lotus.init", {
+local lotus = engage("seeds.lotus.init", {
     sounds = {
-      {
-        name  = "short",
-        path  = "bowl.wav",
-        notif = notif("Change position! #short")
-      },
-      {
-        name  = "short",
-        path  = "bowl.wav",
-        notif = notif("Change position! #short")
-      },
-      {
-        name   = "long",
-        path   = "gong.wav",
-        volume = .5,
-        notif  = notif("Do some squats! #long")
-      }
+        {
+            name  = "short",
+            path  = "bowl.wav",
+            notif = notif("Awareness: ohm... #short")
+        },
+        {
+            name   = "long",
+            path   = "gong.wav",
+            volume = .5,
+            notif  = notif("Standup and shake it out! #long")
+        }
     }
-  })
-end
+})
 
 local watch = engage("seeds.watch.init", {
   logDir = HOME .. "/.log/watch/",
