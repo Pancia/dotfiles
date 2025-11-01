@@ -10,18 +10,52 @@
 # 6. Keyboard Shortcut: Press your desired key combination (e.g., Command+Option+Control+Q)
 #
 # This script is triggered by Command+Control+Q (mapped in karabiner.json)
-# and triggers the lock screen after user types 'jkl' or 'lkj'
+# and triggers the lock screen after user types a random sequence
+
+# CONFIGURATION: Change this to experiment with different methods
+# Options: letters, words, numbers, mixed
+METHOD="words"
+
+# Generate sequence based on selected method
+case $METHOD in
+    letters)
+        # 3 random lowercase letters
+        sequence=$(LC_ALL=C tr -dc 'a-z' </dev/urandom | head -c 3)
+        ;;
+    words)
+        # 3 random words from EFF diceware list
+        sequence=$(cut -f2 /Users/anthony/Developer/eff_large_wordlist.txt | sort -R | head -n 2 | tr '\n' ' ' | sed 's/ $//')
+        display_sequence="$sequence"
+        sequence="${sequence// /}"  # Remove spaces for matching
+        ;;
+    numbers)
+        # 3 random digits
+        sequence=$(LC_ALL=C tr -dc '0-9' </dev/urandom | head -c 3)
+        ;;
+    mixed)
+        # Mix of letters and numbers (e.g., a1b2c3)
+        sequence=$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 6)
+        ;;
+    *)
+        echo "Unknown method: $METHOD"
+        exit 1
+        ;;
+esac
+
+# Use display_sequence if set, otherwise use sequence
+display="${display_sequence:-$sequence}"
 
 echo -e "\033[41mREMEMBER: put wireless mic back in its case\033[0m"
 echo -e "\033[41mCHECK the hot plate\033[0m"
-echo "Type 'jkl' or 'lkj' to exit..."
+echo "Type '$display' to lock the screen..."
 
 input=""
+seq_length=${#sequence}
 while true; do
     read -n 1 -s -r char
     input="${input}${char}"
     echo -ne "\r${input}"
-    if [[ "${input: -3}" == "jkl" || "${input: -3}" == "lkj" ]]; then
+    if [[ "${input: -$seq_length}" == "$sequence" ]]; then
         echo
         break
     fi

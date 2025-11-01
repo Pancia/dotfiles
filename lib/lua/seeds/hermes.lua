@@ -28,6 +28,78 @@ function obj:getProviderForQuery(query)
 end
 
 -- ============================================================================
+-- FUZZY MATCHING
+-- ============================================================================
+
+-- Fuzzy match scoring function
+-- Returns: (matched: boolean, score: number)
+-- Higher scores indicate better matches
+function fuzzyMatch(str, query)
+  if not query or #query == 0 then
+    return true, 0
+  end
+
+  local lowerStr = str:lower()
+  local lowerQuery = query:lower()
+
+  local score = 0
+  local queryIndex = 1
+  local consecutiveMatches = 0
+  local lastMatchIndex = 0
+
+  for i = 1, #lowerStr do
+    if queryIndex > #lowerQuery then
+      break
+    end
+
+    local strChar = lowerStr:sub(i, i)
+    local queryChar = lowerQuery:sub(queryIndex, queryIndex)
+
+    if strChar == queryChar then
+      -- Base score for matching character
+      score = score + 10
+
+      -- Bonus for consecutive matches
+      if i == lastMatchIndex + 1 then
+        consecutiveMatches = consecutiveMatches + 1
+        score = score + (consecutiveMatches * 5)
+      else
+        consecutiveMatches = 0
+      end
+
+      -- Bonus for matching at word boundaries
+      if i == 1 then
+        -- Start of string
+        score = score + 15
+      elseif i > 1 then
+        local prevChar = lowerStr:sub(i - 1, i - 1)
+        local origChar = str:sub(i, i)
+        -- Capital letter in original (word boundary in camelCase)
+        if origChar:match("%u") then
+          score = score + 10
+        -- After space or special character
+        elseif prevChar:match("[%s%-_/]") then
+          score = score + 10
+        end
+      end
+
+      -- Bonus for earlier matches (diminishing)
+      score = score + math.max(0, 50 - i)
+
+      lastMatchIndex = i
+      queryIndex = queryIndex + 1
+    end
+  end
+
+  -- Check if all query characters were matched
+  if queryIndex > #lowerQuery then
+    return true, score
+  else
+    return false, 0
+  end
+end
+
+-- ============================================================================
 -- APPLICATION PROVIDER
 -- ============================================================================
 
@@ -66,9 +138,9 @@ function ApplicationProvider:getChoices(query)
   end
 
   -- Filter and create choices
-  local lowerQuery = query and query:lower() or ""
   for name, app in pairs(allApps) do
-    if #lowerQuery == 0 or name:lower():find(lowerQuery, 1, true) then
+    local matched, score = fuzzyMatch(name, query)
+    if matched then
       -- Get application icon
       local icon = nil
       if type(app) == "string" then
@@ -93,13 +165,20 @@ function ApplicationProvider:getChoices(query)
         image = icon,
         appName = name,
         appPath = type(app) == "string" and app or nil,
-        appObj = type(app) ~= "string" and app or nil
+        appObj = type(app) ~= "string" and app or nil,
+        score = score
       })
     end
   end
 
-  -- Sort alphabetically
-  table.sort(choices, function(a, b) return a.text < b.text end)
+  -- Sort by score (descending), then alphabetically
+  table.sort(choices, function(a, b)
+    if a.score == b.score then
+      return a.text < b.text
+    else
+      return a.score > b.score
+    end
+  end)
 
   return choices
 end
@@ -132,7 +211,6 @@ end
 
 function VpcProvider:getChoices(query)
   local choices = {}
-  local lowerQuery = query and query:lower() or ""
 
   -- Scan vpc directory for .vpc files
   for file in hs.fs.dir(self.vpcDir) do
@@ -140,8 +218,9 @@ function VpcProvider:getChoices(query)
       local vpcName = file:gsub("%.vpc$", "")
       local fullPath = self.vpcDir .. file
 
-      -- Filter by query
-      if #lowerQuery == 0 or vpcName:lower():find(lowerQuery, 1, true) then
+      -- Filter by query using fuzzy matching
+      local matched, score = fuzzyMatch(vpcName, query)
+      if matched then
         -- Try to parse VPC file for metadata
         local subText = "VPC Workspace"
         local fileHandle = io.open(fullPath, "r")
@@ -178,16 +257,23 @@ function VpcProvider:getChoices(query)
         end
 
         table.insert(choices, {
-          text = vpcName,
+          text = "/vpc " .. vpcName,
           subText = subText,
-          vpcPath = fullPath
+          vpcPath = fullPath,
+          score = score
         })
       end
     end
   end
 
-  -- Sort alphabetically
-  table.sort(choices, function(a, b) return a.text < b.text end)
+  -- Sort by score (descending), then alphabetically
+  table.sort(choices, function(a, b)
+    if a.score == b.score then
+      return a.text < b.text
+    else
+      return a.score > b.score
+    end
+  end)
 
   return choices
 end
@@ -214,37 +300,53 @@ end
 function SlashProvider:getChoices(query)
   local trimmedQuery = query or ""
 
-  -- Check if query starts with "vpc"
-  if trimmedQuery:lower():match("^vpc%s*") or trimmedQuery == "" then
-    -- Extract the search term after "vpc "
-    local vpcQuery = trimmedQuery:match("^vpc%s+(.*)") or ""
-    local choices = self.vpcProvider:getChoices(vpcQuery)
+  -- Get all VPC choices (without filtering)
+  local allVpcChoices = self.vpcProvider:getChoices("")
 
-    -- Mark all choices as coming from vpc provider
-    for _, choice in ipairs(choices) do
+  -- Apply fuzzy matching on full display text
+  local matches = {}
+  for _, choice in ipairs(allVpcChoices) do
+    -- choice.text is "/vpc simplymeet", we match against "vpc simplymeet"
+    local textWithoutSlash = choice.text:sub(2) -- Remove leading "/"
+    local matched, score = fuzzyMatch(textWithoutSlash, trimmedQuery)
+
+    if matched then
+      choice.score = score
       choice.provider = "vpc"
+      table.insert(matches, choice)
     end
-
-    -- If no query yet, show help text as first item
-    if trimmedQuery == "" then
-      table.insert(choices, 1, {
-        text = "vpc <name>",
-        subText = "Search and launch VPC workspaces",
-        isHelp = true
-      })
-    end
-
-    return choices
   end
 
-  -- No matching slash command
-  return {
-    {
-      text = "/" .. trimmedQuery,
-      subText = "Unknown slash command. Try: /vpc",
-      isStub = true
+  -- Sort by score (descending), then alphabetically
+  table.sort(matches, function(a, b)
+    if a.score == b.score then
+      return a.text < b.text
+    else
+      return a.score > b.score
+    end
+  end)
+
+  -- If query is empty, show help text as first item
+  if trimmedQuery == "" then
+    table.insert(matches, 1, {
+      text = "vpc <name>",
+      subText = "Search and launch VPC workspaces",
+      isHelp = true
+    })
+  end
+
+  -- If no matches found, show unknown command
+  if #matches == 0 then
+    return {
+      {
+        text = "/" .. trimmedQuery,
+        subText = "Unknown slash command. Try: /vpc",
+        isStub = true
+      }
     }
-  }
+  end
+
+  return matches
 end
 
 function SlashProvider:selectItem(item)

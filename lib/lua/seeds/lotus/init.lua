@@ -5,7 +5,7 @@ local obj = {}
 
 obj.spoonPath = os.getenv("HOME").."/dotfiles/lib/lua/seeds/lotus/"
 
-obj.interval = { minutes = 30 }
+obj.interval = { minutes = 20 }
 
 function timeConfig(x)
     local i = x.interval

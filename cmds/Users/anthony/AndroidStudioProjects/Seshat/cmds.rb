@@ -4,7 +4,7 @@ module CMD
     opts.info = "FIXME"
     lambda { |*args|
       EXE.system %{
-        ./gradlew installRelease && adb shell am start -n com.dayzerostudio.polymnia/.MainActivity
+        ./gradlew installDebug && adb shell am start -n com.dayzerostudio.seshat/.MainActivity
       }
     }
   end
@@ -13,7 +13,7 @@ module CMD
     opts.info = "FIXME"
     lambda { |*args|
       EXE.system %{
-        adb logcat --pid="$(adb shell pidof -s com.dayzerostudio.polymnia)"
+        adb logcat --pid="$(adb shell pidof -s com.dayzerostudio.seshat)"
       }
     }
   end

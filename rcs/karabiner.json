@@ -194,7 +194,7 @@
                                     }
                                 },
                                 "to": {
-                                    "shell_command": "osascript <<EOF\ntell application \"iterm2\"\ncreate window with default profile command \"~/dotfiles/bin/lock-screen-dialog\"\nend tell\nEOF"
+                                    "shell_command": "~/dotfiles/bin/launch-lock-screen-dialog"
                                 },
                                 "type": "basic"
                             }

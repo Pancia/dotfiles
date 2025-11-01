@@ -1,0 +1,22 @@
+#!/bin/bash
+# Launch the lock-screen-dialog in a centered iTerm2 window
+
+osascript <<EOF
+tell application "Finder"
+    set screenBounds to bounds of window of desktop
+    set screenWidth to item 3 of screenBounds
+    set screenHeight to item 4 of screenBounds
+end tell
+set windowWidth to 800
+set windowHeight to 400
+set x1 to (screenWidth - windowWidth) / 2
+set y1 to ((screenHeight - windowHeight) / 4)
+set x2 to x1 + windowWidth
+set y2 to y1 + windowHeight
+tell application "iTerm2"
+    set newWindow to (create window with default profile command "~/dotfiles/bin/lock-screen-dialog")
+    tell current window
+        set bounds to {x1, y1, x2, y2}
+    end tell
+end tell
+EOF
