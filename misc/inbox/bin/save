@@ -2,7 +2,7 @@
 python3.11 _save_transcripts.py inbox.txt transcripts
 python3.11 _bkmk.py inbox.txt transcripts notes
 open .
-echo "mv notes/* ~/Dropbox/wiki/personal/pages"
+echo "mv notes/* ~/ProtonDrive/Dropbox/wiki/personal/pages"
 echo "trash transcripts/*"
 echo "mv inbox.txt archive/inbox.$(date '+%Y-%m-%d_%X').txt"
 echo "touch inbox.txt"

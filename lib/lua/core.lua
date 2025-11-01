@@ -33,11 +33,6 @@ local cmus = engage("seeds.cmus", {})
 
 local snippets = engage("seeds.snippets", {})
 
-local homeboard = engage("seeds.homeboard.init", {
-    homeBoardPath = HOME.."/Dropbox/HomeBoard/",
-    videosPath = HOME.."/Movies/HomeBoard"
-})
-
 function notif(title)
   return function()
     return {title = title, withdrawAfter = 0}
@@ -95,7 +90,7 @@ local function is_reloading()
   return false
 end
 
-local seeds = {lotus = lotus, watch = watch, homeboard = homeboard, monitor = monitor, snippets = snippets}
+local seeds = {lotus = lotus, watch = watch, monitor = monitor, snippets = snippets}
 
 local hs_global_modifier = {"cmd", "ctrl"}
 

@@ -4,7 +4,7 @@
     "iterm": {
         "dir": "$HOME/dotfiles/misc/gkeep-import",
         "tabs": [
-            "py main.py /Users/anthony/Downloads/Takeout/Keep/ /Users/anthony/Dropbox/wiki/personal/journals"
+            "py main.py /Users/anthony/Downloads/Takeout/Keep/ /Users/anthony/ProtonDrive/Dropbox/wiki/personal/journals"
         ]
     }
 }

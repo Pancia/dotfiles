@@ -2,6 +2,7 @@ alias ga='git add'
 alias gaa='git add --all'
 alias gc='git commit --verbose'
 alias gca='git commit --verbose --all'
+# ./ai.zsh defines gcai -> edit git commit message initialized by ai
 alias gd='git diff --color-words'
 alias gds='gd --staged'
 alias gl='git log --graph --all --decorate --abbrev-commit'

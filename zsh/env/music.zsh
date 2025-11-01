@@ -1,2 +1,2 @@
 export MUSIC_DIR="$HOME/Music/MyMusic/my-music/"
-export MUSIC_DB="$HOME/Dropbox/Music/my-music.json"
+export MUSIC_DB="$HOME/ProtonDrive/Dropbox/Music/my-music.json"

@@ -74,7 +74,7 @@ class MyRequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-type', 'text/plain')
         self.end_headers()
-        command = "ag -o --no-filename '\[\[para/([^\]]*)\]\]' notes/ ~/Dropbox/wiki/personal/pages/ | sort | uniq"
+        command = "ag -o --no-filename '\[\[para/([^\]]*)\]\]' notes/ ~/ProtonDrive/Dropbox/wiki/personal/pages/ | sort | uniq"
         result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, text=True)
         response = result.stdout
         self.wfile.write(response.encode('utf-8'))
@@ -108,8 +108,8 @@ class MyRequestHandler(BaseHTTPRequestHandler):
                 json_data = json.loads(body)
                 title = json_data['title']
                 note_filename = f"notes/notes%2F{escape_title(title)}.md"
-                print(f"mv {note_filename} ~/Dropbox/wiki/personal/pages/")
-                os.system(f"mv {note_filename} ~/Dropbox/wiki/personal/pages/")
+                print(f"mv {note_filename} ~/ProtonDrive/Dropbox/wiki/personal/pages/")
+                os.system(f"mv {note_filename} ~/ProtonDrive/Dropbox/wiki/personal/pages/")
                 response_content = b''
                 status = 200
             else:
