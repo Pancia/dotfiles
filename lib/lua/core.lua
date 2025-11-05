@@ -72,7 +72,7 @@ local calendar = engage("seeds.calendar.init", {
             },
         },
         titles = {
-            ["Religion & Spirituality - Academy Symposium"] = {
+            ["Productivity & Accountability with Damian"] = {
                 leadMinutes = 15,
                 action = function(event)
                     hs.notify.new(function(notification)

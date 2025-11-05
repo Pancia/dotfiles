@@ -10,7 +10,7 @@ obj.pollInterval = 60           -- seconds
 obj.queryWindow = 24            -- hours ahead
 obj.triggers = {                -- trigger configuration
     tags = {},                  -- tag -> {leadMinutes, action}
-    titles = {}                 -- title pattern -> {leadMinutes, action}
+    titles = {}                 -- title substring -> {leadMinutes, action}
 }
 obj.pythonPath = os.getenv("HOME").."/.pyenv/shims/python3"
 
@@ -89,11 +89,11 @@ function obj:getNextTriggeredEvent()
 
     local nextEvent = nil
     local nextTime = nil
-    local nextTriggerInfo = nil  -- {kind = "tag"/"title", identifiers = {list}}
+    local nextTriggerInfo = nil  -- {tags = {list}, titleMatches = {list}}
 
     for _, event in ipairs(events) do
         local hasConfiguredTrigger = false
-        local triggerInfo = {tags = {}, patterns = {}}
+        local triggerInfo = {tags = {}, titleMatches = {}}
 
         -- Check tag triggers
         local tags = obj:extractEventTags(event)
@@ -108,7 +108,7 @@ function obj:getNextTriggeredEvent()
         local titleMatches = obj:getMatchingTitleTriggers(event)
         for _, match in ipairs(titleMatches) do
             hasConfiguredTrigger = true
-            table.insert(triggerInfo.patterns, match.pattern)
+            table.insert(triggerInfo.titleMatches, match.searchString)
         end
 
         if hasConfiguredTrigger then
@@ -154,9 +154,9 @@ function obj:renderMenuBar()
             table.insert(displayParts, "#" .. tag)
         end
 
-        -- Add title patterns (show first pattern only in menubar to save space)
-        if #triggerInfo.patterns > 0 then
-            table.insert(displayParts, "[" .. triggerInfo.patterns[1] .. "]")
+        -- Add title matches (show first match only in menubar to save space)
+        if #triggerInfo.titleMatches > 0 then
+            table.insert(displayParts, "[" .. triggerInfo.titleMatches[1] .. "]")
         end
 
         local triggerStr = table.concat(displayParts, " ")
@@ -198,7 +198,7 @@ function obj:renderMenu()
             local titleMatches = obj:getMatchingTitleTriggers(event)
             for _, match in ipairs(titleMatches) do
                 hasConfiguredTrigger = true
-                table.insert(displayParts, "[" .. match.pattern .. "]")
+                table.insert(displayParts, "[" .. match.searchString .. "]")
             end
 
             if hasConfiguredTrigger then
@@ -298,23 +298,33 @@ function obj:extractEventTags(event)
     return allTags
 end
 
-function obj:matchesTitlePattern(eventTitle, pattern)
-    -- Check if event title matches the given Lua pattern
+function obj:matchesTitleSubstring(eventTitle, searchString)
+    -- Check if event title contains the search string (case-insensitive)
     if not eventTitle or eventTitle == "" then
         return false
     end
+    if not searchString or searchString == "" then
+        return false
+    end
 
-    return eventTitle:match(pattern) ~= nil
+    -- Trim whitespace and convert to lowercase for case-insensitive comparison
+    local titleLower = eventTitle:gsub("^%s*(.-)%s*$", "%1"):lower()
+    local searchLower = searchString:gsub("^%s*(.-)%s*$", "%1"):lower()
+
+    local found = titleLower:find(searchLower, 1, true) ~= nil
+    obj._logger.df("title '%s' contains '%s'? %s", eventTitle, searchString, tostring(found))
+
+    return found
 end
 
 function obj:getMatchingTitleTriggers(event)
-    -- Get all configured title patterns that match this event
+    -- Get all configured title substrings that match this event
     local matches = {}
 
-    for pattern, triggerConfig in pairs(obj.triggers.titles) do
-        if obj:matchesTitlePattern(event.title, pattern) then
+    for searchString, triggerConfig in pairs(obj.triggers.titles) do
+        if obj:matchesTitleSubstring(event.title, searchString) then
             table.insert(matches, {
-                pattern = pattern,
+                searchString = searchString,
                 config = triggerConfig
             })
         end
@@ -328,7 +338,7 @@ function obj:queryEvents()
     local scriptPath = obj.spoonPath .. "calendar_query.py"
     local cmd = string.format("%s %s %d 2>/dev/null", obj.pythonPath, scriptPath, obj.queryWindow)
 
-    obj._logger.df("Querying events: %s", cmd)
+    obj._logger.df("Querying events")
 
     local output, status = hs.execute(cmd)
 
@@ -520,19 +530,19 @@ function obj:processEvents(events)
         local titleMatches = obj:getMatchingTitleTriggers(event)
 
         if #titleMatches > 0 then
-            obj._logger.df("Event '%s' matches %d title patterns", event.title, #titleMatches)
+            obj._logger.df("Event '%s' matches %d title triggers", event.title, #titleMatches)
         end
 
         for _, match in ipairs(titleMatches) do
-            local pattern = match.pattern
+            local searchString = match.searchString
             local triggerConfig = match.config
 
-            obj._logger.df("Checking trigger for title pattern '%s' (lead: %dm)", pattern, triggerConfig.leadMinutes)
-            if obj:shouldTrigger(event, pattern, "title", triggerConfig) then
-                obj._logger.df("Triggering action for title pattern '%s' on event '%s'", pattern, event.title)
+            obj._logger.df("Checking trigger for title '%s' (lead: %dm)", searchString, triggerConfig.leadMinutes)
+            if obj:shouldTrigger(event, searchString, "title", triggerConfig) then
+                obj._logger.df("Triggering action for title '%s' on event '%s'", searchString, event.title)
 
                 -- Mark as triggered first
-                obj:markTriggered(event.id, pattern, "title", "before-start")
+                obj:markTriggered(event.id, searchString, "title", "before-start")
 
                 -- Execute action
                 local success, err = pcall(function()
@@ -540,7 +550,7 @@ function obj:processEvents(events)
                 end)
 
                 if not success then
-                    obj._logger.ef("Error executing action for title pattern '%s': %s", pattern, err)
+                    obj._logger.ef("Error executing action for title '%s': %s", searchString, err)
                 else
                     triggeredCount = triggeredCount + 1
                 end

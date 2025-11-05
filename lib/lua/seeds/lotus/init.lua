@@ -109,6 +109,12 @@ function obj:triggerClockNotification(soundIdx, triggerMinute)
     obj._lastTriggeredMinute = triggerMinute
     local sound = obj.sounds[soundIdx]
 
+    local volume = sound.volume or 1
+    local s = sound.name
+        and hs.sound.getByName(sound.name)
+        or hs.sound.getByFile(obj.spoonPath.."/"..sound.path)
+    local clockSound = s:volume(volume):play()
+
     if sound.notif then
         local notification = sound.notif()
         local clockNotif = hs.notify.new(function()
@@ -116,7 +122,7 @@ function obj:triggerClockNotification(soundIdx, triggerMinute)
         end, notification):send()
 
         local clockClearCheck = hs.timer.doEvery(1, function()
-            if not hs.fnutils.contains(hs.notify.deliveredNotifications(), clockNotif) then
+            if clockNotif and not hs.fnutils.contains(hs.notify.deliveredNotifications(), clockNotif) then
                 if clockNotif:activationType() == hs.notify.activationTypes.none then
                     obj:onClockNotifCallback(soundIdx)
                 end
@@ -128,12 +134,6 @@ function obj:triggerClockNotification(soundIdx, triggerMinute)
             end
         end)
     end
-
-    local volume = sound.volume or 1
-    local s = sound.name
-        and hs.sound.getByName(sound.name)
-        or hs.sound.getByFile(obj.spoonPath.."/"..sound.path)
-    local clockSound = s:volume(volume):play()
 end
 
 function obj:onClockNotifCallback(soundIdx)
