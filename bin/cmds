@@ -48,7 +48,7 @@ class CMDS extend CMD
   def self.trash(opts)
     opts.info = "Move cmds.rb file to trash."
     lambda {
-      if File.exists? $cmds_file
+      if File.exist? $cmds_file
         system("zsh -ic 'trash #{$cmds_file}'")
       end
     }

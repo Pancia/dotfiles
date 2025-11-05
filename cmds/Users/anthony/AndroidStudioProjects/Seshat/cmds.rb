@@ -17,6 +17,15 @@ module CMD
       }
     }
   end
+  def shell(opts)
+    opts.banner = "Usage: example"
+    opts.info = "FIXME"
+    lambda { |*args|
+      EXE.system %{
+        adb shell run-as com.dayzerostudio.seshat #{args.join " "}
+      }
+    }
+  end
 end
 
 trap "SIGINT" do

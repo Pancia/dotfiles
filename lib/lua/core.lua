@@ -21,8 +21,23 @@ install:andUse("FadeLogo", {
 })
 
 function engage(seed_path, config)
-  local seed = require(seed_path)
-  seed:start(config)
+  local success, result = pcall(function()
+    local seed = require(seed_path)
+    seed:start(config)
+    return seed
+  end)
+
+  if not success then
+    hs.notify.new({
+      title = "Hammerspoon Seed Error",
+      informativeText = string.format("Failed to load '%s': %s", seed_path, result),
+      withdrawAfter = 10
+    }):send()
+    hs.printf("\n\n=== SEED ERROR: %s ===\n%s\n\n", seed_path, result)
+    return nil
+  end
+
+  return result
 end
 
 local monitor = engage("seeds.monitor", {})
@@ -33,6 +48,49 @@ local cmus = engage("seeds.cmus", {})
 
 local snippets = engage("seeds.snippets", {})
 
+local calendar = engage("seeds.calendar.init", {
+    -- Matches "#{anthony/autocal:focus}" and captures only "focus"
+    tagPattern = "#%{anthony/autocal:([%w-_]+)%}",
+    pollInterval = 60, -- Poll every 60 seconds
+    queryWindow = 3, -- Look 3 hours ahead
+    triggers = {
+        tags = {
+            ["focus"] = {
+                leadMinutes = 5,
+                action = function(event)
+                    hs.notify.new(function(notification)
+                        hs.alert.show("Focus time in 5 minutes!")
+                    end,
+                    {
+                        title = "Focus Time Starting Soon",
+                        informativeText = event.title,
+                        withdrawAfter = 0,
+                        hasActionButton = true,
+                        actionButtonTitle = "Dismiss"
+                    }):send()
+                end
+            },
+        },
+        titles = {
+            ["Religion & Spirituality - Academy Symposium"] = {
+                leadMinutes = 15,
+                action = function(event)
+                    hs.notify.new(function(notification)
+                        hs.alert.show("SYMPOSIUM time in ~15 minutes!")
+                    end,
+                    {
+                        title = "SYMPOSIUM Starting Soon",
+                        informativeText = event.title,
+                        withdrawAfter = 0,
+                        hasActionButton = true,
+                        actionButtonTitle = "Dismiss"
+                    }):send()
+                end
+            },
+        }
+    }
+})
+
 function notif(title)
   return function()
     return {title = title, withdrawAfter = 0}
@@ -40,17 +98,22 @@ function notif(title)
 end
 
 local lotus = engage("seeds.lotus.init", {
+    --interval = { minutes = 20 },
+    clockTriggers = {
+        [0] = 1,
+        [30] = 2,
+    },
     sounds = {
         {
             name  = "short",
             path  = "bowl.wav",
-            notif = notif("Awareness: ohm... #short")
+            notif = notif("Ohm... #short")
         },
         {
             name   = "long",
             path   = "gong.wav",
             volume = .5,
-            notif  = notif("Standup and shake it out! #long")
+            notif  = notif("Ohm! #long")
         }
     }
 })
@@ -90,7 +153,12 @@ local function is_reloading()
   return false
 end
 
-local seeds = {lotus = lotus, watch = watch, monitor = monitor, snippets = snippets}
+seeds = {}
+if lotus then seeds.lotus = lotus end
+if watch then seeds.watch = watch end
+if monitor then seeds.monitor = monitor end
+if snippets then seeds.snippets = snippets end
+if calendar then seeds.calendar = calendar end
 
 local hs_global_modifier = {"cmd", "ctrl"}
 

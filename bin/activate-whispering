@@ -1,93 +1,186 @@
-#!/usr/bin/osascript
+#!/usr/bin/env python3
 
-set logFile to "/tmp/activate-whispering.log"
-do shell script "echo '=== Starting activation ===' >> " & logFile
+import subprocess
+import time
+import sys
 
-# Check if Whispering is already frontmost - if so, minimize it and toggle recording off
-do shell script "echo 'Checking if Whispering is frontmost...' >> " & logFile
-set checkScript to "local app = hs.application.find('Whispering'); " & ¬
-    "if app and app:isFrontmost() then " & ¬
-    "return 'frontmost' " & ¬
-    "else " & ¬
-    "return 'not_frontmost' " & ¬
-    "end"
-set hsCheckResult to do shell script "/Users/anthony/Developer/bin/hs -c " & quoted form of checkScript & " 2>&1"
-do shell script "echo 'Frontmost check result: " & hsCheckResult & "' >> " & logFile
+LOG_FILE = "/tmp/activate-whispering.log"
+HS_BIN = "/Users/anthony/Developer/bin/hs"
 
-if hsCheckResult is "frontmost" then
-    do shell script "echo 'Whispering is frontmost, minimizing and stopping recording...' >> " & logFile
 
+def log(message):
+    """Append a log message to the log file."""
+    with open(LOG_FILE, "a") as f:
+        f.write(f"{message}\n")
+
+
+def run_hs_command(lua_code):
+    """Execute a Hammerspoon Lua command and return the result."""
+    try:
+        result = subprocess.run(
+            [HS_BIN, "-c", lua_code],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        log(f"Hammerspoon command failed: {e.stderr}")
+        return None
+
+
+def send_keystroke(key, modifiers):
+    """Send a keystroke using AppleScript System Events."""
+    modifier_str = ", ".join(f"{mod} down" for mod in modifiers)
+    applescript = f'''
     tell application "System Events"
-        keystroke "z" using {command down, option down, shift down}
-        do shell script "echo 'Triggered recording toggle (stop)' >> " & logFile
+        keystroke "{key}" using {{{modifier_str}}}
     end tell
+    '''
+    try:
+        subprocess.run(
+            ["osascript", "-e", applescript],
+            capture_output=True,
+            check=True
+        )
+        return True
+    except subprocess.CalledProcessError as e:
+        log(f"Keystroke failed: {e.stderr}")
+        return False
 
-    delay 0.1
 
-    # Use Hammerspoon to minimize the window (works regardless of focus)
-    do shell script "echo 'Calling hammerspoon to minimize window...' >> " & logFile
-    set minimizeScript to "local app = hs.application.find('Whispering'); " & ¬
-        "if app then " & ¬
-        "local wins = app:allWindows(); " & ¬
-        "if #wins > 0 then " & ¬
-        "wins[1]:minimize(); " & ¬
-        "return 'minimized' " & ¬
-        "else " & ¬
-        "return 'no windows' " & ¬
-        "end " & ¬
-        "else " & ¬
-        "return 'app not found' " & ¬
-        "end"
-    set hsMinimizeResult to do shell script "/Users/anthony/Developer/bin/hs -c " & quoted form of minimizeScript & " 2>&1"
-    do shell script "echo 'Hammerspoon minimize result: " & hsMinimizeResult & "' >> " & logFile
+def is_whispering_frontmost():
+    """Check if Whispering app is currently frontmost."""
+    lua_code = """
+    local app = hs.application.find('Whispering')
+    if app and app:isFrontmost() then
+        return 'frontmost'
+    else
+        return 'not_frontmost'
+    end
+    """
+    result = run_hs_command(lua_code)
+    log(f"Frontmost check result: {result}")
+    return result == "frontmost"
 
-    delay 0.1
 
-    tell application "System Events"
-        keystroke "t" using {command down, option down, shift down}
-        do shell script "echo 'Triggered tuple mic toggle (mute)' >> " & logFile
-    end tell
-else
-    do shell script "echo 'Whispering is not frontmost, activating...' >> " & logFile
+def minimize_whispering():
+    """Minimize the Whispering window using Hammerspoon."""
+    lua_code = """
+    local app = hs.application.find('Whispering')
+    if app then
+        local wins = app:allWindows()
+        if #wins > 0 then
+            wins[1]:minimize()
+            return 'minimized'
+        else
+            return 'no windows'
+        end
+    else
+        return 'app not found'
+    end
+    """
+    result = run_hs_command(lua_code)
+    log(f"Hammerspoon minimize result: {result}")
+    return result
 
-    tell application "System Events"
-        keystroke "t" using {command down, option down, shift down}
-        do shell script "echo 'Triggered tuple mic toggle (unmute)' >> " & logFile
-    end tell
 
-    delay 0.1
+def is_tuple_running():
+    """Check if Tuple app is currently running."""
+    lua_code = """
+    local app = hs.application.find('Tuple')
+    if app then
+        return 'running'
+    else
+        return 'not_running'
+    end
+    """
+    result = run_hs_command(lua_code)
+    is_running = result == "running"
+    log(f"Tuple running check: {is_running}")
+    return is_running
 
-    # Use Hammerspoon to focus and raise the window
-    do shell script "echo 'Calling hammerspoon to focus window...' >> " & logFile
-    set focusScript to "local app = hs.application.find('Whispering'); " & ¬
-        "if not app then " & ¬
-        "hs.printf('[activate-whisper]: App not running, launching...'); " & ¬
-        "hs.application.open('Whispering'); " & ¬
-        "hs.timer.usleep(1000000); " & ¬
-        "app = hs.application.find('Whispering'); " & ¬
-        "if not app then return 'failed to launch' end " & ¬
-        "end; " & ¬
-        "local wins = app:allWindows(); " & ¬
-        "hs.printf('[activate-whisper]: Found %d windows', #wins); " & ¬
-        "if #wins > 0 then " & ¬
-        "local win = wins[1]; " & ¬
-        "hs.printf('[activate-whisper]: Focusing window: %s', win:title() or 'nil'); " & ¬
-        "if win:isMinimized() then win:unminimize() end; " & ¬
-        "win:focus(); " & ¬
-        "win:raise(); " & ¬
-        "return 'focused and raised window' " & ¬
-        "else " & ¬
-        "return 'no windows found after launch' " & ¬
-        "end"
-    set hsResult to do shell script "/Users/anthony/Developer/bin/hs -c " & quoted form of focusScript & " 2>&1"
-    do shell script "echo 'Hammerspoon result: " & hsResult & "' >> " & logFile
 
-    delay 0.2
+def focus_whispering():
+    """Focus and raise the Whispering window, launching if needed."""
+    lua_code = """
+    local app = hs.application.find('Whispering')
+    if not app then
+        hs.printf('[activate-whisper]: App not running, launching...')
+        hs.application.open('Whispering')
+        hs.timer.usleep(1000000)
+        app = hs.application.find('Whispering')
+        if not app then return 'failed to launch' end
+    end
+    local wins = app:allWindows()
+    hs.printf('[activate-whisper]: Found %d windows', #wins)
+    if #wins > 0 then
+        local win = wins[1]
+        hs.printf('[activate-whisper]: Focusing window: %s', win:title() or 'nil')
+        if win:isMinimized() then win:unminimize() end
+        win:focus()
+        win:raise()
+        return 'focused and raised window'
+    else
+        return 'no windows found after launch'
+    end
+    """
+    result = run_hs_command(lua_code)
+    log(f"Hammerspoon result: {result}")
+    return result
 
-    tell application "System Events"
-        keystroke "z" using {command down, option down, shift down}
-        do shell script "echo 'Triggered recording toggle (start)' >> " & logFile
-    end tell
-end if
 
-do shell script "echo '=== Completed ===' >> " & logFile
+def main():
+    log("=== Starting activation ===")
+
+    log("Checking if Whispering is frontmost...")
+
+    if is_whispering_frontmost():
+        log("Whispering is frontmost, minimizing and stopping recording...")
+
+        # Stop recording
+        send_keystroke("z", ["command", "option", "shift"])
+        log("Triggered recording toggle (stop)")
+
+        time.sleep(0.1)
+
+        # Minimize window
+        log("Calling hammerspoon to minimize window...")
+        minimize_whispering()
+
+        time.sleep(0.1)
+
+        # Mute mic
+        if is_tuple_running():
+            send_keystroke("t", ["command", "option", "shift"])
+            log("Triggered tuple mic toggle (mute)")
+        else:
+            log("Tuple not running, skipping mic toggle")
+
+    else:
+        log("Whispering is not frontmost, activating...")
+
+        # Unmute mic
+        if is_tuple_running():
+            send_keystroke("t", ["command", "option", "shift"])
+            log("Triggered tuple mic toggle (unmute)")
+        else:
+            log("Tuple not running, skipping mic toggle")
+
+        time.sleep(0.1)
+
+        # Focus window
+        log("Calling hammerspoon to focus window...")
+        focus_whispering()
+
+        time.sleep(0.2)
+
+        # Start recording
+        send_keystroke("z", ["command", "option", "shift"])
+        log("Triggered recording toggle (start)")
+
+    log("=== Completed ===")
+
+
+if __name__ == "__main__":
+    main()
