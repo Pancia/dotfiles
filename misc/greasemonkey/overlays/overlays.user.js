@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name     Overlays
-// @version  41
+// @version  42
 // @require  http://code.jquery.com/jquery-latest.min.js
 // @require  https://cdn.jsdelivr.net/npm/js-cookie@3.0.1/dist/js.cookie.min.js
 // @require  https://raw.githubusercontent.com/jashkenas/underscore/master/underscore.js
 // @require  https://raw.githubusercontent.com/pancia/dotfiles/master/misc/greasemonkey/overlays/pressAndHold.js
+// @include  htt*://*youtube.com/*
 // @grant    none
 // ==/UserScript==
 (function($, window, document) {
@@ -151,7 +152,7 @@
         if (!head) { return; }
         style = document.createElement('style');
         style.type = 'text/css';
-        style.innerHTML = css;
+        style.textContent = css;
         head.appendChild(style);
     }
 

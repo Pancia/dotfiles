@@ -27,7 +27,7 @@
                 timer,
                 decaCounter,
                 isActive = false,
-                progressIndicatorHTML;
+                progressIndicator;
 
 
             $(this.element).css({
@@ -36,9 +36,11 @@
                 position: 'relative'
             });
 
-            progressIndicatorHTML = '<div class="holdButtonProgress" style="height: 100%; width: 100%; position: absolute; top: 0; left: -100%; background-color:' + this.settings.progressIndicatorColor + '; opacity:' + this.settings.progressIndicatorOpacity + ';"></div>';
+            progressIndicator = document.createElement('div');
+            progressIndicator.className = 'holdButtonProgress';
+            progressIndicator.style.cssText = 'height: 100%; width: 100%; position: absolute; top: 0; left: -100%; background-color:' + this.settings.progressIndicatorColor + '; opacity:' + this.settings.progressIndicatorOpacity + ';';
 
-            $(this.element).prepend(progressIndicatorHTML);
+            $(this.element).prepend(progressIndicator);
 
             $(this.element).mousedown(function(e) {
                 if(e.button == 2) { return; }
