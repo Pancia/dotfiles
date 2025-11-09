@@ -23,6 +23,32 @@ function find { # find but prefer fd
     command find "$@"
 }
 
+
+function c {
+    cd $HOME
+    local dir
+    dir=$(fd --type d --max-depth 4 --follow --hidden | \
+            fzf --tac --no-sort \
+                --preview='ls -Fh --color=always {}' \
+                --preview-window=right:50%)
+    if [ -n "$dir" ]; then
+        cd "$dir" && echo ls && ls
+    else
+        cd -
+    fi
+}
+
+function v {
+    local file
+    file=$(fd --type f --max-depth 4 --follow --hidden | \
+            fzf --tac --no-sort \
+                --preview='bat --style=numbers --color=always {} 2>/dev/null || cat {}' \
+                --preview-window=right:50%)
+    if [ -n "$file" ]; then
+        nvim "$file"
+    fi
+}
+
 function meditate {
     local T="$((60*${1:-5}))"
     echo "sleeping for $T seconds"

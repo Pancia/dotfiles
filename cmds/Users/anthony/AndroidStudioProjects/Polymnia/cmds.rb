@@ -4,7 +4,7 @@ module CMD
     opts.info = "FIXME"
     lambda { |*args|
       EXE.system %{
-        ./gradlew installRelease && adb shell am start -n com.dayzerostudio.polymnia/.MainActivity
+        ./gradlew installRelease --no-daemon && adb shell am start -n com.dayzerostudio.polymnia/.MainActivity
       }
     }
   end

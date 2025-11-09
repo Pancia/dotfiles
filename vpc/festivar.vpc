@@ -1,21 +1,45 @@
 {
-    "space": "current",
-    "chrome" : [
-        "http://localhost:9630/build/main",
-        "http://localhost:3000/",
-        "https://book.fulcrologic.com/RAD.html",
-        "https://book.fulcrologic.com/"
-    ],
-    "iterm": {
-        "dir": "$HOME/projects/work/festivar-webapp/",
-        "tabs": [
-            "$ mcp",
-            "$ browser",
-            "$ server",
-            "$ vim",
-            "$ claude",
-            "git status"
+    "yabai": {
+        "enabled": true,
+        "layout": {
+            "template": [
+                "board browser browser iterm iterm",
+                "board browser browser iterm iterm",
+                "board browser browser iterm iterm",
+                "board browser browser iterm iterm"
+            ]
+        }
+    },
+    "Google Chrome": {
+        "area": "browser",
+        "urls": [
+            "http://localhost:9630/build/main",
+            "http://localhost:3000/",
+            "https://book.fulcrologic.com/RAD.html",
+            "https://book.fulcrologic.com/"
         ]
     },
-    "board": "$HOME/ProtonDrive/Dropbox/wiki/personal/pages/work%2Ffestivar.md"
+    "Tuple": {
+    },
+    "iTerm2": [
+        {
+            "area": "iterm",
+            "dir": "$HOME/projects/work/festivar-webapp/",
+            "tabs": [
+                "$ mcp",
+                "$ browser",
+                "$ server",
+                "$ vim",
+                "$ claude",
+                "git status"
+            ]
+        },
+        {
+            "area": "board",
+            "dir": "$HOME/ProtonDrive/Dropbox/wiki/personal",
+            "tabs": [
+                "vim pages/work%2Ffestivar.md"
+            ]
+        }
+    ]
 }

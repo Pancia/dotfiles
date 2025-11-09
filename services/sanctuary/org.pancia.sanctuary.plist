@@ -3,18 +3,18 @@
 <plist version="1.0">
     <dict>
         <key>Label</key>
-        <string>org.pancia.screen-unlock</string>
+        <string>org.pancia.sanctuary</string>
         <key>ProgramArguments</key>
         <array>
-            <string>/Users/anthony/dotfiles/services/screen-unlock/dotfiles-services-screen-unlock.sh</string>
+            <string>/Users/anthony/dotfiles/services/sanctuary/dotfiles-services-sanctuary.sh</string>
         </array>
         <key>RunAtLoad</key>
         <true/>
         <key>KeepAlive</key>
         <true/>
         <key>StandardOutPath</key>
-        <string>/Users/anthony/.log/services/screen-unlock.log</string>
+        <string>/Users/anthony/.log/services/sanctuary.log</string>
         <key>StandardErrorPath</key>
-        <string>/Users/anthony/.log/services/screen-unlock.log</string>
+        <string>/Users/anthony/.log/services/sanctuary.log</string>
     </dict>
 </plist>

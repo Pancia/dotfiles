@@ -1,7 +1,16 @@
 module CMD
-  def start(opts)
-    opts.banner = "Usage: start"
-    opts.info = "start"
+  def service_restart(opts)
+    opts.banner = "Usage: service_restart"
+    opts.info = "service_restart"
+    lambda { |*args|
+      EXE.system %{
+        service restart sanctuary && service log sanctuary
+      }
+    }
+  end
+  def dev(opts)
+    opts.banner = "Usage: dev"
+    opts.info = "dev"
     lambda { |*args|
       EXE.system %{
         npm run dev

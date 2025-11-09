@@ -4,7 +4,7 @@ module CMD
     opts.info = "FIXME"
     lambda { |*args|
       EXE.system %{
-        ./gradlew installDebug && adb shell am start -n com.dayzerostudio.seshat/.MainActivity
+        ./gradlew installDebug --no-daemon && adb shell am start -n com.dayzerostudio.seshat/.MainActivity
       }
     }
   end

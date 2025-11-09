@@ -23,8 +23,9 @@ case $METHOD in
         sequence=$(LC_ALL=C tr -dc 'a-z' </dev/urandom | head -c 3)
         ;;
     words)
-        # 3 random words from EFF diceware list
-        sequence=$(cut -f2 /Users/anthony/Developer/eff_large_wordlist.txt | sort -R | head -n 2 | tr '\n' ' ' | sed 's/ $//')
+        # X random words from EFF diceware list
+        num=1
+        sequence=$(cut -f2 /Users/anthony/Developer/eff_large_wordlist.txt | sort -R | head -n $num | tr '\n' ' ' | sed 's/ $//')
         display_sequence="$sequence"
         sequence="${sequence// /}"  # Remove spaces for matching
         ;;

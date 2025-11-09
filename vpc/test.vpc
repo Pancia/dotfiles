@@ -1,4 +1,37 @@
 {
     "space": "current",
-    "board": "$HOME/ProtonDrive/scratchpad/Untitled.txt"
+    "yabai": {
+        "enabled": true,
+        "layout": {
+            "template": [
+                "board chrome chrome iterm",
+                "board chrome chrome iterm",
+                "board chrome chrome iterm",
+                "board chrome chrome iterm"
+            ]
+        }
+    },
+    "Brave Browser": {
+        "area": "chrome",
+        "resize": [{"anchor": "right", "x": 100, "y": 0}],
+        "urls": [
+            "https://www.example.com/"
+        ]
+    },
+    "iTerm2": [
+        {
+            "area": "iterm",
+            "dir": "$HOME/dotfiles/",
+            "tabs": [
+                "git status"
+            ]
+        },
+        {
+            "area": "board",
+            "dir": "$HOME/ProtonDrive/",
+            "tabs": [
+                "vim scratchpad/Untitled.txt"
+            ]
+        }
+    ]
 }
