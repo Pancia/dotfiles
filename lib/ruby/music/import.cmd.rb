@@ -32,6 +32,27 @@ module MusicCMD
     }
   end
 
+  def import_single(opts)
+    opts.banner = "Usage: import_single OPTIONS... FILE"
+    opts.info = "Imports a single file into $MUSIC_DB & $MUSIC_DIR (non-interactive)"
+    opts.on("-p", "--playlist PLAYLIST_NAME", "(Required) String to use as FILE's PLAYLIST metadata") { |pl|
+      $options[:playlist] = pl
+    }
+    opts.on("-a", "--artist ARTIST", "(Required) String to use as FILE's ARTIST metadata") { |artist|
+      $options[:artist] = artist
+    }
+    opts.on("-t", "--title TITLE", "(Required) String to use as FILE's TITLE metadata") { |title|
+      $options[:title] = title
+    }
+    lambda { |file|
+      unless $options[:artist] && $options[:title] && $options[:playlist]
+        puts "Error: --artist and --title are required"
+        exit 1
+      end
+      _import_single_file($options, file)
+    }
+  end
+
   def _import_files(options, files)
       num_files = files.count
       files.each_with_index { |f, idx|
@@ -64,6 +85,36 @@ module MusicCMD
                         "playlist" => options[:playlist]}])
         end
       }
+  end
+
+  def _import_single_file(options, file)
+    sanitized = %x[basename #{Shellwords.escape file}].gsub(/[^\w\$\-\#\.\(\)\&\[\]\,\;\'\" ]/, "")
+    yt_id = sanitized[/(.*)__\$__(.*)__#__([^\.]+)\.m4a/, 3]
+
+    artist = options[:artist]
+    name = options[:title]
+    playlist = options[:playlist]
+
+    uuid = %x[uuidgen].strip
+    song = {:from => :ytdl,
+            :id => uuid,
+            :playlist => playlist,
+            :url => yt_id,
+            :artist => artist,
+            :name => name}
+
+    p song if options[:verbose]
+
+    if not options[:dry_run] then
+      MusicDB.append song
+      execute("mv #{Shellwords.escape file} $MUSIC_DIR/#{uuid}.m4a")
+      MusicDB.tag([{"id" => uuid,
+                    "artist" => artist,
+                    "name" => name,
+                    "playlist" => playlist}])
+    end
+
+    puts "Imported: #{name} by #{artist} (#{uuid})"
   end
 
 end

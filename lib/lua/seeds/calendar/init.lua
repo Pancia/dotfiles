@@ -312,7 +312,6 @@ function obj:matchesTitleSubstring(eventTitle, searchString)
     local searchLower = searchString:gsub("^%s*(.-)%s*$", "%1"):lower()
 
     local found = titleLower:find(searchLower, 1, true) ~= nil
-    obj._logger.df("title '%s' contains '%s'? %s", eventTitle, searchString, tostring(found))
 
     return found
 end
@@ -338,7 +337,7 @@ function obj:queryEvents()
     local scriptPath = obj.spoonPath .. "calendar_query.py"
     local cmd = string.format("%s %s %d 2>/dev/null", obj.pythonPath, scriptPath, obj.queryWindow)
 
-    obj._logger.df("Querying events")
+    obj._logger.vf("Querying events")
 
     local output, status = hs.execute(cmd)
 
@@ -359,7 +358,7 @@ function obj:queryEvents()
         return nil
     end
 
-    obj._logger.df("Found %d events", data.count)
+    obj._logger.vf("Found %d events", data.count)
     return data.events
 end
 
@@ -488,7 +487,7 @@ function obj:processEvents(events)
         return
     end
 
-    obj._logger.df("Processing %d events...", #events)
+    obj._logger.vf("Processing %d events...", #events)
     local triggeredCount = 0
 
     for _, event in ipairs(events) do
@@ -561,12 +560,12 @@ function obj:processEvents(events)
     if triggeredCount > 0 then
         obj._logger.df("Triggered %d actions this cycle", triggeredCount)
     else
-        obj._logger.df("No actions triggered this cycle")
+        obj._logger.vf("No actions triggered this cycle")
     end
 end
 
 function obj:heartbeat()
-    obj._logger.df("Calendar heartbeat - polling events...")
+    obj._logger.vf("Calendar heartbeat - polling events...")
 
     -- Query events
     local events = obj:queryEvents()
