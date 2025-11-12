@@ -49,6 +49,9 @@ function v {
     fi
 }
 
+# FZF
+source <(fzf --zsh)
+
 function meditate {
     local T="$((60*${1:-5}))"
     echo "sleeping for $T seconds"

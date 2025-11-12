@@ -6,6 +6,7 @@ import sys
 
 LOG_FILE = "/tmp/activate-whispering.log"
 HS_BIN = "/Users/anthony/Developer/bin/hs"
+PREVIOUS_WINDOW_FILE = "/tmp/whispering-previous-window.txt"
 
 
 def log(message):
@@ -101,6 +102,38 @@ def is_tuple_running():
     return is_running
 
 
+def get_focused_window():
+    """Get the currently focused app and window ID."""
+    lua_code = """
+    local win = hs.window.focusedWindow()
+    if win then
+        local app = win:application()
+        if app then
+            return app:name() .. '|' .. tostring(win:id())
+        end
+    end
+    return 'none'
+    """
+    result = run_hs_command(lua_code)
+    log(f"Current focused window: {result}")
+    return result
+
+
+def save_focused_window():
+    """Save the currently focused window info to a file."""
+    window_info = get_focused_window()
+    if window_info and window_info != 'none':
+        try:
+            with open(PREVIOUS_WINDOW_FILE, "w") as f:
+                f.write(window_info)
+            log(f"Saved previous window: {window_info}")
+            return True
+        except Exception as e:
+            log(f"Failed to save window info: {e}")
+            return False
+    return False
+
+
 def focus_whispering():
     """Focus and raise the Whispering window, launching if needed."""
     lua_code = """
@@ -130,23 +163,68 @@ def focus_whispering():
     return result
 
 
+def restore_previous_window():
+    """Restore focus to the previously saved window."""
+    try:
+        with open(PREVIOUS_WINDOW_FILE, "r") as f:
+            window_info = f.read().strip()
+
+        if not window_info or window_info == 'none':
+            log("No previous window to restore")
+            return False
+
+        # Parse app_name|window_id
+        parts = window_info.split('|')
+        if len(parts) != 2:
+            log(f"Invalid window info format: {window_info}")
+            return False
+
+        app_name, window_id = parts
+        log(f"Attempting to restore: {app_name} (window {window_id})")
+
+        lua_code = f"""
+        local targetApp = hs.application.find('{app_name}')
+        if not targetApp then
+            hs.printf('[activate-whisper]: App not found: {app_name}')
+            return 'app_not_found'
+        end
+
+        local targetWin = hs.window.find({window_id})
+        if targetWin then
+            hs.printf('[activate-whisper]: Restoring window: %s', targetWin:title() or 'nil')
+            if targetWin:isMinimized() then targetWin:unminimize() end
+            targetWin:focus()
+            targetWin:raise()
+            return 'restored_window'
+        else
+            hs.printf('[activate-whisper]: Window ID not found, focusing app')
+            targetApp:activate()
+            return 'restored_app'
+        end
+        """
+
+        result = run_hs_command(lua_code)
+        log(f"Restore result: {result}")
+        return result in ['restored_window', 'restored_app']
+    except FileNotFoundError:
+        log("No previous window file found")
+        return False
+    except Exception as e:
+        log(f"Failed to restore window: {e}")
+        return False
+
+
 def main():
     log("=== Starting activation ===")
 
     log("Checking if Whispering is frontmost...")
 
     if is_whispering_frontmost():
-        log("Whispering is frontmost, minimizing and stopping recording...")
+        log("Whispering is frontmost, stopping recording and restoring previous window...")
 
         # Stop recording
         send_keystroke("z", ["command", "option", "shift"])
         log("Triggered recording toggle (stop)")
-
-        time.sleep(0.1)
-
-        # Minimize window
-        log("Calling hammerspoon to minimize window...")
-        minimize_whispering()
 
         time.sleep(0.1)
 
@@ -157,8 +235,20 @@ def main():
         else:
             log("Tuple not running, skipping mic toggle")
 
+        time.sleep(0.1)
+
+        # Restore previous window
+        log("Restoring previous window...")
+        restore_previous_window()
+
     else:
         log("Whispering is not frontmost, activating...")
+
+        # Save current window before switching
+        log("Saving current window...")
+        save_focused_window()
+
+        time.sleep(0.1)
 
         # Unmute mic
         if is_tuple_running():

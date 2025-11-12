@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# Check if input file is provided
+if [ -z "$1" ]; then
+    echo "Usage: $0 <input.mov>"
+    exit 1
+fi
+
+INPUT="$1"
+
+# Check if file exists
+if [ ! -f "$INPUT" ]; then
+    echo "Error: File '$INPUT' not found"
+    exit 1
+fi
+
+# Get directory and filename
+DIR=$(dirname "$INPUT")
+FILENAME=$(basename "$INPUT" .mov)
+
+# Output filenames
+WEBCAM_OUTPUT="$DIR/${FILENAME}_webcam.mov"
+SCREEN_OUTPUT="$DIR/${FILENAME}_screen.mov"
+
+echo "Splitting video..."
+echo "Input: $INPUT"
+echo "Webcam output: $WEBCAM_OUTPUT"
+echo "Screen output: $SCREEN_OUTPUT"
+echo ""
+
+# Extract webcam (left half) with mic audio (track 1)
+echo "Processing webcam with mic audio..."
+ffmpeg -i "$INPUT" \
+  -filter:v "crop=1920:1080:0:0" \
+  -map 0:v:0 -map 0:a:0 \
+  -c:v libx264 -c:a copy \
+  "$WEBCAM_OUTPUT"
+
+if [ $? -eq 0 ]; then
+    echo "✓ Webcam video created successfully"
+else
+    echo "✗ Error creating webcam video"
+    exit 1
+fi
+
+echo ""
+
+# Extract screen (right half) with PC audio (track 2)
+echo "Processing screen with PC audio..."
+ffmpeg -i "$INPUT" \
+  -filter:v "crop=1920:1080:1920:0" \
+  -map 0:v:0 -map 0:a:1 \
+  -c:v libx264 -c:a copy \
+  "$SCREEN_OUTPUT"
+
+if [ $? -eq 0 ]; then
+    echo "✓ Screen video created successfully"
+else
+    echo "✗ Error creating screen video"
+    exit 1
+fi
+
+echo ""
+echo "Done! Created:"
+echo "  - $WEBCAM_OUTPUT"
+echo "  - $SCREEN_OUTPUT"

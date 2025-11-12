@@ -27,3 +27,6 @@ function zshaddhistory() {
     record_dir_change
     return 0
 }
+
+echo "Remember to try out:"
+echo "scooter, yazi, lazygit, v, d"

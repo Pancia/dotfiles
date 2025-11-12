@@ -22,3 +22,9 @@ prompt: |
   - Keep body lines under 72 characters
   - Use bullet points with "-" for multiple changes
   - Skip body if change is trivial and self-explanatory
+
+  OUTPUT INSTRUCTIONS:
+  - Output ONLY the commit message itself
+  - Do NOT include any preamble, explanation, or commentary
+  - Do NOT wrap the output in markdown code blocks
+  - Do NOT explain your reasoning or describe the commit message
