@@ -40,10 +40,22 @@ function _ENSURE_CONF_D
     end
 end
 
+function _ENSURE_COMPLETIONS
+    set -l dest $HOME/.config/fish/completions/
+    mkdir -p $dest
+    for comp_file in $HOME/dotfiles/fish/completions/*.fish
+        set -l filename (basename $comp_file)
+        if not test -f "$dest/$filename"; or _not_same_inode "$dest/$filename" "$comp_file"
+            ln -f "$comp_file" "$dest/$filename"
+        end
+    end
+end
+
 # Initialize RC and service management (in background)
 _ENSURE_RCS &
 _ENSURE_SERVICES &
 _ENSURE_CONF_D &
+_ENSURE_COMPLETIONS &
 
 # Fisher plugin manager - auto-bootstrap
 if not functions -q fisher
