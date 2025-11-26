@@ -11,3 +11,4 @@ ai/workflows/*/logs
 misc/monitor-analysis/*.png
 misc/monitor-analysis/*.json
 misc/yt-organize/*.json
+fish/functions/_*

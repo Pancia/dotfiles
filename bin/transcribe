@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/Users/anthony/.pyenv/versions/3.11.11/bin/python3
 
 from faster_whisper import WhisperModel
 import sys
@@ -6,4 +6,4 @@ import sys
 model = WhisperModel("base", device="cpu")
 segments, info = model.transcribe(sys.argv[1])
 for segment in segments:
-    print(segment.text)
+    print(segment.text, flush=True)

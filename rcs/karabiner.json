@@ -201,7 +201,7 @@
                         ]
                     },
                     {
-                        "description": "alt-space -> activate Whispering and trigger Command+Option+Shift+Z",
+                        "description": "alt-space -> activate voice transcription",
                         "manipulators": [
                             {
                                 "from": {
@@ -213,7 +213,7 @@
                                     }
                                 },
                                 "to": {
-                                    "shell_command": "/Users/anthony/dotfiles/bin/activate-whispering"
+                                    "shell_command": "/Users/anthony/private/bin/voicetotext"
                                 },
                                 "type": "basic"
                             },
@@ -227,7 +227,7 @@
                                     }
                                 },
                                 "to": {
-                                    "shell_command": "/Users/anthony/dotfiles/bin/activate-whispering"
+                                    "shell_command": "/Users/anthony/private/bin/voicetotext"
                                 },
                                 "type": "basic"
                             }

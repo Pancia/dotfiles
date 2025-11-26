@@ -3,7 +3,16 @@ let g:fzf_preview_window = ['up:50%', 'ctrl-/']
 
 command! Project :GFiles --other --exclude-standard --cached
 
-nmap <C-P> :Project<CR>
+function! SmartFuzzyFind()
+    let git_dir = system('git rev-parse --is-inside-work-tree 2>/dev/null')
+    if v:shell_error == 0
+        execute 'Project'
+    else
+        execute 'Files'
+    endif
+endfunction
+
+nmap <C-P> :call SmartFuzzyFind()<CR>
 
 call SEMICOLON_CMD(';', ':Commands', 'FZF Commands')
 call SEMICOLON_CMD('h', ':Helptags', 'FZF Helptags')

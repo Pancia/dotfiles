@@ -103,8 +103,11 @@ class ServiceCMDS
   end
   def self.restart(opts)
     opts.info = "Restart a service."
-    lambda { |name|
-      return puts "Usage: service restart <name>" unless name
+    lambda { |name, *args|
+      return puts "Usage: service restart <name> [--log]" unless name
+
+      # Check for --log flag in remaining arguments
+      open_log = args.include?("--log") || args.include?("-l")
 
       full_name = normalize_service_name(name)
       plist_dest = plist_path_in_launch_agents(full_name)
@@ -120,6 +123,11 @@ class ServiceCMDS
       execute("launchctl load #{plist_dest.shellescape}")
       execute("launchctl start #{full_name.shellescape}")
       puts "Restarted #{full_name}"
+
+      if open_log
+        short = short_name(full_name)
+        Kernel.exec("command less +GF #{log_for(short)}")
+      end
     }
   end
   def self.status(opts)

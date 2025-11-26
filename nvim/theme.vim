@@ -28,6 +28,13 @@ else
 endif
 colorscheme onedark
 
+call system("defaults read -g AppleInterfaceStyle")
+if v:shell_error "> Light Mode
+    hi @variable guifg=#2A2A2C
+else "> Dark mode
+    hi @variable guifg=#AFACB1
+endif
+
 hi Folded guifg=#67EAEA guibg=#808080
 
 hi MatchParen gui=standout
@@ -65,3 +72,5 @@ call onedark#set_highlight("MyProjectFixme", {"fg": g:my_colors.yellow
 
 highlight Pmenu guibg=#C0C0C0
 highlight NormalFloat guibg=#C0C0C0
+
+hi Normal guibg=NONE ctermbg=NONE

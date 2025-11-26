@@ -13,8 +13,8 @@
 # and triggers the lock screen after user types a random sequence
 
 # CONFIGURATION: Change this to experiment with different methods
-# Options: letters, words, numbers, mixed
-METHOD="words"
+# Options: letters, words, numbers, mixed, sacred
+METHOD="sacred"
 
 # Generate sequence based on selected method
 case $METHOD in
@@ -37,6 +37,17 @@ case $METHOD in
         # Mix of letters and numbers (e.g., a1b2c3)
         sequence=$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 6)
         ;;
+    sacred)
+        # Random line from sacred lexicon (format: "Text _&:_ Description")
+        # Filter out markdown headers (#) and empty lines, then pick random line
+        full_line=$(grep -v '^#' /Users/anthony/Developer/unlock_wordlist.md | grep -v '^$' | grep '_&:_' | sort -R | head -n 1)
+        # Extract the part before _&:_ (this is what user must type, in lowercase)
+        sequence=$(echo "$full_line" | sed 's/ _&:_.*//' | tr '[:upper:]' '[:lower:]')
+        # Extract the description (part after _&:_)
+        description=$(echo "$full_line" | sed 's/.*_&:_ //')
+        # Display on separate lines
+        display_sequence="$description\n\033[43m$sequence\033[0m"
+        ;;
     *)
         echo "Unknown method: $METHOD"
         exit 1
@@ -48,14 +59,18 @@ display="${display_sequence:-$sequence}"
 
 echo -e "\033[41mREMEMBER: put wireless mic back in its case\033[0m"
 echo -e "\033[41mCHECK the hot plate\033[0m"
-echo "Type '$display' to lock the screen..."
+echo -e "\033[41mCLOSE the webcam privacy flap\033[0m"
+echo -e "\033[41m...\033[0m"
+echo -e "$display"
 
 input=""
 seq_length=${#sequence}
 while true; do
-    read -n 1 -s -r char
+    IFS= read -n 1 -s -r char
     input="${input}${char}"
-    echo -ne "\r${input}"
+    # Display input with visible indicator (use · for spaces if needed)
+    display_input="${input}"
+    echo -ne "\r${display_input}"
     if [[ "${input: -$seq_length}" == "$sequence" ]]; then
         echo
         break

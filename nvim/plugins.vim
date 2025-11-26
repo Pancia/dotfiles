@@ -34,7 +34,9 @@ if !exists('g:vscode')
     Plug 'nvim-lua/plenary.nvim'
     Plug 'nvim-telescope/telescope.nvim'
 
-    Plug 'jackMort/ChatGPT.nvim'
+    " AI {{{
+    "Plug 'jackMort/ChatGPT.nvim'
+    "}}}
 
     " DIR/FILE VIEWER {{{
     Plug 'romgrk/vimfiler-prompt'

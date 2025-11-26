@@ -182,3 +182,13 @@ hs.hotkey.bindSpec({hs_global_modifier, "r"}, function()
   end
   hs.reload()
 end)
+
+function myNotify(path)
+    hs.notify.new(function(note)
+        hs.task.new(path, nil):start()
+    end, {
+        title = 'title',
+        informativeText = 'Click me!',
+        withdrawAfter = 0
+    }):send()
+end
