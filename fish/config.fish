@@ -57,6 +57,19 @@ _ENSURE_SERVICES &
 _ENSURE_CONF_D &
 _ENSURE_COMPLETIONS &
 
+function _ENSURE_FISH_PLUGINS
+    set -l source_file $HOME/dotfiles/fish/fish_plugins
+    set -l dest_file $HOME/.config/fish/fish_plugins
+    if test -f "$source_file"
+        if not test -f "$dest_file"; or _not_same_inode "$dest_file" "$source_file"
+            ln -f "$source_file" "$dest_file"
+        end
+    end
+end
+
+# Initialize fish plugins file
+_ENSURE_FISH_PLUGINS
+
 # Fisher plugin manager - auto-bootstrap
 if not functions -q fisher
     set -q XDG_CONFIG_HOME; or set XDG_CONFIG_HOME ~/.config
@@ -124,3 +137,6 @@ alias gsw 'git checkout'
 alias gp 'echo "ERROR: USE: vim git fuGITive (whichkey plugin)"; false'
 alias gpf 'echo "ERROR: USE: vim git fuGITive (whichkey plugin)"; false'
 alias gpl 'echo "ERROR: USE: vim git fuGITive (whichkey plugin)"; false'
+
+echo "Remember to try out:"
+echo "scooter (find&replace), yazi(tui file manager), lazygit, v, d"

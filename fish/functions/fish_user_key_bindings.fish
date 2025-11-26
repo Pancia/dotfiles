@@ -4,6 +4,7 @@ function fish_user_key_bindings
     # bind \t _fzf_complete
 
     # Ctrl+S - fzfm leader key
-    # Press Ctrl+S, then a letter (f, r, g, d, a)
-    bind \cs _fzfm_leader
+    # Press Ctrl+S to show menu, then press a letter (Space, s, f, r, g, d, a, q)
+    # Press Ctrl+S Space for quick default file search
+    bind \cs fzfm_leader
 end
