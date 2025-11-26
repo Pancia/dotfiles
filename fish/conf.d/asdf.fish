@@ -1,2 +1,2 @@
 # asdf version manager
-source /opt/homebrew/Cellar/asdf/0.16.5/libexec/asdf.sh
+source /opt/homebrew/opt/asdf/libexec/asdf.fish

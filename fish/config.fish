@@ -29,9 +29,28 @@ function _ENSURE_SERVICES
     end
 end
 
+function _ENSURE_CONF_D
+    set -l dest $HOME/.config/fish/conf.d/
+    mkdir -p $dest
+    for conf_file in $HOME/dotfiles/fish/conf.d/*.fish
+        set -l filename (basename $conf_file)
+        if not test -f "$dest/$filename"; or _not_same_inode "$dest/$filename" "$conf_file"
+            ln -f "$conf_file" "$dest/$filename"
+        end
+    end
+end
+
 # Initialize RC and service management (in background)
 _ENSURE_RCS &
 _ENSURE_SERVICES &
+_ENSURE_CONF_D &
+
+# Fisher plugin manager - auto-bootstrap
+if not functions -q fisher
+    set -q XDG_CONFIG_HOME; or set XDG_CONFIG_HOME ~/.config
+    curl https://git.io/fisher --create-dirs -sLo $XDG_CONFIG_HOME/fish/functions/fisher.fish
+    source $XDG_CONFIG_HOME/fish/functions/fisher.fish
+end
 
 # Disable fish greeting
 set -g fish_greeting ""
@@ -39,16 +58,6 @@ set -g fish_greeting ""
 # Source extra config if it exists
 if test -e ~/dotfiles/fish/extra.fish
     source ~/dotfiles/fish/extra.fish
-end
-
-# Setup LLM templates symlink
-set -l TEMPLATES_PATH (llm templates path)
-if not test -L "$TEMPLATES_PATH"
-    if test -e "$TEMPLATES_PATH"
-        echo "Warning: $TEMPLATES_PATH exists but is not a symbolic link"
-    else
-        ln -s ~/dotfiles/ai/templates/ "$TEMPLATES_PATH"
-    end
 end
 
 # Directory change tracking (converted from init.zsh)

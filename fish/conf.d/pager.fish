@@ -1,2 +1,2 @@
 # Pager configuration
-set -gx PAGER "less -j.5"
+set -gx PAGER "less -R -j.5"
