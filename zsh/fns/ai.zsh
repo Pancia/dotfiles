@@ -7,13 +7,13 @@ function ai {
 }
 
 function ai_shell_oracle {
-    claude -p --system-prompt "$(cat ~/dotfiles/ai/templates/dotfiles_ai_shell_oracle.yaml)" "$*"
+    claude -p --system-prompt "$(cat ~/dotfiles/ai/templates/dotfiles_ai_shell_oracle.md)" "$*"
 }
 
 alias '?'='ai_shell_oracle'
 
 function ai_write_git_commit {
-    claude -p --system-prompt "$(cat ~/dotfiles/ai/templates/dotfiles_ai_git_commit.yaml)" "$*"
+    claude -p --system-prompt "$(cat ~/dotfiles/ai/templates/dotfiles_ai_git_commit.md)" "$*"
 }
 
 function ai_git_commit {

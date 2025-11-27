@@ -80,6 +80,9 @@ end
 # Disable fish greeting
 set -g fish_greeting ""
 
+# Set SHELL environment variable
+set -gx SHELL (command --search fish)
+
 # Source extra config if it exists
 if test -e ~/dotfiles/fish/extra.fish
     source ~/dotfiles/fish/extra.fish
