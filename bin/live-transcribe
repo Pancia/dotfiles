@@ -1,0 +1,296 @@
+#!/Users/anthony/.pyenv/versions/3.11.11/bin/python3
+
+import sounddevice as sd
+import numpy as np
+from faster_whisper import WhisperModel
+import queue
+import threading
+import argparse
+import sys
+from datetime import datetime
+import os
+from pathlib import Path
+
+# Configuration
+SAMPLE_RATE = 16000  # Whisper expects 16kHz
+CHUNK_DURATION = 5  # seconds
+
+class LiveTranscriber:
+    def __init__(self, model_size="base", output_dir=None, mic_device=None, computer_device=None):
+        # Load model with explicit compute_type to avoid warning
+        self.model = WhisperModel(model_size, device="cpu", compute_type="int8")
+        self.audio_queue = queue.Queue()
+        self.running = True
+
+        # Setup output directory and file
+        if output_dir is None:
+            output_dir = Path.home() / "transcripts"
+        else:
+            output_dir = Path(output_dir)
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.output_file = output_dir / f"transcript_{timestamp}.txt"
+
+        # Open file for writing
+        self.file_handle = open(self.output_file, 'w')
+        print(f"Writing transcript to: {self.output_file}", file=sys.stderr)
+
+        # Device configuration
+        self.mic_device = mic_device
+        self.computer_device = computer_device
+
+        # Query device info to get channel counts and sample rates
+        devices = sd.query_devices()
+        self.mic_channels = self._get_device_channels(devices[mic_device])
+        self.computer_channels = self._get_device_channels(devices[computer_device])
+
+        # Get native sample rates and use them (we'll resample later for Whisper)
+        self.mic_sample_rate = int(devices[mic_device]['default_samplerate'])
+        self.computer_sample_rate = int(devices[computer_device]['default_samplerate'])
+
+        print(f"Mic device: {devices[mic_device]['name']}", file=sys.stderr)
+        print(f"  Channels: {self.mic_channels}, Sample rate: {self.mic_sample_rate} Hz", file=sys.stderr)
+        print(f"Computer device: {devices[computer_device]['name']}", file=sys.stderr)
+        print(f"  Channels: {self.computer_channels}, Sample rate: {self.computer_sample_rate} Hz", file=sys.stderr)
+
+        # Audio buffers
+        self.mic_buffer = []
+        self.computer_buffer = []
+
+    def _get_device_channels(self, device_info):
+        """Get the appropriate number of channels for a device"""
+        max_channels = device_info['max_input_channels']
+        # Use stereo if available, otherwise mono
+        return min(2, max_channels) if max_channels > 0 else 1
+
+    def _to_mono(self, audio_data):
+        """Convert stereo audio to mono by averaging channels"""
+        if len(audio_data.shape) == 2 and audio_data.shape[1] == 2:
+            return np.mean(audio_data, axis=1)
+        return audio_data.flatten()
+
+    def _resample(self, audio_data, orig_sr):
+        """Resample audio to 16kHz for Whisper"""
+        if orig_sr == SAMPLE_RATE:
+            return audio_data
+
+        # Simple resampling using numpy
+        duration = len(audio_data) / orig_sr
+        target_length = int(duration * SAMPLE_RATE)
+
+        # Linear interpolation for resampling
+        indices = np.linspace(0, len(audio_data) - 1, target_length)
+        resampled = np.interp(indices, np.arange(len(audio_data)), audio_data)
+
+        return resampled.astype(np.float32)
+
+    def audio_callback_mic(self, indata, frames, time, status):
+        """Callback for microphone audio"""
+        if status:
+            print(f"Mic status: {status}", file=sys.stderr)
+        self.mic_buffer.append(indata.copy())
+
+        # Process chunk when we have enough data (based on native sample rate)
+        total_samples = sum(len(chunk) for chunk in self.mic_buffer)
+        if total_samples >= self.mic_sample_rate * CHUNK_DURATION:
+            audio_data = np.concatenate(self.mic_buffer)
+            self.mic_buffer = []
+            # Convert to mono if needed
+            mono_audio = self._to_mono(audio_data)
+            # Resample to 16kHz for Whisper
+            resampled_audio = self._resample(mono_audio, self.mic_sample_rate)
+            self.audio_queue.put(("Microphone", resampled_audio))
+
+    def audio_callback_computer(self, indata, frames, time, status):
+        """Callback for computer audio"""
+        if status:
+            print(f"Computer status: {status}", file=sys.stderr)
+        self.computer_buffer.append(indata.copy())
+
+        # Process chunk when we have enough data (based on native sample rate)
+        total_samples = sum(len(chunk) for chunk in self.computer_buffer)
+        if total_samples >= self.computer_sample_rate * CHUNK_DURATION:
+            audio_data = np.concatenate(self.computer_buffer)
+            self.computer_buffer = []
+            # Convert to mono if needed
+            mono_audio = self._to_mono(audio_data)
+            # Resample to 16kHz for Whisper
+            resampled_audio = self._resample(mono_audio, self.computer_sample_rate)
+            self.audio_queue.put(("Computer", resampled_audio))
+
+    def transcription_worker(self):
+        """Worker thread that processes audio chunks from the queue"""
+        while self.running or not self.audio_queue.empty():
+            try:
+                source, audio_data = self.audio_queue.get(timeout=1)
+
+                # Transcribe the audio chunk
+                segments, info = self.model.transcribe(audio_data, beam_size=5)
+
+                # Process segments
+                for segment in segments:
+                    text = segment.text.strip()
+                    if text:  # Only output non-empty transcriptions
+                        timestamp = datetime.now().strftime("%H:%M:%S")
+                        output_line = f"[{timestamp}] {source}: {text}"
+
+                        # Output to both stdout and file
+                        print(output_line, flush=True)
+                        self.file_handle.write(output_line + "\n")
+                        self.file_handle.flush()
+
+                self.audio_queue.task_done()
+
+            except queue.Empty:
+                continue
+            except Exception as e:
+                print(f"Error transcribing: {e}", file=sys.stderr)
+
+    def _flush_buffers(self):
+        """Flush any remaining audio in buffers to the queue"""
+        # Flush mic buffer if it has any data
+        if self.mic_buffer:
+            audio_data = np.concatenate(self.mic_buffer)
+            self.mic_buffer = []
+            mono_audio = self._to_mono(audio_data)
+            resampled_audio = self._resample(mono_audio, self.mic_sample_rate)
+            self.audio_queue.put(("Microphone", resampled_audio))
+
+        # Flush computer buffer if it has any data
+        if self.computer_buffer:
+            audio_data = np.concatenate(self.computer_buffer)
+            self.computer_buffer = []
+            mono_audio = self._to_mono(audio_data)
+            resampled_audio = self._resample(mono_audio, self.computer_sample_rate)
+            self.audio_queue.put(("Computer", resampled_audio))
+
+    def start(self):
+        """Start live transcription"""
+        # Start transcription worker thread
+        transcription_thread = threading.Thread(target=self.transcription_worker)
+        transcription_thread.start()
+
+        try:
+            # Start both audio streams with appropriate channel counts and sample rates
+            with sd.InputStream(device=self.mic_device,
+                              channels=self.mic_channels,
+                              samplerate=self.mic_sample_rate,
+                              callback=self.audio_callback_mic):
+                with sd.InputStream(device=self.computer_device,
+                                  channels=self.computer_channels,
+                                  samplerate=self.computer_sample_rate,
+                                  callback=self.audio_callback_computer):
+                    print("Press Ctrl+C to stop recording", file=sys.stderr)
+                    print("\033[42m Recording started... \033[0m\n", file=sys.stderr)
+                    # Keep running until interrupted
+                    while self.running:
+                        sd.sleep(1000)
+
+        except KeyboardInterrupt:
+            print("\n\nStopping recording...", file=sys.stderr)
+            self.running = False
+
+        # Flush any remaining buffered audio
+        print("Flushing remaining audio buffers...", file=sys.stderr)
+        self._flush_buffers()
+
+        # Wait for transcription thread to finish processing queue
+        print("Processing remaining transcriptions...", file=sys.stderr)
+        transcription_thread.join()
+
+        # Close file
+        self.file_handle.close()
+        print(f"\nTranscript saved to: {self.output_file}", file=sys.stderr)
+
+def find_device_by_name(name):
+    """Find device index by name (case-insensitive substring match)"""
+    devices = sd.query_devices()
+    name_lower = name.lower()
+
+    for i, device in enumerate(devices):
+        if name_lower in device['name'].lower():
+            return i
+
+    raise ValueError(f"No device found matching '{name}'")
+
+def list_devices():
+    """List all available audio devices"""
+    print("\nAvailable INPUT devices:")
+    print("-" * 80)
+    devices = sd.query_devices()
+    for i, device in enumerate(devices):
+        if device['max_input_channels'] > 0:
+            print(f"{i}: {device['name']}")
+            print(f"   Max input channels: {device['max_input_channels']}")
+            print(f"   Default sample rate: {device['default_samplerate']}")
+            print()
+
+def main():
+    parser = argparse.ArgumentParser(description="Live transcribe microphone and computer audio")
+    parser.add_argument("--output-dir", "-o",
+                       help="Directory to save transcript files (default: ~/transcripts)")
+    parser.add_argument("--model", "-m",
+                       default="base",
+                       choices=["tiny", "base", "small", "medium", "large"],
+                       help="Whisper model size (default: base)")
+    parser.add_argument("--mic-device",
+                       help="Microphone device ID or name substring (use --list-devices to see options)")
+    parser.add_argument("--computer-device",
+                       help="Computer audio device ID or name substring, e.g., 'BlackHole' (use --list-devices to see options)")
+    parser.add_argument("--list-devices", "-l",
+                       action="store_true",
+                       help="List available audio devices and exit")
+
+    args = parser.parse_args()
+
+    if args.list_devices:
+        list_devices()
+        return
+
+    # Check if devices are specified
+    if args.mic_device is None or args.computer_device is None:
+        print("Error: You must specify both --mic-device and --computer-device", file=sys.stderr)
+        print("Use --list-devices to see available options\n", file=sys.stderr)
+        list_devices()
+        sys.exit(1)
+
+    # Resolve device names to indices if needed
+    try:
+        # Try to parse as integer first
+        mic_device = int(args.mic_device)
+    except ValueError:
+        # Otherwise treat as device name
+        try:
+            mic_device = find_device_by_name(args.mic_device)
+            print(f"Found mic device: {sd.query_devices(mic_device)['name']} (index {mic_device})", file=sys.stderr)
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            list_devices()
+            sys.exit(1)
+
+    try:
+        # Try to parse as integer first
+        computer_device = int(args.computer_device)
+    except ValueError:
+        # Otherwise treat as device name
+        try:
+            computer_device = find_device_by_name(args.computer_device)
+            print(f"Found computer device: {sd.query_devices(computer_device)['name']} (index {computer_device})", file=sys.stderr)
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            list_devices()
+            sys.exit(1)
+
+    # Create and start transcriber
+    transcriber = LiveTranscriber(
+        model_size=args.model,
+        output_dir=args.output_dir,
+        mic_device=mic_device,
+        computer_device=computer_device
+    )
+
+    transcriber.start()
+
+if __name__ == "__main__":
+    main()
