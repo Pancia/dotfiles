@@ -89,6 +89,10 @@ class LiveTranscriber:
         self.mic_buffer = []
         self.computer_buffer = []
 
+        # VAD processing buffers (accumulate samples until we have enough for VAD)
+        self.mic_vad_buffer = np.array([], dtype=np.float32)
+        self.computer_vad_buffer = np.array([], dtype=np.float32)
+
         # Speech state tracking
         self.mic_speaking = False
         self.mic_silence_frames = 0
@@ -143,32 +147,51 @@ class LiveTranscriber:
         if status:
             print(f"Mic status: {status}", file=sys.stderr)
 
-        # Add incoming audio to buffer
-        self.mic_buffer.append(indata.copy())
-
-        # Get current buffer as mono audio and resample to 16kHz for VAD
-        current_audio = np.concatenate(self.mic_buffer)
-        mono_audio = self._to_mono(current_audio)
+        # Convert incoming audio to mono and resample to 16kHz for VAD
+        mono_audio = self._to_mono(indata.copy())
         resampled_audio = self._resample(mono_audio, self.mic_sample_rate)
 
-        # Process in VAD frames
-        for i in range(0, len(resampled_audio) - self.vad_frame_size, self.vad_frame_size):
-            frame = resampled_audio[i:i + self.vad_frame_size]
+        # Add to VAD buffer
+        self.mic_vad_buffer = np.concatenate([self.mic_vad_buffer, resampled_audio])
 
-            if len(frame) < self.vad_frame_size:
-                break
+        # Debug: Check audio level
+        audio_level = np.abs(resampled_audio).mean()
+        max_level = np.abs(resampled_audio).max()
 
-            is_speech = self._is_speech(frame)
+        # Process VAD frames when we have enough samples
+        speech_frames = 0
+        silence_frames = 0
+        while len(self.mic_vad_buffer) >= self.vad_frame_size:
+            # Extract one VAD frame
+            frame = self.mic_vad_buffer[:self.vad_frame_size]
+            self.mic_vad_buffer = self.mic_vad_buffer[self.vad_frame_size:]
+
+            # Noise gate: if frame is too quiet, treat as silence
+            frame_level = np.abs(frame).max()
+            if frame_level < 0.01:
+                is_speech = False
+            else:
+                is_speech = self._is_speech(frame)
 
             if is_speech:
+                speech_frames += 1
                 if not self.mic_speaking:
-                    # Transition to speaking
+                    # Transition to speaking - start new chunk
                     self.mic_speaking = True
                     self.mic_chunk_start_time = datetime.now()
+                    # print(f"[VAD] Mic: Started speaking (level avg={audio_level:.4f}, max={max_level:.4f})", file=sys.stderr)
                 self.mic_silence_frames = 0
             else:
+                silence_frames += 1
                 if self.mic_speaking:
                     self.mic_silence_frames += 1
+
+        # Debug output when there's significant audio
+        # if max_level > 0.01:
+        #     print(f"[VAD] Mic: speech_frames={speech_frames}, silence_frames={silence_frames}, level avg={audio_level:.4f}, max={max_level:.4f}, speaking={self.mic_speaking}, buffer={len(self.mic_vad_buffer)}", file=sys.stderr)
+
+        # Add incoming audio to buffer AFTER VAD processing
+        self.mic_buffer.append(resampled_audio)
 
         # Calculate current chunk duration
         if self.mic_chunk_start_time:
@@ -187,45 +210,58 @@ class LiveTranscriber:
             elif chunk_duration >= self.max_chunk_duration:
                 should_send = True
 
-        if should_send and len(resampled_audio) > 0:
-            self.audio_queue.put(("Microphone", resampled_audio.copy()))
+        if should_send and len(self.mic_buffer) > 0:
+            # Concatenate all buffered audio chunks
+            complete_audio = np.concatenate(self.mic_buffer)
+            duration = len(complete_audio) / SAMPLE_RATE
+            # print(f"[DEBUG] Sending mic chunk: {duration:.2f}s, silence_frames={self.mic_silence_frames}, chunk_dur={chunk_duration:.2f}s", file=sys.stderr)
+            self.audio_queue.put(("Microphone", complete_audio.copy()))
             # Reset state
             self.mic_buffer = []
             self.mic_speaking = False
             self.mic_silence_frames = 0
             self.mic_chunk_start_time = None
+        # elif self.mic_speaking and chunk_duration > 1:
+        #     # Debug: show what's preventing send
+        #     print(f"[DEBUG] Mic speaking: silence_frames={self.mic_silence_frames}/{self.silence_frames_threshold}, dur={chunk_duration:.2f}s/{self.min_chunk_duration}s", file=sys.stderr)
 
     def audio_callback_computer(self, indata, frames, time, status):
         """Callback for computer audio with VAD-based chunking"""
         if status:
             print(f"Computer status: {status}", file=sys.stderr)
 
-        # Add incoming audio to buffer
-        self.computer_buffer.append(indata.copy())
-
-        # Get current buffer as mono audio and resample to 16kHz for VAD
-        current_audio = np.concatenate(self.computer_buffer)
-        mono_audio = self._to_mono(current_audio)
+        # Convert incoming audio to mono and resample to 16kHz for VAD
+        mono_audio = self._to_mono(indata.copy())
         resampled_audio = self._resample(mono_audio, self.computer_sample_rate)
 
-        # Process in VAD frames
-        for i in range(0, len(resampled_audio) - self.vad_frame_size, self.vad_frame_size):
-            frame = resampled_audio[i:i + self.vad_frame_size]
+        # Add to VAD buffer
+        self.computer_vad_buffer = np.concatenate([self.computer_vad_buffer, resampled_audio])
 
-            if len(frame) < self.vad_frame_size:
-                break
+        # Process VAD frames when we have enough samples
+        while len(self.computer_vad_buffer) >= self.vad_frame_size:
+            # Extract one VAD frame
+            frame = self.computer_vad_buffer[:self.vad_frame_size]
+            self.computer_vad_buffer = self.computer_vad_buffer[self.vad_frame_size:]
 
-            is_speech = self._is_speech(frame)
+            # Noise gate: if frame is too quiet, treat as silence
+            frame_level = np.abs(frame).max()
+            if frame_level < 0.01:
+                is_speech = False
+            else:
+                is_speech = self._is_speech(frame)
 
             if is_speech:
                 if not self.computer_speaking:
-                    # Transition to speaking
+                    # Transition to speaking - start new chunk
                     self.computer_speaking = True
                     self.computer_chunk_start_time = datetime.now()
                 self.computer_silence_frames = 0
             else:
                 if self.computer_speaking:
                     self.computer_silence_frames += 1
+
+        # Add incoming audio to buffer AFTER VAD processing
+        self.computer_buffer.append(resampled_audio)
 
         # Calculate current chunk duration
         if self.computer_chunk_start_time:
@@ -244,8 +280,12 @@ class LiveTranscriber:
             elif chunk_duration >= self.max_chunk_duration:
                 should_send = True
 
-        if should_send and len(resampled_audio) > 0:
-            self.audio_queue.put(("Computer", resampled_audio.copy()))
+        if should_send and len(self.computer_buffer) > 0:
+            # Concatenate all buffered audio chunks
+            complete_audio = np.concatenate(self.computer_buffer)
+            duration = len(complete_audio) / SAMPLE_RATE
+            # print(f"[DEBUG] Sending computer chunk: {duration:.2f}s, silence_frames={self.computer_silence_frames}, chunk_dur={chunk_duration:.2f}s", file=sys.stderr)
+            self.audio_queue.put(("Computer", complete_audio.copy()))
             # Reset state
             self.computer_buffer = []
             self.computer_speaking = False
@@ -254,6 +294,8 @@ class LiveTranscriber:
 
     def transcription_worker(self):
         """Worker thread that processes audio chunks from the queue"""
+        last_text_by_source = {}  # Track last text per source to deduplicate
+
         while self.running or not self.audio_queue.empty():
             try:
                 source, audio_data = self.audio_queue.get(timeout=1)
@@ -264,11 +306,16 @@ class LiveTranscriber:
                     path_or_hf_repo=self.model_path
                 )
 
-                # Process segments
+                # Process segments and deduplicate consecutive identical ones
                 if 'segments' in result:
                     for segment in result['segments']:
                         text = segment['text'].strip()
                         if text:  # Only output non-empty transcriptions
+                            # Skip if this is identical to the last output from this source
+                            if last_text_by_source.get(source) == text:
+                                continue
+
+                            last_text_by_source[source] = text
                             timestamp = datetime.now().strftime("%H:%M:%S")
                             output_line = f"[{timestamp}] {source}: {text}"
 
@@ -287,20 +334,18 @@ class LiveTranscriber:
     def _flush_buffers(self):
         """Flush any remaining audio in buffers to the queue"""
         # Flush mic buffer if it has any data
+        # Note: buffer already contains resampled 16kHz mono audio
         if self.mic_buffer:
             audio_data = np.concatenate(self.mic_buffer)
             self.mic_buffer = []
-            mono_audio = self._to_mono(audio_data)
-            resampled_audio = self._resample(mono_audio, self.mic_sample_rate)
-            self.audio_queue.put(("Microphone", resampled_audio))
+            self.audio_queue.put(("Microphone", audio_data))
 
         # Flush computer buffer if it has any data
+        # Note: buffer already contains resampled 16kHz mono audio
         if self.computer_buffer:
             audio_data = np.concatenate(self.computer_buffer)
             self.computer_buffer = []
-            mono_audio = self._to_mono(audio_data)
-            resampled_audio = self._resample(mono_audio, self.computer_sample_rate)
-            self.audio_queue.put(("Computer", resampled_audio))
+            self.audio_queue.put(("Computer", audio_data))
 
     def start(self):
         """Start live transcription"""
