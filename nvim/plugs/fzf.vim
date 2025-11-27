@@ -3,12 +3,37 @@ let g:fzf_preview_window = ['up:50%', 'ctrl-/']
 
 command! Project :GFiles --other --exclude-standard --cached
 
+function! FilesWithParentNav(dir)
+  let start_dir = a:dir != '' ? a:dir : '.'
+  let tf = tempname()
+  call writefile([fnamemodify(start_dir, ':p')], tf)
+
+  call fzf#run(fzf#wrap({
+    \ 'source': 'cd ' . shellescape(start_dir) . ' && fd --type f --hidden --follow --exclude .git . | while read -r file; do echo "$PWD/$file|$file"; done',
+    \ 'options': [
+    \   '--delimiter', '|',
+    \   '--with-nth', '2..',
+    \   '--bind',
+    \   printf('ctrl-p:reload:base="$(cat %s)"/..; echo "$base" > %s; cd "$base" && fd --type f --hidden --follow --exclude .git . | while read -r file; do echo "$PWD/$file|$file"; done',
+    \     shellescape(tf), shellescape(tf))
+    \ ],
+    \ 'sink': function('s:open_file')
+  \ }))
+endfunction
+
+function! s:open_file(line)
+  let path = split(a:line, '|')[0]
+  execute 'edit' fnameescape(path)
+endfunction
+
+command! -nargs=? FilesUp call FilesWithParentNav(<q-args>)
+
 function! SmartFuzzyFind()
     let git_dir = system('git rev-parse --is-inside-work-tree 2>/dev/null')
     if v:shell_error == 0
         execute 'Project'
     else
-        execute 'Files'
+        call FilesWithParentNav('.')
     endif
 endfunction
 

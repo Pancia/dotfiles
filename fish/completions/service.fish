@@ -40,6 +40,3 @@ complete -c service -f -n '__service_needs_service_name' -a '(__service_list_ser
 
 # Flags for restart command
 complete -c service -f -n '__fish_seen_subcommand_from restart' -s l -l log -d 'Open log after restart'
-
-# Completions for 's' alias (wraps service command)
-complete -c s -w service

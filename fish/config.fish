@@ -124,6 +124,7 @@ alias gaa 'git add --all'
 alias gc 'git commit --verbose'
 alias gca 'git commit --verbose --all'
 # ./ai.zsh defines gcai -> edit git commit message initialized by ai
+alias gcai 'ai_git_commit'
 alias gd 'git diff --color-words'
 alias gds 'gd --staged'
 alias gl 'git log --graph --all --decorate --abbrev-commit'
@@ -138,5 +139,11 @@ alias gp 'echo "ERROR: USE: vim git fuGITive (whichkey plugin)"; false'
 alias gpf 'echo "ERROR: USE: vim git fuGITive (whichkey plugin)"; false'
 alias gpl 'echo "ERROR: USE: vim git fuGITive (whichkey plugin)"; false'
 
-echo "Remember to try out:"
-echo "scooter (find&replace), yazi(tui file manager), lazygit, v, d"
+# Key bindings
+if status is-interactive
+    # Bind Ctrl-L to clear screen while keeping tide prompt visible
+    bind \cl clear_keep_prompt
+
+    echo "Remember to try out:"
+    echo "scooter (find&replace), yazi(tui file manager), lazygit, v, d"
+end

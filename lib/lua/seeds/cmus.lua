@@ -327,7 +327,21 @@ function obj:showControlsCanvas()
 
     local menuFrame = obj._controlsMenu:frame()
     if menuFrame then
-        obj._canvas:topLeft({x = menuFrame.x, y = menuFrame.y + menuFrame.h + 2})
+        -- Find which screen contains the menubar item
+        local menuCenter = {x = menuFrame.x + menuFrame.w/2, y = menuFrame.y + menuFrame.h/2}
+        local targetScreen = hs.screen.find(menuCenter)
+
+        if targetScreen then
+            -- Position canvas below the menubar item on the same screen
+            obj._canvas:topLeft({x = menuFrame.x, y = menuFrame.y + menuFrame.h + 2})
+        else
+            -- Fallback to main screen if we can't determine the screen
+            local mainScreen = hs.screen.mainScreen()
+            local screenFrame = mainScreen:frame()
+            obj._canvas:topLeft({x = screenFrame.x + (screenFrame.w - obj._canvas:frame().w)/2,
+                                 y = screenFrame.y + 100})
+        end
+
         obj._canvas:show(0.2)
 
         -- Watch for clicks outside canvas (using mouseUp to avoid interfering with button clicks)
