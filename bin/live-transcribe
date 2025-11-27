@@ -2,7 +2,7 @@
 
 import sounddevice as sd
 import numpy as np
-from faster_whisper import WhisperModel
+import mlx_whisper
 import queue
 import threading
 import argparse
@@ -17,8 +17,20 @@ CHUNK_DURATION = 5  # seconds
 
 class LiveTranscriber:
     def __init__(self, model_size="base", output_dir=None, mic_device=None, computer_device=None):
-        # Load model with explicit compute_type to avoid warning
-        self.model = WhisperModel(model_size, device="cpu", compute_type="int8")
+        # Set model path for MLX (optimized for Apple Silicon)
+        # Map model sizes to correct HuggingFace repo names
+        model_map = {
+            "tiny": "mlx-community/whisper-tiny",
+            "base": "mlx-community/whisper-base.en-mlx",  # Using English-only for speed
+            "small": "mlx-community/whisper-small-mlx",
+            "medium": "mlx-community/whisper-medium-mlx",
+            "large": "mlx-community/whisper-large-v3-mlx",
+            "turbo": "mlx-community/whisper-turbo",
+            "large-v3-turbo": "mlx-community/whisper-large-v3-turbo"
+        }
+
+        self.model_path = model_map.get(model_size, f"mlx-community/whisper-{model_size}")
+        print(f"Using {self.model_path} with MLX (Apple Silicon optimized)...", file=sys.stderr)
         self.audio_queue = queue.Queue()
         self.running = True
 
@@ -125,20 +137,24 @@ class LiveTranscriber:
             try:
                 source, audio_data = self.audio_queue.get(timeout=1)
 
-                # Transcribe the audio chunk
-                segments, info = self.model.transcribe(audio_data, beam_size=5)
+                # Transcribe the audio chunk using MLX
+                result = mlx_whisper.transcribe(
+                    audio_data,
+                    path_or_hf_repo=self.model_path
+                )
 
                 # Process segments
-                for segment in segments:
-                    text = segment.text.strip()
-                    if text:  # Only output non-empty transcriptions
-                        timestamp = datetime.now().strftime("%H:%M:%S")
-                        output_line = f"[{timestamp}] {source}: {text}"
+                if 'segments' in result:
+                    for segment in result['segments']:
+                        text = segment['text'].strip()
+                        if text:  # Only output non-empty transcriptions
+                            timestamp = datetime.now().strftime("%H:%M:%S")
+                            output_line = f"[{timestamp}] {source}: {text}"
 
-                        # Output to both stdout and file
-                        print(output_line, flush=True)
-                        self.file_handle.write(output_line + "\n")
-                        self.file_handle.flush()
+                            # Output to both stdout and file
+                            print(output_line, flush=True)
+                            self.file_handle.write(output_line + "\n")
+                            self.file_handle.flush()
 
                 self.audio_queue.task_done()
 
