@@ -3,6 +3,7 @@
 import sounddevice as sd
 import numpy as np
 import mlx_whisper
+import webrtcvad
 import queue
 import threading
 import argparse
@@ -10,13 +11,20 @@ import sys
 from datetime import datetime
 import os
 from pathlib import Path
+import subprocess
 
 # Configuration
 SAMPLE_RATE = 16000  # Whisper expects 16kHz
-CHUNK_DURATION = 5  # seconds
+VAD_FRAME_DURATION = 30  # ms - WebRTC VAD supports 10, 20, or 30ms
+VAD_AGGRESSIVENESS = 2  # 0-3, where 3 is most aggressive
+SILENCE_DURATION = 1.0  # seconds of silence before chunking
+MIN_CHUNK_DURATION = 2.0  # minimum chunk duration in seconds
+MAX_CHUNK_DURATION = 10.0  # maximum chunk duration in seconds
 
 class LiveTranscriber:
-    def __init__(self, model_size="base", output_dir=None, mic_device=None, computer_device=None):
+    def __init__(self, model_size="base", output_dir=None, mic_device=None, computer_device=None,
+                 vad_aggressiveness=VAD_AGGRESSIVENESS, silence_duration=SILENCE_DURATION,
+                 min_chunk_duration=MIN_CHUNK_DURATION, max_chunk_duration=MAX_CHUNK_DURATION):
         # Set model path for MLX (optimized for Apple Silicon)
         # Map model sizes to correct HuggingFace repo names
         model_map = {
@@ -33,6 +41,12 @@ class LiveTranscriber:
         print(f"Using {self.model_path} with MLX (Apple Silicon optimized)...", file=sys.stderr)
         self.audio_queue = queue.Queue()
         self.running = True
+
+        # Store VAD parameters
+        self.vad_aggressiveness = vad_aggressiveness
+        self.silence_duration = silence_duration
+        self.min_chunk_duration = min_chunk_duration
+        self.max_chunk_duration = max_chunk_duration
 
         # Setup output directory and file
         if output_dir is None:
@@ -66,9 +80,23 @@ class LiveTranscriber:
         print(f"Computer device: {devices[computer_device]['name']}", file=sys.stderr)
         print(f"  Channels: {self.computer_channels}, Sample rate: {self.computer_sample_rate} Hz", file=sys.stderr)
 
+        # Initialize VAD
+        self.vad = webrtcvad.Vad(self.vad_aggressiveness)
+        self.vad_frame_size = int(SAMPLE_RATE * VAD_FRAME_DURATION / 1000)  # samples per frame
+        self.silence_frames_threshold = int(self.silence_duration * 1000 / VAD_FRAME_DURATION)
+
         # Audio buffers
         self.mic_buffer = []
         self.computer_buffer = []
+
+        # Speech state tracking
+        self.mic_speaking = False
+        self.mic_silence_frames = 0
+        self.mic_chunk_start_time = None
+
+        self.computer_speaking = False
+        self.computer_silence_frames = 0
+        self.computer_chunk_start_time = None
 
     def _get_device_channels(self, device_info):
         """Get the appropriate number of channels for a device"""
@@ -97,39 +125,132 @@ class LiveTranscriber:
 
         return resampled.astype(np.float32)
 
+    def _is_speech(self, audio_frame):
+        """Check if audio frame contains speech using VAD"""
+        # Convert float32 to int16 for WebRTC VAD
+        audio_int16 = (audio_frame * 32768).astype(np.int16)
+        # WebRTC VAD expects bytes
+        audio_bytes = audio_int16.tobytes()
+
+        try:
+            return self.vad.is_speech(audio_bytes, SAMPLE_RATE)
+        except Exception:
+            # If VAD fails, assume it's speech to be safe
+            return True
+
     def audio_callback_mic(self, indata, frames, time, status):
-        """Callback for microphone audio"""
+        """Callback for microphone audio with VAD-based chunking"""
         if status:
             print(f"Mic status: {status}", file=sys.stderr)
+
+        # Add incoming audio to buffer
         self.mic_buffer.append(indata.copy())
 
-        # Process chunk when we have enough data (based on native sample rate)
-        total_samples = sum(len(chunk) for chunk in self.mic_buffer)
-        if total_samples >= self.mic_sample_rate * CHUNK_DURATION:
-            audio_data = np.concatenate(self.mic_buffer)
+        # Get current buffer as mono audio and resample to 16kHz for VAD
+        current_audio = np.concatenate(self.mic_buffer)
+        mono_audio = self._to_mono(current_audio)
+        resampled_audio = self._resample(mono_audio, self.mic_sample_rate)
+
+        # Process in VAD frames
+        for i in range(0, len(resampled_audio) - self.vad_frame_size, self.vad_frame_size):
+            frame = resampled_audio[i:i + self.vad_frame_size]
+
+            if len(frame) < self.vad_frame_size:
+                break
+
+            is_speech = self._is_speech(frame)
+
+            if is_speech:
+                if not self.mic_speaking:
+                    # Transition to speaking
+                    self.mic_speaking = True
+                    self.mic_chunk_start_time = datetime.now()
+                self.mic_silence_frames = 0
+            else:
+                if self.mic_speaking:
+                    self.mic_silence_frames += 1
+
+        # Calculate current chunk duration
+        if self.mic_chunk_start_time:
+            chunk_duration = (datetime.now() - self.mic_chunk_start_time).total_seconds()
+        else:
+            chunk_duration = 0
+
+        # Determine if we should send the chunk
+        should_send = False
+
+        if self.mic_speaking:
+            # Send if we've detected enough silence after speech
+            if self.mic_silence_frames >= self.silence_frames_threshold and chunk_duration >= self.min_chunk_duration:
+                should_send = True
+            # Force send if chunk is too long
+            elif chunk_duration >= self.max_chunk_duration:
+                should_send = True
+
+        if should_send and len(resampled_audio) > 0:
+            self.audio_queue.put(("Microphone", resampled_audio.copy()))
+            # Reset state
             self.mic_buffer = []
-            # Convert to mono if needed
-            mono_audio = self._to_mono(audio_data)
-            # Resample to 16kHz for Whisper
-            resampled_audio = self._resample(mono_audio, self.mic_sample_rate)
-            self.audio_queue.put(("Microphone", resampled_audio))
+            self.mic_speaking = False
+            self.mic_silence_frames = 0
+            self.mic_chunk_start_time = None
 
     def audio_callback_computer(self, indata, frames, time, status):
-        """Callback for computer audio"""
+        """Callback for computer audio with VAD-based chunking"""
         if status:
             print(f"Computer status: {status}", file=sys.stderr)
+
+        # Add incoming audio to buffer
         self.computer_buffer.append(indata.copy())
 
-        # Process chunk when we have enough data (based on native sample rate)
-        total_samples = sum(len(chunk) for chunk in self.computer_buffer)
-        if total_samples >= self.computer_sample_rate * CHUNK_DURATION:
-            audio_data = np.concatenate(self.computer_buffer)
+        # Get current buffer as mono audio and resample to 16kHz for VAD
+        current_audio = np.concatenate(self.computer_buffer)
+        mono_audio = self._to_mono(current_audio)
+        resampled_audio = self._resample(mono_audio, self.computer_sample_rate)
+
+        # Process in VAD frames
+        for i in range(0, len(resampled_audio) - self.vad_frame_size, self.vad_frame_size):
+            frame = resampled_audio[i:i + self.vad_frame_size]
+
+            if len(frame) < self.vad_frame_size:
+                break
+
+            is_speech = self._is_speech(frame)
+
+            if is_speech:
+                if not self.computer_speaking:
+                    # Transition to speaking
+                    self.computer_speaking = True
+                    self.computer_chunk_start_time = datetime.now()
+                self.computer_silence_frames = 0
+            else:
+                if self.computer_speaking:
+                    self.computer_silence_frames += 1
+
+        # Calculate current chunk duration
+        if self.computer_chunk_start_time:
+            chunk_duration = (datetime.now() - self.computer_chunk_start_time).total_seconds()
+        else:
+            chunk_duration = 0
+
+        # Determine if we should send the chunk
+        should_send = False
+
+        if self.computer_speaking:
+            # Send if we've detected enough silence after speech
+            if self.computer_silence_frames >= self.silence_frames_threshold and chunk_duration >= self.min_chunk_duration:
+                should_send = True
+            # Force send if chunk is too long
+            elif chunk_duration >= self.max_chunk_duration:
+                should_send = True
+
+        if should_send and len(resampled_audio) > 0:
+            self.audio_queue.put(("Computer", resampled_audio.copy()))
+            # Reset state
             self.computer_buffer = []
-            # Convert to mono if needed
-            mono_audio = self._to_mono(audio_data)
-            # Resample to 16kHz for Whisper
-            resampled_audio = self._resample(mono_audio, self.computer_sample_rate)
-            self.audio_queue.put(("Computer", resampled_audio))
+            self.computer_speaking = False
+            self.computer_silence_frames = 0
+            self.computer_chunk_start_time = None
 
     def transcription_worker(self):
         """Worker thread that processes audio chunks from the queue"""
@@ -219,6 +340,31 @@ class LiveTranscriber:
         self.file_handle.close()
         print(f"\nTranscript saved to: {self.output_file}", file=sys.stderr)
 
+def get_current_audio_output():
+    """Get the current system audio output device name"""
+    try:
+        result = subprocess.run(
+            ["SwitchAudioSource", "-c"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+def set_audio_output(device_name):
+    """Set the system audio output device"""
+    try:
+        subprocess.run(
+            ["SwitchAudioSource", "-s", device_name],
+            capture_output=True,
+            check=True
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
 def find_device_by_name(name):
     """Find device index by name (case-insensitive substring match)"""
     devices = sd.query_devices()
@@ -257,6 +403,29 @@ def main():
     parser.add_argument("--list-devices", "-l",
                        action="store_true",
                        help="List available audio devices and exit")
+    parser.add_argument("--vad-aggressiveness",
+                       type=int,
+                       default=VAD_AGGRESSIVENESS,
+                       choices=[0, 1, 2, 3],
+                       help="VAD aggressiveness level (0-3, higher = more aggressive filtering, default: 2)")
+    parser.add_argument("--silence-duration",
+                       type=float,
+                       default=SILENCE_DURATION,
+                       help="Seconds of silence before chunking (default: 1.0)")
+    parser.add_argument("--min-chunk-duration",
+                       type=float,
+                       default=MIN_CHUNK_DURATION,
+                       help="Minimum chunk duration in seconds (default: 2.0)")
+    parser.add_argument("--max-chunk-duration",
+                       type=float,
+                       default=MAX_CHUNK_DURATION,
+                       help="Maximum chunk duration in seconds (default: 10.0)")
+    parser.add_argument("--auto-switch-output",
+                       action="store_true",
+                       help="Automatically switch to Multi-Output Device and restore on exit")
+    parser.add_argument("--output-device-name",
+                       default="Multi-Output Device",
+                       help="Name of output device to switch to (default: Multi-Output Device)")
 
     args = parser.parse_args()
 
@@ -298,15 +467,44 @@ def main():
             list_devices()
             sys.exit(1)
 
-    # Create and start transcriber
-    transcriber = LiveTranscriber(
-        model_size=args.model,
-        output_dir=args.output_dir,
-        mic_device=mic_device,
-        computer_device=computer_device
-    )
+    # Handle audio output switching
+    original_output = None
+    if args.auto_switch_output:
+        original_output = get_current_audio_output()
+        if original_output:
+            print(f"Current output: {original_output}", file=sys.stderr)
+            print(f"Switching to: {args.output_device_name}", file=sys.stderr)
+            if set_audio_output(args.output_device_name):
+                print(f"✓ Switched to {args.output_device_name}", file=sys.stderr)
+            else:
+                print(f"Warning: Failed to switch to {args.output_device_name}", file=sys.stderr)
+                original_output = None  # Don't try to restore if we couldn't switch
+        else:
+            print("Warning: Could not detect current output device (is SwitchAudioSource installed?)", file=sys.stderr)
+            print("Install with: brew install switchaudio-osx", file=sys.stderr)
 
-    transcriber.start()
+    try:
+        # Create and start transcriber
+        transcriber = LiveTranscriber(
+            model_size=args.model,
+            output_dir=args.output_dir,
+            mic_device=mic_device,
+            computer_device=computer_device,
+            vad_aggressiveness=args.vad_aggressiveness,
+            silence_duration=args.silence_duration,
+            min_chunk_duration=args.min_chunk_duration,
+            max_chunk_duration=args.max_chunk_duration
+        )
+
+        transcriber.start()
+    finally:
+        # Restore original audio output
+        if original_output:
+            print(f"\nRestoring output to: {original_output}", file=sys.stderr)
+            if set_audio_output(original_output):
+                print(f"✓ Restored to {original_output}", file=sys.stderr)
+            else:
+                print(f"Warning: Failed to restore to {original_output}", file=sys.stderr)
 
 if __name__ == "__main__":
     main()
