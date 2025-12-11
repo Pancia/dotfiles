@@ -1,0 +1,358 @@
+#!/usr/bin/env python3
+
+"""Grid-based app launcher with fuzzy search and on-demand icon extraction"""
+
+import os
+import sys
+import tty
+import termios
+import subprocess
+import time
+import select
+from pathlib import Path
+
+# Configuration
+CACHE_DIR = Path.home() / ".cache" / "app-icons"
+APPLICATIONS_DIRS = [
+    Path("/Applications"),
+    Path.home() / "Applications",
+    Path("/System/Applications"),
+    Path("/System/Library/CoreServices/Applications"),
+]
+GRID_COLS = 6
+GRID_ROWS = 3
+ICON_WIDTH = 10  # cells (increased for longer labels)
+ICON_HEIGHT = 6  # cells (increased for larger icons)
+COL_SPACING = 2  # cells between icons
+ROW_SPACING = 2  # cells between rows (for labels)
+
+# Global state
+apps_list = []
+filtered_apps = []
+search_query = ""
+DEBOUNCE_DELAY = 0.5  # 500ms
+
+def scan_applications():
+    """Scan all application directories for installed apps"""
+    apps_dict = {}  # Use dict to deduplicate by name (prefer user apps)
+
+    # Scan directories in reverse priority order (system first, user last)
+    # This way user apps will override system apps with same name
+    for app_dir in reversed(APPLICATIONS_DIRS):
+        if not app_dir.exists():
+            continue
+
+        for app_path in app_dir.glob("*.app"):
+            app_name = app_path.stem  # Remove .app extension
+            # Store with name as key - later entries (user apps) override earlier (system)
+            apps_dict[app_name] = {
+                'name': app_name,
+                'path': app_path
+            }
+
+    # Convert to list and sort alphabetically
+    apps = list(apps_dict.values())
+    apps.sort(key=lambda x: x['name'].lower())
+
+    return apps
+
+def get_icon_cache_path(app_name):
+    """Get the cache path for an app's icon"""
+    # Sanitize filename
+    safe_name = app_name.replace('/', '_').replace(' ', '_')
+    return CACHE_DIR / f"{safe_name}.png"
+
+def extract_app_icon(app_path, app_name):
+    """Extract and cache an app's icon"""
+    cache_path = get_icon_cache_path(app_name)
+
+    # Return cached version if exists
+    if cache_path.exists():
+        return cache_path
+
+    # Ensure cache directory exists
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Find .icns file in app bundle
+    resources_dir = app_path / "Contents" / "Resources"
+    if not resources_dir.exists():
+        return None
+
+    # Look for .icns files
+    icns_files = list(resources_dir.glob("*.icns"))
+    if not icns_files:
+        return None
+
+    # Use the first .icns file (usually the app icon)
+    icns_path = icns_files[0]
+
+    # Convert to PNG using sips
+    result = subprocess.run([
+        "sips", "-s", "format", "png",
+        str(icns_path),
+        "--out", str(cache_path)
+    ], capture_output=True)
+
+    if result.returncode == 0 and cache_path.exists():
+        return cache_path
+
+    return None
+
+def filter_apps(query):
+    """Filter apps based on search query (case-insensitive substring match)"""
+    if not query:
+        return apps_list
+
+    query_lower = query.lower()
+    return [app for app in apps_list if query_lower in app['name'].lower()]
+
+def getch_nonblocking(timeout=0.05):
+    """Get a single character from stdin with timeout (non-blocking)"""
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+
+        # Use select to check if input is available
+        ready, _, _ = select.select([fd], [], [], timeout)
+
+        if ready:
+            ch = sys.stdin.read(1)
+            # Check for escape sequences (arrow keys)
+            if ch == '\x1b':
+                # Set non-blocking mode temporarily
+                import fcntl
+                flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+                fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
+                try:
+                    # Try to read more characters immediately
+                    # Arrow keys send ESC [ A/B/C/D all at once
+                    extra = sys.stdin.read(10)  # Read up to 10 more chars
+                    if extra:
+                        ch += extra
+                except:
+                    pass  # No more chars available
+                finally:
+                    # Restore blocking mode
+                    fcntl.fcntl(fd, fcntl.F_SETFL, flags)
+            return ch
+        else:
+            return None  # Timeout, no input
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+def clear_screen():
+    """Clear the screen and move cursor to top"""
+    print("\033[2J\033[H", end="", flush=True)
+
+def move_cursor(row, col):
+    """Move cursor to specific position (1-indexed)"""
+    print(f"\033[{row};{col}H", end="", flush=True)
+
+def clear_images():
+    """Clear all Kitty graphics images"""
+    subprocess.run(["kitten", "icat", "--clear"], stderr=subprocess.DEVNULL)
+
+def get_grid_position(idx):
+    """Calculate grid position for an app index"""
+    grid_row = idx // GRID_COLS
+    grid_col = idx % GRID_COLS
+    x_offset = grid_col * (ICON_WIDTH + COL_SPACING)
+    y_offset = 5 + (grid_row * (ICON_HEIGHT + ROW_SPACING + 1))  # +1 extra for search line
+    return x_offset, y_offset
+
+def render_icon(icon_path, grid_row, grid_col):
+    """Render an icon at a specific grid position"""
+    x_offset = grid_col * (ICON_WIDTH + COL_SPACING)
+    y_offset = 5 + (grid_row * (ICON_HEIGHT + ROW_SPACING + 1))
+
+    if icon_path and icon_path.exists():
+        subprocess.run([
+            "kitten", "icat",
+            "--place", f"{ICON_WIDTH}x{ICON_HEIGHT}@{x_offset}x{y_offset}",
+            "--transfer-mode", "memory",
+            str(icon_path)
+        ], stderr=subprocess.DEVNULL)
+
+def render_label(idx, app_name, is_selected=False):
+    """Render just the label for an app at index idx"""
+    x_offset, y_offset = get_grid_position(idx)
+
+    label_row = y_offset + ICON_HEIGHT + 1
+    label_col = x_offset + 1
+
+    move_cursor(label_row, label_col)
+
+    display_name = app_name[:ICON_WIDTH]
+    if is_selected:
+        print(f"\033[7m{display_name:^{ICON_WIDTH}}\033[0m", end="", flush=True)
+    else:
+        print(f"{display_name:^{ICON_WIDTH}}", end="", flush=True)
+
+def render_header(search_query, filtering=False):
+    """Render the header with search box"""
+    move_cursor(1, 1)
+    print("\033[KApp Launcher", flush=True)
+    move_cursor(2, 1)
+    status = " (filtering...)" if filtering else ""
+    print(f"\033[KSearch: {search_query}_{status}", flush=True)
+    move_cursor(3, 1)
+    print("\033[KArrow keys: navigate | Type: search | Enter: launch | ESC: exit", flush=True)
+
+def update_search_display(search_query):
+    """Update only the search line (fast)"""
+    move_cursor(2, 1)
+    print(f"\033[KSearch: {search_query}_", flush=True)
+
+def render_grid_initial(selected_idx, search_query):
+    """Render the entire grid of apps (full initial render)"""
+    clear_screen()
+    clear_images()
+
+    render_header(search_query)
+
+    # Determine how many apps to show (max grid size)
+    max_apps = GRID_COLS * GRID_ROWS
+    visible_apps = filtered_apps[:max_apps]
+
+    # Render each app in the grid
+    for idx, app in enumerate(visible_apps):
+        grid_row = idx // GRID_COLS
+        grid_col = idx % GRID_COLS
+
+        # Extract and render icon on-demand
+        icon_path = extract_app_icon(app['path'], app['name'])
+        render_icon(icon_path, grid_row, grid_col)
+
+        # Render label
+        is_selected = (idx == selected_idx)
+        render_label(idx, app['name'], is_selected)
+
+    # Show count (calculate position dynamically based on grid size)
+    last_row_y = 5 + ((GRID_ROWS - 1) * (ICON_HEIGHT + ROW_SPACING + 1))
+    status_row = last_row_y + ICON_HEIGHT + 2  # After last label + 1 blank line
+    move_cursor(status_row, 1)
+    if len(filtered_apps) > max_apps:
+        print(f"\033[KShowing {len(visible_apps)} of {len(filtered_apps)} apps", flush=True)
+    else:
+        print(f"\033[K{len(filtered_apps)} apps", flush=True)
+
+def update_selection(old_idx, new_idx):
+    """Update only the changed labels (optimized)"""
+    if old_idx < len(filtered_apps):
+        render_label(old_idx, filtered_apps[old_idx]['name'], is_selected=False)
+
+    if new_idx < len(filtered_apps):
+        render_label(new_idx, filtered_apps[new_idx]['name'], is_selected=True)
+
+def launch_app(app_name):
+    """Launch an application"""
+    subprocess.run(["open", "-a", app_name], stderr=subprocess.DEVNULL)
+
+def main():
+    """Main application loop"""
+    global apps_list, filtered_apps, search_query
+
+    # Scan applications
+    apps_list = scan_applications()
+    filtered_apps = apps_list
+
+    if not apps_list:
+        print("No applications found")
+        return
+
+    selected_idx = 0
+    search_query = ""
+    last_search_time = 0
+    pending_filter = False
+
+    try:
+        # Initial render
+        render_grid_initial(selected_idx, search_query)
+
+        # Event loop
+        while True:
+            # Non-blocking input with timeout
+            ch = getch_nonblocking(timeout=0.05)
+
+            # Check if we need to apply pending filter
+            if pending_filter and (time.time() - last_search_time) >= DEBOUNCE_DELAY:
+                filtered_apps = filter_apps(search_query)
+                selected_idx = 0
+                render_grid_initial(selected_idx, search_query)
+                pending_filter = False
+                continue
+
+            # If no input, continue waiting
+            if ch is None:
+                continue
+
+            # Ctrl-C or Ctrl-D to exit
+            if ch in ['\x03', '\x04']:
+                break
+
+            old_idx = selected_idx
+            new_idx = selected_idx
+            needs_full_redraw = False
+
+            # Arrow keys (navigation) - check BEFORE ESC
+            if ch == '\x1b[A':  # Up
+                if selected_idx >= GRID_COLS:
+                    new_idx = selected_idx - GRID_COLS
+
+            elif ch == '\x1b[B':  # Down
+                max_apps = GRID_COLS * GRID_ROWS
+                if selected_idx < min(len(filtered_apps), max_apps) - GRID_COLS:
+                    new_idx = selected_idx + GRID_COLS
+
+            elif ch == '\x1b[C':  # Right
+                max_apps = GRID_COLS * GRID_ROWS
+                if selected_idx < min(len(filtered_apps), max_apps) - 1:
+                    new_idx = selected_idx + 1
+
+            elif ch == '\x1b[D':  # Left
+                if selected_idx > 0:
+                    new_idx = selected_idx - 1
+
+            # ESC to exit (standalone ESC, not arrow key)
+            elif ch == '\x1b':
+                break
+
+            # Enter to launch
+            elif ch in ['\r', '\n']:
+                if filtered_apps and selected_idx < len(filtered_apps):
+                    clear_screen()
+                    clear_images()
+                    app_to_launch = filtered_apps[selected_idx]['name']
+                    print(f"Launching {app_to_launch}...")
+                    launch_app(app_to_launch)
+                break
+
+            # Backspace to delete search character
+            elif ch in ['\x7f', '\x08']:
+                if search_query:
+                    search_query = search_query[:-1]
+                    update_search_display(search_query)
+                    last_search_time = time.time()  # Reset timer
+                    pending_filter = True
+
+            # Regular characters for search
+            elif len(ch) == 1 and ch.isprintable():
+                search_query += ch
+                update_search_display(search_query)
+                last_search_time = time.time()  # Reset timer
+                pending_filter = True
+
+            # Update display (only for navigation) - OUTSIDE elif chain
+            if new_idx != old_idx:
+                selected_idx = new_idx
+                update_selection(old_idx, new_idx)
+
+    finally:
+        # Cleanup
+        clear_images()
+        clear_screen()
+
+if __name__ == '__main__':
+    main()

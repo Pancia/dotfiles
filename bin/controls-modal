@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 commands = {
         'c': ('CAT', 'echo cat'),
+        'a': ('App Launcher', 'app-launcher'),
         'y': {
             '_desc': 'ytdl',
             'i': ("ytdl interactive", 'ytdl'),
@@ -53,7 +54,7 @@ import subprocess
 def execute_command(command):
     print(f"Running command: {command}")
     try:
-        subprocess.run(command, shell=True, check=True, executable='/bin/zsh')
+        subprocess.run(command, shell=True, check=True, executable='/opt/homebrew/bin/fish')
     except subprocess.CalledProcessError as e:
         print(f"Command '{command}' failed with error: {e}")
 
@@ -62,7 +63,7 @@ def main():
     current_commands = commands
     command_history = []
     while True:
-        os.system('clear')
+        # os.system('clear')
         print_commands(current_commands, command_history)
         user_input = getch()
         print(f"Command {user_input} {user_input.encode().hex()}")

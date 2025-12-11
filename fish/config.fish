@@ -149,4 +149,5 @@ if status is-interactive
 
     echo "Remember to try out:"
     echo "scooter (find&replace), yazi(tui file manager), lazygit, v, d"
+    echo "ghostty and kitty (for images in terminal / hermes app search)"
 end

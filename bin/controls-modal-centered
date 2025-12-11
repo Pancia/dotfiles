@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+# Launch controls-modal in a centered Ghostty window
+
+HS="/Users/anthony/Developer/bin/hs"
+
+# Open Ghostty with controls-modal
+open -na ghostty --args -e /Users/anthony/dotfiles/bin/controls-modal
+
+# Wait for window to appear and be ready
+sleep 0.6
+
+# Center the focused window using Hammerspoon
+"$HS" -c 'local win = hs.window.focusedWindow(); if win then win:centerOnScreen() end' 2>/dev/null

@@ -1,5 +1,5 @@
 let g:vimwiki_list = [
-            \{'path': '~/Dropbox/wiki', 'path_html': '~/Dropbox/wiki', 'auto_tags': 1, 'auto_export': 1 },
+            \{'path': '~/ProtonDrive/wiki', 'path_html': '~/ProtonDrive/wiki', 'auto_tags': 1, 'auto_export': 1 },
             \{'path': '~/dotfiles/wiki', 'auto_tags': 1, 'ext': '.wiki' }
             \]
 

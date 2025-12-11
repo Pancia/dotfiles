@@ -1,6 +1,6 @@
 {"__rc_loc": "<[.config/karabiner/karabiner.json]>",
     "global": {
-        "check_for_updates_on_startup": true,
+        "check_for_updates_on_startup":  true,
         "show_in_menu_bar": true,
         "show_profile_name_in_menu_bar": false
     },
@@ -195,6 +195,25 @@
                                 },
                                 "to": {
                                     "shell_command": "~/dotfiles/bin/launch-lock-screen-dialog"
+                                },
+                                "type": "basic"
+                            }
+                        ]
+                    },
+                    {
+                        "description": "cmd-space -> controls-modal (ghostty centered)",
+                        "manipulators": [
+                            {
+                                "from": {
+                                    "key_code": "spacebar",
+                                    "modifiers": {
+                                        "mandatory": [
+                                            "left_command"
+                                        ]
+                                    }
+                                },
+                                "to": {
+                                    "shell_command": "/Users/anthony/dotfiles/bin/controls-modal-centered"
                                 },
                                 "type": "basic"
                             }

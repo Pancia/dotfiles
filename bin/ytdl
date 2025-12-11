@@ -1,18 +1,37 @@
 #!/bin/bash
 
+valid_types="music audio video text notes"
+
 if [ -z "$1" ]; then
-    echo "Enter the ytdl type:"
-    echo "music audio video text notes"
-    read -r ytdl_type
+    while true; do
+        echo "Enter the ytdl type:"
+        echo "$valid_types"
+        read -r ytdl_type
+        if [[ " $valid_types " =~ " $ytdl_type " ]]; then
+            break
+        else
+            echo "ERROR: Invalid type '$ytdl_type'. Please try again."
+        fi
+    done
 elif [ "$1" == "clipboard" ]; then
     arg2="$(pbpaste)"
-    echo "Enter the ytdl type:"
-    echo "music audio video text notes"
-    read -r ytdl_type
+    while true; do
+        echo "Enter the ytdl type:"
+        echo "$valid_types"
+        read -r ytdl_type
+        if [[ " $valid_types " =~ " $ytdl_type " ]]; then
+            break
+        else
+            echo "ERROR: Invalid type '$ytdl_type'. Please try again."
+        fi
+    done
 else
-    echo ACCEPTABLE 2nd ARG VALUES:
-    echo music audio video text notes
     ytdl_type="$1"
+    if [[ ! " $valid_types " =~ " $ytdl_type " ]]; then
+        echo "ERROR: Invalid type '$ytdl_type'"
+        echo "Valid types are: $valid_types"
+        exit 1
+    fi
 fi
 
 if [ "$1" == "clipboard" ]; then

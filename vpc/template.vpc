@@ -8,5 +8,5 @@
             "cp template.vpc untitled.vpc && vim untitled.vpc"
         ]
     },
-    "board": "$HOME/ProtonDrive/Dropbox/wiki/personal/pages/dashboard%2Fhome.md"
+    "board": "$HOME/ProtonDrive/wiki/personal/pages/dashboard%2Fhome.md"
 }

@@ -1,9 +1,62 @@
 #!/Users/anthony/.pyenv/versions/3.11.11/bin/python3
 
-from faster_whisper import WhisperModel
+import mlx_whisper
 import sys
+import argparse
+from pathlib import Path
 
-model = WhisperModel("base", device="cpu")
-segments, info = model.transcribe(sys.argv[1])
-for segment in segments:
-    print(segment.text, flush=True)
+def main():
+    parser = argparse.ArgumentParser(description="Transcribe audio file using MLX Whisper")
+    parser.add_argument("audio_file", help="Path to audio file to transcribe")
+    parser.add_argument("--model", "-m",
+                       default="base",
+                       choices=["tiny", "base", "small", "medium", "large", "turbo", "large-v3-turbo"],
+                       help="Whisper model size (default: base)")
+    parser.add_argument("--no-file", action="store_true",
+                       help="Don't create transcript file, only print to stdout")
+
+    args = parser.parse_args()
+
+    # Map model sizes to correct HuggingFace repo names
+    model_map = {
+        "tiny": "mlx-community/whisper-tiny",
+        "base": "mlx-community/whisper-base.en-mlx",
+        "small": "mlx-community/whisper-small-mlx",
+        "medium": "mlx-community/whisper-medium-mlx",
+        "large": "mlx-community/whisper-large-v3-mlx",
+        "turbo": "mlx-community/whisper-turbo",
+        "large-v3-turbo": "mlx-community/whisper-large-v3-turbo"
+    }
+
+    model_path = model_map.get(args.model, f"mlx-community/whisper-{args.model}")
+
+    # Transcribe using MLX with streaming output
+    transcript_lines = []
+
+    # Use verbose=True to get segments as they're generated
+    result = mlx_whisper.transcribe(
+        args.audio_file,
+        path_or_hf_repo=model_path,
+        verbose=True,
+        word_timestamps=False
+    )
+
+    # Collect all text from segments
+    if 'segments' in result:
+        for segment in result['segments']:
+            text = segment['text'].strip()
+            if text:
+                transcript_lines.append(text)
+
+    # Write to file unless --no-file is specified
+    if not args.no_file and transcript_lines:
+        audio_path = Path(args.audio_file)
+        transcript_path = audio_path.parent / f"{audio_path.name}.transcript.txt"
+
+        with open(transcript_path, 'w') as f:
+            f.write('\n'.join(transcript_lines) + '\n')
+
+        print(f"\nTranscript saved to: {transcript_path}", file=sys.stderr)
+
+if __name__ == "__main__":
+    main()

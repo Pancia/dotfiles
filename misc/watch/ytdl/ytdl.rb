@@ -23,6 +23,7 @@ Dir["#{$home_dir}/Downloads/*.ytdl"].each { |f|
           -- "#{Shellwords.escape ytid}" 2>&1 \
           && mv "#{Shellwords.escape f}" ~/.Trash/
     }
+    puts(command)
     system(command)
     out_dir = File.expand_path("~/Downloads/ytdl/#{downloadType}")
     # Find all .mp4 files that don't have corresponding .m4a files
@@ -43,6 +44,7 @@ Dir["#{$home_dir}/Downloads/*.ytdl"].each { |f|
         #{$progress_flag} \
         -- "#{Shellwords.escape ytid}" 2>&1
     }
+    puts(command)
     system(command)
     out_dir = File.expand_path("~/Downloads/ytdl/#{downloadType}")
 

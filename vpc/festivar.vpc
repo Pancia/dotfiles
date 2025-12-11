@@ -36,7 +36,7 @@
         },
         {
             "area": "board",
-            "dir": "$HOME/ProtonDrive/Dropbox/wiki/personal",
+            "dir": "$HOME/ProtonDrive/wiki/personal",
             "tabs": [
                 "vim pages/work%2Ffestivar.md"
             ]

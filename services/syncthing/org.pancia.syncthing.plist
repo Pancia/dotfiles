@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>org.pancia.syncthing</string>
+        <key>ProgramArguments</key>
+        <array>
+            <string>/Users/anthony/dotfiles/services/syncthing/dotfiles-services-syncthing.sh</string>
+        </array>
+        <key>RunAtLoad</key>
+        <true/>
+        <key>KeepAlive</key>
+        <true/>
+        <key>StandardOutPath</key>
+        <string>/Users/anthony/.log/services/syncthing.log</string>
+        <key>StandardErrorPath</key>
+        <string>/Users/anthony/.log/services/syncthing.log</string>
+    </dict>
+</plist>
