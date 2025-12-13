@@ -201,7 +201,27 @@
                         ]
                     },
                     {
-                        "description": "cmd-space -> controls-modal (ghostty centered)",
+                        "description": "ctrl-cmd-space -> controls-modal (ghostty centered)",
+                        "manipulators": [
+                            {
+                                "from": {
+                                    "key_code": "spacebar",
+                                    "modifiers": {
+                                        "mandatory": [
+                                            "command",
+                                            "control"
+                                        ]
+                                    }
+                                },
+                                "to": {
+                                    "shell_command": "/Users/anthony/dotfiles/bin/controls-modal-centered"
+                                },
+                                "type": "basic"
+                            }
+                        ]
+                    },
+                    {
+                        "description": "cmd-space -> controls-modal (ghostty centered, app mode)",
                         "manipulators": [
                             {
                                 "from": {
@@ -213,7 +233,7 @@
                                     }
                                 },
                                 "to": {
-                                    "shell_command": "/Users/anthony/dotfiles/bin/controls-modal-centered"
+                                    "shell_command": "/Users/anthony/dotfiles/bin/controls-modal-centered apps"
                                 },
                                 "type": "basic"
                             }

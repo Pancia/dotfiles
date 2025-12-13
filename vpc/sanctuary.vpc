@@ -1,0 +1,34 @@
+{
+    "space": "current",
+    "yabai": {
+        "enabled": true,
+        "layout": {
+            "template": [
+                "browser browser main main timer timer",
+                "browser browser main main timer timer",
+                "browser browser main main timer timer",
+                "browser browser main main timer timer"
+            ]
+        }
+    },
+    "_qutebrowser": {
+        "area": "browser",
+        "urls": ["https://example.com"]
+    },
+    "kitty": [
+        {
+            "area": "main",
+            "dir": "$HOME/sanctuary",
+            "tabs": [
+                "fish main.fish"
+            ]
+        },
+        {
+            "area": "timer",
+            "dir": "$HOME/sanctuary",
+            "tabs": [
+                "fish timer.fish"
+            ]
+        }
+    ]
+}

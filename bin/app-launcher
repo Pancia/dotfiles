@@ -1,6 +1,10 @@
-#!/usr/bin/env python3
+#!/Users/anthony/.pyenv/versions/3.11.11/bin/python3.11
 
 """Grid-based app launcher with fuzzy search and on-demand icon extraction"""
+
+# Capture script start time ASAP (before any imports)
+import time as _time_module
+_SCRIPT_START_TIME = _time_module.time()
 
 import os
 import sys
@@ -9,10 +13,20 @@ import termios
 import subprocess
 import time
 import select
+import json
+import threading
+import queue
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+
+# Log import completion time
+_IMPORTS_COMPLETE_TIME = time.time()
 
 # Configuration
 CACHE_DIR = Path.home() / ".cache" / "app-icons"
+APP_CACHE_FILE = Path.home() / ".cache" / "app-launcher" / "apps.json"
+DEBUG_LOG_FILE = Path.home() / ".cache" / "app-launcher" / "debug.log"
+APP_CACHE_MAX_AGE = 300  # 5 minutes in seconds
 APPLICATIONS_DIRS = [
     Path("/Applications"),
     Path.home() / "Applications",
@@ -25,6 +39,38 @@ ICON_WIDTH = 10  # cells (increased for longer labels)
 ICON_HEIGHT = 6  # cells (increased for larger icons)
 COL_SPACING = 2  # cells between icons
 ROW_SPACING = 2  # cells between rows (for labels)
+ICON_WORKERS = 8  # Number of parallel icon extraction threads
+
+# Debug configuration
+DEBUG = os.environ.get('APP_LAUNCHER_DEBUG') == '1'
+START_TIME = time.time()
+_log_file_initialized = False
+
+def debug_log(msg, absolute_time=False):
+    """Log debug message with timestamp to file if DEBUG is enabled"""
+    global _log_file_initialized
+
+    if DEBUG:
+        if absolute_time:
+            # Use absolute timestamp (matches controls-modal format)
+            log_line = f"[{time.time():.3f}] {msg}\n"
+        else:
+            # Use relative timestamp
+            elapsed = time.time() - START_TIME
+            log_line = f"[{elapsed:.3f}s] {msg}\n"
+
+        try:
+            # Ensure log directory exists
+            DEBUG_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+            # Truncate on first write, append thereafter
+            mode = 'w' if not _log_file_initialized else 'a'
+            with open(DEBUG_LOG_FILE, mode) as f:
+                f.write(log_line)
+
+            _log_file_initialized = True
+        except OSError:
+            pass  # Silently ignore log write failures
 
 # Global state
 apps_list = []
@@ -34,6 +80,7 @@ DEBOUNCE_DELAY = 0.5  # 500ms
 
 def scan_applications():
     """Scan all application directories for installed apps"""
+    start = time.time()
     apps_dict = {}  # Use dict to deduplicate by name (prefer user apps)
 
     # Scan directories in reverse priority order (system first, user last)
@@ -47,14 +94,125 @@ def scan_applications():
             # Store with name as key - later entries (user apps) override earlier (system)
             apps_dict[app_name] = {
                 'name': app_name,
-                'path': app_path
+                'path': app_path  # Keep as Path object
             }
 
-    # Convert to list and sort alphabetically
+    # Convert to list
     apps = list(apps_dict.values())
+
+    # Query last used dates in parallel
+    usage_start = time.time()
+    with ThreadPoolExecutor(max_workers=ICON_WORKERS) as executor:
+        # Submit all queries
+        future_to_idx = {
+            executor.submit(get_app_last_used, app['path']): idx
+            for idx, app in enumerate(apps)
+        }
+
+        # Collect results
+        for future in future_to_idx:
+            idx = future_to_idx[future]
+            try:
+                last_used = future.result()
+                apps[idx]['last_used'] = last_used
+            except Exception:
+                apps[idx]['last_used'] = None
+
+    usage_elapsed = (time.time() - usage_start) * 1000
+    debug_log(f"Usage data queried in {usage_elapsed:.1f}ms")
+
+    # Sort alphabetically (will be re-sorted by recency later for initial view)
     apps.sort(key=lambda x: x['name'].lower())
 
+    elapsed = (time.time() - start) * 1000
+    debug_log(f"App scan complete: {len(apps)} apps in {elapsed:.1f}ms")
+
     return apps
+
+def get_app_last_used(app_path):
+    """Query macOS for when app was last used (system-wide tracking)"""
+    try:
+        result = subprocess.run(
+            ["/usr/bin/mdls", "-name", "kMDItemLastUsedDate", str(app_path)],
+            capture_output=True,
+            text=True,
+            timeout=1
+        )
+
+        if result.returncode != 0:
+            return None
+
+        # Parse output: "kMDItemLastUsedDate = YYYY-MM-DD HH:MM:SS +0000" or "(null)"
+        output = result.stdout.strip()
+        if "(null)" in output:
+            return None
+
+        # Extract timestamp part after "= "
+        if "=" in output:
+            date_str = output.split("=", 1)[1].strip()
+            # Parse to Unix timestamp for easy comparison
+            from datetime import datetime
+            dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S %z")
+            return dt.timestamp()
+
+        return None
+    except (subprocess.TimeoutExpired, ValueError, OSError):
+        return None
+
+def load_cached_apps():
+    """Load apps from cache file if it exists and is recent"""
+    start = time.time()
+
+    if not APP_CACHE_FILE.exists():
+        debug_log("Cache load: MISS (no cache file)")
+        return None
+
+    try:
+        # Check cache age
+        cache_age = time.time() - APP_CACHE_FILE.stat().st_mtime
+        if cache_age > APP_CACHE_MAX_AGE:
+            debug_log(f"Cache load: STALE ({cache_age:.0f}s old)")
+            return None
+
+        # Load cached data
+        with open(APP_CACHE_FILE, 'r') as f:
+            cached_data = json.load(f)
+
+        # Convert path strings back to Path objects
+        for app in cached_data:
+            app['path'] = Path(app['path'])
+            # Ensure last_used field exists (for backward compatibility)
+            if 'last_used' not in app:
+                app['last_used'] = None
+
+        elapsed = (time.time() - start) * 1000
+        debug_log(f"Cache load: HIT ({len(cached_data)} apps in {elapsed:.1f}ms)")
+
+        return cached_data
+    except (json.JSONDecodeError, KeyError, OSError) as e:
+        debug_log(f"Cache load: ERROR ({e})")
+        return None
+
+def save_apps_cache(apps):
+    """Save apps list to cache file"""
+    try:
+        # Ensure cache directory exists
+        APP_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+        # Convert Path objects to strings for JSON
+        serializable_apps = []
+        for app in apps:
+            serializable_apps.append({
+                'name': app['name'],
+                'path': str(app['path']),
+                'last_used': app.get('last_used')  # May be None
+            })
+
+        # Write to cache
+        with open(APP_CACHE_FILE, 'w') as f:
+            json.dump(serializable_apps, f)
+    except OSError:
+        pass  # Ignore cache write failures
 
 def get_icon_cache_path(app_name):
     """Get the cache path for an app's icon"""
@@ -86,61 +244,87 @@ def extract_app_icon(app_path, app_name):
     # Use the first .icns file (usually the app icon)
     icns_path = icns_files[0]
 
-    # Convert to PNG using sips
+    # Convert to PNG using sips (with timing in debug mode)
+    start = time.time() if DEBUG else 0
     result = subprocess.run([
-        "sips", "-s", "format", "png",
+        "/usr/bin/sips", "-s", "format", "png",
         str(icns_path),
         "--out", str(cache_path)
     ], capture_output=True)
 
     if result.returncode == 0 and cache_path.exists():
+        if DEBUG:
+            elapsed = (time.time() - start) * 1000
+            debug_log(f"Icon extracted: {app_name} ({elapsed:.1f}ms)")
         return cache_path
 
     return None
 
+def sort_apps_by_recency(apps):
+    """Sort apps by last used date (most recent first), then alphabetically for never-used
+
+    Returns a new sorted list (does not modify input)
+    """
+    # Separate into used and never-used
+    used_apps = [app for app in apps if app.get('last_used') is not None]
+    never_used_apps = [app for app in apps if app.get('last_used') is None]
+
+    # Sort used apps by recency (most recent first)
+    used_apps.sort(key=lambda x: x['last_used'], reverse=True)
+
+    # Sort never-used apps alphabetically
+    never_used_apps.sort(key=lambda x: x['name'].lower())
+
+    # Combine: used apps first, then never-used
+    return used_apps + never_used_apps
+
 def filter_apps(query):
-    """Filter apps based on search query (case-insensitive substring match)"""
+    """Filter apps based on search query (case-insensitive substring match)
+
+    Returns results sorted alphabetically (not by recency)
+    """
     if not query:
         return apps_list
 
     query_lower = query.lower()
-    return [app for app in apps_list if query_lower in app['name'].lower()]
+    filtered = [app for app in apps_list if query_lower in app['name'].lower()]
+
+    # Sort alphabetically for search results
+    filtered.sort(key=lambda x: x['name'].lower())
+
+    return filtered
 
 def getch_nonblocking(timeout=0.05):
-    """Get a single character from stdin with timeout (non-blocking)"""
+    """Get a single character from stdin with timeout (non-blocking)
+    Note: Assumes terminal is already in raw mode"""
     fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    try:
-        tty.setraw(fd)
 
-        # Use select to check if input is available
-        ready, _, _ = select.select([fd], [], [], timeout)
+    # Use select to check if input is available
+    ready, _, _ = select.select([fd], [], [], timeout)
 
-        if ready:
-            ch = sys.stdin.read(1)
-            # Check for escape sequences (arrow keys)
-            if ch == '\x1b':
-                # Set non-blocking mode temporarily
-                import fcntl
-                flags = fcntl.fcntl(fd, fcntl.F_GETFL)
-                fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+    if ready:
+        ch = sys.stdin.read(1)
+        # Check for escape sequences (arrow keys)
+        if ch == '\x1b':
+            # Set non-blocking mode temporarily
+            import fcntl
+            flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+            fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
-                try:
-                    # Try to read more characters immediately
-                    # Arrow keys send ESC [ A/B/C/D all at once
-                    extra = sys.stdin.read(10)  # Read up to 10 more chars
-                    if extra:
-                        ch += extra
-                except:
-                    pass  # No more chars available
-                finally:
-                    # Restore blocking mode
-                    fcntl.fcntl(fd, fcntl.F_SETFL, flags)
-            return ch
-        else:
-            return None  # Timeout, no input
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            try:
+                # Try to read more characters immediately
+                # Arrow keys send ESC [ A/B/C/D all at once
+                extra = sys.stdin.read(10)  # Read up to 10 more chars
+                if extra:
+                    ch += extra
+            except:
+                pass  # No more chars available
+            finally:
+                # Restore blocking mode
+                fcntl.fcntl(fd, fcntl.F_SETFL, flags)
+        return ch
+    else:
+        return None  # Timeout, no input
 
 def clear_screen():
     """Clear the screen and move cursor to top"""
@@ -152,7 +336,7 @@ def move_cursor(row, col):
 
 def clear_images():
     """Clear all Kitty graphics images"""
-    subprocess.run(["kitten", "icat", "--clear"], stderr=subprocess.DEVNULL)
+    subprocess.run(["/opt/homebrew/bin/kitten", "icat", "--clear"], stderr=subprocess.DEVNULL)
 
 def get_grid_position(idx):
     """Calculate grid position for an app index"""
@@ -162,18 +346,23 @@ def get_grid_position(idx):
     y_offset = 5 + (grid_row * (ICON_HEIGHT + ROW_SPACING + 1))  # +1 extra for search line
     return x_offset, y_offset
 
-def render_icon(icon_path, grid_row, grid_col):
-    """Render an icon at a specific grid position"""
+def render_icon(icon_path, grid_row, grid_col, app_name=None):
+    """Render an icon at a specific grid position (returns Popen process)
+    Caller should wait for process to complete"""
     x_offset = grid_col * (ICON_WIDTH + COL_SPACING)
     y_offset = 5 + (grid_row * (ICON_HEIGHT + ROW_SPACING + 1))
 
     if icon_path and icon_path.exists():
-        subprocess.run([
-            "kitten", "icat",
+        proc = subprocess.Popen([
+            "/opt/homebrew/bin/kitten", "icat",
             "--place", f"{ICON_WIDTH}x{ICON_HEIGHT}@{x_offset}x{y_offset}",
             "--transfer-mode", "memory",
             str(icon_path)
         ], stderr=subprocess.DEVNULL)
+
+        return proc
+
+    return None
 
 def render_label(idx, app_name, is_selected=False):
     """Render just the label for an app at index idx"""
@@ -206,7 +395,9 @@ def update_search_display(search_query):
     print(f"\033[KSearch: {search_query}_", flush=True)
 
 def render_grid_initial(selected_idx, search_query):
-    """Render the entire grid of apps (full initial render)"""
+    """Render the entire grid of apps (labels only, fast initial render)"""
+    start = time.time()
+
     clear_screen()
     clear_images()
 
@@ -216,16 +407,8 @@ def render_grid_initial(selected_idx, search_query):
     max_apps = GRID_COLS * GRID_ROWS
     visible_apps = filtered_apps[:max_apps]
 
-    # Render each app in the grid
+    # Render all labels immediately (fast)
     for idx, app in enumerate(visible_apps):
-        grid_row = idx // GRID_COLS
-        grid_col = idx % GRID_COLS
-
-        # Extract and render icon on-demand
-        icon_path = extract_app_icon(app['path'], app['name'])
-        render_icon(icon_path, grid_row, grid_col)
-
-        # Render label
         is_selected = (idx == selected_idx)
         render_label(idx, app['name'], is_selected)
 
@@ -238,6 +421,40 @@ def render_grid_initial(selected_idx, search_query):
     else:
         print(f"\033[K{len(filtered_apps)} apps", flush=True)
 
+    elapsed = (time.time() - start) * 1000
+    debug_log(f"Initial render complete: {len(visible_apps)} labels in {elapsed:.1f}ms")
+
+def extract_icon_worker(app, idx):
+    """Worker function to extract a single icon (runs in thread pool)"""
+    icon_path = extract_app_icon(app['path'], app['name'])
+    return (idx, icon_path)
+
+def start_icon_extraction(visible_apps, icon_queue):
+    """Start parallel icon extraction in background threads"""
+    def extract_all():
+        with ThreadPoolExecutor(max_workers=ICON_WORKERS) as executor:
+            # Submit all extraction tasks
+            futures = []
+            for idx, app in enumerate(visible_apps):
+                future = executor.submit(extract_icon_worker, app, idx)
+                futures.append(future)
+
+            # Collect results as they complete
+            for future in futures:
+                try:
+                    idx, icon_path = future.result()
+                    icon_queue.put((idx, icon_path))
+                except Exception:
+                    pass  # Ignore extraction failures
+
+        # Signal completion
+        icon_queue.put(None)
+
+    # Start extraction in background thread
+    thread = threading.Thread(target=extract_all, daemon=True)
+    thread.start()
+    return thread
+
 def update_selection(old_idx, new_idx):
     """Update only the changed labels (optimized)"""
     if old_idx < len(filtered_apps):
@@ -248,15 +465,59 @@ def update_selection(old_idx, new_idx):
 
 def launch_app(app_name):
     """Launch an application"""
-    subprocess.run(["open", "-a", app_name], stderr=subprocess.DEVNULL)
+    subprocess.run(["/usr/bin/open", "-a", app_name], stderr=subprocess.DEVNULL)
 
 def main():
     """Main application loop"""
     global apps_list, filtered_apps, search_query
 
-    # Scan applications
-    apps_list = scan_applications()
+    main_start = time.time()
+
+    if DEBUG:
+        import datetime
+        debug_log(f"=== App Launcher Debug Log - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===")
+        debug_log(f"Log file: {DEBUG_LOG_FILE}")
+
+    # Log script startup timing (using captured timestamps)
+    debug_log(f"Script started at {_SCRIPT_START_TIME:.3f}", absolute_time=True)
+
+    imports_elapsed = (_IMPORTS_COMPLETE_TIME - _SCRIPT_START_TIME) * 1000
+    debug_log(f"Imports completed in {imports_elapsed:.1f}ms at {_IMPORTS_COMPLETE_TIME:.3f}", absolute_time=True)
+
+    main_elapsed = (main_start - _SCRIPT_START_TIME) * 1000
+    debug_log(f"main() entered {main_elapsed:.1f}ms after script start", absolute_time=True)
+
+    # Immediate output to overwrite "Running command" message
+    print("\033[2J\033[H", end="", flush=True)  # Clear screen immediately
+    debug_log("Screen cleared", absolute_time=True)
+
+    # Set terminal to raw mode (once for entire session)
+    fd = sys.stdin.fileno()
+    old_terminal_settings = termios.tcgetattr(fd)
+    tty.setraw(fd)
+    debug_log("Terminal set to raw mode")
+
+    # Load apps (from cache or scan)
+    apps_load_start = time.time()
+    apps_list = load_cached_apps()
+    if apps_list is None:
+        # No cache or stale cache - scan applications
+        apps_list = scan_applications()
+        # Save to cache in background
+        threading.Thread(target=save_apps_cache, args=(apps_list,), daemon=True).start()
+    else:
+        # Using cache - re-scan in background to refresh
+        def refresh_cache():
+            fresh_apps = scan_applications()
+            save_apps_cache(fresh_apps)
+        threading.Thread(target=refresh_cache, daemon=True).start()
+
+    # Sort by recency for initial view
+    apps_list = sort_apps_by_recency(apps_list)
     filtered_apps = apps_list
+
+    apps_load_elapsed = (time.time() - apps_load_start) * 1000
+    debug_log(f"Apps loaded in {apps_load_elapsed:.1f}ms", absolute_time=True)
 
     if not apps_list:
         print("No applications found")
@@ -267,20 +528,83 @@ def main():
     last_search_time = 0
     pending_filter = False
 
+    # Icon extraction state
+    icon_queue = queue.Queue()
+    extraction_thread = None
+    icons_rendered = 0
+    total_icons = 0
+    extraction_complete = False
+
     try:
-        # Initial render
+        # Initial render (labels only - FAST)
         render_grid_initial(selected_idx, search_query)
+
+        debug_log("UI rendered (user can interact)", absolute_time=True)
+        startup_elapsed = (time.time() - main_start) * 1000
+        debug_log(f"Startup complete: UI ready in {startup_elapsed:.1f}ms")
+
+        # Start icon extraction in background
+        max_apps = GRID_COLS * GRID_ROWS
+        visible_apps = filtered_apps[:max_apps]
+        total_icons = len(visible_apps)
+        extraction_thread = start_icon_extraction(visible_apps, icon_queue)
 
         # Event loop
         while True:
-            # Non-blocking input with timeout
-            ch = getch_nonblocking(timeout=0.05)
+            # Read input with timeout
+            ch = getch_nonblocking(timeout=0.01)
+
+            # Batch render icons (up to 3 at a time)
+            batch = []
+            batch_procs = []
+
+            try:
+                # Collect up to 3 icons from queue
+                for _ in range(3):
+                    item = icon_queue.get_nowait()
+                    if item is None:
+                        # Extraction complete (marker from worker thread)
+                        extraction_complete = True
+                        break
+                    batch.append(item)
+            except queue.Empty:
+                pass
+
+            # Render batch in parallel
+            if batch:
+                for idx, icon_path in batch:
+                    grid_row = idx // GRID_COLS
+                    grid_col = idx % GRID_COLS
+                    proc = render_icon(icon_path, grid_row, grid_col)
+                    if proc:
+                        batch_procs.append(proc)
+
+                # Wait for all renders in batch to complete
+                for proc in batch_procs:
+                    proc.wait()
+
+                icons_rendered += len(batch)
+
+                # Only log completion milestone
+                if icons_rendered == total_icons:
+                    total_elapsed = (time.time() - main_start) * 1000
+                    debug_log(f"All icons rendered: {icons_rendered}/{total_icons} (total: {total_elapsed:.1f}ms)")
 
             # Check if we need to apply pending filter
             if pending_filter and (time.time() - last_search_time) >= DEBOUNCE_DELAY:
                 filtered_apps = filter_apps(search_query)
                 selected_idx = 0
                 render_grid_initial(selected_idx, search_query)
+
+                # Restart icon extraction with new filtered list
+                icon_queue = queue.Queue()
+                max_apps = GRID_COLS * GRID_ROWS
+                visible_apps = filtered_apps[:max_apps]
+                total_icons = len(visible_apps)
+                icons_rendered = 0
+                extraction_complete = False
+                extraction_thread = start_icon_extraction(visible_apps, icon_queue)
+
                 pending_filter = False
                 continue
 
@@ -350,7 +674,11 @@ def main():
                 update_selection(old_idx, new_idx)
 
     finally:
-        # Cleanup
+        # Restore terminal to normal mode
+        if 'old_terminal_settings' in locals():
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_terminal_settings)
+
+        # Cleanup UI
         clear_images()
         clear_screen()
 

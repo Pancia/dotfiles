@@ -10,4 +10,10 @@ function fish_user_key_bindings
 
     # Ctrl+Z - fancy ctrl-z (fg or jobs, or push-line + clear-screen)
     bind \cz fancy_ctrl_z
+
+    # Override fzfm's ctrl-j binding with alt-j to avoid conflict with newline
+    bind \ej '__fzfm_search jump_frecent'
+    bind \e\cJ '__fzfm_search jump_frecent_aux'
+    # Unbind ctrl-j so it acts as normal newline
+    bind \cj execute
 end

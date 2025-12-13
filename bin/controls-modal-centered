@@ -4,8 +4,8 @@
 
 HS="/Users/anthony/Developer/bin/hs"
 
-# Open Ghostty with controls-modal
-open -na ghostty --args -e /Users/anthony/dotfiles/bin/controls-modal
+# Open Ghostty with controls-modal, passing through any arguments
+open -na ghostty --args -e /Users/anthony/dotfiles/bin/controls-modal "$@"
 
 # Wait for window to appear and be ready
 sleep 0.6

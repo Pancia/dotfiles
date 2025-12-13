@@ -108,7 +108,7 @@ Context:
         return {
             key: value
             for key, value in self.config.items()
-            if key not in special_keys
+            if key not in special_keys and not key.startswith('_')
         }
 
     @staticmethod
@@ -151,14 +151,19 @@ class WindowQuery:
             return None
 
     @staticmethod
-    def find_window_by_app(app_name: str, max_retries: int = 10, delay: float = 0.5) -> Optional[int]:
+    def find_window_by_app(app_name: str, max_retries: int = 10, delay: float = 0.5, debug: bool = False) -> Optional[int]:
         """Find window ID for an app, with retries."""
         for attempt in range(max_retries):
             windows = WindowQuery.run_yabai(['query', '--windows'])
             if windows:
-                for window in windows:
-                    if window.get('app') == app_name:
-                        return window.get('id')
+                matching_windows = [w for w in windows if w.get('app') == app_name]
+                if debug and matching_windows:
+                    print(f"  Debug - Found {len(matching_windows)} window(s) for {app_name}:")
+                    for w in matching_windows:
+                        print(f"    ID: {w.get('id')}, title: {w.get('title')}, space: {w.get('space')}")
+
+                if matching_windows:
+                    return matching_windows[0].get('id')
             if attempt < max_retries - 1:
                 time.sleep(delay)
 
@@ -219,11 +224,42 @@ class YabaiManager:
             return
 
         # Find window
-        window_id = WindowQuery.find_window_by_app(app_name)
+        debug = window_config.get('debug', False)
+        window_id = WindowQuery.find_window_by_app(app_name, debug=debug)
         if not window_id:
             return
 
+        # Debug: Test if window is immediately queryable
+        if debug:
+            print(f"  Debug - Testing immediate query for window {window_id}...")
+            test_info = WindowQuery.run_yabai(['query', '--windows', '--window', str(window_id)])
+            if test_info:
+                print(f"    ✓ Window is queryable immediately")
+            else:
+                print(f"    ✗ Window query failed immediately!")
+
+        # Add delay before positioning if configured
+        position_delay = window_config.get('position_delay', 0)
+        if position_delay > 0:
+            print(f"Waiting {position_delay}s before positioning {app_name}...")
+            time.sleep(position_delay)
+
         print(f"Positioning {app_name} (window id: {window_id})")
+
+        # Debug: Query window properties after delay
+        if debug:
+            print(f"  Debug - Testing query after delay...")
+            window_info = WindowQuery.run_yabai(['query', '--windows', '--window', str(window_id)])
+            if window_info:
+                print(f"    ✓ Window is queryable after delay")
+                print(f"    Properties:")
+                print(f"      is-visible: {window_info.get('is-visible')}")
+                print(f"      is-floating: {window_info.get('is-floating')}")
+                print(f"      is-sticky: {window_info.get('is-sticky')}")
+                print(f"      has-focus: {window_info.get('has-focus')}")
+                print(f"      title: '{window_info.get('title')}'")
+            else:
+                print(f"    ✗ Window query still fails after delay!")
 
         # Step 1: Grid positioning
         grid = None
@@ -237,7 +273,7 @@ class YabaiManager:
 
         if grid:
             print(f"  Grid: {grid}")
-            self._run_yabai(['window', str(window_id), '--grid', grid])
+            self._run_yabai_with_retry(['window', str(window_id), '--grid', grid])
 
         # Step 2: Resize operations
         resize_ops = window_config.get('resize', [])
@@ -340,9 +376,36 @@ class YabaiManager:
             if e.stderr:
                 print(f"  Error: {e.stderr.strip()}")
 
+    @staticmethod
+    def _run_yabai_with_retry(args: list[str], max_retries: int = 3, delay: float = 0.5):
+        """Run a yabai command with retries."""
+        for attempt in range(max_retries):
+            try:
+                subprocess.run(
+                    ['yabai', '-m'] + args,
+                    check=True,
+                    capture_output=True,
+                    text=True
+                )
+                return  # Success
+            except subprocess.CalledProcessError as e:
+                if attempt < max_retries - 1:
+                    time.sleep(delay)
+                else:
+                    print(f"Warning: yabai command failed after {max_retries} attempts: {args}")
+                    if e.stderr:
+                        print(f"  Error: {e.stderr.strip()}")
+
 
 class SpaceSwitcher:
-    """Handle space switching via VPC server."""
+    """Handle space switching via AppleScript."""
+
+    # macOS key codes for desktop spaces 1-9
+    # Source: https://eastmanreference.com/complete-list-of-applescript-key-codes
+    SPACE_KEY_CODES = {
+        1: 18, 2: 19, 3: 20, 4: 21, 5: 23,
+        6: 22, 7: 26, 8: 28, 9: 25
+    }
 
     def __init__(self, config: VPCConfig):
         self.config = config
@@ -351,24 +414,55 @@ class SpaceSwitcher:
         """Switch to the specified space."""
         space = self.config.get('space')
 
+        # Debug: Show current space
+        try:
+            result = subprocess.run(
+                ['yabai', '-m', 'query', '--spaces', '--space'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            space_info = json.loads(result.stdout)
+            current_space_num = space_info.get('index')
+            print(f"Current space: {current_space_num}")
+        except:
+            pass
+
         # Only switch if space is specified and not "current"
         if space and space != 'null' and space != 'current':
             print(f"Switching to space: {space}")
+
+            # Try to convert to integer
             try:
+                space_num = int(space)
+                if space_num not in self.SPACE_KEY_CODES:
+                    print(f"ERROR: Invalid space number {space_num}. Must be 1-9.")
+                    sys.exit(1)
+
+                # Get the key code for this space
+                key_code = self.SPACE_KEY_CODES[space_num]
+
+                # Execute AppleScript to switch spaces
+                applescript = f'''tell application "System Events"
+    key code {key_code} using {{control down, option down, command down}}
+end tell'''
+
                 result = subprocess.run(
-                    ['curl', '-X', 'POST', f'http://localhost:31415/vpc/{space}'],
+                    ['osascript', '-e', applescript],
                     capture_output=True,
                     text=True,
-                    check=True,
-                    timeout=5
+                    check=True
                 )
-                print(f"  Response: {result.stdout.strip()}")
-            except subprocess.CalledProcessError:
-                print("ERROR: Failed to connect to VPC server")
-                sys.exit(404)
-            except subprocess.TimeoutExpired:
-                print("ERROR: VPC server timeout")
-                sys.exit(404)
+                print(f"  Switched to space {space_num}")
+
+            except ValueError:
+                print(f"ERROR: Invalid space value '{space}'. Must be a number 1-9.")
+                sys.exit(1)
+            except subprocess.CalledProcessError as e:
+                print(f"ERROR: Failed to switch space: {e}")
+                if e.stderr:
+                    print(f"  {e.stderr.strip()}")
+                sys.exit(1)
         else:
             print("Using current space (no switch)")
 
@@ -398,10 +492,14 @@ class AppLauncher:
         # Detect app type and call appropriate launcher
         if app_name == 'iTerm2':
             self.launch_iterm(config)
+        elif app_name == 'kitty':
+            self.launch_kitty(config)
         elif app_name == 'Google Chrome':
             self.launch_chrome(config)
         elif app_name == 'Brave Browser':
             self.launch_brave(config)
+        elif app_name == 'qutebrowser':
+            self.launch_qutebrowser(config)
         elif app_name == 'CotEditor':
             self.launch_coteditor(config)
         else:
@@ -428,6 +526,27 @@ class AppLauncher:
             self.yabai.position_window('iTerm2', config)
         except subprocess.CalledProcessError as e:
             print(f"  Warning: iTerm launch failed: {e}")
+
+    def launch_kitty(self, config: dict):
+        """Launch Kitty with configured tabs."""
+        print("Launching Kitty...")
+
+        term_dir = json.dumps(self.config.expand_path(config.get('dir', '')))
+        term_tabs = json.dumps(config.get('tabs', []))
+
+        kitty_script = Path.home() / 'dotfiles' / 'bin' / 'kitty.py'
+
+        try:
+            subprocess.run(
+                [str(kitty_script), term_dir, term_tabs],
+                check=True
+            )
+            print("  Kitty done")
+
+            # Position with yabai
+            self.yabai.position_window('kitty', config)
+        except subprocess.CalledProcessError as e:
+            print(f"  Warning: Kitty launch failed: {e}")
 
     def launch_chrome(self, config: dict):
         """Launch Chrome with a new window and tabs via AppleScript."""
@@ -462,6 +581,67 @@ class AppLauncher:
 
         # Position with yabai
         self.yabai.position_window('Brave Browser', config)
+
+    def launch_qutebrowser(self, config: dict):
+        """Launch qutebrowser with URLs via IPC."""
+        print("Launching qutebrowser...")
+        urls = config.get('urls', [])
+
+        if not urls:
+            return
+
+        print(f"  Opening {len(urls)} URL(s)")
+
+        try:
+            # Step 1: Check if qutebrowser is already running
+            result = subprocess.run(
+                ['pgrep', '-x', 'qutebrowser'],
+                capture_output=True
+            )
+            is_running = result.returncode == 0
+
+            close_first_tab = False
+            if not is_running:
+                # Launch qutebrowser first without URLs to avoid the multi-tab issue
+                print("  Launching qutebrowser...")
+                subprocess.run(['open', '-a', 'qutebrowser'])
+                # Give it time to start
+                time.sleep(2)
+                # Mark that we should close the default tab later
+                close_first_tab = True
+
+            # Step 2: Send URLs via IPC using --target
+            # This works reliably when there's already a running instance
+            target = config.get('target', 'tab')  # tab, tab-bg, window, private-window
+            for url in urls:
+                print(f"  Opening {url}")
+                subprocess.run(
+                    ['qutebrowser', '--target', target, url],
+                    capture_output=True,
+                    check=True
+                )
+
+            # Step 3: Close the default tab if we just launched qutebrowser
+            if close_first_tab:
+                print("  Closing default tab...")
+                # Focus first tab and close it
+                subprocess.run(
+                    ['qutebrowser', ':tab-focus 1'],
+                    capture_output=True
+                )
+                subprocess.run(
+                    ['qutebrowser', ':tab-close'],
+                    capture_output=True
+                )
+
+            print("  qutebrowser done")
+
+            # Position with yabai
+            self.yabai.position_window('qutebrowser', config)
+        except subprocess.CalledProcessError as e:
+            print(f"  Warning: qutebrowser launch failed: {e}")
+        except FileNotFoundError:
+            print("  Warning: qutebrowser not found in PATH")
 
     def launch_generic(self, app_name: str, config: dict):
         """Launch a generic application."""

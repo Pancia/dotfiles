@@ -1,5 +1,5 @@
 function _gitignore_to_regex --description 'Convert gitignore to regex'
-    cat .gitignore .ignore ~/.ignore ~/dotfiles/git/gitignore_global 2> /dev/null; or echo ''
+    cat .gitignore .ignore ~/.ignore ~/dotfiles/git/gitignore_global 2> /dev/null; or echo '' \
     | sed '/^[#;"]/d' \
     | sed 's#^/##' \
     | tr '\n' '|' \
