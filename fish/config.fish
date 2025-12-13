@@ -137,6 +137,9 @@ alias gshow 'git show --color-words'
 alias gstash 'git stash'
 alias gsw 'git checkout'
 
+# Abbreviations
+abbr -a cc claude
+
 # Error messages for dangerous operations
 alias gp 'echo "ERROR: USE: vim git fuGITive (whichkey plugin)"; false'
 alias gpf 'echo "ERROR: USE: vim git fuGITive (whichkey plugin)"; false'

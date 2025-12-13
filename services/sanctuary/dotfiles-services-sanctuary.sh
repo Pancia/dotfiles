@@ -1,1 +1,1 @@
-~/dotfiles/bin/service-wrapper ~/projects/sanctuary/ ./sanctuary.swift
+~/dotfiles/bin/service-wrapper ~/dotfiles/services/sanctuary/ ./sanctuary.swift

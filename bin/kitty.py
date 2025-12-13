@@ -40,28 +40,64 @@ try:
     # Track if we just launched Kitty (will need to close default window)
     close_default_window = not is_running
 
-    # Create new OS window with first tab/command
-    print(f"[kitty.py/debug]: Creating window with first tab: {tabs[0]}")
-    subprocess.run([
-        'kitty', '@', '--to', socket_path, 'launch',
-        '--type=os-window',
-        '--cwd', directory,
-        '--title', 'VPC Workspace',
-        'sh', '-c', f'cd {directory} && {tabs[0]}'
-    ], check=True)
+    def create_tab(tab_data, is_first_tab=False):
+        """Create a tab with optional splits.
 
-    # Wait a moment for the window to be created
+        Args:
+            tab_data: Either a string (single pane) or list of strings (split panes)
+            is_first_tab: If True, create as os-window, else as tab
+        """
+        # Normalize to list
+        commands = [tab_data] if isinstance(tab_data, str) else tab_data
+
+        if len(commands) == 1:
+            # Simple single-pane tab
+            print(f"[kitty.py/debug]: Creating tab: {commands[0]}")
+            subprocess.run([
+                'kitty', '@', '--to', socket_path, 'launch',
+                '--type=os-window' if is_first_tab else '--type=tab',
+                '--cwd', directory,
+                '--title', 'VPC Workspace' if is_first_tab else '',
+                'sh', '-c', f'cd {directory} && {commands[0]}'
+            ], check=True)
+        else:
+            # Tab with vertical splits
+            print(f"[kitty.py/debug]: Creating tab with {len(commands)} vertical splits")
+
+            # Create tab with first pane
+            print(f"[kitty.py/debug]:   Pane 1: {commands[0]}")
+            subprocess.run([
+                'kitty', '@', '--to', socket_path, 'launch',
+                '--type=os-window' if is_first_tab else '--type=tab',
+                '--cwd', directory,
+                '--title', 'VPC Workspace' if is_first_tab else '',
+                'sh', '-c', f'cd {directory} && {commands[0]}'
+            ], check=True)
+            time.sleep(0.2)
+
+            # Switch to splits layout
+            subprocess.run([
+                'kitty', '@', '--to', socket_path, 'goto-layout', 'splits'
+            ], check=True)
+
+            # Create additional panes as vertical splits
+            for i, cmd in enumerate(commands[1:], start=2):
+                print(f"[kitty.py/debug]:   Pane {i}: {cmd}")
+                subprocess.run([
+                    'kitty', '@', '--to', socket_path, 'launch',
+                    '--type=window',
+                    '--cwd', directory,
+                    'sh', '-c', f'cd {directory} && {cmd}'
+                ], check=True)
+                time.sleep(0.2)
+
+    # Create first tab
+    create_tab(tabs[0], is_first_tab=True)
     time.sleep(0.3)
 
     # Create additional tabs
-    for i, tab_cmd in enumerate(tabs[1:], start=2):
-        print(f"[kitty.py/debug]: Creating tab {i}: {tab_cmd}")
-        subprocess.run([
-            'kitty', '@', '--to', socket_path, 'launch',
-            '--type=tab',
-            '--cwd', directory,
-            'sh', '-c', f'cd {directory} && {tab_cmd}'
-        ], check=True)
+    for i, tab_data in enumerate(tabs[1:], start=2):
+        create_tab(tab_data, is_first_tab=False)
         time.sleep(0.3)
 
     # Close the default window if we just launched Kitty

@@ -5,10 +5,11 @@
 HS="/Users/anthony/Developer/bin/hs"
 
 # Open Ghostty with controls-modal, passing through any arguments
-open -na ghostty --args -e /Users/anthony/dotfiles/bin/controls-modal "$@"
+# Set window size to 80 columns x 32 rows
+open -na ghostty --args --window-width=80 --window-height=32 -e /Users/anthony/dotfiles/bin/controls-modal "$@"
 
 # Wait for window to appear and be ready
 sleep 0.6
 
-# Center the focused window using Hammerspoon
+# Center the window using Hammerspoon
 "$HS" -c 'local win = hs.window.focusedWindow(); if win then win:centerOnScreen() end' 2>/dev/null
