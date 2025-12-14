@@ -1,16 +1,8 @@
-{"__dotfiles_rcs": "<[Library/Application Support/Claude]>",
-    "mcpServers": {
-        "clojure-mcp": {
-            "command": "/opt/homebrew/bin/zsh",
-            "args": [
-                "-c",
-                "clojure -X:local/mcp :port 7888 | tee -a ~/.log/claude-clojure-mcp-stdout.log"
-            ]
-        }
-    },
-    "preferences": {
-        "quickEntryShortcut": {
-            "accelerator": "Alt+Cmd+Space"
-        }
+{
+  "mcpServers": {},
+  "preferences": {
+    "quickEntryShortcut": {
+      "accelerator": "Alt+Cmd+Space"
     }
+  }
 }

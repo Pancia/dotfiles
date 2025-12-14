@@ -137,13 +137,13 @@ alias gshow 'git show --color-words'
 alias gstash 'git stash'
 alias gsw 'git checkout'
 
-# Abbreviations
-abbr -a cc claude
-
 # Error messages for dangerous operations
 alias gp 'echo "ERROR: USE: vim git fuGITive (whichkey plugin)"; false'
 alias gpf 'echo "ERROR: USE: vim git fuGITive (whichkey plugin)"; false'
 alias gpl 'echo "ERROR: USE: vim git fuGITive (whichkey plugin)"; false'
+
+# Abbreviations
+abbr -a cc claude
 
 # Key bindings
 if status is-interactive
@@ -151,6 +151,5 @@ if status is-interactive
     bind \cl clear_keep_prompt
 
     echo "Remember to try out:"
-    echo "scooter (find&replace), yazi(tui file manager), lazygit, v, d"
-    echo "ghostty and kitty (for images in terminal / hermes app search)"
+    echo "scooter (find&replace), yazi(tui file manager), lazygit, v(FIXME)"
 end
