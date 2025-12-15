@@ -15,6 +15,7 @@ function fzfm_leader
     echo
     echo (set_color --bold cyan)"fzfm:"(set_color normal)
     echo "  "(set_color green)"Space"(set_color normal)" - Search files "(set_color --bold)"(default)"(set_color normal)
+    echo "  "(set_color green)"j"(set_color normal)" - "(set_color --bold)"J"(set_color normal)"ump to directory"
     echo "  "(set_color green)"s"(set_color normal)" - "(set_color --bold)"S"(set_color normal)"earch files"
     echo "  "(set_color green)"f"(set_color normal)" - Search all "(set_color --bold)"f"(set_color normal)"iles"
     echo "  "(set_color green)"r"(set_color normal)" - "(set_color --bold)"R"(set_color normal)"ecent/frequent files"
@@ -36,6 +37,9 @@ function fzfm_leader
         case ' '
             # Space - default file search
             __fzfm_search all
+        case j J
+            # Jump to directory
+            __fzfm_search jump_frecent
         case s S
             # Search files
             __fzfm_search all

@@ -12,10 +12,10 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# Start wget_server using venv Python directly (no activation needed)
+# Start wget_server using uv
 echo "$(date): Starting wget_server..."
 cd "$WGET_SERVER_DIR"
-venv/bin/python wget_server.py &
+uv run python wget_server.py &
 WGET_PID=$!
 echo "$(date): wget_server started (PID: $WGET_PID)"
 

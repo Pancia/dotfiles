@@ -36,6 +36,7 @@ Hammerspoon modules in `lib/lua/seeds/` follow a standard interface:
 - `start(config)` - Initialize the seed
 - `stop()` - Clean up resources
 - `engage()` wrapper provides error handling via pcall
+- **Never call `hs.reload()` programmatically** - ask the user to reload with `Cmd+Ctrl+R`
 
 ### Auto-Loading (Fish)
 - `conf.d/*.fish` - Sourced on shell startup

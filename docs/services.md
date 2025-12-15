@@ -114,8 +114,8 @@ Command-line utilities for system automation and workflow management. Total: 47 
 | Script | Purpose |
 |--------|---------|
 | **app-launcher** | Application switching with fuzzy matching and multi-mode support |
-| **controls-modal** | UI modal system for macOS with keyboard-driven controls |
-| **controls-modal-centered** | Centered variant of controls modal |
+| **hermes** | UI modal system for macOS with keyboard-driven controls |
+| **hermes-centered** | Centered variant of hermes |
 | **current-space** | Space/desktop management and querying |
 
 ### Terminal Management
@@ -199,7 +199,7 @@ dotfiles/
 │
 └── bin/
     ├── app-launcher
-    ├── controls-modal
+    ├── hermes
     ├── iterm.py
     ├── kitty.py
     ├── music

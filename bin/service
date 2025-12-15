@@ -153,8 +153,11 @@ class ServiceCMDS
   def self.log(opts)
     opts.info = "Show the logs for a service."
     lambda { |name|
+      return puts "Usage: service log <name>" unless name
+      full_name = normalize_service_name(name)
+      short = short_name(full_name)
       # Become that process, so we can  to stop +F paging & look around with less
-      Kernel.exec("command less +GF #{log_for(name)}")
+      Kernel.exec("command less +GF #{log_for(short)}")
     }
   end
   def self.create(opts)

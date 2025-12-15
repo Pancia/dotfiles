@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
-# Launch controls-modal in a centered Ghostty window
+# Launch hermes in a centered Ghostty window
 
 HS="/Users/anthony/Developer/bin/hs"
 
-# Open Ghostty with controls-modal, passing through any arguments
+# Open Ghostty with hermes, passing through any arguments
 # Set window size to 80 columns x 32 rows
-open -na ghostty --args --window-width=80 --window-height=32 -e /Users/anthony/dotfiles/bin/controls-modal "$@"
+open -na ghostty --args --window-width=80 --window-height=32 -e /Users/anthony/dotfiles/bin/hermes "$@"
 
 # Wait for window to appear and be ready
 sleep 0.6

@@ -52,7 +52,7 @@ def debug_log(msg, absolute_time=False):
 
     if DEBUG:
         if absolute_time:
-            # Use absolute timestamp (matches controls-modal format)
+            # Use absolute timestamp (matches hermes format)
             log_line = f"[{time.time():.3f}] {msg}\n"
         else:
             # Use relative timestamp

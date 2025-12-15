@@ -1,0 +1,24 @@
+#<[.config/pymodoro/config.yaml]>
+hooks:
+  app_start:
+    - command: "echo \"[$(date '+%H:%M:%S')] App started: $PYMODORO_LABEL\" >> ~/.log/pymodoro.log"
+      blocking: true
+  app_stop:
+    - command: "echo \"[$(date '+%H:%M:%S')] App stopped: $PYMODORO_LABEL\" >> ~/.log/pymodoro.log"
+      blocking: true
+  work_start:
+    - command: "echo \"[$(date '+%H:%M:%S')] Work session started: $PYMODORO_LABEL\" >> ~/.log/pymodoro.log"
+      blocking: false
+  work_end:
+    - command: "echo \"[$(date '+%H:%M:%S')] Work session ended: $PYMODORO_LABEL\" >> ~/.log/pymodoro.log"
+      blocking: false
+    - command: "hs -c 'pomodoroNotify(\"✅ Work Complete\", \"$PYMODORO_LABEL - Time for a break!\")'"
+      blocking: false
+  break_start:
+    - command: "echo \"[$(date '+%H:%M:%S')] Break started: $PYMODORO_LABEL\" >> ~/.log/pymodoro.log"
+      blocking: false
+  break_end:
+    - command: "echo \"[$(date '+%H:%M:%S')] Break ended: $PYMODORO_LABEL\" >> ~/.log/pymodoro.log"
+      blocking: false
+    - command: "hs -c 'pomodoroNotify(\"⏰ Break Over\", \"$PYMODORO_LABEL - Back to work!\")'"
+      blocking: false

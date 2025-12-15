@@ -42,8 +42,6 @@ end
 
 local monitor = engage("seeds.monitor", {})
 
-local hermes = engage("seeds.hermes", {})
-
 local cmus = engage("seeds.cmus", {})
 
 local snippets = engage("seeds.snippets", {})
@@ -142,6 +140,8 @@ local watch = engage("seeds.watch.init", {
   }
 })
 
+local sanctuary = engage("seeds.sanctuary", {})
+
 local function is_reloading()
   local reload_flag = "/tmp/hs_reloading"
   local file = io.open(reload_flag, "r")
@@ -159,6 +159,7 @@ if watch then seeds.watch = watch end
 if monitor then seeds.monitor = monitor end
 if snippets then seeds.snippets = snippets end
 if calendar then seeds.calendar = calendar end
+if sanctuary then seeds.sanctuary = sanctuary end
 
 local hs_global_modifier = {"cmd", "ctrl"}
 
@@ -172,6 +173,8 @@ hs.hotkey.bindSpec({hs_global_modifier, "r"}, function()
     file:close()
   end
 
+  hs.alert.show("⟳ Reloading...", 1)
+
   for name, seed in pairs(seeds) do
     if seed.stop then
       ok, err = pcall(function() seed.stop() end)
@@ -180,8 +183,16 @@ hs.hotkey.bindSpec({hs_global_modifier, "r"}, function()
       end
     end
   end
-  hs.reload()
+
+  hs.timer.doAfter(0.3, function()
+    hs.reload()
+  end)
 end)
+
+-- Show reload complete notification
+if is_reloading() then
+  hs.alert.show("✓ Hammerspoon reloaded", 1.5)
+end
 
 function myNotify(path)
     hs.notify.new(function(note)
@@ -190,5 +201,81 @@ function myNotify(path)
         title = 'title',
         informativeText = 'Click me!',
         withdrawAfter = 0
+    }):send()
+end
+
+-- Sanctuary notification - opens VPC when clicked
+local sanctuaryNotification = nil
+
+function sanctuaryNotify()
+    -- Withdraw any existing notification first
+    if sanctuaryNotification then
+        sanctuaryNotification:withdraw()
+        sanctuaryNotification = nil
+    end
+
+    sanctuaryNotification = hs.notify.new(function(notification)
+        sanctuaryNotification = nil
+        hs.task.new("/usr/bin/open", nil, {"/Users/anthony/dotfiles/vpc/sanctuary.vpc"}):start()
+    end, {
+        title = "Sanctuary",
+        informativeText = "Kitty is not running. Click to open workspace.",
+        withdrawAfter = 0,
+        hasActionButton = true,
+        actionButtonTitle = "Open VPC",
+        soundName = "default"
+    })
+    sanctuaryNotification:send()
+end
+
+-- Pymodoro notification with continuous sound until dismissed
+local pomodoroSound = nil
+local pomodoroSoundTimer = nil
+
+function pomodoroNotify(title, message, soundPath)
+    -- Stop any existing sound/timer
+    if pomodoroSoundTimer then
+        pomodoroSoundTimer:stop()
+        pomodoroSoundTimer = nil
+    end
+    if pomodoroSound then
+        pomodoroSound:stop()
+        pomodoroSound = nil
+    end
+
+    -- Default sound if not specified
+    soundPath = soundPath or "/System/Library/Sounds/Glass.aiff"
+
+    -- Load and play sound
+    pomodoroSound = hs.sound.getByFile(soundPath)
+    if pomodoroSound then
+        pomodoroSound:play()
+        -- Set up timer to loop the sound
+        pomodoroSoundTimer = hs.timer.doEvery(pomodoroSound:duration() + 0.5, function()
+            if pomodoroSound then
+                pomodoroSound:play()
+            end
+        end)
+    end
+
+    -- Create notification with callback
+    hs.notify.new(function(notification)
+        -- Stop sound when notification is clicked or dismissed
+        if pomodoroSoundTimer then
+            pomodoroSoundTimer:stop()
+            pomodoroSoundTimer = nil
+        end
+        if pomodoroSound then
+            pomodoroSound:stop()
+            pomodoroSound = nil
+        end
+        -- Activate Kitty
+        hs.application.launchOrFocus("kitty")
+    end, {
+        title = title or "Pymodoro",
+        informativeText = message or "",
+        withdrawAfter = 0,
+        hasActionButton = true,
+        actionButtonTitle = "Go to Kitty"
     }):send()
 end

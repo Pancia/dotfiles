@@ -1,0 +1,4 @@
+#!/usr/bin/env fish
+# agenda - Show upcoming calendar events
+set script_dir (dirname (status filename))
+swift "$script_dir/../sanctuary/calendar.swift" $argv

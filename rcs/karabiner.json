@@ -167,14 +167,14 @@
                         ]
                     },
                     {
-                        "description": "eject -> controls-modal",
+                        "description": "eject -> finder (current space)",
                         "manipulators": [
                             {
                                 "from": {
                                     "key_code": "eject"
                                 },
                                 "to": {
-                                    "shell_command": "osascript <<EOF\ntell application \"iterm2\"\ncreate window with default profile command \"~/dotfiles/bin/controls-modal\"\nend tell\nEOF"
+                                    "shell_command": "/Users/anthony/dotfiles/bin/finder-here"
                                 },
                                 "type": "basic"
                             }
@@ -201,7 +201,7 @@
                         ]
                     },
                     {
-                        "description": "ctrl-cmd-space -> controls-modal (ghostty centered)",
+                        "description": "ctrl-cmd-space -> hermes (ghostty centered)",
                         "manipulators": [
                             {
                                 "from": {
@@ -214,14 +214,14 @@
                                     }
                                 },
                                 "to": {
-                                    "shell_command": "/Users/anthony/dotfiles/bin/controls-modal-centered"
+                                    "shell_command": "/Users/anthony/dotfiles/bin/hermes-centered"
                                 },
                                 "type": "basic"
                             }
                         ]
                     },
                     {
-                        "description": "cmd-space -> controls-modal (ghostty centered, app mode)",
+                        "description": "cmd-space -> hermes (ghostty centered, app mode)",
                         "manipulators": [
                             {
                                 "from": {
@@ -233,7 +233,7 @@
                                     }
                                 },
                                 "to": {
-                                    "shell_command": "/Users/anthony/dotfiles/bin/controls-modal-centered apps"
+                                    "shell_command": "/Users/anthony/dotfiles/bin/hermes-centered apps"
                                 },
                                 "type": "basic"
                             }

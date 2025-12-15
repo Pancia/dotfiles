@@ -1,0 +1,25 @@
+#!/bin/sh
+DIR_PATH="${1:-}"
+/Applications/Hammerspoon.app/Contents/Resources/extensions/hs/ipc/bin/hs -c "
+local s = hs.mouse.getCurrentScreen()
+local dirPath = '$DIR_PATH'
+if dirPath ~= '' then
+    hs.execute('open -a Finder \"' .. dirPath .. '\"')
+else
+    hs.application.launchOrFocus('Finder')
+end
+hs.timer.doAfter(0.1, function()
+    local w = hs.application.get('Finder'):focusedWindow()
+    if w then
+        w:moveToScreen(s)
+        local f = s:frame()
+        local width, height = 1400, 680
+        w:setFrame({
+            x = f.x + (f.w - width) / 2,
+            y = f.y + (f.h - height) / 2,
+            w = width,
+            h = height
+        })
+    end
+end)
+"

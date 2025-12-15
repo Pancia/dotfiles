@@ -10,13 +10,13 @@
             ]
         }
     },
-    "qutebrowser": {
+    "_qutebrowser": {
         "area": "browser",
         "urls": ["https://example.com"]
     },
     "kitty": {
         "area": "main",
-        "dir": "$HOME/sanctuary",
+        "dir": "$HOME/dotfiles/sanctuary",
         "tabs": [
             ["fish main.fish", "fish timer.fish"]
         ]

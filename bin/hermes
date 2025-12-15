@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 
 # Debug logging
-DEBUG_LOG_FILE = Path.home() / ".cache" / "controls-modal" / "debug.log"
+DEBUG_LOG_FILE = Path.home() / ".cache" / "hermes" / "debug.log"
 _log_initialized = False
 
 def debug_log(msg):
@@ -82,7 +82,7 @@ def build_vpc_menu():
     if not vpc_files:
         return {
             '_desc': 'VPC Workspaces',
-            'x': ('No VPC files found', 'echo "No .vpc files found in ~/dotfiles/vpc/"')
+            'x': ['No VPC files found', 'echo "No .vpc files found in ~/dotfiles/vpc/"']
         }
 
     # Create a mapping of vpc_name -> vpc_path
@@ -99,7 +99,7 @@ def build_vpc_menu():
     for key, vpc_name in VPC_STATIC_MAP.items():
         if vpc_name in vpc_map:
             vpc_path = vpc_map[vpc_name]
-            menu[key] = (vpc_name, f"open '{vpc_path}'")
+            menu[key] = [vpc_name, f"open '{vpc_path}'"]
             assigned_vpcs.add(vpc_name)
             debug_log(f"Static assignment: {key} -> {vpc_name}")
 
@@ -154,7 +154,7 @@ def assign_vpc_keys(menu, vpc_names, vpc_map, depth=0):
             # Single VPC, assign directly (no metadata, just name)
             vpc_name = vpcs[0]
             vpc_path = vpc_map[vpc_name]
-            menu[char] = (vpc_name, f"open '{vpc_path}'")
+            menu[char] = [vpc_name, f"open '{vpc_path}'"]
             debug_log(f"Dynamic assignment: {char} -> {vpc_name}")
         else:
             # Multiple VPCs with same character, create nested menu
@@ -169,32 +169,26 @@ def assign_vpc_keys(menu, vpc_names, vpc_map, depth=0):
 
     return menu
 
-commands = {
-        'c': ('CAT', 'echo cat'),
-        'a': ('App Launcher', ['/Users/anthony/dotfiles/bin/app-launcher']),
-        'y': {
-            '_desc': 'ytdl',
-            'i': ("ytdl interactive", 'ytdl'),
-            'y': ("ytdl clipboard", 'ytdl clipboard'),
-            },
-        'm': {
-            '_desc': 'music',
-            'c': ("Play or Pause", 'cmus-remote --pause'),
-            'e': ("Edit Track", 'cmedit'),
-            'y': ("Redownload from Youtube", 'cmytdl'),
-            'a': ("Open Track in Audacity", 'cmaudacity'),
-            's': ("Select Track by Playlist", 'cmselect'),
-            't': ("Select Track by Tags", 'cmselect --filter-by-tags'),
-            'n': ("Next Track", 'cmus-remote --next'),
-            'p': ("Prev Track", 'cmus-remote --prev'),
-            'l': ("Seek 10 Forwards", 'cmus-remote --seek +10'),
-            'h': ("Seek 10 Backwards", 'cmus-remote --seek -10'),
-            '.': ("Seek 30 Forwards", 'cmus-remote --seek +30'),
-            ',': ("Seek 30 Backwards", 'cmus-remote --seek -30'),
-            'j': ("Volume Down", 'cmus-remote --volume -5'),
-            'k': ("Volume Up", 'cmus-remote --volume +5')
-            }
-        }
+COMMANDS_FILE = Path.home() / ".config" / "hermes" / "commands.json"
+
+def load_commands():
+    """Load commands from JSON config file"""
+    if not COMMANDS_FILE.exists():
+        debug_log(f"Commands file not found: {COMMANDS_FILE}")
+        return {}
+    try:
+        import json
+        with open(COMMANDS_FILE, 'r') as f:
+            data = json.load(f)
+        # Remove rc metadata key
+        data.pop('__rc_loc', None)
+        debug_log(f"Loaded {len(data)} commands from {COMMANDS_FILE}")
+        return data
+    except Exception as e:
+        debug_log(f"Error loading commands: {e}")
+        return {}
+
+commands = load_commands()
 
 import sys, tty, termios
 def getch():
@@ -218,20 +212,60 @@ def print_commands(commands_list, command_history):
     for shortcut, content in commands_list.items():
         if shortcut[0] == '_':
             pass
-        elif isinstance(content, tuple):
+        elif isinstance(content, list):
             (description, command) = content
+            # Resolve any dynamic content in the description
+            display_title = resolve_dynamic_title(description)
             # Regular command - cyan hotkey, white label
-            print(f"{BOLD_CYAN}[{shortcut}]{RESET} {BOLD_WHITE}{description}{RESET}")
+            print(f"{BOLD_CYAN}[{shortcut}]{RESET} {BOLD_WHITE}{display_title}{RESET}")
         else:
             # Submenu - yellow hotkey with arrow before label
             description = content["_desc"]
-            print(f"{BOLD_YELLOW}[{shortcut}]{RESET} {YELLOW}→ {description}{RESET}")
+            display_title = resolve_dynamic_title(description)
+            print(f"{BOLD_YELLOW}[{shortcut}]{RESET} {YELLOW}→ {display_title}{RESET}")
 
     if command_history:
         print(f"\n{DIM_GRAY}<DEL> - Go back up a level{RESET}")
     print(f"{DIM_GRAY}<ESC> <Ctrl-C> <Ctrl-D> - EXIT{RESET}")
 
 import subprocess
+import re
+
+def resolve_dynamic_title(title):
+    """
+    Resolve dynamic parts in a title string.
+    Supports $(command) syntax for shell command substitution.
+
+    Examples:
+        "Current time: $(date +%H:%M)" -> "Current time: 14:30"
+        "$(date +%A)" -> "Saturday"
+    """
+    if '$(' not in title:
+        return title
+
+    def replace_command(match):
+        cmd = match.group(1)
+        try:
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=1,
+                executable='/bin/sh'
+            )
+            return result.stdout.strip() if result.returncode == 0 else f"[{cmd}]"
+        except subprocess.TimeoutExpired:
+            debug_log(f"Dynamic title command timed out: {cmd}")
+            return f"[timeout]"
+        except Exception as e:
+            debug_log(f"Dynamic title error for '{cmd}': {e}")
+            return f"[error]"
+
+    # Match $(command) patterns, handling nested parentheses
+    pattern = r'\$\(([^)]+)\)'
+    return re.sub(pattern, replace_command, title)
+
 def execute_command(command):
     """
     Execute a command and return whether to quit the modal.
@@ -295,7 +329,7 @@ def main():
         if arg == 'apps' and 'a' in current_commands:
             # Auto-execute app launcher
             action = current_commands['a']
-            if isinstance(action, tuple):
+            if isinstance(action, list):
                 command = action[1]
                 # If command is a list, extend it with the 'apps' argument
                 if isinstance(command, list):
@@ -312,7 +346,7 @@ def main():
         print(f"Command {user_input} {user_input.encode().hex()}")
         if user_input in current_commands:
             action = current_commands[user_input]
-            if isinstance(action, tuple):
+            if isinstance(action, list):
                 should_quit = execute_command(action[1])
                 if should_quit:
                     debug_log("Quitting after VPC command execution")

@@ -39,10 +39,11 @@ func isKittyRunning() -> Bool {
 
 // MARK: - VPC Management
 
+let vpcPath = "/Users/anthony/dotfiles/vpc/sanctuary.vpc"
+
 func openSanctuaryVPC() {
     log("VPC: Opening sanctuary.vpc")
 
-    let vpcPath = "/Users/anthony/dotfiles/vpc/sanctuary.vpc"
     let task = Process()
     let pipe = Pipe()
 
@@ -67,12 +68,34 @@ func openSanctuaryVPC() {
     }
 }
 
-func checkKittyAndOpenVPC() {
+// MARK: - Notification Management
+
+func showSanctuaryNotification() {
+    log("Notification: Showing sanctuary notification via Hammerspoon")
+
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: "/Applications/Hammerspoon.app/Contents/Resources/extensions/hs/ipc/bin/hs")
+    task.arguments = ["-c", "sanctuaryNotify()"]
+
+    do {
+        try task.run()
+        task.waitUntilExit()
+        if task.terminationStatus == 0 {
+            log("Notification: Sent to Hammerspoon")
+        } else {
+            log("Notification: hs command failed with status \(task.terminationStatus)")
+        }
+    } catch {
+        log("Notification: Failed to run hs - \(error.localizedDescription)")
+    }
+}
+
+func checkKittyAndNotify() {
     if !isKittyRunning() {
-        log("VPC: No Kitty process found, opening sanctuary.vpc")
-        openSanctuaryVPC()
+        log("VPC: No Kitty process found, showing notification")
+        showSanctuaryNotification()
     } else {
-        log("VPC: Kitty is running, skipping VPC open")
+        log("VPC: Kitty is running, skipping notification")
     }
 }
 
@@ -83,7 +106,7 @@ func startHealthCheck() {
 
     Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { _ in
         log("HealthCheck: Checking Kitty status...")
-        checkKittyAndOpenVPC()
+        checkKittyAndNotify()
     }
 }
 
@@ -95,22 +118,22 @@ log("========================================")
 log("Features:")
 log("  - Screen Unlock Listener")
 log("  - Health Check Loop (30s)")
-log("  - Kitty Detection & VPC Opener")
+log("  - Kitty Detection & Notification")
 log("========================================")
 
 // Start health check loop
 startHealthCheck()
 
 // Listen for screen unlock notifications
-let center = DistributedNotificationCenter.default()
-center.addObserver(
+let unlockCenter = DistributedNotificationCenter.default()
+unlockCenter.addObserver(
     forName: NSNotification.Name("com.apple.screenIsUnlocked"),
     object: nil,
     queue: nil
 ) { notification in
     log("UnlockEvent: Screen unlocked, checking Kitty")
     DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-        checkKittyAndOpenVPC()
+        checkKittyAndNotify()
     }
 }
 

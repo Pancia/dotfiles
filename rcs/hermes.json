@@ -1,0 +1,59 @@
+{"__rc_loc": "<[.config/hermes/commands.json]>",
+    "c": ["calendar", "agenda $(read --prompt-str 'hours>' -c '24' HOURS && echo $HOURS)"],
+    "d": {
+        "_desc": "+dotfiles",
+        "e": ["Edit dotfiles", "cd ~/dotfiles && v"]
+    },
+    "f": {
+        "_desc": "+finder",
+        "_": ["View spirituality", "finder-here $HOME/ProtonDrive/_spirituality"],
+        "b": ["View MediaBoard", "finder-here $HOME/MediaBoard"],
+        "d": ["View Dotfiles", "finder-here $HOME/dotfiles"],
+        "h": ["View Home", "finder-here $HOME"],
+        "i": ["View inbox", "finder-here $HOME/ProtonDrive/_inbox/"],
+        "m": ["View Media", "finder-here $HOME/Media"],
+        "o": ["View ProtonDrive", "finder-here $HOME/ProtonDrive"],
+        "p": ["View Projects", "finder-here $HOME/projects"],
+        "s": ["View Screenshots", "finder-here $HOME/Screenshots"],
+        "t": ["View transcripts", "finder-here $HOME/transcripts"],
+        "w": ["View Downloads", "finder-here $HOME/Downloads"],
+        "y": ["View YTDL", "finder-here $HOME/Downloads/ytdl/"]
+    },
+    "a": ["App Launcher", ["/Users/anthony/dotfiles/bin/app-launcher"]],
+    "p": ["Edit Snippets", "snippets"],
+    "s": {
+        "_desc": "+services",
+        "_": ["Status", "service status"],
+        "l": ["List Services", "service list"],
+        "r": ["Restart Service", "service restart $(service list | awk '{print $3}' | fzf)"],
+        "s": ["Start Service", "service start $(service list | awk '{print $3}' | fzf)"],
+        "x": ["Stop Service", "service stop $(service list | awk '{print $3}' | fzf)"],
+        "o": ["View Logs", "service log $(service list | awk '{print $3}' | fzf)"],
+        "e": ["Edit Service", "service edit $(service list | awk '{print $3}' | fzf)"],
+        "c": ["Create Service", "service create $(read --prompt-str 'name>')"]
+    },
+    "v": ["VPC (dynamic)", "true"],
+    "y": {
+        "_desc": "+ytdl",
+        "i": ["ytdl interactive", "ytdl"],
+        "y": ["ytdl clipboard", "ytdl clipboard"]
+    },
+    "m": {
+        "_desc": "+music",
+        "c": ["Play or Pause", "cmus-remote --pause"],
+        "e": ["Edit Track", "cmedit"],
+        "y": ["Redownload from Youtube", "cmytdl"],
+        "a": ["Open Track in Audacity", "cmaudacity"],
+        "s": ["Select Track by Playlist", "cmselect"],
+        "t": ["Select Track by Tags", "cmselect --filter-by-tags"],
+        "n": ["Next Track", "cmus-remote --next"],
+        "p": ["Prev Track", "cmus-remote --prev"],
+        "l": ["Seek 10 Forwards", "cmus-remote --seek +10"],
+        "h": ["Seek 10 Backwards", "cmus-remote --seek -10"],
+        ".": ["Seek 30 Forwards", "cmus-remote --seek +30"],
+        ",": ["Seek 30 Backwards", "cmus-remote --seek -30"],
+        "j": ["Volume Down", "cmus-remote --volume -5"],
+        "k": ["Volume Up", "cmus-remote --volume +5"]
+    },
+    "w": ["superwhisper: $(echo `cat ~/private/.superwhisper.counter` '/' `cat ~/private/.superwhisper.max-count`)", "~/private/bin/superwhisper_reset"]
+}
