@@ -165,7 +165,6 @@ def getch():
 
 def print_menu(commands, path=''):
     """Display the menu with available commands."""
-    git_status_line()
     entries = []
 
     for key, content in commands.items():
@@ -219,9 +218,10 @@ def print_menu(commands, path=''):
 
     print()
     if path:
-        print(f"{DIM}<DEL> Go back  <ESC> Exit{RESET}")
+        print(f"{DIM}[:] Search  <DEL> Go back  <ESC> Exit{RESET}")
     else:
-        print(f"{DIM}<ESC> Exit{RESET}")
+        print(f"{DIM}[:] Search  <ESC> Exit{RESET}")
+    git_status_line()
 
 
 def execute_command(command):
@@ -249,6 +249,49 @@ def reload_commands():
     return COMMANDS
 
 
+def flatten_commands(commands, path=""):
+    """Recursively flatten menu structure into searchable entries."""
+    entries = []
+    for key, content in commands.items():
+        if key.startswith('_'):
+            continue
+        if isinstance(content, tuple):
+            desc = content[0]
+            cmd = content[1]
+            display = f"{path}{desc}" if path else desc
+            entries.append((display, content))
+        else:
+            submenu_desc = content.get('_desc', key)
+            new_path = f"{path}{submenu_desc} → " if path else f"{submenu_desc} → "
+            entries.extend(flatten_commands(content, new_path))
+    return entries
+
+
+def fzf_search_mode():
+    """Launch fzf to search through all commands. Returns the command tuple or None."""
+    entries = flatten_commands(COMMANDS)
+    if not entries:
+        return None
+
+    fzf_input = "\n".join(entry[0] for entry in entries)
+
+    try:
+        result = subprocess.run(
+            ['fzf', '--prompt=: ', '--height=40%', '--reverse'],
+            input=fzf_input,
+            capture_output=True,
+            text=True
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            selected = result.stdout.strip()
+            for display, content in entries:
+                if display == selected:
+                    return content
+    except FileNotFoundError:
+        print(f"{YELLOW}fzf not found{RESET}")
+    return None
+
+
 def main():
     current = COMMANDS
     history = []
@@ -265,6 +308,17 @@ def main():
                 current, path = history.pop()
             else:
                 break
+        elif key == ':':
+            # fzf search mode
+            result = fzf_search_mode()
+            if result:
+                cmd = result[1]
+                stay_in_submenu = result[2] if len(result) > 2 else False
+                execute_command(cmd)
+                if not stay_in_submenu:
+                    current = COMMANDS
+                    history = []
+                    path = ''
         elif key in current:
             action = current[key]
             if isinstance(action, tuple):
