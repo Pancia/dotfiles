@@ -15,7 +15,7 @@ local config = {
 
 -- State
 obj._timer = nil
-obj._overlay = nil
+obj._overlays = {}  -- one overlay per screen
 obj._holdStartTime = nil
 obj._progressTimer = nil
 obj._mouseDownTap = nil
@@ -27,9 +27,9 @@ function obj:isInCurfewWindow()
     return hour >= config.triggerHour or hour < config.resetHour
 end
 
-function obj:createOverlay()
-    local screen = hs.screen.mainScreen()
+function obj:createOverlayForScreen(screen)
     local frame = screen:frame()
+    local fullFrame = screen:fullFrame()
 
     local boxWidth = 500
     local boxHeight = 350
@@ -38,19 +38,19 @@ function obj:createOverlay()
     local boxX = centerX - boxWidth / 2
     local boxY = centerY - boxHeight / 2
 
-    obj._overlay = hs.canvas.new(frame)
-    obj._overlay:level(hs.canvas.windowLevels.screenSaver)
-    obj._overlay:behavior(hs.canvas.windowBehaviors.canJoinAllSpaces + hs.canvas.windowBehaviors.stationary)
+    local overlay = hs.canvas.new(fullFrame)
+    overlay:level(hs.canvas.windowLevels.screenSaver)
+    overlay:behavior(hs.canvas.windowBehaviors.canJoinAllSpaces + hs.canvas.windowBehaviors.stationary)
 
     -- Full screen dim background
-    obj._overlay[1] = {
+    overlay[1] = {
         type = "rectangle",
         action = "fill",
         fillColor = {red = 0.05, green = 0.05, blue = 0.1, alpha = 0.9}
     }
 
     -- Central dialog box
-    obj._overlay[2] = {
+    overlay[2] = {
         type = "rectangle",
         action = "fill",
         frame = {x = boxX, y = boxY, w = boxWidth, h = boxHeight},
@@ -59,7 +59,7 @@ function obj:createOverlay()
     }
 
     -- Dialog border
-    obj._overlay[3] = {
+    overlay[3] = {
         type = "rectangle",
         action = "stroke",
         frame = {x = boxX, y = boxY, w = boxWidth, h = boxHeight},
@@ -73,7 +73,7 @@ function obj:createOverlay()
     local ringRadius = 50
 
     -- Moon icon
-    obj._overlay[4] = {
+    overlay[4] = {
         type = "circle",
         action = "fill",
         center = {x = centerX, y = boxY + 45},
@@ -82,7 +82,7 @@ function obj:createOverlay()
     }
 
     -- Title
-    obj._overlay[5] = {
+    overlay[5] = {
         type = "text",
         text = "Time to wind down",
         textColor = {red = 1, green = 1, blue = 1, alpha = 1},
@@ -92,7 +92,7 @@ function obj:createOverlay()
     }
 
     -- Time display
-    obj._overlay[6] = {
+    overlay[6] = {
         type = "text",
         text = "It's " .. os.date("%I:%M %p"),
         textColor = {red = 0.6, green = 0.6, blue = 0.6, alpha = 1},
@@ -102,7 +102,7 @@ function obj:createOverlay()
     }
 
     -- Progress ring background
-    obj._overlay[7] = {
+    overlay[7] = {
         type = "circle",
         action = "stroke",
         center = {x = centerX, y = ringCenterY},
@@ -112,7 +112,7 @@ function obj:createOverlay()
     }
 
     -- Progress ring (fills as you hold)
-    obj._overlay[8] = {
+    overlay[8] = {
         id = "ringProgress",
         type = "arc",
         center = {x = centerX, y = ringCenterY},
@@ -125,7 +125,7 @@ function obj:createOverlay()
     }
 
     -- Hold duration text
-    obj._overlay[9] = {
+    overlay[9] = {
         id = "holdText",
         type = "text",
         text = "0/" .. config.holdDuration .. "s",
@@ -136,7 +136,7 @@ function obj:createOverlay()
     }
 
     -- Instructions
-    obj._overlay[10] = {
+    overlay[10] = {
         type = "text",
         text = "Hold mouse button to dismiss",
         textColor = {red = 0.5, green = 0.5, blue = 0.5, alpha = 1},
@@ -145,24 +145,37 @@ function obj:createOverlay()
         frame = {x = boxX + 20, y = boxY + boxHeight - 50, w = boxWidth - 40, h = 25}
     }
 
-    obj._overlay:clickActivating(false)
-    obj._overlay:show()
+    overlay:clickActivating(false)
+    overlay:show()
+
+    return overlay
+end
+
+function obj:createOverlays()
+    for _, screen in ipairs(hs.screen.allScreens()) do
+        local overlay = obj:createOverlayForScreen(screen)
+        table.insert(obj._overlays, overlay)
+    end
 end
 
 function obj:updateProgress(elapsed)
-    if not obj._overlay then return end
+    if #obj._overlays == 0 then return end
 
     local progress = math.min(elapsed / config.holdDuration, 1)
     local endAngle = -90 + (360 * progress)
 
-    obj._overlay[8].endAngle = endAngle
-    obj._overlay[9].text = string.format("%.0f/%ds", elapsed, config.holdDuration)
+    for _, overlay in ipairs(obj._overlays) do
+        overlay[8].endAngle = endAngle
+        overlay[9].text = string.format("%.0f/%ds", elapsed, config.holdDuration)
+    end
 end
 
 function obj:resetProgress()
-    if not obj._overlay then return end
-    obj._overlay[8].endAngle = -90
-    obj._overlay[9].text = "0/" .. config.holdDuration .. "s"
+    if #obj._overlays == 0 then return end
+    for _, overlay in ipairs(obj._overlays) do
+        overlay[8].endAngle = -90
+        overlay[9].text = "0/" .. config.holdDuration .. "s"
+    end
 end
 
 function obj:startHold()
@@ -233,7 +246,7 @@ function obj:trigger()
     obj._logger.i("Showing curfew overlay")
     obj._isShowing = true
 
-    obj:createOverlay()
+    obj:createOverlays()
     obj:setupEventTaps()
 end
 
@@ -243,10 +256,10 @@ function obj:hide()
     obj:endHold()
     obj:cleanupEventTaps()
 
-    if obj._overlay then
-        obj._overlay:delete()
-        obj._overlay = nil
+    for _, overlay in ipairs(obj._overlays) do
+        overlay:delete()
     end
+    obj._overlays = {}
 end
 
 function obj:checkAndShow()

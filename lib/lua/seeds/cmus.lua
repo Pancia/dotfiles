@@ -1,8 +1,9 @@
 local obj = {}
 
-local cmusRemotePath = hs.execute("which cmus-remote", true):gsub("%s+$", "")
+local cmusRemotePath = nil
 
 function cmusRemote(action)
+    if not cmusRemotePath then return "", false end
     return hs.execute(cmusRemotePath.." "..action)
 end
 
@@ -403,14 +404,23 @@ function obj:start(config)
     bindMediaKeys()
     obj._ipcPort = hs.ipc.localPort("cmus", obj.onIPCMessage)
     obj._controlsMenu = hs.menubar.new()
-    obj:initMenuTitle()
     obj._controlsMenu:setClickCallback(function()
         obj:toggleControlsCanvas()
+    end)
+
+    -- Defer slow shell commands
+    obj._initTimer = hs.timer.doAfter(0, function()
+        cmusRemotePath = hs.execute("which cmus-remote", true):gsub("%s+$", "")
+        obj:initMenuTitle()
     end)
 end
 
 function obj:stop()
     obj:hideControlsCanvas()
+    if obj._initTimer then
+        obj._initTimer:stop()
+        obj._initTimer = nil
+    end
     if obj._canvas then
         obj._canvas:delete()
         obj._canvas = nil

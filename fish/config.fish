@@ -154,6 +154,10 @@ if status is-interactive
     # Bind Ctrl-L to clear screen while keeping tide prompt visible
     bind \cl clear_keep_prompt
 
-    echo "Remember to try out:"
-    echo "scooter (find&replace), yazi(tui file manager), lazygit, v(FIXME)"
+    # Only show reminders in a real terminal (not hs.execute, etc.)
+    if isatty stdout
+        echo "Remember to try out:"
+        echo "scooter (find&replace), yazi(tui file manager), lazygit"
+        echo "d / p / v -- <TAB> or standalone"
+    end
 end

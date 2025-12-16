@@ -46,17 +46,20 @@ function obj:start(config)
     end
     obj._logger.df("Loaded %d triggered events from state", triggeredCount)
 
-    -- Create menubar
+    -- Create menubar (defer renderMenuBar to avoid blocking)
     obj._menubar = hs.menubar.new():setMenu(function() return obj:renderMenu() end)
-    obj:renderMenuBar()
+    obj._menubar:setTitle("📅")
 
     -- Start polling timer
     obj._pollTimer = hs.timer.doEvery(obj.pollInterval, function()
         obj:heartbeat()
     end)
 
-    -- Do initial poll
-    obj:heartbeat()
+    -- Defer initial poll and menubar render to avoid blocking startup
+    obj._initTimer = hs.timer.doAfter(0, function()
+        obj:heartbeat()
+        obj:renderMenuBar()
+    end)
 
     return self
 end
@@ -67,7 +70,10 @@ function obj:stop()
     -- Save state
     hs.settings.set("calendar_triggered_events", obj._triggeredEvents)
 
-    -- Stop timer
+    -- Stop timers
+    if obj._initTimer then
+        obj._initTimer:stop()
+    end
     if obj._pollTimer then
         obj._pollTimer:stop()
     end

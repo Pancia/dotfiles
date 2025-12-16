@@ -57,9 +57,9 @@ function listVims --description 'List available vim sessions'
     end
 end
 
-function showPlans --description 'List PLAN_* files in dotfiles directory'
+function showPlans --description 'List PLAN-* files in dotfiles directory'
     string match -q '*/dotfiles' (pwd); or return
-    set -l plans (ls PLAN_* 2>/dev/null)
+    set -l plans (ls PLAN-* 2>/dev/null)
     if test -n "$plans"
         echo "&> Plans:"
         for plan in $plans
@@ -90,5 +90,10 @@ function chpwd_hook --on-variable PWD
     cache 15 showTodos
     cache 15 showCmds
     cache 5 listVims
+    showPlans
+end
+
+# Show plans on shell startup (this file is sourced from config.fish)
+if status is-interactive; and isatty stdout
     showPlans
 end

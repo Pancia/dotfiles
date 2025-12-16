@@ -1,7 +1,9 @@
 -- CONTEXT: [[~/dotfiles/wiki/HammerSpoon.wiki]]
+local _coreStart = hs.timer.absoluteTime()
 
 local HOME = os.getenv("HOME")
 
+local _spoonStart = hs.timer.absoluteTime()
 local install = hs.loadSpoon("SpoonInstall")
 install.use_syncinstall = true
 
@@ -19,13 +21,16 @@ install:andUse("FadeLogo", {
   start = true,
   config = {default_run = 1.0}
 })
+table.insert(_G._profile, string.format("  spoons: %.1fms", (hs.timer.absoluteTime() - _spoonStart) / 1e6))
 
 function engage(seed_path, config)
+  local start = hs.timer.absoluteTime()
   local success, result = pcall(function()
     local seed = require(seed_path)
     seed:start(config)
     return seed
   end)
+  local elapsed = (hs.timer.absoluteTime() - start) / 1e6
 
   if not success then
     hs.notify.new({
@@ -37,8 +42,11 @@ function engage(seed_path, config)
     return nil
   end
 
+  table.insert(_G._profile, string.format("    %s: %.1fms", seed_path, elapsed))
   return result
 end
+
+local _engageStart = hs.timer.absoluteTime()
 
 local monitor = engage("seeds.monitor", {})
 
@@ -143,12 +151,15 @@ local watch = engage("seeds.watch.init", {
 local sanctuary = engage("seeds.sanctuary", {})
 
 local curfew = engage("seeds.curfew", {
-    triggerHour = 21,
-    resetHour = 4,
+    triggerHour = 23,
+    resetHour = 6,
     holdDuration = 15
 })
 
 local superwhisper = engage("seeds.superwhisper", {})
+
+local _engageElapsed = (hs.timer.absoluteTime() - _engageStart) / 1e6
+table.insert(_G._profile, string.format("  seeds: %.1fms", _engageElapsed))
 
 local function is_reloading()
   local reload_flag = "/tmp/hs_reloading"
@@ -173,8 +184,12 @@ if superwhisper then seeds.superwhisper = superwhisper end
 
 local hs_global_modifier = {"cmd", "ctrl"}
 
--- Global window filter for CLI window-switcher (kept active for instant queries)
-_G.windowFilter = hs.window.filter.new(true):setCurrentSpace(nil):keepActive()
+-- Global window filter for CLI window-switcher (defer to avoid blocking startup)
+hs.timer.doAfter(0, function()
+  local start = hs.timer.absoluteTime()
+  _G.windowFilter = hs.window.filter.new(true):setCurrentSpace(nil):keepActive()
+  hs.printf("[deferred] windowFilter: %.1fms", (hs.timer.absoluteTime() - start) / 1e6)
+end)
 
 hs.hotkey.bindSpec({hs_global_modifier, "c"}, hs.toggleConsole)
 
@@ -188,14 +203,23 @@ hs.hotkey.bindSpec({hs_global_modifier, "r"}, function()
 
   hs.alert.show("⟳ Reloading...", 1)
 
+  local stopProfile = {}
+  local totalStart = hs.timer.absoluteTime()
   for name, seed in pairs(seeds) do
     if seed.stop then
+      local start = hs.timer.absoluteTime()
       local ok, err = pcall(function() seed:stop() end)
+      local elapsed = (hs.timer.absoluteTime() - start) / 1e6 -- convert to ms
       if not ok then
-        hs.printf("\n\nERROR: stop(%s):\n%s\n\n", name, err)
+        table.insert(stopProfile, string.format("  ERROR %s: %s", name, err))
+      else
+        table.insert(stopProfile, string.format("  %s: %.1fms", name, elapsed))
       end
     end
   end
+  local totalElapsed = (hs.timer.absoluteTime() - totalStart) / 1e6
+  table.insert(stopProfile, string.format("stop total: %.1fms", totalElapsed))
+  hs.printf("[profile:stop]\n%s", table.concat(stopProfile, "\n"))
 
   hs.timer.doAfter(0.3, function()
     hs.reload()
@@ -206,6 +230,8 @@ end)
 if is_reloading() then
   hs.alert.show("✓ Hammerspoon reloaded", 1.5)
 end
+
+table.insert(_G._profile, string.format("  core: %.1fms", (hs.timer.absoluteTime() - _coreStart) / 1e6))
 
 function myNotify(path)
     hs.notify.new(function(note)
@@ -300,7 +326,7 @@ local function pomodoroOnDismiss()
 end
 
 -- Helper: Show the must-click canvas overlay
-local function showPomodoroCanvas(title, message)
+function showPomodoroCanvas(title, message)
     local screen = hs.screen.mainScreen()
     local frame = screen:frame()
 
@@ -318,7 +344,8 @@ local function showPomodoroCanvas(title, message)
         type = "rectangle",
         action = "fill",
         fillColor = {red = 0.1, green = 0.1, blue = 0.1, alpha = 0.95},
-        roundedRectRadii = {xRadius = 12, yRadius = 12}
+        roundedRectRadii = {xRadius = 12, yRadius = 12},
+        trackMouseUp = true
     }
 
     -- Border
@@ -403,7 +430,7 @@ function pomodoroNotify(title, message, soundPath)
     pomodoroNotification:send()
 
     -- 2. Start sound loop
-    pomodoroSound = hs.sound.getByFile(soundPath)
+    pomodoroSound = nil --hs.sound.getByFile(soundPath)
     if pomodoroSound then
         pomodoroSound:play()
         pomodoroSoundTimer = hs.timer.doEvery(pomodoroSound:duration() + 0.5, function()

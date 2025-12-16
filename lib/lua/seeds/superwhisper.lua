@@ -65,19 +65,26 @@ function obj:start(config)
     self.state_file = config.state_file
   end
 
-  self._filter = hs.window.filter.new("superwhisper")
-  self._filter:subscribe(hs.window.filter.windowCreated, onWindowCreated)
-  self._filter:subscribe(hs.window.filter.windowDestroyed, onWindowDestroyed)
+  -- Defer window filter creation to avoid blocking startup
+  self._initTimer = hs.timer.doAfter(0, function()
+    self._filter = hs.window.filter.new("superwhisper")
+    self._filter:subscribe(hs.window.filter.windowCreated, onWindowCreated)
+    self._filter:subscribe(hs.window.filter.windowDestroyed, onWindowDestroyed)
 
-  -- Check if already recording on start
-  if self:isRecording() then
-    obj._start_time = hs.timer.secondsSinceEpoch()
-  end
+    -- Check if already recording on start
+    if self:isRecording() then
+      obj._start_time = hs.timer.secondsSinceEpoch()
+    end
+  end)
 
   return self
 end
 
 function obj:stop()
+  if self._initTimer then
+    self._initTimer:stop()
+    self._initTimer = nil
+  end
   if self._filter then
     self._filter:unsubscribeAll()
     self._filter = nil
