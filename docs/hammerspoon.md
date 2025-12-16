@@ -351,56 +351,27 @@ local lotus = engage("seeds.lotus.init", {
 
 ## Curfew: 9pm Wind-Down Reminder
 
-Encourages stopping computer use after 9pm with escalating hold-to-dismiss overlays.
+Encourages stopping computer use after 9pm with a hold-to-dismiss overlay.
 
 ### Configuration
 
 ```lua
 local curfew = engage("seeds.curfew", {
-    triggerHour = 21,       -- 9pm
-    triggerMinute = 0,
-    snoozeInterval = 1,     -- 1 minute between escalations
-    resetHour = 4,          -- 4am reset
-    holdDurations = {5, 10, 20, 40, 60}  -- seconds per level
+    triggerHour = 21,    -- 9pm
+    resetHour = 4,       -- 4am
+    holdDuration = 15    -- seconds to hold
 })
 ```
 
 ### How It Works
 
-1. **Triggers at 9pm** (or immediately if computer opens between 9pm-4am)
+1. **Checks every minute** if current time is in curfew window (9pm-4am)
 2. **Full-screen overlay** appears with progress ring
-3. **Hold mouse button** to dismiss (not click) - ring fills as you hold
-4. **Snooze**: Overlay returns in 1 minute with longer hold requirement
-5. **Escalation**: Each snooze increases hold duration (5s → 10s → 20s → 40s → 60s)
-6. **Resets at 4am** for the new day
+3. **Hold mouse button** for 15 seconds to dismiss (not click)
+4. **Returns in ~1 minute** (next timer tick)
+5. **Repeats until 4am**
 
-### Escalation Levels
-
-| Level | Hold Duration | Visual | Message |
-|-------|---------------|--------|---------|
-| 0 | 5 seconds | Calm blue | "Time to wind down" |
-| 1 | 10 seconds | Slightly brighter | "Consider wrapping up" |
-| 2 | 20 seconds | Amber | "It's getting late" |
-| 3 | 40 seconds | Red | "You should really stop" |
-| 4+ | 60 seconds | Deep red | "Final warning" |
-
-### Features
-
-- **Wake Detection**: Triggers on system wake if in curfew window (9pm-4am)
-- **Start Detection**: Triggers on Hammerspoon start if in curfew window
-- **State Persistence**: Snooze count persists across reloads and sleep/wake
-- **Progress Ring**: Visual feedback showing hold progress
-
-### State Persistence
-
-```lua
--- Saved to hs.settings
-curfew.snoozeCount      -- Current escalation level
-curfew.lastDate         -- Date of last trigger (for reset detection)
-curfew.nextTriggerTime  -- Unix timestamp of pending snooze (survives reload)
-```
-
-Pending snoozes survive Hammerspoon reloads. If you snooze and then reload, the overlay will return at the scheduled time.
+Simple polling approach - no complex state management or persistence needed.
 
 ## Cmus: Music Control
 

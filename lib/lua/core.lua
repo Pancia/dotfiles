@@ -144,10 +144,8 @@ local sanctuary = engage("seeds.sanctuary", {})
 
 local curfew = engage("seeds.curfew", {
     triggerHour = 21,
-    triggerMinute = 0,
-    snoozeInterval = 1,  -- 1 minute between escalations
     resetHour = 4,
-    holdDurations = {5, 10, 20, 40, 60}
+    holdDuration = 15
 })
 
 local superwhisper = engage("seeds.superwhisper", {})
@@ -192,9 +190,9 @@ hs.hotkey.bindSpec({hs_global_modifier, "r"}, function()
 
   for name, seed in pairs(seeds) do
     if seed.stop then
-      ok, err = pcall(function() seed.stop() end)
+      local ok, err = pcall(function() seed:stop() end)
       if not ok then
-        hs.printf("\n\nERROR: stop(%s):\n%s\n\n", name, errmsg)
+        hs.printf("\n\nERROR: stop(%s):\n%s\n\n", name, err)
       end
     end
   end

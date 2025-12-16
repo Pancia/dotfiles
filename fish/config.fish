@@ -77,6 +77,9 @@ if not functions -q fisher
     source $XDG_CONFIG_HOME/fish/functions/fisher.fish
 end
 
+# Source chpwd hooks (event handlers need explicit sourcing)
+source ~/dotfiles/fish/functions/chpwd.fish
+
 # Disable fish greeting
 set -g fish_greeting ""
 
@@ -136,6 +139,7 @@ alias gsave 'git stash save'
 alias gshow 'git show --color-words'
 alias gstash 'git stash'
 alias gsw 'git checkout'
+alias grs 'git restore --staged'
 
 # Error messages for dangerous operations
 alias gp 'echo "ERROR: USE: vim git fuGITive (whichkey plugin)"; false'

@@ -226,20 +226,21 @@ class YabaiManager:
 
     def position_window(self, app_name: str, window_config: dict):
         """Position a window using grid + resize + offset."""
-        if not self.enabled or not self.available:
-            return
-
         if not window_config:
             return
 
-        # Find window
+        # Find window (needed for display move even if yabai positioning disabled)
         debug = window_config.get('debug', False)
         window_id = WindowQuery.find_window_by_app(app_name, debug=debug)
         if not window_id:
             return
 
-        # Move window to selected display if specified
+        # Move window to selected display if specified (works without yabai enabled)
         self.move_window_to_display(window_id)
+
+        # Skip remaining positioning if yabai not enabled
+        if not self.enabled or not self.available:
+            return
 
         # Debug: Test if window is immediately queryable
         if debug:

@@ -57,6 +57,17 @@ function listVims --description 'List available vim sessions'
     end
 end
 
+function showPlans --description 'List PLAN_* files in dotfiles directory'
+    string match -q '*/dotfiles' (pwd); or return
+    set -l plans (ls PLAN_* 2>/dev/null)
+    if test -n "$plans"
+        echo "&> Plans:"
+        for plan in $plans
+            echo "  $plan"
+        end
+    end
+end
+
 function _recordCWD --description 'Record current working directory'
     echo (pwd) >> ~/.config/dir_history
     echo (cat ~/.config/dir_history | sort | uniq) > ~/.config/dir_history
@@ -79,4 +90,5 @@ function chpwd_hook --on-variable PWD
     cache 15 showTodos
     cache 15 showCmds
     cache 5 listVims
+    showPlans
 end
