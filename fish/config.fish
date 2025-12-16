@@ -121,30 +121,25 @@ alias 'q?' 'ruby ~/dotfiles/lib/ruby/q.rb show'
 # Cmds alias
 alias '@' 'cmds'
 
-# Git aliases
-# Note: These are created as separate alias commands instead of functions
-# Run this file to set up aliases, or define them individually
-
-alias ga 'git add'
-alias gaa 'git add --all'
-alias gc 'git commit --verbose'
-alias gca 'git commit --verbose --all'
-# ./ai.zsh defines gcai -> edit git commit message initialized by ai
-alias gcai 'ai_git_commit'
-alias gd 'git diff --color-words'
-alias gds 'gd --staged'
-alias gl 'git log --graph --all --decorate --abbrev-commit'
-alias gs 'git status'
-alias gsave 'git stash save'
-alias gshow 'git show --color-words'
-alias gstash 'git stash'
-alias gsw 'git checkout'
-alias grs 'git restore --staged'
-
-# Error messages for dangerous operations
-alias gp 'echo "ERROR: USE: vim git fuGITive (whichkey plugin)"; false'
-alias gpf 'echo "ERROR: USE: vim git fuGITive (whichkey plugin)"; false'
-alias gpl 'echo "ERROR: USE: vim git fuGITive (whichkey plugin)"; false'
+# Git aliases - disabled, use `g` command instead
+function __git_use_g; echo "Use 'g' command instead (git which-key menu)"; false; end
+alias ga  __git_use_g
+alias gaa __git_use_g
+alias gc  __git_use_g
+alias gca __git_use_g
+alias gcai __git_use_g
+alias gd  __git_use_g
+alias gds __git_use_g
+alias gl  __git_use_g
+alias gs  __git_use_g
+alias gsave __git_use_g
+alias gshow __git_use_g
+alias gstash __git_use_g
+alias gsw __git_use_g
+alias grs __git_use_g
+alias gp  __git_use_g
+alias gpf __git_use_g
+alias gpl __git_use_g
 
 # Abbreviations
 abbr -a cc my-claude-code-wrapper
