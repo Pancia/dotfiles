@@ -13,6 +13,81 @@ BOLD_YELLOW = '\033[1;93m'
 YELLOW = '\033[33m'
 DIM = '\033[2;37m'
 RESET = '\033[0m'
+CYAN = '\033[36m'
+GREEN = '\033[32m'
+RED = '\033[31m'
+
+
+def git_status_line():
+    """Display git status line matching Tide prompt format."""
+    def run(cmd):
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=2).stdout.strip()
+        except:
+            return ''
+
+    # Branch name (or tag/SHA if detached)
+    branch = run(['git', 'branch', '--show-current'])
+    if not branch:
+        # Detached HEAD - try tag, then short SHA
+        branch = run(['git', 'describe', '--tags', '--exact-match', 'HEAD'])
+        if branch:
+            branch = '#' + branch
+        else:
+            branch = '@' + run(['git', 'rev-parse', '--short', 'HEAD'])
+    if not branch or branch in ('@', '#'):
+        return  # Not in a git repo
+
+    # Status counts from porcelain
+    status = run(['git', 'status', '--porcelain'])
+    staged = dirty = untracked = conflicted = 0
+    for line in status.splitlines():
+        if line.startswith('UU'):
+            conflicted += 1
+        elif line[0] in 'ADMR':
+            staged += 1
+        if len(line) > 1 and line[1] in 'ADMR':
+            dirty += 1
+        if line.startswith('??'):
+            untracked += 1
+
+    # Stash count
+    stash = len(run(['git', 'stash', 'list']).splitlines()) if run(['git', 'stash', 'list']) else 0
+
+    # Ahead/behind upstream
+    ahead = behind = 0
+    upstream = run(['git', 'rev-list', '--count', '--left-right', '@{upstream}...HEAD'])
+    if upstream and '\t' in upstream:
+        behind, ahead = upstream.split('\t')
+        behind, ahead = int(behind), int(ahead)
+
+    # Choose background color like Tide: green=clean, yellow=unstable, red=urgent
+    if conflicted:
+        bg = '\033[41m'  # Red background
+    elif staged or dirty or untracked:
+        bg = '\033[43m'  # Yellow background
+    else:
+        bg = '\033[42m'  # Green background
+    black = '\033[30m'  # Black text for contrast
+
+    # Build status line - only show non-zero values
+    parts = [branch]
+    if behind:
+        parts.append(f"⇣{behind}")
+    if ahead:
+        parts.append(f"⇡{ahead}")
+    if stash:
+        parts.append(f"*{stash}")
+    if conflicted:
+        parts.append(f"~{conflicted}")
+    if staged:
+        parts.append(f"+{staged}")
+    if dirty:
+        parts.append(f"!{dirty}")
+    if untracked:
+        parts.append(f"?{untracked}")
+
+    print(f"{bg}{black} {' '.join(parts)} {RESET}")
 
 # Menu structure - nested dicts are submenus, tuples are (description, command, stay_in_submenu)
 # stay_in_submenu=True stays in current submenu, False goes back to root
@@ -33,6 +108,7 @@ COMMANDS = {
         'm': ('Amend', 'git commit --amend --verbose && git status'),
         'p': ('Commit interactively', 'git commit --patch && git status'),
         'i': ('Commit (AI message)', 'ai_git_commit && git status'),
+        'I': ('Add all + AI commit', 'git add --all && ai_git_commit && git status'),
     },
     'd': {
         '_desc': 'Diff',
@@ -89,6 +165,7 @@ def getch():
 
 def print_menu(commands, path=''):
     """Display the menu with available commands."""
+    git_status_line()
     entries = []
 
     for key, content in commands.items():

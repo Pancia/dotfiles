@@ -247,11 +247,13 @@ end
 local sanctuaryNotification = nil
 
 function sanctuaryNotify()
-    -- Withdraw any existing notification first
-    if sanctuaryNotification then
-        sanctuaryNotification:withdraw()
-        sanctuaryNotification = nil
+    -- Withdraw all existing Sanctuary notifications
+    for _, notif in ipairs(hs.notify.deliveredNotifications()) do
+        if notif:title() == "Sanctuary" then
+            notif:withdraw()
+        end
     end
+    sanctuaryNotification = nil
 
     sanctuaryNotification = hs.notify.new(function(notification)
         sanctuaryNotification = nil

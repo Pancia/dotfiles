@@ -1,5 +1,5 @@
--- Curfew: 9pm wind-down reminder with hold-to-dismiss
--- Simple polling approach: check every minute, show overlay if in curfew window
+-- Curfew: wind-down reminder with hold-to-dismiss
+-- Triggers every minute on the minute (XX:00)
 
 local obj = {}
 obj._name = "curfew"
@@ -7,10 +7,7 @@ obj._logger = hs.logger.new("curfew", "info")
 
 -- Configuration (set via start())
 local config = {
-    triggerHour = 21,    -- 9pm
-    resetHour = 4,       -- 4am
     holdDuration = 15,   -- seconds to hold
-    checkInterval = 60   -- check every 60 seconds
 }
 
 -- State
@@ -22,9 +19,14 @@ obj._mouseDownTap = nil
 obj._mouseUpTap = nil
 obj._isShowing = false
 
-function obj:isInCurfewWindow()
-    local hour = tonumber(os.date("%H"))
-    return hour >= config.triggerHour or hour < config.resetHour
+function obj:scheduleNextMinute()
+    local now = os.date("*t")
+    local secondsUntilNextMinute = 60 - now.sec
+
+    obj._timer = hs.timer.doAfter(secondsUntilNextMinute, function()
+        obj:trigger()
+        obj:scheduleNextMinute()
+    end)
 end
 
 function obj:createOverlayForScreen(screen)
@@ -262,12 +264,6 @@ function obj:hide()
     obj._overlays = {}
 end
 
-function obj:checkAndShow()
-    if obj:isInCurfewWindow() and not obj._isShowing then
-        obj:trigger()
-    end
-end
-
 function obj:start(cfg)
     obj._logger.i("Starting curfew monitor")
 
@@ -278,15 +274,8 @@ function obj:start(cfg)
         end
     end
 
-    -- Check every minute
-    obj._timer = hs.timer.doEvery(config.checkInterval, function()
-        obj:checkAndShow()
-    end)
-
-    -- Initial check after short delay
-    hs.timer.doAfter(3, function()
-        obj:checkAndShow()
-    end)
+    -- Schedule to trigger at the next minute boundary
+    obj:scheduleNextMinute()
 
     return obj
 end
