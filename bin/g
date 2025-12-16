@@ -14,63 +14,63 @@ YELLOW = '\033[33m'
 DIM = '\033[2;37m'
 RESET = '\033[0m'
 
-# Menu structure - nested dicts are submenus, tuples are (description, command, stay_open)
-# stay_open=True keeps modal open after command (for informational commands)
+# Menu structure - nested dicts are submenus, tuples are (description, command, stay_in_submenu)
+# stay_in_submenu=True stays in current submenu, False goes back to root
 COMMANDS = {
     '_desc': 'Git',
     'a': {
         '_desc': 'Add',
         'f': ('Add file (fzf)', 'git ls-files -m -o --exclude-standard | fzf -m | xargs git add && git status', True),
         '.': ('Add this directory', 'git add . && git status', True),
-        'a': ('Add all', 'git add --all && git status', True),
-        'p': ('Add interactively', 'git add --patch && git status', True),
+        'a': ('Add all', 'git add --all && git status'),
+        'p': ('Add interactively', 'git add --patch && git status'),
     },
-    'b': ('Blame (fzf)', 'git ls-files | fzf | xargs git blame', True),
+    'b': ('Blame (fzf)', 'git ls-files | fzf | xargs git blame'),
     'c': {
         '_desc': 'Commit',
-        'c': ('Commit', 'git commit --verbose && git status', True),
-        'a': ('Commit all', 'git commit --verbose --all && git status', True),
-        'm': ('Amend', 'git commit --amend --verbose && git status', True),
-        'p': ('Commit interactively', 'git commit --patch && git status', True),
-        'i': ('Commit (AI message)', 'ai_git_commit && git status', True),
+        'c': ('Commit', 'git commit --verbose && git status'),
+        'a': ('Commit all', 'git commit --verbose --all && git status'),
+        'm': ('Amend', 'git commit --amend --verbose && git status'),
+        'p': ('Commit interactively', 'git commit --patch && git status'),
+        'i': ('Commit (AI message)', 'ai_git_commit && git status'),
     },
     'd': {
         '_desc': 'Diff',
         'd': ('Diff', 'git diff --color-words', True),
         's': ('Diff staged', 'git diff --staged --color-words', True),
-        'f': ('Diff file (fzf)', 'git ls-files -m | fzf | xargs -r git diff --color-words', True),
+        'f': ('Diff file (fzf)', 'git ls-files -m | fzf | xargs git diff --color-words', True),
     },
     'f': {
         '_desc': 'Fetch/Pull',
-        'f': ('Fetch all', 'git fetch --all --prune && git status', True),
-        'l': ('Pull', 'git pull && git status', True),
+        'f': ('Fetch all', 'git fetch --all --prune && git status'),
+        'l': ('Pull', 'git pull && git status'),
     },
-    'h': ('Show (last commit)', 'git show --color-words', True),
-    'l': ('Log graph', 'git log --graph --all --decorate --abbrev-commit --oneline -20', True),
+    'h': ('Show (last commit)', 'git show --color-words'),
+    'l': ('Log graph', 'git log --graph --all --decorate --abbrev-commit --oneline -20'),
     'p': {
         '_desc': 'Push/Pull',
         'p': {
             '_desc': 'Push',
-            'p': ('Push', 'git push && git status', True),
-            'f': ('Push force++', 'git push --force-with-lease --force-if-includes && git status', True),
+            'p': ('Push', 'git push && git status'),
+            'f': ('Push force++', 'git push --force-with-lease --force-if-includes && git status'),
         },
-        'l': ('Pull', 'git pull && git status', True),
+        'l': ('Pull', 'git pull && git status'),
     },
     'r': {
         '_desc': 'Restore',
         's': ('Unstage (fzf)', 'git diff --staged --name-only | fzf -m | xargs git restore --staged && git status', True),
         'r': ('Restore file (fzf)', 'git diff --name-only | fzf -m | xargs git restore && git status', True),
     },
-    's': ('Status', 'git status', True),
+    's': ('Status', 'git status'),
     't': {
         '_desc': 'Stash',
-        't': ('Stash', 'git stash && git status', True),
-        's': ('Stash save (named)', 'git stash save && git status', True),
-        'p': ('Stash pop', 'git stash pop && git status', True),
+        't': ('Stash', 'git stash && git status'),
+        's': ('Stash save (named)', 'git stash save && git status'),
+        'p': ('Stash pop', 'git stash pop && git status'),
         'l': ('Stash list', 'git stash list', True),
     },
-    'w': ('Switch branch (fzf)', 'git branch -a | fzf | xargs git checkout && git status', True),
-    '=': ('Edit this menu', ['nvim', __file__, '-c', '/^COMMANDS', '-c', 'normal zt'], True, True),  # stay_open, reload
+    'w': ('Switch branch (fzf)', 'git branch -a | fzf | xargs git checkout && git status'),
+    '=': ('Edit this menu', ['nvim', __file__, '-c', '/^COMMANDS', '-c', 'normal zt'], False, True),  # go to root, reload
 }
 
 
@@ -191,18 +191,20 @@ def main():
         elif key in current:
             action = current[key]
             if isinstance(action, tuple):
-                # Execute command - tuple is (desc, cmd, stay_open, reload)
-                desc = action[0]
+                # Execute command - tuple is (desc, cmd, stay_in_submenu, reload)
                 cmd = action[1]
-                stay_open = action[2] if len(action) > 2 else False
+                stay_in_submenu = action[2] if len(action) > 2 else False
                 should_reload = action[3] if len(action) > 3 else False
                 execute_command(cmd)
                 if should_reload:
                     current = reload_commands()
                     history = []
                     path = ''
-                if not stay_open:
-                    break
+                elif not stay_in_submenu:
+                    # Go back to root
+                    current = COMMANDS
+                    history = []
+                    path = ''
             else:
                 # Enter submenu
                 history.append((current, path))
