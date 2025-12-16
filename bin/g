@@ -122,7 +122,7 @@ COMMANDS = {
         'l': ('Pull', 'git pull && git status'),
     },
     'h': ('Show (last commit)', 'git show --color-words'),
-    'l': ('Log graph', 'git log --graph --all --decorate --abbrev-commit --oneline -20'),
+    'l': ('Log graph', 'git log --graph --all --decorate --abbrev-commit'),
     'p': {
         '_desc': 'Push/Pull',
         'p': {
@@ -197,13 +197,12 @@ def print_menu(commands, path=''):
     num_cols = max(1, term_width // max_width)
     num_rows = (len(entries) + num_cols - 1) // num_cols
 
-    # Print header
-    menu_desc = commands.get('_desc', 'Git')
+    # Print separator and header
+    print(f"{DIM}{'─' * 40}{RESET}")
     if path:
+        menu_desc = commands.get('_desc', '')
         print(f"{DIM}{path}{RESET}{BOLD_WHITE}{menu_desc}{RESET}")
-    else:
-        print(f"{BOLD_WHITE}{menu_desc}{RESET}")
-    print()
+        print()
 
     # Print in columns
     for row in range(num_rows):
@@ -216,11 +215,11 @@ def print_menu(commands, path=''):
                 line_parts.append(formatted + padding)
         print(''.join(line_parts).rstrip())
 
-    print()
     if path:
         print(f"{DIM}[:] Search  <DEL> Go back  <ESC> Exit{RESET}")
     else:
         print(f"{DIM}[:] Search  <ESC> Exit{RESET}")
+    print(f"{DIM}{'─' * 40}{RESET}")
     git_status_line()
 
 
@@ -296,6 +295,10 @@ def main():
     current = COMMANDS
     history = []
     path = ''
+
+    # Show git status on startup
+    subprocess.run(['git', 'status'])
+    print()
 
     while True:
         print_menu(current, path)
