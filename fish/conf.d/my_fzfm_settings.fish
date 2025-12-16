@@ -19,3 +19,10 @@ set -gx fzfm_list_cmd_jump_frecent_aux "cat \
     (fd --max-depth 1 --type d --no-ignore --search-path /Volumes | psub) \
     (fd --max-depth 1 --type d --no-ignore --search-path $HOME | psub) \
     | __fzfm_dedup"
+
+# Git project jumping - searches for .git directories in FZFM_PROJECT_ROOTS
+set -gx FZFM_PROJECT_ROOTS $HOME/projects $HOME/AndroidStudioProjects $HOME/private/ $HOME/ProtonDrive/
+
+set -gx fzfm_list_cmd_jump_projects "fd --type d --hidden --no-ignore --prune --glob '.git' --max-depth 4 \
+    (for path in \$FZFM_PROJECT_ROOTS; echo -- --search-path; echo -- \$path; end) \
+    | xargs -I{} dirname {} | __fzfm_dedup"

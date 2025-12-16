@@ -15,7 +15,8 @@ module MusicCMD
     lambda {
       $options[:filter] = ".playlist" if not $options[:filter]
       result = self._search_impl()
-      items = result.split "\n"
+      return if result.nil? || result.strip.empty?
+      items = result.split("\n").reject { |item| item.strip.empty? }
       p "items: #{items}" if $options[:verbose]
       if not items.empty?
         system("cmus-remote --clear")

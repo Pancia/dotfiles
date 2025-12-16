@@ -1,7 +1,7 @@
 {
     "space": "current",
     "brave" : ["www.google.com"],
-    "iterm": {
+    "iTerm2": {
         "dir": "$HOME/dotfiles/vpc/",
         "tabs": [
             "echo Hello World!",

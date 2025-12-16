@@ -4,9 +4,15 @@
 
 HS="/Users/anthony/Developer/bin/hs"
 
+# Use smaller window for app launcher mode, larger for general hermes
+if [[ "$1" == "apps" ]]; then
+    WIDTH=80
+else
+    WIDTH=100
+fi
+
 # Open Ghostty with hermes, passing through any arguments
-# Set window size to 80 columns x 32 rows
-open -na ghostty --args --window-width=80 --window-height=32 -e /Users/anthony/dotfiles/bin/hermes "$@"
+open -na ghostty --args --window-width=$WIDTH --window-height=32 -e /Users/anthony/dotfiles/bin/hermes "$@"
 
 # Wait for window to appear and be ready
 sleep 0.6

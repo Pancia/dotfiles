@@ -1,6 +1,6 @@
 {
     "space": "current",
-    "iterm": {
+    "iTerm2": {
         "dir": "$HOME",
         "tabs": [
             "q remote-sync"

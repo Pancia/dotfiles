@@ -1,7 +1,7 @@
 {
     "space": "current",
     "brave" : ["takeout.google.com"],
-    "iterm": {
+    "iTerm2": {
         "dir": "$HOME/dotfiles/misc/gkeep-import",
         "tabs": [
             "py main.py /Users/anthony/Downloads/Takeout/Keep/ /Users/anthony/ProtonDrive/wiki/personal/journals"

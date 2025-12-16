@@ -36,12 +36,42 @@ class CMDS extend CMD
     }
   end
   def self.edit(opts)
-    opts.info = "Edit cmds.rb file, with default template."
-    lambda {
+    opts.banner = "Usage: cmds edit [function_name]"
+    opts.info = "Edit cmds.rb file. If function_name given and doesn't exist, creates it from template."
+    lambda { |*args|
+      func_name = args.first
+
       if not File.file? $cmds_file
         system("mkdir -p $(dirname #{$cmds_file})")
         system("cp #{$cmds_base_dir}/template.rb #{$cmds_file}")
       end
+
+      if func_name
+        content = File.read($cmds_file)
+        # Check if function already exists
+        unless content.match?(/def\s+#{Regexp.escape(func_name)}\s*\(/)
+          # Extract template function and adapt it
+          func_template = <<~RUBY.chomp
+
+	def #{func_name}(opts)
+		opts.banner = "Usage: #{func_name} FIXME"
+		opts.info = "FIXME"
+		lambda { |*args|
+			EXE.system %{
+				echo "FIXME"
+			}
+		}
+	end
+          RUBY
+          # Insert before the 'end' that closes module CMD (first unindented 'end')
+          new_content = content.sub(/^(module CMD\b.*?)(^end\b)/m) { "#{$1}#{func_template}\n#{$2}" }
+          File.write($cmds_file, new_content)
+          # Open vim at the function, searching for FIXME to enable easy tabbing
+          system("$EDITOR '+/def #{func_name}' '+normal zt' '+/FIXME' #{$cmds_file}")
+          return
+        end
+      end
+
       system("$EDITOR #{$cmds_file}")
     }
   end

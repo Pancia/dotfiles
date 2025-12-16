@@ -1,5 +1,8 @@
 #!/usr/bin/env fish
 
+set -l script_dir (path resolve (dirname (status filename)))
+echo scriptdir is $script_dir
+
 echo "=== Inbox Journals ==="
 bat --paging=never /Users/anthony/Cloud/_inbox/Journals/*
 echo
@@ -12,5 +15,5 @@ echo q pymodoro --label "$LABEL" --work $work --short $short --long $work --max-
 q pymodoro --label "$LABEL" --work $work --short $short --long $work --max-sessions $sessions --notify 0 --confirm
 
 # Return to interactive shell when done
-cd (dirname (status filename))
+cd $script_dir
 exec fish

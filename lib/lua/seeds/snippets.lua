@@ -294,7 +294,7 @@ function obj:start(config)
   self._chooser:searchSubText(true) -- Allow searching in content too
 
   -- Bind hotkey
-  hs.hotkey.bindSpec(self.hotkey, function() self:toggle() end)
+  self._hotkey = hs.hotkey.bindSpec(self.hotkey, function() self:toggle() end)
 
   -- Start text expansion if enabled
   if self.expansion_enabled then
@@ -302,6 +302,18 @@ function obj:start(config)
   end
 
   return self
+end
+
+function obj:stop()
+  self:stopExpansion()
+  if self._chooser then
+    self._chooser:delete()
+    self._chooser = nil
+  end
+  if self._hotkey then
+    self._hotkey:delete()
+    self._hotkey = nil
+  end
 end
 
 return obj

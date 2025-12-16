@@ -61,7 +61,7 @@ cd ~/dotfiles
 | `Cmd+Ctrl+C` | Hammerspoon console |
 | `Cmd+Ctrl+S` | Snippets chooser |
 | `Cmd+Ctrl+P` | Clipboard tool |
-| `Alt+Ctrl+Tab` | Window switcher |
+| `Alt+Tab` | Window switcher (fzf, all spaces) |
 | `F7/F8/F9` | Media controls (cmus) |
 
 ### Shell Commands (Fish)
@@ -108,7 +108,7 @@ cd ~/dotfiles
 
 ### Important Directories
 - Functions: `fish/functions/` (169 files)
-- Seeds: `lib/lua/seeds/` (8 modules)
+- Seeds: `lib/lua/seeds/` (9 modules)
 - Utilities: `bin/` (50+ scripts)
 - Services: `services/` (6 LaunchAgents)
 - Workspaces: `vpc/` (10 VPC definitions)

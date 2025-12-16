@@ -115,7 +115,7 @@
                         ]
                     },
                     {
-                        "description": "alt-tab -> hermes",
+                        "description": "alt-tab -> hermes (window switcher)",
                         "manipulators": [
                             {
                                 "from": {
@@ -126,42 +126,9 @@
                                         ]
                                     }
                                 },
-                                "to": [
-                                    {
-                                        "key_code": "tab",
-                                        "modifiers": [
-                                            "left_alt",
-                                            "left_control"
-                                        ]
-                                    }
-                                ],
-                                "type": "basic"
-                            }
-                        ]
-                    },
-                    {
-                        "description": "shift-alt-tab -> hermes",
-                        "manipulators": [
-                            {
-                                "from": {
-                                    "key_code": "tab",
-                                    "modifiers": {
-                                        "mandatory": [
-                                            "left_alt",
-                                            "left_shift"
-                                        ]
-                                    }
+                                "to": {
+                                    "shell_command": "/Users/anthony/dotfiles/bin/hermes-centered windows"
                                 },
-                                "to": [
-                                    {
-                                        "key_code": "tab",
-                                        "modifiers": [
-                                            "left_alt",
-                                            "left_control",
-                                            "left_shift"
-                                        ]
-                                    }
-                                ],
                                 "type": "basic"
                             }
                         ]
@@ -201,7 +168,7 @@
                         ]
                     },
                     {
-                        "description": "ctrl-cmd-space -> hermes (ghostty centered)",
+                        "description": "ctrl-cmd-space -> hermes (ghostty centered, app mode)",
                         "manipulators": [
                             {
                                 "from": {
@@ -214,14 +181,14 @@
                                     }
                                 },
                                 "to": {
-                                    "shell_command": "/Users/anthony/dotfiles/bin/hermes-centered"
+                                    "shell_command": "/Users/anthony/dotfiles/bin/hermes-centered apps"
                                 },
                                 "type": "basic"
                             }
                         ]
                     },
                     {
-                        "description": "cmd-space -> hermes (ghostty centered, app mode)",
+                        "description": "cmd-space -> hermes (ghostty centered)",
                         "manipulators": [
                             {
                                 "from": {
@@ -233,7 +200,7 @@
                                     }
                                 },
                                 "to": {
-                                    "shell_command": "/Users/anthony/dotfiles/bin/hermes-centered apps"
+                                    "shell_command": "/Users/anthony/dotfiles/bin/hermes-centered"
                                 },
                                 "type": "basic"
                             }

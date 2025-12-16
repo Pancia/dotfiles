@@ -60,6 +60,7 @@ This ensures that if one seed fails to load, it doesn't crash the entire Hammers
 
 | Seed | Purpose | Key Features |
 |------|---------|--------------|
+| **Curfew** | 9pm wind-down reminder | - Full-screen overlay at 9pm<br>- Hold-to-dismiss mechanic (not click)<br>- Escalating hold durations (5s→60s)<br>- Wake/start detection |
 | **Hermes** | Application & workspace launcher | - App launcher with fuzzy matching<br>- VPC workspace launcher<br>- Multi-provider system (apps, slash commands, bang commands)<br>- Window switcher |
 | **Snippets** | Text expansion system | - File-based snippet definitions<br>- Trigger-based auto-expansion<br>- Manual snippet chooser<br>- Clipboard integration |
 | **Calendar** | Calendar event monitoring | - Tag-based event triggers<br>- Title-based event triggers<br>- Configurable lead time notifications<br>- Menubar countdown display |
@@ -83,8 +84,17 @@ This ensures that if one seed fails to load, it doesn't crash the entire Hammers
 | Hotkey | Action |
 |--------|--------|
 | `Cmd+Space` | App launcher (Hermes) with fuzzy search |
-| `Alt+Ctrl+Tab` | Window switcher (next window) |
-| `Alt+Ctrl+Shift+Tab` | Window switcher (previous window) |
+| `Alt+Tab` | Window switcher (fzf picker, all spaces) |
+
+### Window Switcher
+
+The window switcher (`Alt+Tab`) uses a global `windowFilter` in Hammerspoon to track windows across all spaces. It:
+
+1. Queries `_G.windowFilter` for all windows (kept active via `keepActive()`)
+2. Pipes window list to fzf for fuzzy selection
+3. Focuses the selected window (works across spaces)
+
+**Implementation**: `bin/window-switcher` script + `_G.windowFilter` in `lib/lua/core.lua`
 
 ### Navigation (Active Modal)
 
@@ -339,6 +349,59 @@ local lotus = engage("seeds.lotus.init", {
 - Persistent state across Hammerspoon reloads
 - Menubar controls for adding time and restarting
 
+## Curfew: 9pm Wind-Down Reminder
+
+Encourages stopping computer use after 9pm with escalating hold-to-dismiss overlays.
+
+### Configuration
+
+```lua
+local curfew = engage("seeds.curfew", {
+    triggerHour = 21,       -- 9pm
+    triggerMinute = 0,
+    snoozeInterval = 1,     -- 1 minute between escalations
+    resetHour = 4,          -- 4am reset
+    holdDurations = {5, 10, 20, 40, 60}  -- seconds per level
+})
+```
+
+### How It Works
+
+1. **Triggers at 9pm** (or immediately if computer opens between 9pm-4am)
+2. **Full-screen overlay** appears with progress ring
+3. **Hold mouse button** to dismiss (not click) - ring fills as you hold
+4. **Snooze**: Overlay returns in 1 minute with longer hold requirement
+5. **Escalation**: Each snooze increases hold duration (5s → 10s → 20s → 40s → 60s)
+6. **Resets at 4am** for the new day
+
+### Escalation Levels
+
+| Level | Hold Duration | Visual | Message |
+|-------|---------------|--------|---------|
+| 0 | 5 seconds | Calm blue | "Time to wind down" |
+| 1 | 10 seconds | Slightly brighter | "Consider wrapping up" |
+| 2 | 20 seconds | Amber | "It's getting late" |
+| 3 | 40 seconds | Red | "You should really stop" |
+| 4+ | 60 seconds | Deep red | "Final warning" |
+
+### Features
+
+- **Wake Detection**: Triggers on system wake if in curfew window (9pm-4am)
+- **Start Detection**: Triggers on Hammerspoon start if in curfew window
+- **State Persistence**: Snooze count persists across reloads and sleep/wake
+- **Progress Ring**: Visual feedback showing hold progress
+
+### State Persistence
+
+```lua
+-- Saved to hs.settings
+curfew.snoozeCount      -- Current escalation level
+curfew.lastDate         -- Date of last trigger (for reset detection)
+curfew.nextTriggerTime  -- Unix timestamp of pending snooze (survives reload)
+```
+
+Pending snoozes survive Hammerspoon reloads. If you snooze and then reload, the overlay will return at the scheduled time.
+
 ## Cmus: Music Control
 
 Integration with cmus music player and Spotify.
@@ -484,6 +547,7 @@ install:andUse("FadeLogo", {
 
 | Path | Purpose |
 |------|---------|
+| `~/dotfiles/lib/lua/seeds/curfew.lua` | 9pm wind-down reminder |
 | `~/dotfiles/lib/lua/seeds/hermes.lua` | App launcher & VPC system |
 | `~/dotfiles/lib/lua/seeds/snippets.lua` | Text expansion |
 | `~/dotfiles/lib/lua/seeds/calendar/init.lua` | Calendar monitoring |

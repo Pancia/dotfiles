@@ -1,7 +1,7 @@
 {
     "space": "current",
     "chrome" : ["localhost:9630"],
-    "iterm": {
+    "iTerm2": {
         "dir": "$HOME/projects/work/simplymeet/",
         "tabs": [
             "echo docker compose up",

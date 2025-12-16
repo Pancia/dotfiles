@@ -1,8 +1,8 @@
 # Completions for directory bookmark system (d)
 
-# Get list of bookmarks dynamically
+# Get list of bookmarks dynamically (fast - reads files directly)
 function __d_bookmarks
-    ruby ~/dotfiles/lib/ruby/d.rb show 2>/dev/null | string match -r '^\S+\s+->' | string replace -r '\s+->.*$' ''
+    ls -1 ~/.config/d 2>/dev/null
 end
 
 # d - navigate to bookmark

@@ -174,8 +174,9 @@ class WindowQuery:
 class YabaiManager:
     """Manage yabai window positioning and layouts."""
 
-    def __init__(self, config: VPCConfig):
+    def __init__(self, config: VPCConfig, display_selector: 'DisplaySelector' = None):
         self.config = config
+        self.display_selector = display_selector
         self.yabai_config = config.get('yabai', {})
         self.enabled = self.yabai_config.get('enabled', False)
         self.available = self._check_yabai_available()
@@ -215,6 +216,14 @@ class YabaiManager:
         if layout:
             self._run_yabai(['space', '--layout', layout])
 
+    def move_window_to_display(self, window_id: int):
+        """Move window to the selected display if specified."""
+        if not self.display_selector or not self.display_selector.selected_display_id:
+            return
+
+        display_id = self.display_selector.selected_display_id
+        self._run_yabai(['window', str(window_id), '--display', str(display_id)])
+
     def position_window(self, app_name: str, window_config: dict):
         """Position a window using grid + resize + offset."""
         if not self.enabled or not self.available:
@@ -228,6 +237,9 @@ class YabaiManager:
         window_id = WindowQuery.find_window_by_app(app_name, debug=debug)
         if not window_id:
             return
+
+        # Move window to selected display if specified
+        self.move_window_to_display(window_id)
 
         # Debug: Test if window is immediately queryable
         if debug:
@@ -465,6 +477,107 @@ end tell'''
                 sys.exit(1)
         else:
             print("Using current space (no switch)")
+
+
+class DisplaySelector:
+    """Handle display detection and selection."""
+
+    def __init__(self):
+        self.displays = self._query_displays()
+        self.selected_display_id = None
+
+    def _query_displays(self) -> list[dict] | None:
+        """Query yabai for connected displays."""
+        try:
+            result = subprocess.run(
+                ['yabai', '-m', 'query', '--displays'],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=2
+            )
+            return json.loads(result.stdout)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+                FileNotFoundError, json.JSONDecodeError):
+            return None
+
+    def has_multiple_displays(self) -> bool:
+        """Check if multiple displays are connected."""
+        return self.displays is not None and len(self.displays) > 1
+
+    def prompt_for_display(self) -> int | None:
+        """Prompt user to select a display. Returns display ID or None."""
+        if not self.has_multiple_displays():
+            return None
+
+        # Non-interactive mode - use focused display
+        if not sys.stdin.isatty():
+            focused = next(
+                (d for d in self.displays if d.get('has-focus')),
+                self.displays[0]
+            )
+            print(f"Using focused display [{focused['index']}]")
+            self.selected_display_id = focused['id']
+            return self.selected_display_id
+
+        print("Multiple displays detected. Select target display:")
+        for display in self.displays:
+            idx = display['index']
+            width = int(display['frame']['w'])
+            height = int(display['frame']['h'])
+            is_primary = display['frame']['x'] == 0 and display['frame']['y'] == 0
+            position = "Primary" if is_primary else "Secondary"
+            has_focus = " *" if display.get('has-focus') else ""
+            print(f"  [{idx}] {width}x{height} ({position}){has_focus}")
+
+        # Get default (currently focused display)
+        default_idx = next(
+            (d['index'] for d in self.displays if d.get('has-focus')),
+            1
+        )
+
+        try:
+            choice = input(f"Enter display number [{default_idx}]: ").strip()
+            if not choice:
+                selected_idx = default_idx
+            else:
+                selected_idx = int(choice)
+
+            # Validate choice
+            valid_indices = [d['index'] for d in self.displays]
+            if selected_idx not in valid_indices:
+                print(f"Invalid choice. Using display {default_idx}.")
+                selected_idx = default_idx
+
+            # Get display ID from index
+            selected_display = next(
+                d for d in self.displays if d['index'] == selected_idx
+            )
+            self.selected_display_id = selected_display['id']
+            return self.selected_display_id
+
+        except (ValueError, KeyboardInterrupt):
+            print(f"\nUsing display {default_idx}.")
+            selected_display = next(
+                d for d in self.displays if d['index'] == default_idx
+            )
+            self.selected_display_id = selected_display['id']
+            return self.selected_display_id
+
+    def focus_display(self, display_id: int) -> bool:
+        """Focus the selected display via yabai."""
+        try:
+            subprocess.run(
+                ['yabai', '-m', 'display', '--focus', str(display_id)],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            print(f"Focused display {display_id}")
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"Warning: Could not focus display: {e}")
+            return False
 
 
 class AppLauncher:
@@ -742,6 +855,8 @@ def main():
         description='VPC - Setup workspace with apps and window layouts'
     )
     parser.add_argument('config', help='Path to .vpc config file')
+    parser.add_argument('--display', '-d', type=int,
+                        help='Target display ID (skip prompt)')
     args = parser.parse_args()
 
     print(f"Loading config: {args.config}")
@@ -751,12 +866,26 @@ def main():
     # Load configuration
     config = VPCConfig(args.config)
 
+    # Display selection
+    display_selector = DisplaySelector()
+    if args.display:
+        # Use command-line specified display
+        display_selector.selected_display_id = args.display
+        display_selector.focus_display(args.display)
+        print()
+    elif display_selector.has_multiple_displays():
+        # Prompt for display selection
+        display_id = display_selector.prompt_for_display()
+        if display_id:
+            display_selector.focus_display(display_id)
+        print()
+
     # Switch space
     space_switcher = SpaceSwitcher(config)
     space_switcher.switch_space()
 
     # Initialize yabai manager
-    yabai = YabaiManager(config)
+    yabai = YabaiManager(config, display_selector)
     yabai.apply_space_config()
 
     # Launch applications

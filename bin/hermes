@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
+import sys
+import os
+import tty
+import termios
 import time
+import subprocess
+import re
 from pathlib import Path
 
 # Debug logging
@@ -18,163 +24,82 @@ def debug_log(msg):
     except:
         pass
 
-# ============================================================================
-# VPC CONFIGURATION
-# ============================================================================
-
-# User-defined static VPC key mappings
-# Format: {'key': 'vpc_filename_without_extension'}
-VPC_STATIC_MAP = {
-    # Example: 's': 'simplymeet',
-    # Add your preferred VPC shortcuts here
-}
-
-VPC_DIR = Path.home() / "dotfiles" / "vpc"
-
-def get_vpc_files():
-    """Scan VPC directory and return list of .vpc files"""
-    if not VPC_DIR.exists():
-        debug_log(f"VPC directory not found: {VPC_DIR}")
-        return []
-
-    vpc_files = []
-    for file_path in VPC_DIR.glob("*.vpc"):
-        vpc_files.append(file_path)
-
-    debug_log(f"Found {len(vpc_files)} VPC files")
-    return vpc_files
-
-def parse_vpc_metadata(vpc_path):
-    """Parse VPC JSON file to extract metadata for description"""
-    try:
-        import json
-        with open(vpc_path, 'r') as f:
-            data = json.load(f)
-
-        parts = []
-        if data.get('space'):
-            parts.append(f"Space {data['space']}")
-        # Check for both lowercase and titlecase variants
-        if data.get('iterm') or data.get('iTerm2'):
-            parts.append("iTerm")
-        if data.get('chrome') or data.get('Chrome'):
-            parts.append("Chrome")
-        if data.get('brave') or data.get('Brave Browser'):
-            parts.append("Brave")
-        if data.get('apps'):
-            parts.append("Apps")
-        if data.get('board'):
-            parts.append("Board")
-        if data.get('yabai'):
-            parts.append("Yabai")
-
-        if parts:
-            return " • ".join(parts)
-        else:
-            return "VPC Workspace"
-    except Exception as e:
-        debug_log(f"Error parsing VPC metadata from {vpc_path}: {e}")
-        return "VPC Workspace"
-
-def build_vpc_menu():
-    """Build VPC menu with smart key assignment and conflict resolution"""
-    vpc_files = get_vpc_files()
-    if not vpc_files:
-        return {
-            '_desc': 'VPC Workspaces',
-            'x': ['No VPC files found', 'echo "No .vpc files found in ~/dotfiles/vpc/"']
-        }
-
-    # Create a mapping of vpc_name -> vpc_path
-    vpc_map = {}
-    for vpc_path in vpc_files:
-        vpc_name = vpc_path.stem  # filename without extension
-        vpc_map[vpc_name] = vpc_path
-
-    # Start with static mappings
-    menu = {'_desc': 'VPC Workspaces'}
-    assigned_vpcs = set()
-
-    # First pass: assign static mappings
-    for key, vpc_name in VPC_STATIC_MAP.items():
-        if vpc_name in vpc_map:
-            vpc_path = vpc_map[vpc_name]
-            menu[key] = [vpc_name, f"open '{vpc_path}'"]
-            assigned_vpcs.add(vpc_name)
-            debug_log(f"Static assignment: {key} -> {vpc_name}")
-
-    # Second pass: assign remaining VPCs dynamically
-    unassigned_vpcs = [name for name in vpc_map.keys() if name not in assigned_vpcs]
-
-    if unassigned_vpcs:
-        menu = assign_vpc_keys(menu, unassigned_vpcs, vpc_map)
-
-    return menu
-
-def assign_vpc_keys(menu, vpc_names, vpc_map, depth=0):
-    """
-    Recursively assign keys to VPCs based on their names.
-    Handle conflicts by creating nested menus.
-
-    Args:
-        menu: Current menu dict to populate
-        vpc_names: List of VPC names to assign
-        vpc_map: Mapping of vpc_name -> vpc_path
-        depth: Current character index for key selection
-    """
-    if depth > 10:  # Safety limit
-        debug_log(f"Warning: Max recursion depth reached for VPC assignment")
-        return menu
-
-    # Group VPCs by their nth character
-    char_groups = {}
-    for vpc_name in vpc_names:
-        if depth < len(vpc_name):
-            char = vpc_name[depth].lower()
-        else:
-            # If we've exhausted the name, use a fallback
-            char = '0'
-
-        if char not in char_groups:
-            char_groups[char] = []
-        char_groups[char].append(vpc_name)
-
-    # Assign keys
-    for char, vpcs in char_groups.items():
-        if char in menu and not isinstance(menu[char], dict):
-            # Key already used by a static mapping, try next character
-            debug_log(f"Key '{char}' already used, creating nested menu for {vpcs}")
-            # Create a nested menu for these VPCs
-            vpc_list = ", ".join(sorted(vpcs))
-            if len(vpc_list) > 50:
-                vpc_list = vpc_list[:47] + "..."
-            nested_menu = {'_desc': vpc_list}
-            menu[char + char] = assign_vpc_keys(nested_menu, vpcs, vpc_map, depth + 1)
-        elif len(vpcs) == 1:
-            # Single VPC, assign directly (no metadata, just name)
-            vpc_name = vpcs[0]
-            vpc_path = vpc_map[vpc_name]
-            menu[char] = [vpc_name, f"open '{vpc_path}'"]
-            debug_log(f"Dynamic assignment: {char} -> {vpc_name}")
-        else:
-            # Multiple VPCs with same character, create nested menu
-            debug_log(f"Conflict on '{char}': {vpcs} - creating nested menu")
-            # Create description showing contained VPC names
-            vpc_list = ", ".join(sorted(vpcs))
-            if len(vpc_list) > 50:
-                vpc_list = vpc_list[:47] + "..."
-            if char not in menu or not isinstance(menu[char], dict):
-                menu[char] = {'_desc': vpc_list}
-            menu[char] = assign_vpc_keys(menu[char], vpcs, vpc_map, depth + 1)
-
-    return menu
-
 COMMANDS_FILE = Path.home() / ".config" / "hermes" / "commands.json"
+COMMANDS_PY_FILE = Path.home() / ".config" / "hermes" / "commands.py"
+
+
+def load_python_commands():
+    """Load commands from Python config file"""
+    if not COMMANDS_PY_FILE.exists():
+        debug_log(f"Python commands file not found: {COMMANDS_PY_FILE}")
+        return None
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("commands", COMMANDS_PY_FILE)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        commands = getattr(module, 'COMMANDS', None)
+        if commands is not None:
+            debug_log(f"Loaded {len(commands)} commands from Python config")
+        return commands
+    except Exception as e:
+        debug_log(f"Error loading Python commands: {e}")
+        print(f"hermes: error loading Python commands: {e}", file=sys.stderr)
+        return None
+
+
+def print_json_error(filepath, error):
+    """Print a pretty JSON parse error with context"""
+    RED = '\033[31m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
+    RESET = '\033[0m'
+    CYAN = '\033[36m'
+
+    try:
+        with open(filepath, 'r') as f:
+            lines = f.readlines()
+    except:
+        print(f"{RED}hermes: JSON error: {error.msg}{RESET}", file=sys.stderr)
+        return
+
+    lineno = error.lineno
+    colno = error.colno
+
+    print(f"\n{RED}{BOLD}JSON Parse Error{RESET} {DIM}in commands.json{RESET}", file=sys.stderr)
+    print(f"{DIM}{error.msg} at line {lineno}, column {colno}{RESET}\n", file=sys.stderr)
+
+    # Show context: 2 lines before, error line, 2 lines after
+    start = max(0, lineno - 3)
+    end = min(len(lines), lineno + 2)
+
+    for i in range(start, end):
+        line_num = i + 1
+        line = lines[i].rstrip()
+        prefix = f"{DIM}{line_num:4} │{RESET} "
+
+        if line_num == lineno:
+            # Error line - highlight it
+            print(f"{CYAN}{BOLD}{line_num:4} │{RESET} {line}", file=sys.stderr)
+            # Show caret pointing to error column
+            pointer = ' ' * (7 + colno - 1) + f'{RED}^── {error.msg}{RESET}'
+            print(pointer, file=sys.stderr)
+        else:
+            print(f"{prefix}{line}", file=sys.stderr)
+
+    print(file=sys.stderr)
 
 def load_commands():
-    """Load commands from JSON config file"""
+    """Load commands - try Python config first, fall back to JSON"""
+    # Try Python config first
+    commands = load_python_commands()
+    if commands is not None:
+        return commands
+
+    # Fall back to JSON config
     if not COMMANDS_FILE.exists():
         debug_log(f"Commands file not found: {COMMANDS_FILE}")
+        print(f"hermes: commands file not found: {COMMANDS_FILE}", file=sys.stderr)
         return {}
     try:
         import json
@@ -184,13 +109,51 @@ def load_commands():
         data.pop('__rc_loc', None)
         debug_log(f"Loaded {len(data)} commands from {COMMANDS_FILE}")
         return data
+    except json.JSONDecodeError as e:
+        debug_log(f"Error loading commands: {e}")
+        print_json_error(COMMANDS_FILE, e)
+        return (None, e.lineno)  # Return error line for vim jump
     except Exception as e:
         debug_log(f"Error loading commands: {e}")
-        return {}
+        print(f"hermes: error loading commands: {e}", file=sys.stderr)
+        return ({}, None)
 
-commands = load_commands()
+def load_commands_with_retry():
+    """Load commands, offering to open vim on JSON errors"""
+    import subprocess
+    import tty
+    import termios
+    import os
 
-import sys, tty, termios
+    while True:
+        result = load_commands()
+        if isinstance(result, tuple):
+            data, error_line = result
+            if data is None:
+                # JSON error - ask user if they want to edit
+                if not os.isatty(sys.stdin.fileno()):
+                    sys.exit(1)
+
+                print(f"Press any key to edit in vim, or q/Esc/Ctrl-C to quit: ", end='', flush=True)
+                fd = sys.stdin.fileno()
+                old_settings = termios.tcgetattr(fd)
+                try:
+                    tty.setraw(fd)
+                    ch = sys.stdin.read(1)
+                finally:
+                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                print()
+
+                # Quit on q, Esc, Ctrl-C, Ctrl-D
+                if ch in ('q', 'Q', '\x1b', '\x03', '\x04', '\x7f', '\x08'):
+                    sys.exit(1)
+                else:
+                    # Open vim at error line
+                    subprocess.run(['/opt/homebrew/bin/nvim', f'+{error_line}', str(COMMANDS_FILE)])
+                    continue  # Retry after editing
+            return data
+        return result
+
 def getch():
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
@@ -209,27 +172,66 @@ def print_commands(commands_list, command_history):
     DIM_GRAY = '\033[2;37m'     # Dim gray for commands
     RESET = '\033[0m'           # Reset formatting
 
+    # Collect entries as (shortcut, formatted_string, plain_length)
+    entries = []
     for shortcut, content in commands_list.items():
-        if shortcut[0] == '_':
-            pass
+        if shortcut.startswith('_'):
+            continue
         elif isinstance(content, list):
             (description, command) = content
-            # Resolve any dynamic content in the description
             display_title = resolve_dynamic_title(description)
-            # Regular command - cyan hotkey, white label
-            print(f"{BOLD_CYAN}[{shortcut}]{RESET} {BOLD_WHITE}{display_title}{RESET}")
+            formatted = f"{BOLD_CYAN}[{shortcut}]{RESET} {BOLD_WHITE}{display_title}{RESET}"
+            plain_len = len(f"[{shortcut}] {display_title}")
+            entries.append((shortcut, formatted, plain_len))
+        elif callable(content):
+            # Callable generator - show as lazy submenu
+            display_title = content.__name__.replace('build_', '').replace('_menu', '').replace('_', ' ').title()
+            formatted = f"{BOLD_YELLOW}[{shortcut}]{RESET} {YELLOW}→ {display_title}...{RESET}"
+            plain_len = len(f"[{shortcut}] → {display_title}...")
+            entries.append((shortcut, formatted, plain_len))
         else:
-            # Submenu - yellow hotkey with arrow before label
             description = content["_desc"]
             display_title = resolve_dynamic_title(description)
-            print(f"{BOLD_YELLOW}[{shortcut}]{RESET} {YELLOW}→ {display_title}{RESET}")
+            formatted = f"{BOLD_YELLOW}[{shortcut}]{RESET} {YELLOW}→ {display_title}{RESET}"
+            plain_len = len(f"[{shortcut}] → {display_title}")
+            entries.append((shortcut, formatted, plain_len))
+
+    # Add search command as a menu item
+    formatted = f"{BOLD_CYAN}[:]{RESET} {BOLD_WHITE}Search all commands{RESET}"
+    plain_len = len("[:] Search all commands")
+    entries.append((':', formatted, plain_len))
+
+    # Sort entries by shortcut key
+    entries.sort(key=lambda x: x[0].lower())
+
+    if not entries:
+        return
+
+    # Get terminal width
+    try:
+        term_width = os.get_terminal_size().columns
+    except OSError:
+        term_width = 80
+
+    # Calculate column layout
+    max_width = max(e[2] for e in entries) + 2  # +2 for padding
+    num_cols = max(1, term_width // max_width)
+    num_rows = (len(entries) + num_cols - 1) // num_cols
+
+    # Print in columns (fill by column, read by row)
+    for row in range(num_rows):
+        line_parts = []
+        for col in range(num_cols):
+            idx = col * num_rows + row
+            if idx < len(entries):
+                shortcut, formatted, plain_len = entries[idx]
+                padding = ' ' * (max_width - plain_len)
+                line_parts.append(formatted + padding)
+        print(''.join(line_parts).rstrip())
 
     if command_history:
         print(f"\n{DIM_GRAY}<DEL> - Go back up a level{RESET}")
     print(f"{DIM_GRAY}<ESC> <Ctrl-C> <Ctrl-D> - EXIT{RESET}")
-
-import subprocess
-import re
 
 def resolve_dynamic_title(title):
     """
@@ -266,19 +268,88 @@ def resolve_dynamic_title(title):
     pattern = r'\$\(([^)]+)\)'
     return re.sub(pattern, replace_command, title)
 
+def flatten_commands(commands, path=""):
+    """
+    Recursively flatten menu structure into searchable entries.
+
+    Returns list of tuples: (display_string, command)
+    """
+    entries = []
+    for key, content in commands.items():
+        if key.startswith('_'):
+            continue
+
+        if isinstance(content, list):
+            # Leaf command
+            description = content[0]
+            command = content[1]
+            display_title = resolve_dynamic_title(description)
+            display = f"{path}{display_title}" if path else display_title
+            entries.append((display, command))
+        elif callable(content):
+            # Callable generator - invoke to include in search
+            resolved = content()
+            submenu_desc = resolved.get('_desc', key)
+            display_desc = resolve_dynamic_title(submenu_desc)
+            new_path = f"{path}{display_desc} → " if path else f"{display_desc} → "
+            entries.extend(flatten_commands(resolved, new_path))
+        else:
+            # Submenu - recurse with _desc in path
+            submenu_desc = content.get('_desc', key)
+            display_desc = resolve_dynamic_title(submenu_desc)
+            new_path = f"{path}{display_desc} → " if path else f"{display_desc} → "
+            entries.extend(flatten_commands(content, new_path))
+
+    return entries
+
+def fzf_search_mode(commands):
+    """
+    Launch fzf to search through all commands recursively.
+    Returns the command to execute, or None if cancelled.
+    """
+    entries = flatten_commands(commands)
+    if not entries:
+        return None
+
+    # Format entries for fzf
+    fzf_input = "\n".join(entry[0] for entry in entries)
+
+    try:
+        result = subprocess.run(
+            ['/opt/homebrew/bin/fzf', '--prompt=: ', '--height=40%', '--reverse', '--ansi'],
+            input=fzf_input,
+            capture_output=True,
+            text=True
+        )
+
+        if result.returncode == 0 and result.stdout.strip():
+            selected = result.stdout.strip()
+            # Find the matching entry
+            for display, command in entries:
+                if display == selected:
+                    return command
+    except FileNotFoundError:
+        print("fzf not found. Please install fzf.")
+    except Exception as e:
+        debug_log(f"fzf search error: {e}")
+
+    return None
+
 def execute_command(command):
     """
-    Execute a command and return whether to quit the modal.
+    Execute a command and return (should_quit, should_reload).
 
     Returns:
-        bool: True if should quit after execution, False otherwise
+        tuple: (should_quit, should_reload) - whether to quit and whether to reload commands
     """
     start = time.time()
     should_quit = False
+    should_reload = False
+    is_vpc_command = isinstance(command, str) and '.vpc' in command
 
-    # Check if this is a VPC command (should quit after execution)
-    if isinstance(command, str) and '.vpc' in command:
-        should_quit = True
+    # Check if this is editing the Hermes config (should reload after)
+    if isinstance(command, str) and ('hermes.json' in command or 'commands.json' in command or 'hermes_commands.py' in command or 'commands.py' in command):
+        should_reload = True
 
     # Support both list (direct execution) and string (shell execution) syntax
     if isinstance(command, list):
@@ -289,6 +360,8 @@ def execute_command(command):
             subprocess.run(command, shell=False, check=True, env=os.environ)
             elapsed = (time.time() - start) * 1000
             debug_log(f"Command completed: {' '.join(command)} ({elapsed:.1f}ms)")
+            if is_vpc_command:
+                should_quit = True
         except subprocess.CalledProcessError as e:
             elapsed = (time.time() - start) * 1000
             debug_log(f"Command failed: {' '.join(command)} - {e} ({elapsed:.1f}ms)")
@@ -301,23 +374,22 @@ def execute_command(command):
             subprocess.run(command, shell=True, check=True, executable='/opt/homebrew/bin/fish')
             elapsed = (time.time() - start) * 1000
             debug_log(f"Command completed: {command} ({elapsed:.1f}ms)")
+            if is_vpc_command:
+                should_quit = True
         except subprocess.CalledProcessError as e:
             elapsed = (time.time() - start) * 1000
             debug_log(f"Command failed: {command} - {e} ({elapsed:.1f}ms)")
             print(f"Command '{command}' failed with error: {e}")
 
-    return should_quit
+    return should_quit, should_reload
 
-import os
 def main():
     import datetime
     debug_log(f"=== Controls Modal - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===")
     debug_log(f"Args: {sys.argv}")
 
-    # Build VPC menu dynamically and inject into commands
-    global commands
-    commands['v'] = build_vpc_menu()
-    debug_log(f"VPC menu built with {len(commands['v']) - 1} entries")  # -1 for _desc
+    # Load commands (deferred from module level for faster startup)
+    commands = load_commands_with_retry()
 
     current_commands = commands
     command_history = []
@@ -333,21 +405,40 @@ def main():
                 command = action[1]
                 # If command is a list, extend it with the 'apps' argument
                 if isinstance(command, list):
-                    execute_command(command + ['apps'])
+                    _, _ = execute_command(command + ['apps'])
                 else:
                     # Shell command - append argument as string
-                    execute_command(f"{command} apps")
+                    _, _ = execute_command(f"{command} apps")
                 # Don't return - continue to show main menu
+        elif arg == 'windows' and 'w' in current_commands:
+            # Auto-execute window switcher and exit
+            action = current_commands['w']
+            if isinstance(action, list):
+                execute_command(action[1])
+                sys.exit(0)
 
     while True:
         # os.system('clear')
         print_commands(current_commands, command_history)
         user_input = getch()
         print(f"Command {user_input} {user_input.encode().hex()}")
+
         if user_input in current_commands:
             action = current_commands[user_input]
+
+            # Resolve callable generators on first access (lazy loading)
+            if callable(action):
+                debug_log(f"Resolving generator for key '{user_input}'")
+                action = action()  # Call the generator
+                current_commands[user_input] = action  # Cache result
+
             if isinstance(action, list):
-                should_quit = execute_command(action[1])
+                should_quit, should_reload = execute_command(action[1])
+                if should_reload:
+                    debug_log("Reloading commands after config edit")
+                    commands = load_commands_with_retry()
+                    current_commands = commands
+                    command_history = []
                 if should_quit:
                     debug_log("Quitting after VPC command execution")
                     break
@@ -360,6 +451,20 @@ def main():
         elif user_input in ['\x7f', '\x08']:
             if command_history:
                 current_commands = command_history.pop()
+        elif user_input == ':':
+            # fzf search mode
+            debug_log("Entering fzf search mode")
+            command = fzf_search_mode(commands)
+            if command:
+                should_quit, should_reload = execute_command(command)
+                if should_reload:
+                    debug_log("Reloading commands after config edit (fzf)")
+                    commands = load_commands_with_retry()
+                    current_commands = commands
+                    command_history = []
+                if should_quit:
+                    debug_log("Quitting after fzf command execution")
+                    break
         else:
             print(f"Command {user_input} {user_input.encode().hex()} not found. Please try again.")
 

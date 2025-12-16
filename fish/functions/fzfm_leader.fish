@@ -14,15 +14,17 @@ function fzfm_leader
     # Show help menu
     echo
     echo (set_color --bold cyan)"fzfm:"(set_color normal)
-    echo "  "(set_color green)"Space"(set_color normal)" - Search files "(set_color --bold)"(default)"(set_color normal)
-    echo "  "(set_color green)"j"(set_color normal)" - "(set_color --bold)"J"(set_color normal)"ump to directory"
-    echo "  "(set_color green)"s"(set_color normal)" - "(set_color --bold)"S"(set_color normal)"earch files"
-    echo "  "(set_color green)"f"(set_color normal)" - Search all "(set_color --bold)"f"(set_color normal)"iles"
-    echo "  "(set_color green)"r"(set_color normal)" - "(set_color --bold)"R"(set_color normal)"ecent/frequent files"
-    echo "  "(set_color green)"g"(set_color normal)" - "(set_color --bold)"G"(set_color normal)"rep search (search file contents)"
-    echo "  "(set_color green)"d"(set_color normal)" - Current "(set_color --bold)"d"(set_color normal)"irectory only"
-    echo "  "(set_color green)"a"(set_color normal)" - "(set_color --bold)"A"(set_color normal)"ll files (thorough search)"
-    echo "  "(set_color green)"q"(set_color normal)" - "(set_color --bold)"Q"(set_color normal)"uit/cancel"
+    echo "  "(set_color green)"Space"(set_color normal)" - Search files "(set_color --bold yellow)"(default)"(set_color normal)
+    echo "  "(set_color green)"j"(set_color normal)" - "(set_color --bold yellow)"J"(set_color normal)"ump to directory"
+    echo "  "(set_color green)"p"(set_color normal)" - "(set_color --bold yellow)"P"(set_color normal)"roject (git repos)"
+    echo "  "(set_color green)"s"(set_color normal)" - "(set_color --bold yellow)"S"(set_color normal)"earch files"
+    echo "  "(set_color green)"f"(set_color normal)" - Search all "(set_color --bold yellow)"f"(set_color normal)"iles"
+    echo "  "(set_color green)"r"(set_color normal)" - "(set_color --bold yellow)"R"(set_color normal)"ecent/frequent files"
+    echo "  "(set_color green)"g"(set_color normal)" - "(set_color --bold yellow)"G"(set_color normal)"rep search (search file contents)"
+    echo "  "(set_color green)"d"(set_color normal)" - Current "(set_color --bold yellow)"d"(set_color normal)"irectory only"
+    echo "  "(set_color green)"a"(set_color normal)" - "(set_color --bold yellow)"A"(set_color normal)"ll files (thorough search)"
+    echo "  "(set_color green)"c"(set_color normal)" - Fuzzy "(set_color --bold yellow)"c"(set_color normal)"ompletion"
+    echo "  "(set_color green)"q"(set_color normal)" - "(set_color --bold yellow)"Q"(set_color normal)"uit/cancel"
     echo
     echo -n (set_color cyan)"Choose:"(set_color normal)" "
 
@@ -40,6 +42,9 @@ function fzfm_leader
         case j J
             # Jump to directory
             __fzfm_search jump_frecent
+        case p P
+            # Jump to git project
+            __fzfm_search jump_projects
         case s S
             # Search files
             __fzfm_search all
@@ -58,6 +63,9 @@ function fzfm_leader
         case a A
             # All files (more thorough)
             __fzfm_search All
+        case c C
+            # Fuzzy completion
+            _fzf_complete
         case q Q ''
             # Cancel (q, Q, Escape, or Ctrl+C)
             # Just return without doing anything

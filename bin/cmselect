@@ -4,6 +4,6 @@ command="music select $@"
 
 osascript <<EOF
 tell application "iterm2"
-  create window with default profile command "zsh -ic '$command'"
+  create window with default profile command "fish -ic '$command'"
 end tell
 EOF

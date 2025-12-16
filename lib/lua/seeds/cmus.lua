@@ -409,4 +409,20 @@ function obj:start(config)
     end)
 end
 
+function obj:stop()
+    obj:hideControlsCanvas()
+    if obj._canvas then
+        obj._canvas:delete()
+        obj._canvas = nil
+    end
+    if obj._ipcPort then
+        obj._ipcPort:delete()
+        obj._ipcPort = nil
+    end
+    if obj._controlsMenu then
+        obj._controlsMenu:delete()
+        obj._controlsMenu = nil
+    end
+end
+
 return obj

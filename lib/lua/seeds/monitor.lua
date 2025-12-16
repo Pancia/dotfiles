@@ -79,7 +79,11 @@ function createEntry(window, visibleWindows)
     end
 
     entry["visible"] = hs.fnutils.map(realWindows, function(w)
-        return w:application():title() .. " => " .. w:title()
+        local wApp = w:application()
+        if wApp == nil then
+            return "<no app> => " .. w:title()
+        end
+        return wApp:title() .. " => " .. w:title()
     end)
     entry["active"] = obj._wasActive
     return entry

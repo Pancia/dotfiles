@@ -6,7 +6,7 @@ function _not_same_inode
 end
 
 function _ENSURE_RCS
-    for rc in (find $HOME/dotfiles/rcs -type f -not -name '.*')
+    for rc in (find $HOME/dotfiles/rcs -type f -not -name '.*' -not -path '*/_*')
         set -l rc_dest (head -n 1 $rc | sed -E 's/.*<\[(.*)\]>.*/\1/')
         if not test -f "$HOME/$rc_dest"; or _not_same_inode "$HOME/$rc_dest" "$rc"
             mkdir -p (dirname "$HOME/$rc_dest")
@@ -143,7 +143,7 @@ alias gpf 'echo "ERROR: USE: vim git fuGITive (whichkey plugin)"; false'
 alias gpl 'echo "ERROR: USE: vim git fuGITive (whichkey plugin)"; false'
 
 # Abbreviations
-abbr -a cc claude
+abbr -a cc my-claude-code-wrapper
 
 # Key bindings
 if status is-interactive

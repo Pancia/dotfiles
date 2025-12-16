@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+HS="/Users/anthony/Developer/bin/hs"
+
+# Get windows as JSON from Hammerspoon's global window filter (all spaces)
+windows=$("$HS" -c '
+local result = {}
+for _, w in ipairs(windowFilter:getWindows()) do
+  local app = w:application()
+  if app then
+    table.insert(result, {id=w:id(), app=app:name(), title=w:title()})
+  end
+end
+print(hs.json.encode(result))
+')
+
+# Parse JSON, format for fzf: "title | app [id]"
+# Use jq to format, pipe to fzf, extract window ID, focus it
+selected=$(echo "$windows" | jq -r '.[] | "\(.title) | \(.app) [\(.id)]"' | /opt/homebrew/bin/fzf --height=100% --reverse)
+
+if [ -n "$selected" ]; then
+    # Extract window ID from "[id]" at end
+    window_id=$(echo "$selected" | grep -oE '\[[0-9]+\]$' | tr -d '[]')
+    # Use windowFilter to find and focus (hs.window.get only works for current space)
+    "$HS" -c "
+for _, w in ipairs(windowFilter:getWindows()) do
+  if w:id() == $window_id then
+    w:focus()
+    break
+  end
+end
+"
+fi
