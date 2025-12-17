@@ -1,17 +1,19 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env fish
 
-function sysAudVol() {
-    nvram SystemAudioVolume | cut -d$'\t' -f2
-}
+function sysAudVol
+    nvram SystemAudioVolume | cut -f2
+end
 
-function disable_osx_startup_chime() {
-    echo "$(date '+%x %X')"
-    echo "SystemAudioVolume is: '$(sysAudVol | xxd)'"
-    if [[ ! "$(sysAudVol)" == '%80' ]]; then
+function disable_osx_startup_chime
+    echo (date '+%x %X')
+    set -l vol (sysAudVol | xxd)
+    echo "SystemAudioVolume is: '$vol'"
+    if test (sysAudVol) != '%80'
         sudo nvram SystemAudioVolume=%80
-        echo "SystemAudioVolume set to: '$(sysAudVol | xxd)'"
-    fi
+        set -l vol (sysAudVol | xxd)
+        echo "SystemAudioVolume set to: '$vol'"
+    end
     echo
-}
+end
 
 disable_osx_startup_chime 2>&1

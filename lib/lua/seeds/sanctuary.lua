@@ -1,6 +1,8 @@
+local safeLogger = require("lib/safeLogger")
+
 local obj = {}
 obj._name = "sanctuary"
-obj._logger = hs.logger.new("sanctuary", "info")
+obj._logger = safeLogger.new("sanctuary", "info")
 
 local CHECK_INTERVAL = 30  -- 30-second heartbeat
 local VPC_PATH = "/Users/anthony/dotfiles/vpc/sanctuary.vpc"

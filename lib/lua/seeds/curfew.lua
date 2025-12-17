@@ -1,9 +1,11 @@
 -- Curfew: wind-down reminder with hold-to-dismiss
 -- Triggers every minute on the minute (XX:00)
 
+local safeLogger = require("lib/safeLogger")
+
 local obj = {}
 obj._name = "curfew"
-obj._logger = hs.logger.new("curfew", "info")
+obj._logger = safeLogger.new("curfew", "info")
 
 -- Configuration (set via start())
 local config = {
@@ -19,13 +21,10 @@ obj._mouseDownTap = nil
 obj._mouseUpTap = nil
 obj._isShowing = false
 
-function obj:scheduleNextMinute()
-    local now = os.date("*t")
-    local secondsUntilNextMinute = 60 - now.sec
-
-    obj._timer = hs.timer.doAfter(secondsUntilNextMinute, function()
+function obj:scheduleNext()
+    obj._timer = hs.timer.doAfter(60, function()
         obj:trigger()
-        obj:scheduleNextMinute()
+        obj:scheduleNext()
     end)
 end
 
@@ -242,8 +241,15 @@ function obj:cleanupEventTaps()
     end
 end
 
+function obj:isWithinCurfew()
+    local hour = tonumber(os.date("%H"))
+    -- Curfew spans midnight: trigger if hour >= triggerHour OR hour < resetHour
+    return hour >= config.triggerHour or hour < config.resetHour
+end
+
 function obj:trigger()
     if obj._isShowing then return end
+    if not obj:isWithinCurfew() then return end
 
     obj._logger.i("Showing curfew overlay")
     obj._isShowing = true
@@ -274,8 +280,7 @@ function obj:start(cfg)
         end
     end
 
-    -- Schedule to trigger at the next minute boundary
-    obj:scheduleNextMinute()
+    -- obj:scheduleNext()
 
     return obj
 end

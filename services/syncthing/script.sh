@@ -1,4 +1,4 @@
-#!/usr/bin/env zsh
+#!/opt/homebrew/bin/fish
 
 echo 'syncthing here'
 cd $HOME

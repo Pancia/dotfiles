@@ -7,7 +7,15 @@ end
 
 function _ENSURE_RCS
     for rc in (find $HOME/dotfiles/rcs -type f -not -name '.*' -not -path '*/_*')
-        set -l rc_dest (head -n 1 $rc | sed -E 's/.*<\[(.*)\]>.*/\1/')
+        set -l first_line (head -n 1 $rc)
+        # Skip files without <[...]> metadata header
+        if not string match -rq '<\[.*\]>' -- $first_line
+            if status is-interactive; and isatty stderr
+                echo "[_ENSURE_RCS] warning: $rc missing <[dest]> header" >&2
+            end
+            continue
+        end
+        set -l rc_dest (echo $first_line | sed -E 's/.*<\[(.*)\]>.*/\1/')
         if not test -f "$HOME/$rc_dest"; or _not_same_inode "$HOME/$rc_dest" "$rc"
             mkdir -p (dirname "$HOME/$rc_dest")
             ln -f "$rc" "$HOME/$rc_dest"
@@ -131,7 +139,7 @@ alias gcai __git_use_g
 alias gd  __git_use_g
 alias gds __git_use_g
 alias gl  __git_use_g
-alias gs  __git_use_g
+alias gs  'git status'
 alias gsave __git_use_g
 alias gshow __git_use_g
 alias gstash __git_use_g
@@ -143,6 +151,7 @@ alias gpl __git_use_g
 
 # Abbreviations
 abbr -a cc my-claude-code-wrapper
+abbr -a oo my-opencode-wrapper
 
 # Key bindings
 if status is-interactive

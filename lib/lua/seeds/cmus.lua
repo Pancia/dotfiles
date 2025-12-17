@@ -408,18 +408,24 @@ function obj:start(config)
         obj:toggleControlsCanvas()
     end)
 
-    -- Defer slow shell commands
-    obj._initTimer = hs.timer.doAfter(0, function()
-        cmusRemotePath = hs.execute("which cmus-remote", true):gsub("%s+$", "")
+    -- Find cmus-remote path asynchronously
+    local start = hs.timer.absoluteTime()
+    obj._whichTask = hs.task.new("/usr/bin/which", function(exitCode, stdout, stderr)
+        obj._whichTask = nil
+        if exitCode == 0 then
+            cmusRemotePath = stdout:gsub("%s+$", "")
+        end
         obj:initMenuTitle()
-    end)
+        hs.printf("[async] cmus.init: %.1fms", (hs.timer.absoluteTime() - start) / 1e6)
+    end, {"cmus-remote"})
+    obj._whichTask:start()
 end
 
 function obj:stop()
     obj:hideControlsCanvas()
-    if obj._initTimer then
-        obj._initTimer:stop()
-        obj._initTimer = nil
+    if obj._whichTask then
+        obj._whichTask:terminate()
+        obj._whichTask = nil
     end
     if obj._canvas then
         obj._canvas:delete()

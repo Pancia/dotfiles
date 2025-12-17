@@ -1,2 +1,2 @@
-#!/usr/bin/env zsh
-less +GF "$@"
+#!/usr/bin/env fish
+less +GF $argv

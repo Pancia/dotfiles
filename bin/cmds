@@ -79,7 +79,7 @@ class CMDS extend CMD
     opts.info = "Move cmds.rb file to trash."
     lambda {
       if File.exist? $cmds_file
-        system("zsh -ic 'trash #{$cmds_file}'")
+        system("fish -c 'trash #{$cmds_file}'")
       end
     }
   end

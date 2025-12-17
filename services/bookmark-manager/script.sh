@@ -1,5 +1,5 @@
-#!/usr/bin/env zsh
+#!/opt/homebrew/bin/fish
 
-echo "$(date): bookmark-manager service started"
+echo (date)": bookmark-manager service started"
 
-cd ~/projects/bookmarks_manager && npm run service
+cd ~/projects/bookmarks_manager; and npm run service

@@ -1,10 +1,10 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env fish
 
-read local_ref local_sha remote_ref remote_sha
+read -l local_ref local_sha remote_ref remote_sha
 
-if [[ `cmds list` =~ 'pre_push' ]]; then
+if string match -q '*pre_push*' (cmds list)
     cmds pre_push
-    exit $?
-fi
+    exit $status
+end
 
 exit 0

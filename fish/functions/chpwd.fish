@@ -90,7 +90,7 @@ function chpwd_hook --on-variable PWD
     cache 15 showTodos
     cache 15 showCmds
     cache 5 listVims
-    showPlans
+    cache 5 showPlans
 end
 
 # Show plans on shell startup (this file is sourced from config.fish)

@@ -216,9 +216,9 @@ def print_menu(commands, path=''):
         print(''.join(line_parts).rstrip())
 
     if path:
-        print(f"{DIM}[:] Search  <DEL> Go back  <ESC> Exit{RESET}")
+        print(f"{DIM}[:] Search  <DEL> Go back  <ESC>/q Exit{RESET}")
     else:
-        print(f"{DIM}[:] Search  <ESC> Exit{RESET}")
+        print(f"{DIM}[:] Search  <ESC>/q Exit{RESET}")
     print(f"{DIM}{'─' * 40}{RESET}")
     git_status_line()
 
@@ -304,7 +304,7 @@ def main():
         print_menu(current, path)
         key = getch()
 
-        if key in ('\x1b', '\x03', '\x04'):  # ESC, Ctrl-C, Ctrl-D
+        if key in ('\x1b', '\x03', '\x04', 'q'):  # ESC, Ctrl-C, Ctrl-D, q
             break
         elif key in ('\x7f', '\x08'):  # DEL, Backspace
             if history:

@@ -6,7 +6,7 @@ module MusicCMD
     puts "CMD[SEARCH]" if $options[:verbose]
     puts "search: #{$options[:filter]}" if $options[:verbose]
     tmp = Tempfile.new; IO.write tmp, MusicDB.read($options[:filter])
-    %x< cat '#{tmp.path}' | sort | uniq #{ "| zsh -ic 'search #{args}' " if not $options[:raw]} >.gsub(/\]7;.*/, "")
+    %x< cat '#{tmp.path}' | sort | uniq #{ "| fish -c 'search #{args}' " if not $options[:raw]} >.gsub(/\]7;.*/, "")
   end
 
   def search(opts)

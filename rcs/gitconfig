@@ -15,3 +15,5 @@
     email = anthony.dayzerostudio@gmail.com
 [rebase]
     instructionFormat = (%an) %s
+[safe]
+    directory = /Users/anthony/flutter/3.29.2

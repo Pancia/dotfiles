@@ -1,0 +1,5 @@
+- uninstall zen
+- maybe clear /Users/anthony/Library/Caches/zen
+- 13G	/Users/anthony/.cache/huggingface
+- 2.0G	/Users/anthony/Library/Caches/Homebrew
+- 1.4G	/Users/anthony/Library/Caches/pip

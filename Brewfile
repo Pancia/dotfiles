@@ -9,7 +9,6 @@ tap 'neovim/neovim'
 # Shell & CLI Tools
 brew 'fish'
 brew 'fzf'
-brew 'zsh'
 
 # File & Text Search
 brew 'bat'

@@ -25,7 +25,7 @@
 	<key>ClosingHotkeySwitchesSpaces</key>
 	<true/>
 	<key>Command</key>
-	<string>/usr/local/bin/zsh</string>
+	<string>/opt/homebrew/bin/fish</string>
 	<key>CommandSelection</key>
 	<true/>
 	<key>Control</key>
@@ -752,7 +752,7 @@
 			<key>Columns</key>
 			<integer>128</integer>
 			<key>Command</key>
-			<string>/usr/local/bin/zsh</string>
+			<string>/opt/homebrew/bin/fish</string>
 			<key>Cursor Boost</key>
 			<real>0.0</real>
 			<key>Cursor Color</key>
@@ -2228,7 +2228,7 @@
 											<key>Columns</key>
 											<integer>128</integer>
 											<key>Command</key>
-											<string>/usr/local/bin/zsh</string>
+											<string>/opt/homebrew/bin/fish</string>
 											<key>Cursor Boost</key>
 											<real>0.0</real>
 											<key>Cursor Color</key>
@@ -2632,7 +2632,7 @@
 										<key>Program</key>
 										<dict>
 											<key>Custom Shell</key>
-											<string>/usr/local/bin/zsh</string>
+											<string>/opt/homebrew/bin/fish</string>
 											<key>Type</key>
 											<string>Custom Shell</string>
 										</dict>
@@ -2923,7 +2923,7 @@
 											<key>Columns</key>
 											<integer>128</integer>
 											<key>Command</key>
-											<string>/usr/local/bin/zsh</string>
+											<string>/opt/homebrew/bin/fish</string>
 											<key>Cursor Boost</key>
 											<real>0.0</real>
 											<key>Cursor Color</key>
@@ -3322,7 +3322,7 @@
 										<key>Program</key>
 										<dict>
 											<key>Custom Shell</key>
-											<string>/usr/local/bin/zsh</string>
+											<string>/opt/homebrew/bin/fish</string>
 											<key>Type</key>
 											<string>Custom Shell</string>
 										</dict>
@@ -3613,7 +3613,7 @@
 											<key>Columns</key>
 											<integer>128</integer>
 											<key>Command</key>
-											<string>/usr/local/bin/zsh</string>
+											<string>/opt/homebrew/bin/fish</string>
 											<key>Cursor Boost</key>
 											<real>0.0</real>
 											<key>Cursor Color</key>
@@ -4104,7 +4104,7 @@
 										<key>Program</key>
 										<dict>
 											<key>Custom Shell</key>
-											<string>/usr/local/bin/zsh</string>
+											<string>/opt/homebrew/bin/fish</string>
 											<key>Type</key>
 											<string>Custom Shell</string>
 										</dict>
@@ -4459,7 +4459,7 @@
 											<key>Columns</key>
 											<integer>128</integer>
 											<key>Command</key>
-											<string>/usr/local/bin/zsh</string>
+											<string>/opt/homebrew/bin/fish</string>
 											<key>Cursor Boost</key>
 											<real>0.0</real>
 											<key>Cursor Color</key>
@@ -4862,7 +4862,7 @@
 										<key>Program</key>
 										<dict>
 											<key>Custom Shell</key>
-											<string>/usr/local/bin/zsh</string>
+											<string>/opt/homebrew/bin/fish</string>
 											<key>Type</key>
 											<string>Custom Shell</string>
 										</dict>
@@ -5130,7 +5130,7 @@
 											<key>Columns</key>
 											<integer>128</integer>
 											<key>Command</key>
-											<string>/usr/local/bin/zsh</string>
+											<string>/opt/homebrew/bin/fish</string>
 											<key>Cursor Boost</key>
 											<real>0.0</real>
 											<key>Cursor Color</key>
@@ -5523,7 +5523,7 @@
 										<key>Program</key>
 										<dict>
 											<key>Custom Shell</key>
-											<string>/usr/local/bin/zsh</string>
+											<string>/opt/homebrew/bin/fish</string>
 											<key>Type</key>
 											<string>Custom Shell</string>
 										</dict>
@@ -5814,7 +5814,7 @@
 											<key>Columns</key>
 											<integer>128</integer>
 											<key>Command</key>
-											<string>/usr/local/bin/zsh</string>
+											<string>/opt/homebrew/bin/fish</string>
 											<key>Cursor Boost</key>
 											<real>0.0</real>
 											<key>Cursor Color</key>
@@ -6207,7 +6207,7 @@
 										<key>Program</key>
 										<dict>
 											<key>Custom Shell</key>
-											<string>/usr/local/bin/zsh</string>
+											<string>/opt/homebrew/bin/fish</string>
 											<key>Type</key>
 											<string>Custom Shell</string>
 										</dict>
@@ -6475,7 +6475,7 @@
 											<key>Columns</key>
 											<integer>128</integer>
 											<key>Command</key>
-											<string>/usr/local/bin/zsh</string>
+											<string>/opt/homebrew/bin/fish</string>
 											<key>Cursor Boost</key>
 											<real>0.0</real>
 											<key>Cursor Color</key>
@@ -6874,7 +6874,7 @@
 										<key>Program</key>
 										<dict>
 											<key>Custom Shell</key>
-											<string>/usr/local/bin/zsh</string>
+											<string>/opt/homebrew/bin/fish</string>
 											<key>Type</key>
 											<string>Custom Shell</string>
 										</dict>
@@ -7165,7 +7165,7 @@
 											<key>Columns</key>
 											<integer>128</integer>
 											<key>Command</key>
-											<string>/usr/local/bin/zsh</string>
+											<string>/opt/homebrew/bin/fish</string>
 											<key>Cursor Boost</key>
 											<real>0.0</real>
 											<key>Cursor Color</key>
@@ -7557,7 +7557,7 @@
 										<key>Program</key>
 										<dict>
 											<key>Custom Shell</key>
-											<string>/usr/local/bin/zsh</string>
+											<string>/opt/homebrew/bin/fish</string>
 											<key>Type</key>
 											<string>Custom Shell</string>
 										</dict>

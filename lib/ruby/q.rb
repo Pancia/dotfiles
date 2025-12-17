@@ -43,7 +43,7 @@ class CMDS
   def self.delreg(opts)
     opts.info = "Delete a register."
     lambda { |name|
-      execute("zsh -ic 'trash #{reg_file(name)}'")
+      execute("fish -c 'trash #{reg_file(name)}'")
     }
   end
   def self.editreg(opts)

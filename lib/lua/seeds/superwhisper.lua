@@ -4,7 +4,6 @@ local obj = {}
 obj.state_file = os.getenv("HOME") .. "/.local/state/superwhisper_seconds"
 
 -- Internal state
-obj._filter = nil
 obj._start_time = nil
 
 -- Read current total
@@ -34,29 +33,43 @@ function obj:addSeconds(duration)
   return total
 end
 
--- Check if SuperWhisper is currently recording
-function obj:isRecording()
+-- Check if SuperWhisper has recording window open (non-standard floating panel)
+function obj:hasRecordingWindow()
   local app = hs.application.get("superwhisper")
   if app then
-    return #app:allWindows() > 0
+    for _, w in ipairs(app:allWindows()) do
+      if not w:isStandard() then
+        return true
+      end
+    end
   end
   return false
 end
 
--- Handle window created
-local function onWindowCreated(win)
-  if not obj._start_time then
-    obj._start_time = hs.timer.secondsSinceEpoch()
+-- Sync state: called from Karabiner, checks actual SuperWhisper state
+-- Starts tracking if recording window is open, stops if closed
+function obj:sync()
+  local recording = self:hasRecordingWindow()
+
+  if recording and not self._start_time then
+    -- Recording started - begin tracking
+    self._start_time = hs.timer.secondsSinceEpoch()
+    return true
+  elseif not recording and self._start_time then
+    -- Recording stopped - save duration
+    local duration = hs.timer.secondsSinceEpoch() - self._start_time
+    self:addSeconds(duration)
+    self._start_time = nil
+    return false
   end
+
+  -- No state change
+  return recording
 end
 
--- Handle window destroyed
-local function onWindowDestroyed(win)
-  if obj._start_time then
-    local duration = hs.timer.secondsSinceEpoch() - obj._start_time
-    obj:addSeconds(duration)
-    obj._start_time = nil
-  end
+-- Check if currently tracking
+function obj:isTracking()
+  return self._start_time ~= nil
 end
 
 function obj:start(config)
@@ -64,32 +77,19 @@ function obj:start(config)
   if config.state_file then
     self.state_file = config.state_file
   end
-
-  -- Defer window filter creation to avoid blocking startup
-  self._initTimer = hs.timer.doAfter(0, function()
-    self._filter = hs.window.filter.new("superwhisper")
-    self._filter:subscribe(hs.window.filter.windowCreated, onWindowCreated)
-    self._filter:subscribe(hs.window.filter.windowDestroyed, onWindowDestroyed)
-
-    -- Check if already recording on start
-    if self:isRecording() then
-      obj._start_time = hs.timer.secondsSinceEpoch()
-    end
-  end)
-
   return self
 end
 
 function obj:stop()
-  if self._initTimer then
-    self._initTimer:stop()
-    self._initTimer = nil
+  -- Save any in-progress recording before stopping
+  if self._start_time then
+    local duration = hs.timer.secondsSinceEpoch() - self._start_time
+    self:addSeconds(duration)
+    self._start_time = nil
   end
-  if self._filter then
-    self._filter:unsubscribeAll()
-    self._filter = nil
-  end
-  self._start_time = nil
 end
+
+-- Export global function for hs -c access
+_G.superwhisperSync = function() return obj:sync() end
 
 return obj

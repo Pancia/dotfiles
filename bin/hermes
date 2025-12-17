@@ -237,11 +237,36 @@ def resolve_dynamic_title(title):
     """
     Resolve dynamic parts in a title string.
     Supports $(command) syntax for shell command substitution.
+    Supports #!fish: prefix to execute entire title in fish shell.
 
     Examples:
         "Current time: $(date +%H:%M)" -> "Current time: 14:30"
         "$(date +%A)" -> "Saturday"
+        "#!fish:hello $(echo world)" -> "hello world"
     """
+    # Check for fish shebang prefix - execute entire title in fish
+    if title.startswith('#!fish:'):
+        fish_cmd = title[7:]  # Strip '#!fish:' prefix
+        try:
+            result = subprocess.run(
+                ['/opt/homebrew/bin/fish', '--no-config', '-c', fish_cmd],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                return result.stdout.strip()
+            else:
+                err = result.stderr.strip().split('\n')[0][:50] if result.stderr else "unknown"
+                return f"[fish error: {err}]"
+        except subprocess.TimeoutExpired:
+            debug_log(f"Fish title command timed out: {fish_cmd}")
+            return "[timeout]"
+        except Exception as e:
+            debug_log(f"Fish title error: {e}")
+            return "[error]"
+
     if '$(' not in title:
         return title
 

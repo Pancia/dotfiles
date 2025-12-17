@@ -52,7 +52,7 @@ class CMDS
   def self.delbookmark(opts)
     opts.info = "Delete a bookmark."
     lambda { |name|
-      execute("zsh -ic 'trash #{bookmark_file(name)}'")
+      execute("fish -c 'trash #{bookmark_file(name)}'")
     }
   end
   def self.editbookmark(opts)

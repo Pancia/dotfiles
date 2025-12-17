@@ -151,7 +151,7 @@ local watch = engage("seeds.watch.init", {
 local sanctuary = engage("seeds.sanctuary", {})
 
 local curfew = engage("seeds.curfew", {
-    triggerHour = 23,
+    triggerHour = 22,
     resetHour = 6,
     holdDuration = 15
 })
@@ -273,8 +273,11 @@ end
 local pomodoroSound = nil
 local pomodoroSoundTimer = nil
 local pomodoroCountdownTimers = {}
-local pomodoroCanvas = nil
+local pomodoroOverlays = {}  -- one overlay per screen
 local pomodoroNotification = nil
+local pomodoroMouseDownTap = nil
+local pomodoroMouseUpTap = nil
+local pomodoroIsShowingOverlay = false
 
 -- Helper: Cleanup state without triggering dismiss actions
 local function pomodoroCleanup()
@@ -294,11 +297,22 @@ local function pomodoroCleanup()
         pomodoroSound = nil
     end
 
-    -- Delete canvas
-    if pomodoroCanvas then
-        pomodoroCanvas:delete()
-        pomodoroCanvas = nil
+    -- Clean up eventtaps
+    if pomodoroMouseDownTap then
+        pomodoroMouseDownTap:stop()
+        pomodoroMouseDownTap = nil
     end
+    if pomodoroMouseUpTap then
+        pomodoroMouseUpTap:stop()
+        pomodoroMouseUpTap = nil
+    end
+
+    -- Delete all overlays
+    pomodoroIsShowingOverlay = false
+    for _, overlay in ipairs(pomodoroOverlays) do
+        overlay:delete()
+    end
+    pomodoroOverlays = {}
 
     -- Withdraw notification silently (set nil first to prevent callback loop)
     local notif = pomodoroNotification
@@ -327,76 +341,121 @@ local function pomodoroOnDismiss()
     hs.application.launchOrFocus("kitty")
 end
 
--- Helper: Show the must-click canvas overlay
-function showPomodoroCanvas(title, message)
-    local screen = hs.screen.mainScreen()
+-- Helper: Create full-screen overlay for a single screen
+local function createPomodoroOverlayForScreen(screen, title, message)
     local frame = screen:frame()
+    local fullFrame = screen:fullFrame()
 
     local boxWidth = 500
-    local boxHeight = 200
-    local x = frame.x + (frame.w - boxWidth) / 2
-    local y = frame.y + (frame.h - boxHeight) / 2
+    local boxHeight = 250
+    local centerX = frame.w / 2
+    local centerY = frame.h / 2
+    local boxX = centerX - boxWidth / 2
+    local boxY = centerY - boxHeight / 2
 
-    pomodoroCanvas = hs.canvas.new({x = x, y = y, w = boxWidth, h = boxHeight})
-    pomodoroCanvas:level(hs.canvas.windowLevels.screenSaver)
-    pomodoroCanvas:behavior(hs.canvas.windowBehaviors.canJoinAllSpaces + hs.canvas.windowBehaviors.stationary)
+    local overlay = hs.canvas.new(fullFrame)
+    overlay:level(hs.canvas.windowLevels.screenSaver)
+    overlay:behavior(hs.canvas.windowBehaviors.canJoinAllSpaces + hs.canvas.windowBehaviors.stationary)
 
-    -- Background
-    pomodoroCanvas[1] = {
+    -- Full screen dim background
+    overlay[1] = {
         type = "rectangle",
         action = "fill",
-        fillColor = {red = 0.1, green = 0.1, blue = 0.1, alpha = 0.95},
-        roundedRectRadii = {xRadius = 12, yRadius = 12},
-        trackMouseUp = true
+        fillColor = {red = 0.05, green = 0.08, blue = 0.05, alpha = 0.9}
     }
 
-    -- Border
-    pomodoroCanvas[2] = {
+    -- Central dialog box
+    overlay[2] = {
+        type = "rectangle",
+        action = "fill",
+        frame = {x = boxX, y = boxY, w = boxWidth, h = boxHeight},
+        fillColor = {red = 0.1, green = 0.12, blue = 0.1, alpha = 1},
+        roundedRectRadii = {xRadius = 16, yRadius = 16}
+    }
+
+    -- Dialog border
+    overlay[3] = {
         type = "rectangle",
         action = "stroke",
-        strokeColor = {red = 1, green = 0.4, blue = 0.4, alpha = 1},
-        strokeWidth = 3,
-        roundedRectRadii = {xRadius = 12, yRadius = 12}
+        frame = {x = boxX, y = boxY, w = boxWidth, h = boxHeight},
+        strokeColor = {red = 0.4, green = 0.7, blue = 0.4, alpha = 1},
+        strokeWidth = 2,
+        roundedRectRadii = {xRadius = 16, yRadius = 16}
     }
 
-    -- Title text
-    pomodoroCanvas[3] = {
+    -- Break icon (green circle)
+    overlay[4] = {
+        type = "circle",
+        action = "fill",
+        center = {x = centerX, y = boxY + 45},
+        radius = 20,
+        fillColor = {red = 0.4, green = 0.8, blue = 0.4, alpha = 1}
+    }
+
+    -- Title
+    overlay[5] = {
         type = "text",
-        text = title or "Pymodoro",
+        text = title or "Break Time",
         textColor = {red = 1, green = 1, blue = 1, alpha = 1},
         textSize = 28,
         textAlignment = "center",
-        frame = {x = 20, y = 40, w = boxWidth - 40, h = 40}
+        frame = {x = boxX + 20, y = boxY + 80, w = boxWidth - 40, h = 40}
     }
 
-    -- Message text
-    pomodoroCanvas[4] = {
+    -- Message
+    overlay[6] = {
         type = "text",
         text = message or "",
-        textColor = {red = 0.8, green = 0.8, blue = 0.8, alpha = 1},
+        textColor = {red = 0.7, green = 0.7, blue = 0.7, alpha = 1},
         textSize = 18,
         textAlignment = "center",
-        frame = {x = 20, y = 90, w = boxWidth - 40, h = 30}
+        frame = {x = boxX + 20, y = boxY + 125, w = boxWidth - 40, h = 30}
     }
 
-    -- Click to dismiss instruction
-    pomodoroCanvas[5] = {
+    -- Instructions
+    overlay[7] = {
         type = "text",
-        text = "Click anywhere to dismiss",
+        text = "Click anywhere to dismiss and continue",
         textColor = {red = 0.5, green = 0.5, blue = 0.5, alpha = 1},
         textSize = 14,
         textAlignment = "center",
-        frame = {x = 20, y = 150, w = boxWidth - 40, h = 25}
+        frame = {x = boxX + 20, y = boxY + boxHeight - 50, w = boxWidth - 40, h = 25}
     }
 
-    pomodoroCanvas:clickActivating(false)
-    pomodoroCanvas:mouseCallback(function(canvas, event, id, x, y)
-        if event == "mouseUp" then
-            pomodoroOnDismiss()
+    overlay:clickActivating(false)
+    overlay:show()
+
+    return overlay
+end
+
+-- Helper: Show the must-click full-screen overlay on all screens
+function showPomodoroCanvas(title, message)
+    pomodoroIsShowingOverlay = true
+
+    -- Create overlay on all screens
+    for _, screen in ipairs(hs.screen.allScreens()) do
+        local overlay = createPomodoroOverlayForScreen(screen, title, message)
+        table.insert(pomodoroOverlays, overlay)
+    end
+
+    -- Set up eventtaps to capture mouse input
+    pomodoroMouseDownTap = hs.eventtap.new({hs.eventtap.event.types.leftMouseDown}, function(event)
+        if pomodoroIsShowingOverlay then
+            return true  -- consume the event
         end
+        return false
     end)
 
-    pomodoroCanvas:show()
+    pomodoroMouseUpTap = hs.eventtap.new({hs.eventtap.event.types.leftMouseUp}, function(event)
+        if pomodoroIsShowingOverlay then
+            pomodoroOnDismiss()
+            return true  -- consume the event
+        end
+        return false
+    end)
+
+    pomodoroMouseDownTap:start()
+    pomodoroMouseUpTap:start()
 end
 
 -- Alert style for countdown (top edge)

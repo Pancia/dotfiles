@@ -14,21 +14,14 @@ obj._buffer = ""
 obj._triggers = {} -- Map of trigger -> snippet content
 obj._max_trigger_length = 0
 
--- Load snippets from file
-function obj:loadSnippets()
+-- Parse snippets from file content string
+function obj:parseSnippets(content)
   local snippets = {}
-  local file = io.open(self.snippets_file, "r")
-
-  if not file then
-    hs.notify.show("Snippets", "Could not open snippets file", self.snippets_file)
-    return snippets
-  end
-
   local current_snippet = nil
 
-  for line in file:lines() do
+  for line in content:gmatch("([^\n]*)\n?") do
     -- Check if this is a new snippet (contains ':')
-    local title, content = line:match("^([^:]+):%s*(.*)$")
+    local title, snippet_content = line:match("^([^:]+):%s*(.*)$")
 
     if title then
       -- Save previous snippet if exists
@@ -46,7 +39,7 @@ function obj:loadSnippets()
       -- Start new snippet
       current_snippet = {
         title = clean_title:match("^%s*(.-)%s*$"), -- trim whitespace
-        content = content,
+        content = snippet_content,
         trigger = trigger
       }
     elseif current_snippet and line:match("%S") then
@@ -64,8 +57,6 @@ function obj:loadSnippets()
     table.insert(snippets, current_snippet)
   end
 
-  file:close()
-
   -- Process escape sequences in all snippets
   for _, snippet in ipairs(snippets) do
     snippet.content = snippet.content:gsub("\\n", "\n")
@@ -73,6 +64,38 @@ function obj:loadSnippets()
   end
 
   return snippets
+end
+
+-- Load snippets from file (synchronous - for chooser)
+function obj:loadSnippets()
+  local file = io.open(self.snippets_file, "r")
+  if not file then
+    hs.notify.show("Snippets", "Could not open snippets file", self.snippets_file)
+    return {}
+  end
+  local content = file:read("*a")
+  file:close()
+  return self:parseSnippets(content)
+end
+
+-- Load snippets asynchronously (for startup)
+function obj:loadSnippetsAsync(callback)
+  if self._loadTask then
+    self._loadTask:terminate()
+    self._loadTask = nil
+  end
+
+  self._loadTask = hs.task.new("/bin/cat", function(exitCode, stdout, stderr)
+    self._loadTask = nil
+    if exitCode ~= 0 then
+      hs.notify.show("Snippets", "Could not read snippets file", stderr or "unknown error")
+      if callback then callback({}) end
+      return
+    end
+    local snippets = self:parseSnippets(stdout)
+    if callback then callback(snippets) end
+  end, {self.snippets_file})
+  self._loadTask:start()
 end
 
 -- Build triggers map from snippets
@@ -168,21 +191,23 @@ function obj:handleKeystroke(event)
   return false
 end
 
--- Start the text expansion eventtap
+-- Start the text expansion eventtap (async)
 function obj:startExpansion()
   if self._eventtap then
     self._eventtap:stop()
   end
 
-  self._snippets = self:loadSnippets()
-  self:buildTriggers()
+  self:loadSnippetsAsync(function(snippets)
+    self._snippets = snippets
+    self:buildTriggers()
 
-  if self._max_trigger_length > 0 then
-    self._eventtap = hs.eventtap.new({hs.eventtap.event.types.keyDown}, function(event)
-      return self:handleKeystroke(event)
-    end)
-    self._eventtap:start()
-  end
+    if self._max_trigger_length > 0 then
+      self._eventtap = hs.eventtap.new({hs.eventtap.event.types.keyDown}, function(event)
+        return self:handleKeystroke(event)
+      end)
+      self._eventtap:start()
+    end
+  end)
 end
 
 -- Stop text expansion
@@ -288,7 +313,7 @@ function obj:start(config)
     self.expansion_enabled = config.expansion_enabled
   end
 
-  -- Create the chooser
+  -- Create the chooser (choices loaded lazily)
   self._chooser = hs.chooser.new(selectSnippet)
   self._chooser:choices(function() return self:populateChooser() end)
   self._chooser:searchSubText(true) -- Allow searching in content too
@@ -296,7 +321,7 @@ function obj:start(config)
   -- Bind hotkey
   self._hotkey = hs.hotkey.bindSpec(self.hotkey, function() self:toggle() end)
 
-  -- Start text expansion if enabled
+  -- Start expansion asynchronously (ProtonDrive I/O can be slow)
   if self.expansion_enabled then
     self:startExpansion()
   end
@@ -306,6 +331,10 @@ end
 
 function obj:stop()
   self:stopExpansion()
+  if self._loadTask then
+    self._loadTask:terminate()
+    self._loadTask = nil
+  end
   if self._chooser then
     self._chooser:delete()
     self._chooser = nil

@@ -3,18 +3,18 @@
 require 'tempfile'
 
 if ARGV.empty?
-    items = %x[ ag "^function [^_].*|^alias .*" --nofilename --nobreak -o ~/dotfiles/zsh/**/*.zsh ]
+    items = %x[ ag "^function [^_].*|^alias .*" --nofilename --nobreak -o ~/dotfiles/fish/**/*.fish ]
         .gsub(/^(function|alias) /, "")
     tmp = Tempfile.new
     IO.write tmp, items
-    to_run = %x[ cat #{tmp.path} | sort | zsh -ic 'search' ]
+    to_run = %x[ cat #{tmp.path} | sort | fish -c 'search' ]
         .gsub(/='[^']+'/, "")
         .gsub(/{.*/, "")
         .gsub(/\]7;.*/, "")
         .gsub("\n", "")
-    exec "zsh -is prompt '#{to_run}'" if not to_run.empty?
+    exec "fish -c '#{to_run}'" if not to_run.empty?
 else
     tmp = Tempfile.new
-    %x[ zsh -ic 'cheat #{ARGV.join " "} > #{tmp.path}' ]
+    %x[ fish -c 'cheat #{ARGV.join " "} > #{tmp.path}' ]
     exec %[ less -n #{tmp.path} ]
 end

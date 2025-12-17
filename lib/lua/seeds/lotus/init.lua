@@ -1,5 +1,6 @@
 local durp = require("lib/durationpicker")
 local wake = require("lib/wakeDialog")
+local safeLogger = require("lib/safeLogger")
 
 local obj = {}
 
@@ -417,7 +418,7 @@ function onWake()
 end
 
 function obj:start(config)
-    obj._logger = hs.logger.new("Lotus", "debug")
+    obj._logger = safeLogger.new("Lotus", "debug")
 
     for k,v in pairs(config) do obj[k] = v end
     local saved = {

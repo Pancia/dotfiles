@@ -1,4 +1,4 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env fish
 #
 # NOTE sourced from /opt/homebrew/Cellar/cmus/2.9.1_1/share/doc/cmus/examples
 #
@@ -18,24 +18,27 @@
 #   - other keys/values are given only if they are available
 #
 
-output() {
-    printf -v args "%q" "$*"
-    local escaped="$(iconv -s -c -t ascii <(echo $args) | sed 's/\\//g' )"
-    local command="local port = hs.ipc.remotePort(\"cmus\"); port:sendMessage(\"$escaped\", 123); port:delete()"
+function output
+    set -l args (string escape -- $argv)
+    set -l escaped (echo $args | iconv -s -c -t ascii | sed 's/\\//g')
+    set -l command "local port = hs.ipc.remotePort(\"cmus\"); port:sendMessage(\"$escaped\", 123); port:delete()"
     hs -c "$command"
-}
+end
 
-while test $# -ge 2
-do
-	eval _$1='$2'
-	shift
-	shift
-done
+# Parse key-value pairs into _key variables
+set -l i 1
+while test $i -le (count $argv)
+    set -l key $argv[$i]
+    set -l val $argv[(math $i + 1)]
+    set -l varname _$key
+    set $varname $val
+    set i (math $i + 2)
+end
 
-message=""
-if test -n "$_file"; then
-	printf -v message "%.20s - %.20s" "$_artist" "$_title"
-elif test -n "$_url"; then
-	printf -v message "%.20s - %.20s" "$_url" "$_title"
-fi
+set -l message ""
+if test -n "$_file"
+    set message (printf "%.20s - %.20s" "$_artist" "$_title")
+else if test -n "$_url"
+    set message (printf "%.20s - %.20s" "$_url" "$_title")
+end
 output $message

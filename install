@@ -40,7 +40,7 @@ task_opt () {
     ln -Ffs opt /opt/dotfiles
     for i in $(ls opt); do
         echo "installing opt: ${i}"
-        zsh -c "cd opt/${i}; ./${i}.install"
+        fish -c "cd opt/$i; ./$i.install"
     done
 }
 
@@ -94,7 +94,7 @@ task_all () {
 main() {
     [[ ! "$(pwd)" == "$HOME/dotfiles" ]] && (echo 'CANNOT EXECUTE outside of dotfiles root'; exit 2)
     case "$1" in
-        '') task_all && exec zsh zsh/zshrc ;;
+        '') task_all && exec fish ;;
         brew) task_brew ;;
         gitconfig|git) task_gitconfig ;;
         help) echo "init brew gitconfig neovim opt" ;;

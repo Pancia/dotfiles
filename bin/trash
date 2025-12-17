@@ -1,2 +1,2 @@
-#!/usr/bin/env zsh
-zsh -ic "trash $@"
+#!/usr/bin/env fish
+fish -c "trash $argv"

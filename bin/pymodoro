@@ -1,0 +1,4 @@
+#!/usr/bin/env fish
+pushd ~/projects/pymodoro
+uv run pymodoro $argv
+popd

@@ -219,7 +219,7 @@
                                     }
                                 },
                                 "to": {
-                                    "shell_command": "/Users/anthony/private/bin/voicetotext"
+                                    "shell_command": "/Users/anthony/private/bin/voicetotext; /Users/anthony/Developer/bin/hs -c 'superwhisperSync()'"
                                 },
                                 "type": "basic"
                             },
@@ -233,7 +233,7 @@
                                     }
                                 },
                                 "to": {
-                                    "shell_command": "/Users/anthony/private/bin/voicetotext"
+                                    "shell_command": "/Users/anthony/private/bin/voicetotext; /Users/anthony/Developer/bin/hs -c 'superwhisperSync()'"
                                 },
                                 "type": "basic"
                             }

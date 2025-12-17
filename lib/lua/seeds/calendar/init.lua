@@ -1,4 +1,5 @@
 local json = require("hs.json")
+local safeLogger = require("lib/safeLogger")
 
 local obj = {}
 
@@ -15,7 +16,7 @@ obj.triggers = {                -- trigger configuration
 obj.pythonPath = os.getenv("HOME").."/.pyenv/shims/python3"
 
 function obj:start(config)
-    obj._logger = hs.logger.new("Calendar", "debug")
+    obj._logger = safeLogger.new("Calendar", "debug")
     obj._logger.df("Starting calendar seed...")
 
     -- Merge config
@@ -38,6 +39,7 @@ function obj:start(config)
 
     -- Initialize state
     obj._triggeredEvents = hs.settings.get("calendar_triggered_events") or {}
+    obj._cachedEvents = nil  -- Will be populated by async query
 
     -- Count triggered events
     local triggeredCount = 0
@@ -57,8 +59,10 @@ function obj:start(config)
 
     -- Defer initial poll and menubar render to avoid blocking startup
     obj._initTimer = hs.timer.doAfter(0, function()
+        local start = hs.timer.absoluteTime()
         obj:heartbeat()
         obj:renderMenuBar()
+        hs.printf("[deferred] calendar.init: %.1fms", (hs.timer.absoluteTime() - start) / 1e6)
     end)
 
     return self
@@ -69,6 +73,12 @@ function obj:stop()
 
     -- Save state
     hs.settings.set("calendar_triggered_events", obj._triggeredEvents)
+
+    -- Stop any pending query task
+    if obj._queryTask then
+        obj._queryTask:terminate()
+        obj._queryTask = nil
+    end
 
     -- Stop timers
     if obj._initTimer then
@@ -339,33 +349,54 @@ function obj:getMatchingTitleTriggers(event)
 end
 
 function obj:queryEvents()
-    -- Call Python script to get calendar events
+    -- Return cached events (updated asynchronously by queryEventsAsync)
+    return obj._cachedEvents
+end
+
+function obj:queryEventsAsync(callback)
+    -- Call Python script asynchronously to get calendar events
     local scriptPath = obj.spoonPath .. "calendar_query.py"
-    local cmd = string.format("%s %s %d 2>/dev/null", obj.pythonPath, scriptPath, obj.queryWindow)
 
-    obj._logger.vf("Querying events")
+    obj._logger.vf("Querying events (async)")
 
-    local output, status = hs.execute(cmd)
-
-    if not status then
-        obj._logger.ef("Failed to execute calendar query: %s", output)
-        return nil
+    -- Cancel any pending query task
+    if obj._queryTask then
+        obj._queryTask:terminate()
+        obj._queryTask = nil
     end
 
-    -- Parse JSON
-    local success, data = pcall(json.decode, output)
-    if not success then
-        obj._logger.ef("Failed to parse JSON: %s", data)
-        return nil
-    end
+    obj._queryTask = hs.task.new(obj.pythonPath, function(exitCode, stdout, stderr)
+        obj._queryTask = nil
 
-    if not data.success then
-        obj._logger.ef("Calendar query failed: %s", data.error or "unknown error")
-        return nil
-    end
+        if exitCode ~= 0 then
+            obj._logger.ef("Calendar query failed (exit %d): %s", exitCode, stderr)
+            if callback then callback(nil) end
+            return
+        end
 
-    obj._logger.vf("Found %d events", data.count)
-    return data.events
+        -- Parse JSON
+        local success, data = pcall(json.decode, stdout)
+        if not success then
+            obj._logger.ef("Failed to parse JSON: %s", data)
+            if callback then callback(nil) end
+            return
+        end
+
+        if not data.success then
+            obj._logger.ef("Calendar query failed: %s", data.error or "unknown error")
+            if callback then callback(nil) end
+            return
+        end
+
+        obj._logger.vf("Found %d events", data.count)
+
+        -- Update cache
+        obj._cachedEvents = data.events
+
+        if callback then callback(data.events) end
+    end, {scriptPath, tostring(obj.queryWindow)})
+
+    obj._queryTask:start()
 end
 
 function obj:parseEventDate(dateStr)
@@ -573,19 +604,19 @@ end
 function obj:heartbeat()
     obj._logger.vf("Calendar heartbeat - polling events...")
 
-    -- Query events
-    local events = obj:queryEvents()
+    -- Query events asynchronously
+    obj:queryEventsAsync(function(events)
+        -- Process events and trigger actions
+        obj:processEvents(events)
 
-    -- Process events and trigger actions
-    obj:processEvents(events)
+        -- Cleanup old triggers periodically (every ~100 polls = ~100 minutes)
+        if math.random(100) == 1 then
+            obj:cleanupOldTriggers()
+        end
 
-    -- Cleanup old triggers periodically (every ~100 polls = ~100 minutes)
-    if math.random(100) == 1 then
-        obj:cleanupOldTriggers()
-    end
-
-    -- Update menubar
-    obj:renderMenuBar()
+        -- Update menubar
+        obj:renderMenuBar()
+    end)
 end
 
 return obj

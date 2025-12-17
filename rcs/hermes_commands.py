@@ -282,7 +282,7 @@ def build_services_menu():
 
 
 # ============================================================================
-# COMMANDS
+# commands definition
 # ============================================================================
 
 COMMANDS = {
@@ -382,6 +382,8 @@ COMMANDS = {
         'k': ['Volume Up', 'cmus-remote --volume +5'],
     },
 
-    '=': ['edit Hermes config', 'vim ~/dotfiles/rcs/hermes_commands.py'],
-    '-': ["superwhisper: $(echo `cat ~/private/.superwhisper.counter` '/' `cat ~/private/.superwhisper.max-count`)", '~/private/bin/superwhisper_reset'],
+    't': ['open my yt playlists (WIP tv-board)', "open -na 'Brave Browser Beta' --args $(cat ~/Cloud/_config/my-youtube.playlists)"],
+
+    '=': ['edit Hermes config', 'nvim ~/dotfiles/rcs/hermes_commands.py -c "/^COMMANDS" -c "normal zt"'],
+    '-': ["#!fish:~/private/bin/superwhisper_status", '~/private/bin/superwhisper_reset'],
 }

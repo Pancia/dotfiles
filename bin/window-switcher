@@ -6,16 +6,25 @@ windows=$("$HS" -c '
 local result = {}
 for _, w in ipairs(windowFilter:getWindows()) do
   local app = w:application()
-  if app then
-    table.insert(result, {id=w:id(), app=app:name(), title=w:title()})
+  local screen = w:screen()
+  if app and screen then
+    table.insert(result, {id=w:id(), app=app:name(), title=w:title(), monitor=screen:name()})
   end
 end
 print(hs.json.encode(result))
 ')
 
-# Parse JSON, format for fzf: "title | app [id]"
+# Parse JSON, format for fzf (include monitor only if multiple monitors)
 # Use jq to format, pipe to fzf, extract window ID, focus it
-selected=$(echo "$windows" | jq -r '.[] | "\(.title) | \(.app) [\(.id)]"' | /opt/homebrew/bin/fzf --height=100% --reverse)
+selected=$(echo "$windows" | jq -r '
+  (map(.monitor) | unique | length) as $num_monitors |
+  .[] |
+  if $num_monitors > 1 then
+    "\(.monitor) | \(.title) | \(.app) [\(.id)]"
+  else
+    "\(.title) | \(.app) [\(.id)]"
+  end
+' | /opt/homebrew/bin/fzf --height=100% --reverse)
 
 if [ -n "$selected" ]; then
     # Extract window ID from "[id]" at end

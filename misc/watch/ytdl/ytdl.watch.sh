@@ -1,3 +1,3 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env fish
 
-ruby $(dirname "$0")/ytdl.rb 2>&1
+ruby (dirname (status filename))/ytdl.rb 2>&1
