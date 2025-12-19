@@ -3,7 +3,7 @@ module CMD
     opts.banner = "Usage: timer"
     opts.info = "timer"
     lambda { |*args|
-      EXE.system %{
+      EXE.bash %{
         fish timer.fish
       }
     }
@@ -13,8 +13,8 @@ module CMD
     opts.banner = "Usage: main"
     opts.info = "main"
     lambda { |*args|
-      EXE.system %{
-        fish main.fish
+      EXE.bash %{
+        fish main-claude.fish #{args.join " "}
       }
     }
   end

@@ -6,8 +6,8 @@ $cmds_base_dir = "/Users/#{%x[whoami].strip}/dotfiles/cmds/"
 $cmds_file = "/Users/#{%x[whoami].strip}/dotfiles/cmds/#{%x[pwd].strip}/cmds.rb"
 
 module EXE
-  def self.system(command, opts={silent: false})
-    temp = "/tmp/command.zsh"
+  def self.bash(command, opts={silent: false})
+    temp = "/tmp/command.bash"
     pretty_command = command.lstrip.split(/\s\s+/).join(" \\\n")
     unless opts[:silent]
       File.write(temp, pretty_command)
@@ -18,6 +18,18 @@ module EXE
     Kernel.system(command)
     exitstatus = $?.exitstatus
     Kernel.system("export DISABLE_AUTO_TITLE=''")
+    exit exitstatus if exitstatus
+  end
+
+  def self.fish(command, opts={silent: false})
+    temp = "/tmp/command.fish"
+    pretty_command = command.lstrip.split(/\s\s+/).join(" \\\n")
+    unless opts[:silent]
+      File.write(temp, pretty_command)
+      Kernel.system("bat -P #{temp}")
+    end
+    Kernel.system("fish", "-c", command)
+    exitstatus = $?.exitstatus
     exit exitstatus if exitstatus
   end
 end
@@ -57,7 +69,7 @@ class CMDS extend CMD
 		opts.banner = "Usage: #{func_name} FIXME"
 		opts.info = "FIXME"
 		lambda { |*args|
-			EXE.system %{
+			EXE.bash %{
 				echo "FIXME"
 			}
 		}
@@ -80,6 +92,33 @@ class CMDS extend CMD
     lambda {
       if File.exist? $cmds_file
         system("fish -c 'trash #{$cmds_file}'")
+      end
+    }
+  end
+  def self.show(opts)
+    opts.banner = "Usage: cmds show [function_name]"
+    opts.info = "Show all commands or a specific function's source code."
+    lambda { |*args|
+      func_name = args.first
+
+      unless File.file? $cmds_file
+        STDERR.puts "No cmds.rb file at #{$cmds_file}"
+        exit 1
+      end
+
+      content = File.read($cmds_file)
+
+      if func_name
+        # Extract specific function
+        if match = content.match(/^(\s*def\s+#{Regexp.escape(func_name)}\s*\(.*?^\s*end)/m)
+          IO.popen("bat -l ruby -P", "w") { |io| io.puts match[1] }
+        else
+          STDERR.puts "Function '#{func_name}' not found"
+          exit 1
+        end
+      else
+        # Show all functions with bat syntax highlighting
+        system("bat -l ruby -P #{$cmds_file}")
       end
     }
   end

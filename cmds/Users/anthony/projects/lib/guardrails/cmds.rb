@@ -3,7 +3,7 @@ module CMD
     opts.banner = "Usage: test"
     opts.info = "run the clojure tests"
     lambda { |*args|
-      EXE.system %{
+      EXE.bash %{
         clj \
           -A:spec-dev:dev:test:clj-tests \
           -J-Dguardrails.enabled=true \
@@ -17,7 +17,7 @@ module CMD
     opts.banner = "Usage: repl"
     opts.info = "run the clojure repl"
     lambda { |*args|
-      EXE.system %{
+      EXE.bash %{
         clj -A:nREVL:dev:test
       }
     }

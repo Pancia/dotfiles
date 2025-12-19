@@ -1,7 +1,8 @@
 local obj = {}
+local log = hs.logger.new("superwhisper", "info")
 
 -- Configuration
-obj.state_file = os.getenv("HOME") .. "/.local/state/superwhisper_seconds"
+obj.state_file = os.getenv("HOME") .. "/.local/state/my-superwhisper/active"
 
 -- Internal state
 obj._start_time = nil
@@ -23,6 +24,9 @@ function obj:saveTotal(seconds)
   if file then
     file:write(tostring(math.floor(seconds)))
     file:close()
+    log.i("saved total:", math.floor(seconds), "to", self.state_file)
+  else
+    log.e("failed to open state file for writing:", self.state_file)
   end
 end
 
@@ -54,10 +58,12 @@ function obj:sync()
   if recording and not self._start_time then
     -- Recording started - begin tracking
     self._start_time = hs.timer.secondsSinceEpoch()
+    log.i("recording started")
     return true
   elseif not recording and self._start_time then
     -- Recording stopped - save duration
     local duration = hs.timer.secondsSinceEpoch() - self._start_time
+    log.i("recording stopped, duration:", math.floor(duration), "seconds")
     self:addSeconds(duration)
     self._start_time = nil
     return false
@@ -77,6 +83,7 @@ function obj:start(config)
   if config.state_file then
     self.state_file = config.state_file
   end
+  log.i("started, state_file:", self.state_file)
   return self
 end
 

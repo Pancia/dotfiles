@@ -1,16 +1,20 @@
 # Trash management system
-set -gx TRASH_CACHE_MAX_HISTORY 500
-set -gx TRASH_CACHE_HISTORY "$HOME/.cache/dotfiles/trash/history"
+function _trash_history_path
+    echo "$HOME/.cache/dotfiles/trash/history"
+end
 
 function _record_trash --description 'Record trashed file'
-    if not test -d (dirname "$TRASH_CACHE_HISTORY")
-        mkdir -p (dirname "$TRASH_CACHE_HISTORY")
+    set -l history_file (_trash_history_path)
+    set -l max_history 500
+
+    if not test -d (dirname "$history_file")
+        mkdir -p (dirname "$history_file")
     end
-    printf '%s\t%s\t%s\t%s\n' "$argv[1]" "$argv[2]" "$argv[3]" "$argv[4]" >> "$TRASH_CACHE_HISTORY"
-    if test (wc -l < "$TRASH_CACHE_HISTORY") -gt $TRASH_CACHE_MAX_HISTORY
+    printf '%s\t%s\t%s\t%s\n' "$argv[1]" "$argv[2]" "$argv[3]" "$argv[4]" >> "$history_file"
+    if test -f "$history_file"; and test (wc -l < "$history_file") -gt $max_history
         set -l tmp (mktemp)
-        awk -F'\t' '{if (NR != 1) { print $0 } }' "$TRASH_CACHE_HISTORY" > "$tmp"
-        mv "$tmp" "$TRASH_CACHE_HISTORY"
+        awk -F'\t' '{if (NR != 1) { print $0 } }' "$history_file" > "$tmp"
+        mv "$tmp" "$history_file"
     end
 end
 
@@ -34,13 +38,17 @@ function trash --description 'Move files to trash with history'
         end
     end
 
-    test "$failed" = "true"; and return 1
+    if test "$failed" = "true"
+        return 1
+    end
 end
 
 function restore --description 'Restore files from trash'
+    set -l history_file (_trash_history_path)
+
     if test (count $argv) -eq 0
         set -l selected (mktemp)
-        cat -n $TRASH_CACHE_HISTORY | tail -r | peco --on-cancel error > $selected
+        cat -n $history_file | tail -r | peco --on-cancel error > $selected
         and restore $selected
     else
         set -l line_num (cat $argv[1] | cut -f1)
@@ -49,7 +57,7 @@ function restore --description 'Restore files from trash'
             return 1
         end
 
-        set -l line (awk "{ if (NR == $line_num) { print \$0 } }" $TRASH_CACHE_HISTORY)
+        set -l line (awk "{ if (NR == $line_num) { print \$0 } }" $history_file)
         set -l src (echo "$line" | cut -f4)
 
         # Extract the filename from the trash path
@@ -76,7 +84,7 @@ function restore --description 'Restore files from trash'
         mkdir -p (dirname "$dest")
 
         mv "$src" "$dest"
-        and sed -i '' "$line_num"d $TRASH_CACHE_HISTORY
+        and sed -i '' "$line_num"d $history_file
     end
 end
 

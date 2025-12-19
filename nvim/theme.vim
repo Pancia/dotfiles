@@ -20,18 +20,24 @@ let g:my_colors = {
 \ "visual_black":   {"gui": "#000000", "cterm": "NONE"},
 \ "visual_grey":    {"gui": "#AEC0EC", "cterm": "NONE"},
 \}
-call system("defaults read -g AppleInterfaceStyle")
-if v:shell_error
+
+" Detect dark/light mode (cache result to avoid multiple system calls)
+if exists('v:os_appearance')
+    let s:is_light_mode = (v:os_appearance ==# 'light')
+else
+    let s:is_light_mode = system("defaults read -g AppleInterfaceStyle") !~? 'dark'
+endif
+
+if s:is_light_mode
     let g:onedark_color_overrides = g:my_colors
 else
     let g:onedark_color_overrides = {}
 endif
 colorscheme onedark
 
-call system("defaults read -g AppleInterfaceStyle")
-if v:shell_error "> Light Mode
+if s:is_light_mode
     hi @variable guifg=#2A2A2C
-else "> Dark mode
+else
     hi @variable guifg=#AFACB1
 endif
 

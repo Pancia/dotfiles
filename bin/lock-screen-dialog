@@ -67,8 +67,17 @@ input=""
 seq_length=${#sequence}
 while true; do
     IFS= read -n 1 -s -r char
+
+    # Handle backspace (ASCII 127 or 8)
+    if [[ "$char" == $'\x7f' || "$char" == $'\x08' ]]; then
+        if [[ -n "$input" ]]; then
+            input="${input%?}"  # Remove last character
+            echo -ne "\r\033[K${input}"  # Clear line and redisplay
+        fi
+        continue
+    fi
+
     input="${input}${char}"
-    # Display input with visible indicator (use · for spaces if needed)
     display_input="${input}"
     echo -ne "\r${display_input}"
     if [[ "${input: -$seq_length}" == "$sequence" ]]; then

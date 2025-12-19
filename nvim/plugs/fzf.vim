@@ -1,7 +1,11 @@
 let g:fzf_layout = { 'window': { 'width': 1.0, 'height': 0.8 } }
 let g:fzf_preview_window = ['up:50%', 'ctrl-/']
 
-command! Project :GFiles --other --exclude-standard --cached
+command! Project call fzf#run(fzf#wrap({
+  \ 'source': 'git ls-files --other --exclude-standard --cached',
+  \ 'sink': 'e',
+  \ 'options': ['--preview', 'bat --style=numbers --color=always {} 2>/dev/null || cat {}']
+  \ }))
 
 function! FilesWithParentNav(dir)
   let start_dir = a:dir != '' ? a:dir : '.'
@@ -9,12 +13,12 @@ function! FilesWithParentNav(dir)
   call writefile([fnamemodify(start_dir, ':p')], tf)
 
   call fzf#run(fzf#wrap({
-    \ 'source': 'cd ' . shellescape(start_dir) . ' && fd --type f --hidden --follow --exclude .git . | while read -r file; do echo "$PWD/$file|$file"; done',
+    \ 'source': 'cd ' . shellescape(start_dir) . ' && base=$PWD && fd --type f --hidden --follow --exclude .git --absolute-path . | awk -v b="$base" ''{rel=substr($0, length(b)+2); print $0 "|" rel}''',
     \ 'options': [
     \   '--delimiter', '|',
     \   '--with-nth', '2..',
     \   '--bind',
-    \   printf('ctrl-p:reload:base="$(cat %s)"/..; echo "$base" > %s; cd "$base" && fd --type f --hidden --follow --exclude .git . | while read -r file; do echo "$PWD/$file|$file"; done',
+    \   printf('ctrl-p:reload:base="$(cat %s)"/.. && echo "$base" > %s && cd "$base" && fd --type f --hidden --follow --exclude .git --absolute-path . | awk -v b="$base" ''{rel=substr($0, length(b)+2); print $0 "|" rel}''',
     \     shellescape(tf), shellescape(tf))
     \ ],
     \ 'sink': function('s:open_file')

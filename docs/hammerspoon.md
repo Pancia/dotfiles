@@ -88,13 +88,13 @@ This ensures that if one seed fails to load, it doesn't crash the entire Hammers
 
 ### Window Switcher
 
-The window switcher (`Alt+Tab`) uses a global `windowFilter` in Hammerspoon to track windows across all spaces. It:
+The window switcher (`Alt+Tab`) uses yabai to query windows across all spaces. It:
 
-1. Queries `_G.windowFilter` for all windows (kept active via `keepActive()`)
+1. Queries `yabai -m query --windows` for all windows (instant, daemon-backed)
 2. Pipes window list to fzf for fuzzy selection
-3. Focuses the selected window (works across spaces)
+3. Focuses the selected window via `yabai -m window --focus`
 
-**Implementation**: `bin/window-switcher` script + `_G.windowFilter` in `lib/lua/core.lua`
+**Implementation**: `bin/window-switcher` script (no Hammerspoon dependency)
 
 ### Navigation (Active Modal)
 

@@ -3,7 +3,7 @@ module CMD
     opts.banner = "Usage: example"
     opts.info = "FIXME"
     lambda { |*args|
-      EXE.system %{
+      EXE.bash %{
         echo "FIXME"
       }
     }

@@ -293,6 +293,8 @@ COMMANDS = {
         'e': ['Edit dotfiles', 'cd ~/dotfiles && v'],
     },
 
+    'l': ['LOCK IT DOWN', 'launch-lock-screen-dialog'],
+
     'j': ['Emoji Picker', 'hs -c \'hs.eventtap.keyStroke({"cmd", "ctrl", "alt", "shift"}, "j")\''],
 
     'f': {
@@ -326,6 +328,7 @@ COMMANDS = {
         'p': ['Proton Password', "open -a 'Proton Pass'"],
         's': ['Spotify', 'open -a Spotify'],
         't': ['iTerm', "open -a 'iTerm'"],
+        'v': ['Brave Beta (TV_BOARD)', "open -a 'Brave Browser Beta'"],
         'x': ['Opera GX', "open -a 'Opera GX'"],
         'z': ['Zen Browser', "open -a 'Zen Browser'"],
         'w': {
@@ -362,6 +365,11 @@ COMMANDS = {
         '_desc': '+ytdl',
         'i': ['ytdl interactive', 'ytdl'],
         'y': ['ytdl clipboard', 'ytdl clipboard'],
+    },
+
+    'u': {
+        '_desc': '+audio tools',
+        'l': ['Live Transcribe', 'q live-transcribe'],
     },
 
     'm': {

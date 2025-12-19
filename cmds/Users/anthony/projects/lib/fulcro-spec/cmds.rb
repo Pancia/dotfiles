@@ -3,7 +3,7 @@ module CMD
     opts.banner = "Usage: test"
     opts.info = "Run clojure tests"
     lambda { |*args|
-      EXE.system %{
+      EXE.bash %{
         clj -A:tee:clj-tests \
           --config-file tests.local.edn \
           --focus-meta :test/focused \
@@ -16,7 +16,7 @@ module CMD
     opts.banner = "Usage: repl"
     opts.info = "Run clojure repl"
     lambda { |*args|
-      EXE.system %{
+      EXE.bash %{
         clj -A:nREVL:test #{args.join " "}
       }
     }

@@ -175,7 +175,7 @@ def print_commands(commands_list, command_history):
     # Collect entries as (shortcut, formatted_string, plain_length)
     entries = []
     for shortcut, content in commands_list.items():
-        if shortcut.startswith('_'):
+        if shortcut.startswith('_') or shortcut == '=':
             continue
         elif isinstance(content, list):
             (description, command) = content
@@ -195,11 +195,6 @@ def print_commands(commands_list, command_history):
             formatted = f"{BOLD_YELLOW}[{shortcut}]{RESET} {YELLOW}→ {display_title}{RESET}"
             plain_len = len(f"[{shortcut}] → {display_title}")
             entries.append((shortcut, formatted, plain_len))
-
-    # Add search command as a menu item
-    formatted = f"{BOLD_CYAN}[:]{RESET} {BOLD_WHITE}Search all commands{RESET}"
-    plain_len = len("[:] Search all commands")
-    entries.append((':', formatted, plain_len))
 
     # Sort entries by shortcut key
     entries.sort(key=lambda x: x[0].lower())
@@ -230,8 +225,8 @@ def print_commands(commands_list, command_history):
         print(''.join(line_parts).rstrip())
 
     if command_history:
-        print(f"\n{DIM_GRAY}<DEL> - Go back up a level{RESET}")
-    print(f"{DIM_GRAY}<ESC> <Ctrl-C> <Ctrl-D> - EXIT{RESET}")
+        print(f"\n{DIM_GRAY}<DEL> Go back{RESET}")
+    print(f"{DIM_GRAY}[=] Edit config  [:] Search  <ESC> Exit{RESET}")
 
 def resolve_dynamic_title(title):
     """
@@ -447,6 +442,18 @@ def main():
         print_commands(current_commands, command_history)
         user_input = getch()
         print(f"Command {user_input} {user_input.encode().hex()}")
+
+        # Global hotkey: edit config (available at any level)
+        if user_input == '=' and '=' in commands:
+            action = commands['=']
+            if isinstance(action, list):
+                should_quit, should_reload = execute_command(action[1])
+                if should_reload:
+                    debug_log("Reloading commands after config edit")
+                    commands = load_commands_with_retry()
+                    current_commands = commands
+                    command_history = []
+            continue
 
         if user_input in current_commands:
             action = current_commands[user_input]

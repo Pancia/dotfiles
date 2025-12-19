@@ -3,7 +3,7 @@ module CMD
     opts.banner = "Usage: example"
     opts.info = "FIXME"
     lambda { |*args|
-      EXE.system %{
+      EXE.bash %{
         uv run flet run --recursive --port 8555 #{args.join " "}
       }
     }
@@ -12,7 +12,7 @@ module CMD
     opts.banner = "Usage: example"
     opts.info = "FIXME"
     lambda { |*args|
-      EXE.system %{
+      EXE.bash %{
         uv run flet build apk --deep-linking-scheme=lakshmi --deep-linking-host=app --project "Lakshmi"
       }
     }
@@ -21,7 +21,7 @@ module CMD
     opts.banner = "Usage: example"
     opts.info = "FIXME"
     lambda { |*args|
-      EXE.system %{
+      EXE.bash %{
         adb uninstall com.flet.lakshmi; adb install build/apk/app-release.apk
       }
     }
@@ -30,7 +30,7 @@ module CMD
     opts.banner = "Usage: example"
     opts.info = "FIXME"
     lambda { |*args|
-      EXE.system %{
+      EXE.bash %{
         adb logcat --pid="$(adb shell pidof -s com.flet.lakshmi)"
       }
     }
@@ -40,7 +40,7 @@ module CMD
     opts.banner = "Usage: install FIXME"
     opts.info = "FIXME"
     lambda { |*args|
-      EXE.system %{
+      EXE.bash %{
           uv pip install "flet[all]"
       }
     }
@@ -50,7 +50,7 @@ module CMD
     opts.banner = "Usage: engage FIXME"
     opts.info = "FIXME"
     lambda { |*args|
-      EXE.system %{
+      EXE.bash %{
           cmds build && cmds deploy && adb shell am start -a android.intent.action.VIEW -d "lakshmi://app/rituals"
       }
     }

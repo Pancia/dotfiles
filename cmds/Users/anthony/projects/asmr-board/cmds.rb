@@ -3,7 +3,7 @@ module CMD
     opts.banner = "Usage: start"
     opts.info = "start"
     lambda { |*args|
-      EXE.system %{
+      EXE.bash %{
         npm start
       }
     }

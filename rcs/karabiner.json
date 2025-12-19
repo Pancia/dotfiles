@@ -115,7 +115,7 @@
                         ]
                     },
                     {
-                        "description": "alt-tab -> hermes (window switcher)",
+                        "description": "alt-tab -> window switcher",
                         "manipulators": [
                             {
                                 "from": {
@@ -127,7 +127,7 @@
                                     }
                                 },
                                 "to": {
-                                    "shell_command": "/Users/anthony/dotfiles/bin/hermes-centered windows"
+                                    "shell_command": "open -na ghostty --args --window-width=120 --window-height=30 -e /Users/anthony/dotfiles/bin/window-switcher"
                                 },
                                 "type": "basic"
                             }

@@ -3,7 +3,7 @@ module CMD
     opts.banner = "Usage: example"
     opts.info = "FIXME"
     lambda { |*args|
-      EXE.system %{
+      EXE.bash %{
         ./gradlew installDebug --no-daemon && adb shell am start -n com.dayzerostudio.seshat/.MainActivity
       }
     }
@@ -12,7 +12,7 @@ module CMD
     opts.banner = "Usage: example"
     opts.info = "FIXME"
     lambda { |*args|
-      EXE.system %{
+      EXE.bash %{
         adb logcat --pid="$(adb shell pidof -s com.dayzerostudio.seshat)"
       }
     }
@@ -21,7 +21,7 @@ module CMD
     opts.banner = "Usage: example"
     opts.info = "FIXME"
     lambda { |*args|
-      EXE.system %{
+      EXE.bash %{
         adb shell run-as com.dayzerostudio.seshat #{args.join " "}
       }
     }

@@ -151,8 +151,8 @@ local watch = engage("seeds.watch.init", {
 local sanctuary = engage("seeds.sanctuary", {})
 
 local curfew = engage("seeds.curfew", {
-    triggerHour = 22,
-    resetHour = 6,
+    triggerTime = {hour = 21, minute = 00},
+    resetTime = {hour = 6, minute = 0},
     holdDuration = 15
 })
 
@@ -183,13 +183,6 @@ if curfew then seeds.curfew = curfew end
 if superwhisper then seeds.superwhisper = superwhisper end
 
 local hs_global_modifier = {"cmd", "ctrl"}
-
--- Global window filter for CLI window-switcher (defer to avoid blocking startup)
-hs.timer.doAfter(0, function()
-  local start = hs.timer.absoluteTime()
-  _G.windowFilter = hs.window.filter.new(true):setCurrentSpace(nil):keepActive()
-  hs.printf("[deferred] windowFilter: %.1fms", (hs.timer.absoluteTime() - start) / 1e6)
-end)
 
 hs.hotkey.bindSpec({hs_global_modifier, "c"}, hs.toggleConsole)
 

@@ -243,8 +243,13 @@ end
 
 function obj:isWithinCurfew()
     local hour = tonumber(os.date("%H"))
-    -- Curfew spans midnight: trigger if hour >= triggerHour OR hour < resetHour
-    return hour >= config.triggerHour or hour < config.resetHour
+    local minute = tonumber(os.date("%M"))
+    local now = hour * 60 + minute
+    local trigger = config.triggerTime.hour * 60 + config.triggerTime.minute
+    local reset = config.resetTime.hour * 60 + config.resetTime.minute
+
+    -- Curfew spans midnight: trigger if now >= triggerTime OR now < resetTime
+    return now >= trigger or now < reset
 end
 
 function obj:trigger()
@@ -280,7 +285,7 @@ function obj:start(cfg)
         end
     end
 
-    -- obj:scheduleNext()
+    obj:scheduleNext()
 
     return obj
 end

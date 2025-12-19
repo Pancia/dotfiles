@@ -1,41 +1,19 @@
 #!/usr/bin/env bash
-HS="/Users/anthony/Developer/bin/hs"
 
-# Get windows as JSON from Hammerspoon's global window filter (all spaces)
-windows=$("$HS" -c '
-local result = {}
-for _, w in ipairs(windowFilter:getWindows()) do
-  local app = w:application()
-  local screen = w:screen()
-  if app and screen then
-    table.insert(result, {id=w:id(), app=app:name(), title=w:title(), monitor=screen:name()})
-  end
-end
-print(hs.json.encode(result))
-')
+# Get windows as JSON from yabai (all spaces, instant)
+windows=$(/opt/homebrew/bin/yabai -m query --windows)
 
-# Parse JSON, format for fzf (include monitor only if multiple monitors)
-# Use jq to format, pipe to fzf, extract window ID, focus it
-selected=$(echo "$windows" | jq -r '
-  (map(.monitor) | unique | length) as $num_monitors |
+# Parse JSON, format for fzf (include space number)
+# Filter to visible/standard windows, format as "space | title | app [id]"
+selected=$(echo "$windows" | /opt/homebrew/bin/jq -r '
   .[] |
-  if $num_monitors > 1 then
-    "\(.monitor) | \(.title) | \(.app) [\(.id)]"
-  else
-    "\(.title) | \(.app) [\(.id)]"
-  end
+  select(.["is-visible"] == true or .["is-minimized"] == false) |
+  select(.title != "") |
+  "[\(.space)] \(.title) | \(.app) [\(.id)]"
 ' | /opt/homebrew/bin/fzf --height=100% --reverse)
 
 if [ -n "$selected" ]; then
     # Extract window ID from "[id]" at end
     window_id=$(echo "$selected" | grep -oE '\[[0-9]+\]$' | tr -d '[]')
-    # Use windowFilter to find and focus (hs.window.get only works for current space)
-    "$HS" -c "
-for _, w in ipairs(windowFilter:getWindows()) do
-  if w:id() == $window_id then
-    w:focus()
-    break
-  end
-end
-"
+    /opt/homebrew/bin/yabai -m window --focus "$window_id"
 fi

@@ -1,2 +1,2 @@
 #!/usr/bin/env fish
-fish -c "trash $argv"
+trash $argv

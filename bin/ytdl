@@ -118,33 +118,16 @@ function _ytdl_download_text
     set -l out_dir "$YTDL_OUTPUT_DIR/$download_type"
     set -l out_file "$out_dir/%(channel)s__\$__%(title)s__#__%(id)s.%(ext)s"
 
-    # Try to download subtitles first
-    _ytdl_run $ytid -o $out_file --skip-download --write-subs --write-auto-subs --sub-langs en --convert-subs srt
+    # Download audio and transcribe
+    _ytdl_run $ytid -o $out_file -f $YTDL_AUDIO_CODE
 
-    # Check if any .srt files were created
-    set -l srt_files $out_dir/*__#__$ytid*.srt
-
-    if test (count $srt_files) -eq 0 -o ! -f "$srt_files[1]"
-        # No subtitles available - download audio and transcribe
-        echo "[No subtitles found, downloading audio for transcription...]"
-        _ytdl_run $ytid -o $out_file -f $YTDL_AUDIO_CODE
-
-        # Transcribe audio files
-        for audio_file in $out_dir/*__#__$ytid*
-            if not string match -qr '\.(txt|srt)$' -- $audio_file
-                set -l txt_file (string replace -r '\.[^.]+$' '.txt' -- $audio_file)
-                echo "[Transcribing] $audio_file"
-                transcribe $audio_file | tee $txt_file
-            end
-        end
-    else
-        # Convert .srt files to .txt
-        for srt_file in $srt_files
-            set -l txt_file (string replace -r '\.srt$' '.txt' -- $srt_file)
-            if not test -f "$txt_file"
-                echo "[Converting] $srt_file -> $txt_file"
-                srttotxt $srt_file
-            end
+    # Find the audio file we just downloaded (matches this specific ytid)
+    set -l audio_file $out_dir/*__#__$ytid.*
+    if test (count $audio_file) -gt 0 -a -f "$audio_file[1]"
+        if not string match -qr '\.(txt|srt)$' -- $audio_file[1]
+            set -l txt_file (string replace -r '\.[^.]+$' '.txt' -- $audio_file[1])
+            echo "[Transcribing] $audio_file[1]"
+            transcribe $audio_file[1] | tee $txt_file
         end
     end
 end
