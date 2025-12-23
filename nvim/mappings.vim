@@ -31,3 +31,11 @@ command! BD b#|bd#
 " terminal helpers
 tnoremap <expr> <Esc> (&filetype == "fzf") ? "<Esc>" : "<C-\><C-n>"
 nnoremap ! :!
+
+" Session management
+let g:session_file = expand('~/.local/share/nvim/session.vim')
+let g:session_restart_flag = expand('~/.local/share/nvim/restart')
+command! SessionSave execute 'mksession!' g:session_file | echo 'Session saved'
+command! SessionQuit execute 'mksession!' g:session_file | quitall
+command! SessionRestart execute 'mksession!' g:session_file | call writefile([], g:session_restart_flag) | quitall
+command! SessionLoad execute 'source' g:session_file

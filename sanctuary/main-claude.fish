@@ -40,10 +40,11 @@ if test "$argv[1]" = "--completions"
 end
 
 # =============================================================================
-# Subcommand Parsing: run <section> | test <section>
+# Subcommand Parsing: run <section> | test <section> | minimal
 # =============================================================================
 set -g test_mode 0
 set -g target_section ""
+set -g minimal_mode 0
 
 if test (count $argv) -gt 0
     switch $argv[1]
@@ -53,11 +54,23 @@ if test (count $argv) -gt 0
         case test
             set test_mode 1
             set target_section $argv[2]
+        case minimal
+            set minimal_mode 1
         case '*'
             echo "Usage: sanctuary [run|test] <section>"
+            echo "       sanctuary minimal  # quick flow"
             echo "       sanctuary  # run full flow"
             exit 1
     end
+end
+
+# =============================================================================
+# Ensure running in Kitty terminal (only for full flow or minimal mode)
+# =============================================================================
+if test -z "$target_section"; and not set -q KITTY_WINDOW_ID
+    kitty --directory="$script_dir" fish (status filename) $argv &
+    disown
+    exit 0
 end
 
 # =============================================================================
@@ -84,13 +97,17 @@ end
 # =============================================================================
 # Section calendar: Display Calendar (24 hours)
 # =============================================================================
-function _sanctuary_calendar
+function _sanctuary_calendar --argument-names hours
+    if test -z "$hours"
+        set hours 24
+    end
+
     echo "───────────────────────────────────────────────────────────────────────────"
     echo
     set_color yellow
-    echo "UPCOMING (next 24 hours):"
+    echo "UPCOMING (next $hours hours):"
     set_color normal
-    swift "$script_dir/calendar.swift" 24 2>/dev/null
+    swift "$script_dir/calendar.swift" $hours 2>/dev/null
     echo
 
     set_color --dim
@@ -165,7 +182,7 @@ function _sanctuary_inbox
         set_color yellow
         echo "INBOX JOURNALS:"
         set_color normal
-        bat --paging=never --style=plain $journal_files
+        bat --paging=never --style=grid,header $journal_files
         echo
     end
 end
@@ -354,7 +371,7 @@ end
 # Section pomodoro: Configure Pymodoro Session
 # =============================================================================
 
-function _sanctuary_pomodoro --argument-names test_mode
+function _sanctuary_pomodoro --argument-names test_mode use_split
     # TUI config dialog
     set -l config (uv run "$script_dir/pomo_config.py")
     if test -z "$config"
@@ -383,7 +400,9 @@ function _sanctuary_pomodoro --argument-names test_mode
     if test "$test_mode" = "1"
         set_color yellow
         if test -n "$LABEL"
-            echo "[TEST MODE] Would launch: pymodoro --label \"$LABEL\" --work $work --short $short --long $work --max-sessions $sessions --notify 0 --confirm"
+            set -l launch_method "in current terminal"
+            test "$use_split" = "1"; and set launch_method "in Kitty split pane"
+            echo "[TEST MODE] Would launch $launch_method: pymodoro --label \"$LABEL\" --work $work --short $short --long 0 --max-sessions $sessions --notify 0 --confirm"
         else
             echo "[TEST MODE] No label selected. Would prompt to start pymodoro anyway."
         end
@@ -391,7 +410,7 @@ function _sanctuary_pomodoro --argument-names test_mode
         return
     end
 
-    set -l pomo_cmd "pymodoro --work $work --short $short --long $work --max-sessions $sessions --notify 0 --confirm"
+    set -l pomo_cmd "pymodoro --work $work --short $short --long 0 --max-sessions $sessions --notify 0 --confirm"
     if test -n "$LABEL"
         set pomo_cmd "$pomo_cmd --label \"$LABEL\""
     else
@@ -401,8 +420,14 @@ function _sanctuary_pomodoro --argument-names test_mode
         end
     end
 
-    # Launch in a Kitty split pane
-    kitty @ launch --location=vsplit --hold --cwd=current fish -c "$pomo_cmd"
+    # Launch pymodoro
+    if test "$use_split" = "1"
+        # Launch in a Kitty split pane (for minimal/full flow)
+        kitty @ launch --location=vsplit --hold --cwd=current fish -c "$pomo_cmd"
+    else
+        # Run directly in current terminal (for standalone run)
+        eval $pomo_cmd
+    end
 end
 
 # =============================================================================
@@ -413,7 +438,7 @@ function _sanctuary_run_section --argument-names section test_mode
         case vision
             _sanctuary_vision
         case calendar
-            _sanctuary_calendar
+            _sanctuary_calendar $argv[3..-1]
         case mood
             _sanctuary_mood
         case inbox
@@ -431,7 +456,7 @@ function _sanctuary_run_section --argument-names section test_mode
         case edit
             _sanctuary_edit
         case pomodoro
-            _sanctuary_pomodoro $test_mode
+            _sanctuary_pomodoro $test_mode 0
         case '*'
             echo "Unknown section: $section"
             echo "Valid: vision, calendar, mood, inbox, intention, focus, template, state, journal, edit, pomodoro"
@@ -449,6 +474,21 @@ if test -n "$target_section"
     exit $status
 end
 
+# Minimal mode: focus, state, pomodoro, journal, edit
+if test $minimal_mode -eq 1
+    _sanctuary_focus
+    # Set minimal defaults for skipped steps
+    set -g g_mood "ready"
+    set -g g_intention "Focus on $g_focus_name"
+    set -g g_journal_template "<INSERT>"
+    _sanctuary_state 0
+    _sanctuary_pomodoro 0 1
+    _sanctuary_journal 0
+    _sanctuary_edit
+    cd $script_dir
+    exec fish
+end
+
 # Default: run all sections in order
 _sanctuary_vision
 _sanctuary_calendar
@@ -460,7 +500,7 @@ _sanctuary_template
 _sanctuary_state 0
 _sanctuary_journal 0
 _sanctuary_edit
-_sanctuary_pomodoro 0
+_sanctuary_pomodoro 0 1
 
 # Return to interactive shell when done
 cd $script_dir

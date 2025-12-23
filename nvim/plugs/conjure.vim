@@ -11,6 +11,7 @@ let g:conjure#client#clojure#nrepl#test#current_form_names = ['deftest', 'specif
 "let g:conjure#client#clojure#nrepl#test#runner = 'kaocha'
 "let g:conjure#client#clojure#nrepl#test#call_suffix = '{:kaocha/color? true :config-file "tests.local.edn"}'
 
+" Use stdio client with hs-fennel wrapper for Hammerspoon
 let g:conjure#filetype#fennel = "conjure.client.fennel.stdio"
 let g:conjure#client#fennel#stdio#command = "hs-fennel"
 let g:conjure#debug = v:false

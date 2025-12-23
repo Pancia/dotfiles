@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Fennel REPL that evaluates in Hammerspoon
+# Used by Conjure's fennel.stdio client
+
+# Print initial prompt
+printf '>> '
+
+while IFS= read -r line || [[ -n "$line" ]]; do
+    # Skip empty lines but still show prompt
+    if [[ -z "$line" ]]; then
+        printf '>> '
+        continue
+    fi
+
+    # Use a temp file to avoid escaping issues
+    tmpfile=$(mktemp)
+    printf '%s' "$line" > "$tmpfile"
+
+    # Close stdin for hs to prevent it from consuming our input
+    result=$(hs -c "
+        local f = io.open('$tmpfile', 'r')
+        if not f then return 'Error: could not read temp file' end
+        local code = f:read('*a')
+        f:close()
+        os.remove('$tmpfile')
+
+        local ok, result = pcall(function()
+            return fennel.eval(code)
+        end)
+        if ok then
+            if result ~= nil then
+                return fennel.view(result)
+            else
+                return 'nil'
+            end
+        else
+            return 'Error: ' .. tostring(result)
+        end
+    " </dev/null 2>&1)
+
+    # Clean up in case hs failed
+    rm -f "$tmpfile" 2>/dev/null
+
+    # Output result and prompt
+    printf '%s\n>> ' "$result"
+done

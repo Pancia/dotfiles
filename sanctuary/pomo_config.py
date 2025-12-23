@@ -33,10 +33,10 @@ class PomoConfig(App):
             yield Input(value="24", id="work")
         with Horizontal():
             yield Static("Break mins:", classes="label")
-            yield Input(value="6", id="short")
+            yield Input(value="3", id="short")
         with Horizontal():
             yield Static("Sessions:", classes="label")
-            yield Input(value="3", id="sessions")
+            yield Input(value="2", id="sessions")
         yield Static("", id="projection")
         yield Button("Start", id="submit", variant="primary")
 
@@ -55,20 +55,20 @@ class PomoConfig(App):
 
     def submit_config(self):
         w = self.query_one("#work", Input).value or "24"
-        s = self.query_one("#short", Input).value or "6"
-        n = self.query_one("#sessions", Input).value or "3"
+        s = self.query_one("#short", Input).value or "3"
+        n = self.query_one("#sessions", Input).value or "2"
         self.exit(f"{w}/{s}/{n}")
 
     def update_projection(self):
         try:
             work = int(self.query_one("#work", Input).value or 24)
-            short = int(self.query_one("#short", Input).value or 6)
-            sessions = int(self.query_one("#sessions", Input).value or 3)
+            short = int(self.query_one("#short", Input).value or 3)
+            sessions = int(self.query_one("#sessions", Input).value or 2)
             total = work * sessions + short * (sessions - 1)
             end = datetime.now() + timedelta(minutes=total)
             hours, mins = divmod(total, 60)
             duration = f"{hours}h {mins}m" if hours else f"{mins}m"
-            self.query_one("#projection").update(f"→ {duration}, ends ~{end:%H:%M}")
+            self.query_one("#projection").update(f"will take {duration}, ends at ~{end:%H:%M}")
         except ValueError:
             self.query_one("#projection").update("")
 

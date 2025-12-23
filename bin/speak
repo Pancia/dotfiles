@@ -1,0 +1,3 @@
+#!/usr/bin/env fish
+# TTS using Kokoro with blended voice
+exec "$HOME/projects/let-there-be-voice/speak" $argv

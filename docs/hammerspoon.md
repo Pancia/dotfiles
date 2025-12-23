@@ -9,7 +9,7 @@ Seeds are modular Lua modules located in `lib/lua/seeds/` that implement specifi
 ### Core Concepts
 
 - **Entry Point**: `~/.hammerspoon/init.lua` loads `lib/lua/init.lua`
-- **Core Config**: `lib/lua/core.lua` - Main configuration and seed initialization
+- **Core Config**: `lib/lua/hammerspoon.lua` - Main configuration and seed initialization
 - **Seeds Directory**: `lib/lua/seeds/` - All seed modules
 - **Libraries**: `lib/lua/lib/` - Shared utilities and helpers
 
@@ -512,7 +512,7 @@ install:andUse("FadeLogo", {
 |------|---------|
 | `~/.hammerspoon/init.lua` | Entry point (loads dotfiles config) |
 | `~/dotfiles/lib/lua/init.lua` | Main initialization file |
-| `~/dotfiles/lib/lua/core.lua` | Core configuration and seed loading |
+| `~/dotfiles/lib/lua/hammerspoon.lua` | Core configuration and seed loading |
 
 ### Seeds
 
@@ -620,7 +620,7 @@ end):start()
 
 ### Customization
 
-1. Edit `lib/lua/core.lua` to enable/disable seeds
+1. Edit `lib/lua/hammerspoon.lua` to enable/disable seeds
 2. Modify seed configurations when calling `engage()`
 3. Create new seeds following the standard interface
 4. Add VPC workspaces as `.vpc` JSON files
@@ -638,5 +638,5 @@ To create a new seed:
 
 1. Create `lib/lua/seeds/myseed.lua`
 2. Implement `start(config)` and `stop()` methods
-3. Load in `core.lua`: `local myseed = engage("seeds.myseed", {})`
+3. Load in `hammerspoon.lua`: `local myseed = engage("seeds.myseed", {})`
 4. Optionally register in global `seeds` table for reload support

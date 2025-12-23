@@ -4,7 +4,7 @@ local obj = {}
 obj._name = "sanctuary"
 obj._logger = safeLogger.new("sanctuary", "info")
 
-local CHECK_INTERVAL = 30  -- 30-second heartbeat
+local CHECK_INTERVAL = 150  -- 2.5 minute heartbeat
 local VPC_PATH = "/Users/anthony/dotfiles/vpc/sanctuary.vpc"
 
 local kittyNotification = nil
@@ -85,7 +85,7 @@ function obj.heartbeat()
 end
 
 function obj.start(config)
-  obj._logger.i("Starting sanctuary monitor (30s heartbeat)")
+  obj._logger.i("Starting sanctuary monitor (2.5 minute heartbeat)")
   obj._timer = hs.timer.doEvery(CHECK_INTERVAL, obj.heartbeat)
   hs.timer.doAfter(10, obj.heartbeat)
   return obj

@@ -402,7 +402,13 @@ end
 function obj:start(config)
     wake:onSleep(onSleep):start()
     bindMediaKeys()
-    obj._ipcPort = hs.ipc.localPort("cmus", obj.onIPCMessage)
+    -- Try to create IPC port, handling stale port from previous session
+    local ok, port = pcall(hs.ipc.localPort, "cmus", obj.onIPCMessage)
+    if ok then
+        obj._ipcPort = port
+    else
+        hs.printf("[cmus] Warning: could not create IPC port (may be stale): %s", tostring(port))
+    end
     obj._controlsMenu = hs.menubar.new()
     obj._controlsMenu:setClickCallback(function()
         obj:toggleControlsCanvas()

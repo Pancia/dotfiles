@@ -102,9 +102,9 @@ func checkKittyAndNotify() {
 // MARK: - Health Check Loop
 
 func startHealthCheck() {
-    log("HealthCheck: Starting 30-second health check loop")
+    log("HealthCheck: Starting 2.5 minute health check loop")
 
-    Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { _ in
+    Timer.scheduledTimer(withTimeInterval: 150.0, repeats: true) { _ in
         log("HealthCheck: Checking Kitty status...")
         checkKittyAndNotify()
     }
@@ -117,7 +117,7 @@ log("Sanctuary Service")
 log("========================================")
 log("Features:")
 log("  - Screen Unlock Listener")
-log("  - Health Check Loop (30s)")
+log("  - Health Check Loop (2.5 minute)")
 log("  - Kitty Detection & Notification")
 log("========================================")
 

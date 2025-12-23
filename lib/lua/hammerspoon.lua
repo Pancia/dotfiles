@@ -7,15 +7,7 @@ local _spoonStart = hs.timer.absoluteTime()
 local install = hs.loadSpoon("SpoonInstall")
 install.use_syncinstall = true
 
-install:andUse("ClipboardTool", {
-  start = true,
-  hotkeys = {
-    toggle_clipboard = {{"cmd", "ctrl"}, "p"}
-  },
-  config = {
-      display_max_length = 50
-  }
-})
+-- ClipboardTool replaced by seeds.clipboard (encrypted)
 
 install:andUse("FadeLogo", {
   start = true,
@@ -158,6 +150,12 @@ local curfew = engage("seeds.curfew", {
 
 local superwhisper = engage("seeds.superwhisper", {})
 
+local clipboard = engage("seeds.clipboard", {
+  hotkey = {{"cmd", "ctrl"}, "p"},
+  hist_size = 50,
+  storage_path = HOME .. "/ProtonDrive/hammerspoon/clipboard_history.enc"
+})
+
 local _engageElapsed = (hs.timer.absoluteTime() - _engageStart) / 1e6
 table.insert(_G._profile, string.format("  seeds: %.1fms", _engageElapsed))
 
@@ -181,6 +179,7 @@ if calendar then seeds.calendar = calendar end
 if sanctuary then seeds.sanctuary = sanctuary end
 if curfew then seeds.curfew = curfew end
 if superwhisper then seeds.superwhisper = superwhisper end
+if clipboard then seeds.clipboard = clipboard end
 
 local hs_global_modifier = {"cmd", "ctrl"}
 
@@ -319,18 +318,7 @@ end
 local function pomodoroOnDismiss()
     pomodoroCleanup()
 
-    -- Signal pymodoro to continue to next session
-    local pidFile = os.getenv("HOME") .. "/.local/state/pymodoro/pymodoro.pid"
-    local f = io.open(pidFile, "r")
-    if f then
-        local pid = f:read("*l")
-        f:close()
-        if pid then
-            hs.execute("/bin/kill -SIGUSR1 " .. pid)
-        end
-    end
-
-    -- Activate Kitty
+    -- Activate Kitty (user interacts with pymodoro directly to continue)
     hs.application.launchOrFocus("kitty")
 end
 
@@ -521,3 +509,362 @@ function pomodoroNotify(title, message, soundPath)
     end)
     table.insert(pomodoroCountdownTimers, canvasTimer)
 end
+
+-- ============================================================================
+-- Break Overlay: Fullscreen overlay during breaks
+-- ============================================================================
+
+-- Break overlay state
+local breakOverlays = {}
+local breakOverlayTimer = nil
+local breakOverlayDismissable = false
+local breakMouseDownTap = nil
+local breakMouseUpTap = nil
+local breakKeyboardTap = nil
+local breakIsShowingOverlay = false
+local breakHoldStartTime = nil
+local breakProgressTimer = nil
+local BREAK_PANIC_HOLD_DURATION = 10  -- seconds to hold for early dismiss
+
+-- Helper: Create break overlay for a single screen
+local function createBreakOverlayForScreen(screen, label, durationMinutes)
+    local frame = screen:frame()
+    local fullFrame = screen:fullFrame()
+
+    local boxWidth = 500
+    local boxHeight = 350
+    local centerX = frame.w / 2
+    local centerY = frame.h / 2
+    local boxX = centerX - boxWidth / 2
+    local boxY = centerY - boxHeight / 2
+
+    -- Progress ring position
+    local ringCenterY = boxY + 220
+    local ringRadius = 40
+
+    local overlay = hs.canvas.new(fullFrame)
+    overlay:level(hs.canvas.windowLevels.screenSaver)
+    overlay:behavior(hs.canvas.windowBehaviors.canJoinAllSpaces + hs.canvas.windowBehaviors.stationary)
+
+    -- Full screen dim background (calming blue tint)
+    overlay[1] = {
+        type = "rectangle",
+        action = "fill",
+        fillColor = {red = 0.03, green = 0.05, blue = 0.1, alpha = 0.92}
+    }
+
+    -- Central dialog box
+    overlay[2] = {
+        type = "rectangle",
+        action = "fill",
+        frame = {x = boxX, y = boxY, w = boxWidth, h = boxHeight},
+        fillColor = {red = 0.08, green = 0.1, blue = 0.15, alpha = 1},
+        roundedRectRadii = {xRadius = 16, yRadius = 16}
+    }
+
+    -- Dialog border (soft blue)
+    overlay[3] = {
+        type = "rectangle",
+        action = "stroke",
+        frame = {x = boxX, y = boxY, w = boxWidth, h = boxHeight},
+        strokeColor = {red = 0.3, green = 0.5, blue = 0.7, alpha = 1},
+        strokeWidth = 2,
+        roundedRectRadii = {xRadius = 16, yRadius = 16}
+    }
+
+    -- Coffee icon (text-based)
+    overlay[4] = {
+        type = "text",
+        text = "☕",
+        textColor = {red = 0.9, green = 0.85, blue = 0.7, alpha = 1},
+        textSize = 48,
+        textAlignment = "center",
+        frame = {x = boxX, y = boxY + 30, w = boxWidth, h = 60}
+    }
+
+    -- Title
+    overlay[5] = {
+        id = "title",
+        type = "text",
+        text = "Take a break",
+        textColor = {red = 1, green = 1, blue = 1, alpha = 1},
+        textSize = 28,
+        textAlignment = "center",
+        frame = {x = boxX + 20, y = boxY + 90, w = boxWidth - 40, h = 40}
+    }
+
+    -- Label (if provided)
+    local labelText = label and label ~= "" and label or ""
+    overlay[6] = {
+        type = "text",
+        text = labelText,
+        textColor = {red = 0.6, green = 0.6, blue = 0.7, alpha = 1},
+        textSize = 16,
+        textAlignment = "center",
+        frame = {x = boxX + 20, y = boxY + 130, w = boxWidth - 40, h = 25}
+    }
+
+    -- Duration display
+    local durationText = string.format("%d minute%s", durationMinutes, durationMinutes == 1 and "" or "s")
+    overlay[11] = {
+        type = "text",
+        text = durationText,
+        textColor = {red = 0.5, green = 0.6, blue = 0.7, alpha = 1},
+        textSize = 18,
+        textAlignment = "center",
+        frame = {x = boxX + 20, y = boxY + 160, w = boxWidth - 40, h = 25}
+    }
+
+    -- Progress ring background (for panic button)
+    overlay[7] = {
+        type = "circle",
+        action = "stroke",
+        center = {x = centerX, y = ringCenterY},
+        radius = ringRadius,
+        strokeColor = {red = 0.2, green = 0.2, blue = 0.25, alpha = 1},
+        strokeWidth = 6
+    }
+
+    -- Progress ring (fills as you hold - for panic exit)
+    overlay[8] = {
+        id = "ringProgress",
+        type = "arc",
+        center = {x = centerX, y = ringCenterY},
+        radius = ringRadius,
+        startAngle = -90,
+        endAngle = -90,
+        strokeColor = {red = 0.7, green = 0.4, blue = 0.4, alpha = 1},
+        strokeWidth = 6,
+        action = "stroke"
+    }
+
+    -- Hold duration text inside ring
+    overlay[9] = {
+        id = "holdText",
+        type = "text",
+        text = "",
+        textColor = {red = 0.6, green = 0.6, blue = 0.6, alpha = 1},
+        textSize = 14,
+        textAlignment = "center",
+        frame = {x = centerX - 30, y = ringCenterY - 10, w = 60, h = 20}
+    }
+
+    -- Instructions
+    overlay[10] = {
+        id = "instructions",
+        type = "text",
+        text = "Hold mouse button 10s for emergency exit",
+        textColor = {red = 0.35, green = 0.35, blue = 0.4, alpha = 1},
+        textSize = 12,
+        textAlignment = "center",
+        frame = {x = boxX + 20, y = boxY + boxHeight - 40, w = boxWidth - 40, h = 20}
+    }
+
+    overlay:clickActivating(false)
+    overlay:show()
+
+    return overlay
+end
+
+-- Forward declarations
+local breakOverlayCleanup
+local breakOverlayDismiss
+local breakStartHold
+local breakEndHold
+local breakUpdateProgress
+local breakResetProgress
+
+-- Helper: Update progress ring during hold
+breakUpdateProgress = function(elapsed)
+    if #breakOverlays == 0 then return end
+
+    local progress = math.min(elapsed / BREAK_PANIC_HOLD_DURATION, 1)
+    local endAngle = -90 + (360 * progress)
+
+    for _, overlay in ipairs(breakOverlays) do
+        overlay[8].endAngle = endAngle
+        overlay[9].text = string.format("%.0fs", math.ceil(BREAK_PANIC_HOLD_DURATION - elapsed))
+    end
+end
+
+-- Helper: Reset progress ring
+breakResetProgress = function()
+    if #breakOverlays == 0 then return end
+    for _, overlay in ipairs(breakOverlays) do
+        overlay[8].endAngle = -90
+        overlay[9].text = ""
+    end
+end
+
+-- Helper: Start hold for panic exit
+breakStartHold = function()
+    breakHoldStartTime = hs.timer.secondsSinceEpoch()
+
+    if breakProgressTimer then
+        breakProgressTimer:stop()
+    end
+
+    breakProgressTimer = hs.timer.doEvery(0.05, function()
+        if not breakHoldStartTime then return end
+
+        local elapsed = hs.timer.secondsSinceEpoch() - breakHoldStartTime
+        breakUpdateProgress(elapsed)
+
+        if elapsed >= BREAK_PANIC_HOLD_DURATION then
+            breakOverlayDismiss()
+        end
+    end)
+end
+
+-- Helper: End hold
+breakEndHold = function()
+    breakHoldStartTime = nil
+
+    if breakProgressTimer then
+        breakProgressTimer:stop()
+        breakProgressTimer = nil
+    end
+
+    breakResetProgress()
+end
+
+-- Helper: Cleanup break overlay state
+breakOverlayCleanup = function()
+    -- Stop timers
+    if breakOverlayTimer then
+        breakOverlayTimer:stop()
+        breakOverlayTimer = nil
+    end
+    if breakProgressTimer then
+        breakProgressTimer:stop()
+        breakProgressTimer = nil
+    end
+
+    -- Clean up eventtaps
+    if breakMouseDownTap then
+        breakMouseDownTap:stop()
+        breakMouseDownTap = nil
+    end
+    if breakMouseUpTap then
+        breakMouseUpTap:stop()
+        breakMouseUpTap = nil
+    end
+    if breakKeyboardTap then
+        breakKeyboardTap:stop()
+        breakKeyboardTap = nil
+    end
+
+    -- Reset state
+    breakHoldStartTime = nil
+    breakIsShowingOverlay = false
+    breakOverlayDismissable = false
+
+    -- Delete all overlays
+    for _, overlay in ipairs(breakOverlays) do
+        overlay:delete()
+    end
+    breakOverlays = {}
+end
+
+-- Helper: Dismiss break overlay
+breakOverlayDismiss = function()
+    breakOverlayCleanup()
+
+    -- Activate Kitty (user interacts with pymodoro directly to continue)
+    hs.application.launchOrFocus("kitty")
+end
+
+-- Helper: Setup event taps to block input
+local function breakSetupEventTaps()
+    -- Block keyboard (but allow Cmd+Ctrl+R to reload Hammerspoon as safety escape)
+    breakKeyboardTap = hs.eventtap.new({hs.eventtap.event.types.keyDown, hs.eventtap.event.types.keyUp}, function(event)
+        if breakIsShowingOverlay then
+            local flags = event:getFlags()
+            local keyCode = event:getKeyCode()
+            -- Allow Cmd+Ctrl+R (keyCode 15 = 'r') to reload Hammerspoon
+            if flags.cmd and flags.ctrl and keyCode == 15 then
+                return false  -- let it through
+            end
+            return true  -- consume all other keyboard events
+        end
+        return false
+    end)
+
+    -- Mouse down - start hold timer
+    breakMouseDownTap = hs.eventtap.new({hs.eventtap.event.types.leftMouseDown}, function(event)
+        if breakIsShowingOverlay then
+            if breakOverlayDismissable then
+                -- Normal dismiss when break is over
+                breakOverlayDismiss()
+            else
+                -- Start panic hold
+                breakStartHold()
+            end
+            return true
+        end
+        return false
+    end)
+
+    -- Mouse up - cancel hold if not complete
+    breakMouseUpTap = hs.eventtap.new({hs.eventtap.event.types.leftMouseUp}, function(event)
+        if breakIsShowingOverlay then
+            if breakHoldStartTime then
+                breakEndHold()
+            end
+            return true
+        end
+        return false
+    end)
+
+    breakKeyboardTap:start()
+    breakMouseDownTap:start()
+    breakMouseUpTap:start()
+end
+
+-- Helper: Enable dismissal (called when break timer expires)
+local function breakOverlayEnableDismiss()
+    breakOverlayDismissable = true
+
+    -- Update overlay text
+    for _, overlay in ipairs(breakOverlays) do
+        overlay[5].text = "Break complete"
+        overlay[5].textColor = {red = 0.5, green = 0.8, blue = 0.5, alpha = 1}
+        overlay[10].text = "Click anywhere to continue"
+        overlay[10].textColor = {red = 0.5, green = 0.7, blue = 0.5, alpha = 1}
+        -- Hide the progress ring when dismissable
+        overlay[7].strokeColor = {red = 0, green = 0, blue = 0, alpha = 0}
+        overlay[8].strokeColor = {red = 0, green = 0, blue = 0, alpha = 0}
+    end
+
+    -- Play a subtle sound to indicate break is over
+    hs.sound.getByName("Glass"):play()
+end
+
+-- Main function: Show break overlay for specified duration
+function breakOverlayShow(label, durationMinutes)
+    -- Clean up any existing break overlay
+    breakOverlayCleanup()
+
+    -- Default to 5 minutes if not specified
+    durationMinutes = durationMinutes or 5
+
+    breakIsShowingOverlay = true
+    breakOverlayDismissable = false
+
+    -- Create overlay on all screens
+    for _, screen in ipairs(hs.screen.allScreens()) do
+        local overlay = createBreakOverlayForScreen(screen, label, durationMinutes)
+        table.insert(breakOverlays, overlay)
+    end
+
+    -- Setup event taps to block input immediately
+    breakSetupEventTaps()
+
+    -- Schedule enable dismiss after break duration
+    breakOverlayTimer = hs.timer.doAfter(durationMinutes * 60, function()
+        breakOverlayEnableDismiss()
+    end)
+end
+
+-- Export for hs -c access
+_G.breakOverlayShow = breakOverlayShow

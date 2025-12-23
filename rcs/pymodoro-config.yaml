@@ -15,10 +15,10 @@ hooks:
     - command: "hs -c 'pomodoroNotify(\"✅ Work Complete\", \"$PYMODORO_LABEL - Time for a break!\")'"
       blocking: false
   break_start:
-    - command: "echo \"[$(date '+%H:%M:%S')] Break started: $PYMODORO_LABEL\" >> ~/.log/pymodoro.log"
+    - command: "echo \"[$(date '+%H:%M:%S')] Break started: $PYMODORO_LABEL ($PYMODORO_DURATION min)\" >> ~/.log/pymodoro.log"
+      blocking: false
+    - command: "hs -c \"breakOverlayShow('$PYMODORO_LABEL', $PYMODORO_DURATION)\""
       blocking: false
   break_end:
     - command: "echo \"[$(date '+%H:%M:%S')] Break ended: $PYMODORO_LABEL\" >> ~/.log/pymodoro.log"
-      blocking: false
-    - command: "hs -c 'pomodoroNotify(\"⏰ Break Over\", \"$PYMODORO_LABEL - Back to work!\")'"
       blocking: false

@@ -2,7 +2,9 @@
 local _initStart = hs.timer.absoluteTime()
 _G._profile = {}
 
-package.path = '/opt/homebrew/Cellar/luarocks/3.9.2/share/lua/5.4/?.lua;'..package.path
+local lua_version = _VERSION:match("Lua (%d+%.%d+)")
+package.path = '/opt/homebrew/share/lua/'..lua_version..'/?.lua;'..package.path
+package.cpath = '/opt/homebrew/lib/lua/'..lua_version..'/?.so;'..package.cpath
 
 local _s = hs.timer.absoluteTime()
 fennel = require("fennel")
@@ -20,7 +22,7 @@ require("hs.ipc")
 hs.ipc.cliInstall("/Users/"..os.getenv("USER").."/Developer/")
 table.insert(_G._profile, string.format("  ipc: %.1fms", (hs.timer.absoluteTime() - _s) / 1e6))
 
-require("core")
+require("hammerspoon")
 
 table.insert(_G._profile, string.format("init total: %.1fms", (hs.timer.absoluteTime() - _initStart) / 1e6))
 hs.printf("[profile:start]\n%s", table.concat(_G._profile, "\n"))

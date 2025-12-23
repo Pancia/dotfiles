@@ -124,14 +124,11 @@ COMMANDS = {
     'h': ('Show (last commit)', 'git show --color-words'),
     'l': ('Log graph', 'git log --graph --all --decorate --abbrev-commit'),
     'p': {
-        '_desc': 'Push/Pull',
-        'p': {
-            '_desc': 'Push',
-            'p': ('Push', 'git push && git status'),
-            'f': ('Push force++', 'git push --force-with-lease --force-if-includes && git status'),
+        '_desc': 'Push',
+        'p': ('Push', 'git push && git status'),
+        'f': ('Push force++', 'git push --force-with-lease --force-if-includes && git status'),
         },
-        'l': ('Pull', 'git pull && git status'),
-    },
+    'u': ('Pull', 'git pull && git status'),
     'r': {
         '_desc': 'Restore',
         's': ('Unstage (fzf)', 'git diff --staged --name-only | fzf -m | xargs git restore --staged && git status', True),
