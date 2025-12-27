@@ -21,3 +21,4 @@ fish/functions/nvm.fish
 fish/functions/fish_prompt.fish
 fish/functions/fzfm_fre_prune.clj
 tmp/
+cache/

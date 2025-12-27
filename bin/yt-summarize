@@ -1,0 +1,64 @@
+#!/usr/bin/env fish
+
+# Usage: yt-summarize URL [-s SECTIONS] [-c CONTEXT]
+# Examples:
+#   yt-summarize "https://youtube.com/watch?v=xxx"
+#   yt-summarize "https://youtube.com/watch?v=xxx" -s 40:00-45:35
+#   yt-summarize "https://youtube.com/watch?v=xxx" -s 40:00-45:35,1:20:00-1:25:00
+#   yt-summarize "https://youtube.com/watch?v=xxx" -c "I'm interested in the business strategy aspects"
+#   yt-summarize "https://youtube.com/watch?v=xxx" -s 10:00-15:00 -c "Focus on the meditation techniques"
+
+argparse 's/sections=' 'c/context=' 'h/help' -- $argv
+or exit 1
+
+if set -q _flag_help; or test (count $argv) -lt 1
+    echo "Usage: yt-summarize URL [-s SECTIONS] [-c CONTEXT]"
+    echo
+    echo "Options:"
+    echo "  -s, --sections  Comma-separated time ranges (e.g., 40:00-45:35,1:20:00-1:25:00)"
+    echo "  -c, --context   Additional context for the summary prompt"
+    echo "  -h, --help      Show this help"
+    echo
+    echo "Examples:"
+    echo "  yt-summarize 'https://youtube.com/watch?v=xxx'"
+    echo "  yt-summarize 'https://youtube.com/watch?v=xxx' -s 40:00-45:35"
+    echo "  yt-summarize 'https://youtube.com/watch?v=xxx' -s 10:00-20:00,30:00-35:00"
+    echo "  yt-summarize 'https://youtube.com/watch?v=xxx' -c 'Focus on productivity tips'"
+    exit 0
+end
+
+set -l url $argv[1]
+
+# Build JSON payload
+set -l payload_parts "\"url\": \"$url\""
+
+if set -q _flag_sections
+    # Convert CSV to JSON array
+    set -l sections_list (string split ',' $_flag_sections)
+    set -l sections_json (printf '"%s",' $sections_list | string trim -r -c ',')
+    set payload_parts $payload_parts "\"sections\": [$sections_json]"
+    echo "Sections: $_flag_sections"
+end
+
+if set -q _flag_context
+    # Escape quotes and backslashes for JSON
+    set -l escaped_context (string replace -a '\\' '\\\\' -- "$_flag_context" | string replace -a '"' '\\"' | string replace -a \n '\\n')
+    set payload_parts $payload_parts "\"context\": \"$escaped_context\""
+    echo "Context: $_flag_context"
+end
+
+set -l payload "{$(string join ', ' $payload_parts)}"
+
+set -l output (curl -sN -X POST http://localhost:8765/summarize \
+    -H "Content-Type: application/json" \
+    -d "$payload" | tee /dev/stderr)
+
+# Extract saved_to path from the complete event
+set -l saved_to (echo $output | string match -r '"saved_to": "([^"]+)"' | tail -1)
+
+if test -n "$saved_to" -a -f "$saved_to"
+    echo
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo
+    cat "$saved_to"
+end

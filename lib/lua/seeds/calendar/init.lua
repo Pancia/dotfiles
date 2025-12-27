@@ -1,5 +1,6 @@
 local json = require("hs.json")
 local safeLogger = require("lib/safeLogger")
+local menubarRegistry = require("lib/menubarRegistry")
 
 local obj = {}
 
@@ -48,9 +49,17 @@ function obj:start(config)
     end
     obj._logger.df("Loaded %d triggered events from state", triggeredCount)
 
-    -- Create menubar (defer renderMenuBar to avoid blocking)
-    obj._menubar = hs.menubar.new():setMenu(function() return obj:renderMenu() end)
-    obj._menubar:setTitle("📅")
+    -- Get or create persistent menubar (survives soft reloads)
+    local mb, isNew = menubarRegistry.getOrCreate("calendar")
+    obj._menubar = mb
+
+    -- Always update menu callback (points to new code after reload)
+    obj._menubar:setMenu(function() return obj:renderMenu() end)
+
+    -- Only set initial title if newly created
+    if isNew then
+        obj._menubar:setTitle("📅")
+    end
 
     -- Start polling timer
     obj._pollTimer = hs.timer.doEvery(obj.pollInterval, function()
@@ -68,8 +77,9 @@ function obj:start(config)
     return self
 end
 
-function obj:stop()
-    obj._logger.df("Stopping calendar seed...")
+-- Soft stop: cleanup resources but preserve menubar (for soft reload)
+function obj:softStop()
+    obj._logger.df("Soft stopping calendar seed...")
 
     -- Save state
     hs.settings.set("calendar_triggered_events", obj._triggeredEvents)
@@ -88,11 +98,17 @@ function obj:stop()
         obj._pollTimer:stop()
     end
 
-    -- Remove menubar
-    if obj._menubar then
-        obj._menubar:delete()
-    end
+    -- NOTE: Do NOT delete menubar - it persists across soft reloads
+    obj._menubar = nil
 
+    return self
+end
+
+-- Hard stop: full cleanup including menubar (for hard reload)
+function obj:stop()
+    obj._logger.df("Stopping calendar seed...")
+    obj:softStop()
+    menubarRegistry.delete("calendar")
     return self
 end
 

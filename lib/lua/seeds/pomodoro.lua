@@ -3,6 +3,7 @@
 -- Updated via hooks from pymodoro calling hs -c commands
 
 local safeLogger = require("lib/safeLogger")
+local menubarRegistry = require("lib/menubarRegistry")
 
 local obj = {}
 obj._name = "pomodoro"
@@ -129,8 +130,11 @@ end
 function obj:start(config)
     obj._logger.i("Starting pomodoro menubar")
 
-    -- Create menubar item
-    obj._menubar = hs.menubar.new()
+    -- Get or create persistent menubar (survives soft reloads)
+    local mb, isNew = menubarRegistry.getOrCreate("pomodoro")
+    obj._menubar = mb
+
+    -- Always update callback (points to new code after reload)
     obj._menubar:setClickCallback(function()
         -- Click to focus Kitty (where pymodoro runs)
         hs.application.launchOrFocus("kitty")
@@ -139,24 +143,32 @@ function obj:start(config)
     -- Start timer to update countdown
     obj._timer = hs.timer.doEvery(1, obj.tickTimer)
 
-    -- Initial state
-    obj.updateMenuTitle()
+    -- Initial state (only set if newly created)
+    if isNew then
+        obj.updateMenuTitle()
+    end
 
     return obj
 end
 
-function obj:stop()
-    obj._logger.i("Stopping pomodoro menubar")
+-- Soft stop: cleanup resources but preserve menubar (for soft reload)
+function obj:softStop()
+    obj._logger.i("Soft stopping pomodoro menubar")
 
     if obj._timer then
         obj._timer:stop()
         obj._timer = nil
     end
 
-    if obj._menubar then
-        obj._menubar:delete()
-        obj._menubar = nil
-    end
+    -- NOTE: Do NOT delete menubar - it persists across soft reloads
+    obj._menubar = nil
+end
+
+-- Hard stop: full cleanup including menubar (for hard reload)
+function obj:stop()
+    obj._logger.i("Stopping pomodoro menubar")
+    obj:softStop()
+    menubarRegistry.delete("pomodoro")
 end
 
 -- Export global functions for hs -c access

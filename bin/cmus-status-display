@@ -41,4 +41,6 @@ if test -n "$_file"
 else if test -n "$_url"
     set message (printf "%.20s - %.20s" "$_url" "$_title")
 end
-output $message
+# Include status in message so Hammerspoon doesn't need to re-query (avoids race condition)
+# Use :: as delimiter (pipe causes shell escaping issues)
+output "$_status::$message"

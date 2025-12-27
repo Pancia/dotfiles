@@ -1,0 +1,770 @@
+#!/usr/bin/env -S uv run --with kerykeion python3
+"""
+Astrological Transit Tracker
+
+CLI tool for tracking astrological transits against natal charts.
+Uses kerykeion for calculations, stores data in ~/Cloud/astro/.
+
+Usage:
+    astro add-chart [NAME]       # Create natal chart interactively
+    astro list-charts            # Show saved charts
+    astro show-chart [NAME]      # Display chart details
+    astro remove-chart NAME      # Delete a chart
+    astro now [NAME]             # Current transits
+    astro forecast [NAME] --days N   # N-day forecast from today
+    astro forecast --date YYYY-MM-DD # Forecast from specific date
+
+Run with: uv run --with kerykeion ~/dotfiles/bin/astro <command>
+"""
+
+import argparse
+import json
+import sys
+from dataclasses import dataclass, asdict, field
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Optional
+
+
+# =============================================================================
+# Data Models
+# =============================================================================
+
+@dataclass
+class BirthData:
+    """Birth data for a natal chart."""
+    full_name: str
+    year: int
+    month: int
+    day: int
+    hour: int
+    minute: int
+    city: str
+    nation: str
+    lat: float = 0.0
+    lng: float = 0.0
+    tz_str: str = ""
+
+
+@dataclass
+class NatalChart:
+    """A saved natal chart."""
+    name: str
+    birth_data: BirthData
+    created_at: str
+    notes: str = ""
+
+
+@dataclass
+class TransitEvent:
+    """A single transit aspect."""
+    transit_planet: str
+    natal_planet: str
+    aspect: str
+    orb: float
+    transit_sign: str = ""
+    transit_house: str = ""
+    natal_sign: str = ""
+    natal_house: str = ""
+    applying: bool = True
+    exact_date: Optional[str] = None
+
+
+@dataclass
+class Config:
+    """User configuration."""
+    default_chart: str = "default"
+    geonames_username: str = "pancia"
+    orb_settings: dict = field(default_factory=lambda: {
+        "conjunction": 8,
+        "opposition": 8,
+        "trine": 6,
+        "square": 6,
+        "sextile": 4
+    })
+    display_format: str = "compact"
+
+
+# =============================================================================
+# Storage Layer
+# =============================================================================
+
+class AstroStorage:
+    """Handles all file I/O operations."""
+
+    def __init__(self, base_path: Optional[Path] = None):
+        self.base_path = base_path or Path.home() / ".local" / "share" / "astro"
+        self.charts_dir = self.base_path / "charts"
+        self.transits_dir = self.base_path / "transits"
+        self.ephemeris_dir = self.base_path / "ephemeris_cache"
+        self.config_file = self.base_path / "config.json"
+        self._ensure_dirs()
+
+    def _ensure_dirs(self):
+        """Create directory structure if missing."""
+        self.charts_dir.mkdir(parents=True, exist_ok=True)
+        self.transits_dir.mkdir(parents=True, exist_ok=True)
+        self.ephemeris_dir.mkdir(parents=True, exist_ok=True)
+
+    # --- Config ---
+
+    def load_config(self) -> Config:
+        """Load user configuration."""
+        if self.config_file.exists():
+            with open(self.config_file, 'r') as f:
+                data = json.load(f)
+                return Config(**data)
+        return Config()
+
+    def save_config(self, config: Config) -> None:
+        """Save user configuration."""
+        with open(self.config_file, 'w') as f:
+            json.dump(asdict(config), f, indent=2)
+
+    # --- Charts ---
+
+    def save_chart(self, chart: NatalChart) -> None:
+        """Save natal chart to JSON."""
+        filepath = self.charts_dir / f"{chart.name}.json"
+        with open(filepath, 'w') as f:
+            json.dump(asdict(chart), f, indent=2)
+
+    def load_chart(self, name: str) -> NatalChart:
+        """Load natal chart from JSON."""
+        filepath = self.charts_dir / f"{name}.json"
+        if not filepath.exists():
+            raise FileNotFoundError(f"Chart '{name}' not found. "
+                                    f"Run 'astro add-chart {name}' to create it.")
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        return NatalChart(
+            name=data['name'],
+            birth_data=BirthData(**data['birth_data']),
+            created_at=data['created_at'],
+            notes=data.get('notes', '')
+        )
+
+    def list_charts(self) -> list[str]:
+        """Return list of chart names."""
+        return sorted([f.stem for f in self.charts_dir.glob("*.json")])
+
+    def delete_chart(self, name: str) -> bool:
+        """Delete a chart. Returns True if deleted."""
+        filepath = self.charts_dir / f"{name}.json"
+        if filepath.exists():
+            filepath.unlink()
+            return True
+        return False
+
+    # --- Transit Cache ---
+
+    def get_cached_transit(self, date: str, chart_name: str) -> Optional[dict]:
+        """Retrieve cached transit data for a date."""
+        year_month = date[:7]  # YYYY-MM
+        filepath = self.transits_dir / year_month / f"{date}_{chart_name}.json"
+        if filepath.exists():
+            with open(filepath, 'r') as f:
+                return json.load(f)
+        return None
+
+    def cache_transit(self, date: str, chart_name: str, aspects: list[TransitEvent]) -> None:
+        """Cache transit data for a date."""
+        year_month = date[:7]
+        month_dir = self.transits_dir / year_month
+        month_dir.mkdir(parents=True, exist_ok=True)
+
+        filepath = month_dir / f"{date}_{chart_name}.json"
+        data = {
+            'date': date,
+            'chart_name': chart_name,
+            'computed_at': datetime.now().isoformat(),
+            'aspects': [asdict(a) for a in aspects]
+        }
+        with open(filepath, 'w') as f:
+            json.dump(data, f, indent=2)
+
+    def clear_cache(self) -> int:
+        """Clear all cached transits. Returns count of deleted files."""
+        count = 0
+        for month_dir in self.transits_dir.iterdir():
+            if month_dir.is_dir():
+                for cache_file in month_dir.glob("*.json"):
+                    cache_file.unlink()
+                    count += 1
+                month_dir.rmdir()
+        return count
+
+
+# =============================================================================
+# Chart Manager
+# =============================================================================
+
+class ChartManager:
+    """Manages natal chart operations."""
+
+    def __init__(self, storage: AstroStorage):
+        self.storage = storage
+
+    def create_chart_interactive(self, name: Optional[str] = None) -> NatalChart:
+        """Interactive chart creation using input()."""
+        print("Create New Natal Chart")
+        print("=" * 40)
+        print()
+
+        if not name:
+            name = input("Chart name (e.g., 'default', 'partner'): ").strip()
+            if not name:
+                name = "default"
+
+        # Check if already exists
+        existing = self.storage.list_charts()
+        if name in existing:
+            overwrite = input(f"Chart '{name}' exists. Overwrite? (y/N): ").strip().lower()
+            if overwrite != 'y':
+                print("Aborted.")
+                sys.exit(0)
+
+        print()
+        full_name = input("Full name: ").strip()
+
+        print()
+        print("Birth date:")
+        year = self._input_int("  Year (YYYY): ", 1900, 2100)
+        month = self._input_int("  Month (1-12): ", 1, 12)
+        day = self._input_int("  Day (1-31): ", 1, 31)
+
+        print()
+        print("Birth time (24-hour format):")
+        hour = self._input_int("  Hour (0-23): ", 0, 23)
+        minute = self._input_int("  Minute (0-59): ", 0, 59)
+
+        print()
+        print("Birth location:")
+        city = input("  City: ").strip()
+        nation = input("  Nation code (e.g., US, UK, DE): ").strip().upper()
+
+        # Create birth data (kerykeion will geocode city)
+        birth_data = BirthData(
+            full_name=full_name,
+            year=year,
+            month=month,
+            day=day,
+            hour=hour,
+            minute=minute,
+            city=city,
+            nation=nation
+        )
+
+        chart = NatalChart(
+            name=name,
+            birth_data=birth_data,
+            created_at=datetime.now().isoformat()
+        )
+
+        self.storage.save_chart(chart)
+        return chart
+
+    def _input_int(self, prompt: str, min_val: int, max_val: int) -> int:
+        """Get integer input with validation."""
+        while True:
+            try:
+                val = int(input(prompt))
+                if min_val <= val <= max_val:
+                    return val
+                print(f"  Please enter a value between {min_val} and {max_val}")
+            except ValueError:
+                print("  Please enter a valid number")
+
+
+# =============================================================================
+# Transit Calculator
+# =============================================================================
+
+class TransitCalculator:
+    """Computes transits using kerykeion."""
+
+    def __init__(self, storage: AstroStorage):
+        self.storage = storage
+        self.config = storage.load_config()
+
+    def _make_subject(self, name: str, year: int, month: int, day: int,
+                      hour: int, minute: int, bd: BirthData) -> 'AstrologicalSubject':
+        """Create AstrologicalSubject, using cached coords if available."""
+        from kerykeion import AstrologicalSubject
+
+        # Use cached coordinates if available
+        if bd.lat and bd.lng and bd.tz_str:
+            return AstrologicalSubject(
+                name, year, month, day, hour, minute,
+                bd.city, bd.nation,
+                lat=bd.lat, lng=bd.lng, tz_str=bd.tz_str,
+                houses_system_identifier="W"
+            )
+        else:
+            return AstrologicalSubject(
+                name, year, month, day, hour, minute,
+                bd.city, bd.nation,
+                houses_system_identifier="W",
+                geonames_username=self.config.geonames_username
+            )
+
+    def _cache_coords(self, natal_chart: NatalChart, subject) -> None:
+        """Save geocoded coordinates back to chart."""
+        bd = natal_chart.birth_data
+        if not bd.lat or not bd.lng:
+            bd.lat = subject.lat
+            bd.lng = subject.lng
+            bd.tz_str = subject.tz_str
+            self.storage.save_chart(natal_chart)
+
+    def compute_current_transits(self, natal_chart: NatalChart) -> list[TransitEvent]:
+        """Compute transits for the current moment."""
+        from kerykeion import SynastryAspects
+
+        bd = natal_chart.birth_data
+
+        # Create natal subject
+        natal = self._make_subject(
+            bd.full_name, bd.year, bd.month, bd.day, bd.hour, bd.minute, bd
+        )
+        self._cache_coords(natal_chart, natal)
+
+        # Create transit subject for now
+        now = datetime.now()
+        transit = self._make_subject(
+            "Transit", now.year, now.month, now.day, now.hour, now.minute, bd
+        )
+
+        # Calculate aspects
+        aspects = SynastryAspects(transit, natal)
+        return self._parse_aspects(aspects.relevant_aspects, transit, natal)
+
+    def compute_day_transits(self, natal_chart: NatalChart, date) -> list[TransitEvent]:
+        """Compute transits for a specific date (at noon)."""
+        from kerykeion import SynastryAspects
+
+        bd = natal_chart.birth_data
+
+        # Create natal subject
+        natal = self._make_subject(
+            bd.full_name, bd.year, bd.month, bd.day, bd.hour, bd.minute, bd
+        )
+        self._cache_coords(natal_chart, natal)
+
+        # Create transit subject for the date at noon
+        transit = self._make_subject(
+            "Transit", date.year, date.month, date.day, 12, 0, bd
+        )
+
+        # Calculate aspects
+        aspects = SynastryAspects(transit, natal)
+        return self._parse_aspects(aspects.relevant_aspects, transit, natal)
+
+    # Major planets only (skip points, nodes, lilith, etc.)
+    MAJOR_PLANETS = {'Sun', 'Moon', 'Mercury', 'Venus', 'Mars',
+                     'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'}
+
+    def get_lunar_phase(self, date, bd: BirthData) -> Optional[TransitEvent]:
+        """Check if date has a new or full moon (orb < 2°)."""
+        transit = self._make_subject("Transit", date.year, date.month, date.day, 12, 0, bd)
+
+        sun_pos = transit.sun.abs_pos
+        moon_pos = transit.moon.abs_pos
+
+        # Calculate aspect
+        diff = abs(sun_pos - moon_pos)
+        if diff > 180:
+            diff = 360 - diff
+
+        # New Moon = conjunction (diff near 0)
+        if diff < 2.0:
+            return TransitEvent(
+                transit_planet="New Moon",
+                natal_planet="",
+                aspect="conjunction",
+                orb=diff,
+                transit_sign=transit.moon.sign,
+                transit_house="",
+            )
+        # Full Moon = opposition (diff near 180)
+        elif abs(diff - 180) < 2.0:
+            return TransitEvent(
+                transit_planet="Full Moon",
+                natal_planet="",
+                aspect="opposition",
+                orb=abs(diff - 180),
+                transit_sign=transit.moon.sign,
+                transit_house="",
+            )
+        return None
+
+    def forecast_transits(self, natal_chart: NatalChart, days: int,
+                          orb_limit: float = 0.5, major_only: bool = True,
+                          start_date: Optional[datetime] = None
+                          ) -> list[tuple[str, list[TransitEvent]]]:
+        """
+        Forecast transits for N days starting from a date.
+        Returns list of (date_str, events) tuples.
+
+        Args:
+            days: Number of days to forecast
+            orb_limit: Max orb to include (default 0.5° for "exact" transits)
+            major_only: Only show major planet transits (default True)
+            start_date: Starting date (default: today)
+        """
+        results = []
+        today = start_date.date() if start_date else datetime.now().date()
+
+        for day_offset in range(days):
+            date = today + timedelta(days=day_offset)
+            date_str = date.isoformat()
+
+            # Check cache first
+            cached = self.storage.get_cached_transit(date_str, natal_chart.name)
+            if cached:
+                events = [TransitEvent(**e) for e in cached['aspects']]
+            else:
+                # Compute for this day
+                events = self.compute_day_transits(natal_chart, date)
+                self.storage.cache_transit(date_str, natal_chart.name, events)
+
+            # Filter to highlights
+            highlights = []
+            for e in events:
+                if abs(e.orb) > orb_limit:
+                    continue
+                if major_only:
+                    if e.transit_planet not in self.MAJOR_PLANETS:
+                        continue
+                    if e.natal_planet not in self.MAJOR_PLANETS:
+                        continue
+                highlights.append(e)
+
+            # Check for lunar phases
+            lunar = self.get_lunar_phase(date, natal_chart.birth_data)
+            if lunar:
+                highlights.insert(0, lunar)
+
+            if highlights:
+                results.append((date_str, highlights))
+
+        return results
+
+    def _parse_aspects(self, raw_aspects: list, transit_subj, natal_subj) -> list[TransitEvent]:
+        """Convert kerykeion aspects to TransitEvent objects."""
+        events = []
+
+        # Build lookup for planet data
+        def get_planet_data(subj, name):
+            """Get sign/house for a planet by name."""
+            # Map common names to attribute names
+            attr_map = {
+                'Sun': 'sun', 'Moon': 'moon', 'Mercury': 'mercury',
+                'Venus': 'venus', 'Mars': 'mars', 'Jupiter': 'jupiter',
+                'Saturn': 'saturn', 'Uranus': 'uranus', 'Neptune': 'neptune',
+                'Pluto': 'pluto', 'Chiron': 'chiron',
+                'True_North_Lunar_Node': 'true_north_lunar_node',
+                'True_South_Lunar_Node': 'true_south_lunar_node',
+                'Mean_Lilith': 'mean_lilith',
+            }
+            attr = attr_map.get(name, name.lower())
+            planet = getattr(subj, attr, None)
+            if planet:
+                # Clean up house name (e.g., "Eighth_House" -> "8")
+                house = getattr(planet, 'house', '')
+                if house:
+                    house_map = {
+                        'First_House': '1', 'Second_House': '2', 'Third_House': '3',
+                        'Fourth_House': '4', 'Fifth_House': '5', 'Sixth_House': '6',
+                        'Seventh_House': '7', 'Eighth_House': '8', 'Ninth_House': '9',
+                        'Tenth_House': '10', 'Eleventh_House': '11', 'Twelfth_House': '12',
+                    }
+                    house = house_map.get(house, house)
+                return getattr(planet, 'sign', ''), house
+            return '', ''
+
+        for asp in raw_aspects:
+            t_sign, t_house = get_planet_data(transit_subj, asp['p1_name'])
+            n_sign, n_house = get_planet_data(natal_subj, asp['p2_name'])
+
+            events.append(TransitEvent(
+                transit_planet=asp['p1_name'],
+                natal_planet=asp['p2_name'],
+                aspect=asp['aspect'],
+                orb=asp['orbit'],
+                transit_sign=t_sign,
+                transit_house=t_house,
+                natal_sign=n_sign,
+                natal_house=n_house,
+                applying=True  # TODO: calculate applying/separating
+            ))
+        return events
+
+
+# =============================================================================
+# Transit Formatter
+# =============================================================================
+
+class TransitFormatter:
+    """Formats transit data for display."""
+
+    # Aspect symbols
+    ASPECT_SYMBOLS = {
+        'conjunction': '☌',
+        'opposition': '☍',
+        'trine': '△',
+        'square': '□',
+        'sextile': '⚹',
+        'quincunx': '⚻',
+        'semisextile': '⚺',
+    }
+
+    # Planet symbols
+    PLANET_SYMBOLS = {
+        'Sun': '☉',
+        'Moon': '☽',
+        'Mercury': '☿',
+        'Venus': '♀',
+        'Mars': '♂',
+        'Jupiter': '♃',
+        'Saturn': '♄',
+        'Uranus': '♅',
+        'Neptune': '♆',
+        'Pluto': '♇',
+    }
+
+    # Sign symbols
+    SIGN_SYMBOLS = {
+        'Ari': '♈', 'Tau': '♉', 'Gem': '♊', 'Can': '♋',
+        'Leo': '♌', 'Vir': '♍', 'Lib': '♎', 'Sco': '♏',
+        'Sag': '♐', 'Cap': '♑', 'Aqu': '♒', 'Pis': '♓',
+    }
+
+    def _sign_str(self, sign: str, house: str) -> str:
+        """Format sign and house as compact string."""
+        s_sym = self.SIGN_SYMBOLS.get(sign, sign)
+        if house:
+            return f"{s_sym}{house}"
+        return s_sym
+
+    def format_compact(self, transits: list[TransitEvent], limit: int = 15) -> str:
+        """Compact format for current transits."""
+        if not transits:
+            return "No significant transits found."
+
+        lines = []
+        sorted_transits = sorted(transits, key=lambda x: abs(x.orb))[:limit]
+
+        for t in sorted_transits:
+            # Get symbols
+            t_sym = self.PLANET_SYMBOLS.get(t.transit_planet, '')
+            n_sym = self.PLANET_SYMBOLS.get(t.natal_planet, '')
+            a_sym = self.ASPECT_SYMBOLS.get(t.aspect.lower(), '')
+
+            orb_str = f"{t.orb:+.2f}°" if t.orb >= 0 else f"{t.orb:.2f}°"
+            t_pos = self._sign_str(t.transit_sign, t.transit_house)
+            n_pos = self._sign_str(t.natal_sign, t.natal_house)
+
+            lines.append(
+                f"  {t_sym} {t.transit_planet:8s} {t_pos:4s}  {a_sym} {t.aspect:10s}  "
+                f"{n_sym} natal {t.natal_planet:8s} {n_pos:4s}  ({orb_str})"
+            )
+
+        return "\n".join(lines)
+
+    def format_forecast(self, forecast: list[tuple[str, list[TransitEvent]]]) -> str:
+        """Format forecast with dates and transits."""
+        if not forecast:
+            return "No exact transits in forecast period."
+
+        lines = []
+        for date_str, events in forecast:
+            # Parse and format date
+            date = datetime.fromisoformat(date_str)
+            date_fmt = date.strftime("%a %b %d")
+
+            lines.append(f"\n{date_fmt}:")
+            for t in sorted(events, key=lambda x: abs(x.orb)):
+                # Lunar phases (New Moon, Full Moon)
+                if t.transit_planet in ('New Moon', 'Full Moon'):
+                    phase_sym = '🌑' if t.transit_planet == 'New Moon' else '🌕'
+                    s_sym = self.SIGN_SYMBOLS.get(t.transit_sign, t.transit_sign)
+                    lines.append(f"  {phase_sym} {t.transit_planet} in {s_sym} {t.transit_sign}")
+                    continue
+
+                t_sym = self.PLANET_SYMBOLS.get(t.transit_planet, '')
+                n_sym = self.PLANET_SYMBOLS.get(t.natal_planet, '')
+                a_sym = self.ASPECT_SYMBOLS.get(t.aspect.lower(), '')
+                t_pos = self._sign_str(t.transit_sign, t.transit_house)
+                n_pos = self._sign_str(t.natal_sign, t.natal_house)
+
+                lines.append(
+                    f"  {t_sym} {t.transit_planet:8s} {t_pos:4s} {a_sym} {t.aspect:10s} "
+                    f"{n_sym} natal {t.natal_planet:8s} {n_pos:4s} ({t.orb:+.2f}°)"
+                )
+
+        return "\n".join(lines)
+
+
+# =============================================================================
+# CLI
+# =============================================================================
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog='astro',
+        description='Astrological transit tracker',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  astro add-chart                # Add default natal chart
+  astro add-chart partner        # Add chart named 'partner'
+  astro now                      # Current transits (default chart)
+  astro now partner              # Current transits for partner
+  astro forecast --days 30       # 30-day forecast from today
+  astro forecast --date 2025-06-01 --days 30  # Forecast from June 1st
+  astro list-charts              # Show all saved charts
+"""
+    )
+
+    subparsers = parser.add_subparsers(dest='command', help='Commands')
+
+    # --- Chart management ---
+    add_p = subparsers.add_parser('add-chart', help='Add natal chart interactively')
+    add_p.add_argument('name', nargs='?', help='Chart name (default: "default")')
+
+    subparsers.add_parser('list-charts', help='List all saved charts')
+
+    show_p = subparsers.add_parser('show-chart', help='Show chart details')
+    show_p.add_argument('name', nargs='?', help='Chart name (uses config default)')
+
+    rm_p = subparsers.add_parser('remove-chart', help='Remove a chart')
+    rm_p.add_argument('name', help='Chart name to remove')
+
+    # --- Transit queries ---
+    now_p = subparsers.add_parser('now', help='Show current transits')
+    now_p.add_argument('chart', nargs='?', help='Chart name (uses config default)')
+
+    fc_p = subparsers.add_parser('forecast', help='Forecast upcoming transits')
+    fc_p.add_argument('chart', nargs='?', help='Chart name (uses config default)')
+    fc_p.add_argument('--days', '-d', type=int, default=30, help='Days to forecast (default: 30)')
+    fc_p.add_argument('--date', type=str, help='Start date (YYYY-MM-DD, default: today)')
+    fc_p.add_argument('--all', '-a', action='store_true', help='Include all objects (nodes, chiron, etc.)')
+    fc_p.add_argument('--orb', '-o', type=float, default=0.5, help='Max orb in degrees (default: 0.5)')
+
+    # --- Utility ---
+    subparsers.add_parser('clear-cache', help='Clear transit cache')
+    subparsers.add_parser('config', help='Show configuration')
+
+    args = parser.parse_args()
+
+    # Initialize components
+    storage = AstroStorage()
+    config = storage.load_config()
+    chart_mgr = ChartManager(storage)
+    transit_calc = TransitCalculator(storage)
+    formatter = TransitFormatter()
+
+    # Helper to get chart name with config default
+    def get_chart_name(arg_value):
+        return arg_value if arg_value else config.default_chart
+
+    # --- Dispatch commands ---
+
+    if args.command == 'add-chart':
+        chart = chart_mgr.create_chart_interactive(args.name)
+        print()
+        print(f"Chart '{chart.name}' saved successfully.")
+
+    elif args.command == 'list-charts':
+        charts = storage.list_charts()
+        if charts:
+            config = storage.load_config()
+            print("Saved charts:")
+            for name in charts:
+                marker = " (default)" if name == config.default_chart else ""
+                print(f"  - {name}{marker}")
+        else:
+            print("No charts found.")
+            print("Run 'astro add-chart' to create one.")
+
+    elif args.command == 'show-chart':
+        try:
+            chart = storage.load_chart(get_chart_name(args.name))
+            bd = chart.birth_data
+            print(f"Chart: {chart.name}")
+            print(f"  Name:     {bd.full_name}")
+            print(f"  Birth:    {bd.year}-{bd.month:02d}-{bd.day:02d} "
+                  f"{bd.hour:02d}:{bd.minute:02d}")
+            print(f"  Location: {bd.city}, {bd.nation}")
+            print(f"  Created:  {chart.created_at[:10]}")
+        except FileNotFoundError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == 'remove-chart':
+        if storage.delete_chart(args.name):
+            print(f"Removed chart: {args.name}")
+        else:
+            print(f"Error: Chart '{args.name}' not found", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == 'now':
+        try:
+            chart = storage.load_chart(get_chart_name(args.chart))
+            now = datetime.now()
+            print(f"Transits for {chart.birth_data.full_name}")
+            print(f"({now.strftime('%Y-%m-%d %H:%M')})")
+            print()
+            transits = transit_calc.compute_current_transits(chart)
+            print(formatter.format_compact(transits))
+        except FileNotFoundError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == 'forecast':
+        try:
+            chart = storage.load_chart(get_chart_name(args.chart))
+            major_only = not args.all
+            obj_desc = "all objects" if args.all else "major planets"
+
+            # Parse start date if provided
+            start_date = None
+            if args.date:
+                try:
+                    start_date = datetime.strptime(args.date, "%Y-%m-%d")
+                except ValueError:
+                    print(f"Error: Invalid date format '{args.date}'. Use YYYY-MM-DD.", file=sys.stderr)
+                    sys.exit(1)
+
+            start_str = start_date.strftime("%Y-%m-%d") if start_date else "today"
+            print(f"{args.days}-day forecast for {chart.birth_data.full_name}")
+            print(f"(from {start_str}, orb < {args.orb}°, {obj_desc})")
+            forecast = transit_calc.forecast_transits(
+                chart, args.days, orb_limit=args.orb, major_only=major_only,
+                start_date=start_date
+            )
+            print(formatter.format_forecast(forecast))
+        except FileNotFoundError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == 'clear-cache':
+        count = storage.clear_cache()
+        print(f"Cleared {count} cached transit files.")
+
+    elif args.command == 'config':
+        config = storage.load_config()
+        print(f"Data directory: {storage.base_path}")
+        print(f"Default chart:  {config.default_chart}")
+        print(f"Display format: {config.display_format}")
+        print(f"Orb settings:")
+        for aspect, orb in config.orb_settings.items():
+            print(f"  {aspect}: {orb}°")
+
+    else:
+        parser.print_help()
+
+
+if __name__ == '__main__':
+    main()

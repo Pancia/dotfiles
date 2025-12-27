@@ -1,3 +1,5 @@
+local menubarRegistry = require("lib/menubarRegistry")
+
 local obj = {}
 
 obj.spoonPath = os.getenv("HOME").."/dotfiles/lib/lua/seeds/watch/"
@@ -76,13 +78,19 @@ function obj:start(config)
             startScriptTimer(script)
         end
     end)
-    local menu = renderMenu()
-    obj._menubar = hs.menubar.new():setMenu(renderMenu)
+
+    -- Get or create persistent menubar (survives soft reloads)
+    local mb, isNew = menubarRegistry.getOrCreate("watch")
+    obj._menubar = mb
+
+    -- Always update menu callback (points to new code after reload)
+    obj._menubar:setMenu(renderMenu)
     renderMenuBar()
     return self
 end
 
-function obj:stop()
+-- Soft stop: cleanup resources but preserve menubar (for soft reload)
+function obj:softStop()
     hs.fnutils.ieach(obj.scripts, function(script)
         if script._timer then
             script._timer:stop()
@@ -91,6 +99,15 @@ function obj:stop()
             script._delayedStartTimer:stop()
         end
     end)
+    -- NOTE: Do NOT delete menubar - it persists across soft reloads
+    obj._menubar = nil
+    return self
+end
+
+-- Hard stop: full cleanup including menubar (for hard reload)
+function obj:stop()
+    obj:softStop()
+    menubarRegistry.delete("watch")
     return self
 end
 

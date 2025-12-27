@@ -3,6 +3,7 @@ let g:fzf_preview_window = ['up:50%', 'ctrl-/']
 
 command! Project call fzf#run(fzf#wrap({
   \ 'source': 'git ls-files --other --exclude-standard --cached',
+  \ 'dir': systemlist('git rev-parse --show-toplevel')[0],
   \ 'sink': 'e',
   \ 'options': ['--preview', 'bat --style=numbers --color=always {} 2>/dev/null || cat {}']
   \ }))

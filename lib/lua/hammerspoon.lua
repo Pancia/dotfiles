@@ -143,7 +143,7 @@ local watch = engage("seeds.watch.init", {
 local sanctuary = engage("seeds.sanctuary", {})
 
 local curfew = engage("seeds.curfew", {
-    triggerTime = {hour = 21, minute = 00},
+    triggerTime = {hour = 23, minute = 45},
     resetTime = {hour = 6, minute = 0},
     holdDuration = 15
 })
@@ -154,6 +154,10 @@ local clipboard = engage("seeds.clipboard", {
   hotkey = {{"cmd", "ctrl"}, "p"},
   hist_size = 50,
   storage_path = HOME .. "/ProtonDrive/hammerspoon/clipboard_history.enc"
+})
+
+local hermes = engage("seeds.hermes.init", {
+  hotkey = {{"cmd"}, "space"},
 })
 
 local _engageElapsed = (hs.timer.absoluteTime() - _engageStart) / 1e6
@@ -180,12 +184,81 @@ if sanctuary then seeds.sanctuary = sanctuary end
 if curfew then seeds.curfew = curfew end
 if superwhisper then seeds.superwhisper = superwhisper end
 if clipboard then seeds.clipboard = clipboard end
+if cmus then seeds.cmus = cmus end
+if hermes then seeds.hermes = hermes end
 
 local hs_global_modifier = {"cmd", "ctrl"}
 
 hs.hotkey.bindSpec({hs_global_modifier, "c"}, hs.toggleConsole)
 
-hs.hotkey.bindSpec({hs_global_modifier, "r"}, function()
+-- Soft reload: reloads code without destroying menubars
+-- Menubars persist via lib/menubarRegistry, preserving Hidden Bar visibility
+local function softReload()
+    hs.alert.show("⟳ Soft reloading...", 1)
+
+    local softReloadProfile = {}
+    local totalStart = hs.timer.absoluteTime()
+
+    -- Phase 1: Stop seeds (softStop if available, else regular stop)
+    for name, seed in pairs(seeds) do
+        local start = hs.timer.absoluteTime()
+        local ok, err
+
+        if seed.softStop then
+            ok, err = pcall(function() seed:softStop() end)
+        elseif seed.stop then
+            ok, err = pcall(function() seed:stop() end)
+        else
+            ok = true
+        end
+
+        local elapsed = (hs.timer.absoluteTime() - start) / 1e6
+        if not ok then
+            table.insert(softReloadProfile, string.format("  ERROR %s: %s", name, err))
+        else
+            local method = seed.softStop and "softStop" or "stop"
+            table.insert(softReloadProfile, string.format("  %s %s: %.1fms", method, name, elapsed))
+        end
+    end
+
+    -- Phase 2: Clear module cache for seeds (NOT menubarRegistry)
+    local seedModules = {
+        "seeds.monitor",
+        "seeds.cmus",
+        "seeds.snippets",
+        "seeds.calendar.init",
+        "seeds.lotus.init",
+        "seeds.watch.init",
+        "seeds.sanctuary",
+        "seeds.curfew",
+        "seeds.superwhisper",
+        "seeds.clipboard",
+        "seeds.hermes.init",
+        "seeds.hermes.commands",
+    }
+
+    for _, modulePath in ipairs(seedModules) do
+        package.loaded[modulePath] = nil
+    end
+
+    -- Phase 3: Clear hammerspoon.lua itself and re-require
+    package.loaded["hammerspoon"] = nil
+
+    local totalElapsed = (hs.timer.absoluteTime() - totalStart) / 1e6
+    table.insert(softReloadProfile, string.format("soft reload cleanup: %.1fms", totalElapsed))
+    hs.printf("[profile:softReload]\n%s", table.concat(softReloadProfile, "\n"))
+
+    -- Phase 4: Re-require hammerspoon (this re-engages all seeds)
+    require("hammerspoon")
+
+    hs.alert.show("✓ Soft reload complete", 1.5)
+end
+
+-- Soft reload (default) - preserves menubars for Hidden Bar
+hs.hotkey.bindSpec({hs_global_modifier, "r"}, softReload)
+
+-- Hard reload (fallback) - full restart, destroys all state
+hs.hotkey.bindSpec({{"cmd", "ctrl", "shift"}, "r"}, function()
   local reload_flag = "/tmp/hs_reloading"
   local file = io.open(reload_flag, "w")
   if file then
@@ -193,7 +266,7 @@ hs.hotkey.bindSpec({hs_global_modifier, "r"}, function()
     file:close()
   end
 
-  hs.alert.show("⟳ Reloading...", 1)
+  hs.alert.show("⟳ Hard reloading...", 1)
 
   local stopProfile = {}
   local totalStart = hs.timer.absoluteTime()

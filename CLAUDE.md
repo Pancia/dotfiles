@@ -71,6 +71,7 @@ cd ~/dotfiles
 | `d` | Directory bookmarks |
 | `q` | Command registry |
 | `z` | Jump to directory |
+| `astro` | Astrological transit tracker |
 
 ### Neovim Prefixes
 | Prefix | Commands |
@@ -89,6 +90,7 @@ cd ~/dotfiles
 | **Hammerspoon** | macOS automation | `lib/lua/` |
 | **Karabiner** | Keyboard customization | `rcs/karabiner.json` |
 | **Yabai** | Window tiling | (via VPC workspaces) |
+| **Astro** | Astrological transits | `bin/astro`, `~/.local/share/astro/` |
 
 ## Detailed Documentation
 
@@ -98,6 +100,7 @@ cd ~/dotfiles
 | [docs/neovim.md](docs/neovim.md) | Neovim plugins, LSP, keymaps, settings |
 | [docs/hammerspoon.md](docs/hammerspoon.md) | Seeds, hotkeys, VPC system, Spoons |
 | [docs/services.md](docs/services.md) | LaunchAgents, VPC workspaces, bin utilities |
+| [docs/astro.md](docs/astro.md) | Astrological transit tracker CLI |
 
 ## File Locations
 

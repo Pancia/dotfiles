@@ -1,6 +1,6 @@
 #!/bin/sh
 DIR_PATH="${1:-}"
-/Applications/Hammerspoon.app/Contents/Resources/extensions/hs/ipc/bin/hs -c "
+/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -c "
 local s = hs.mouse.getCurrentScreen()
 local dirPath = '$DIR_PATH'
 if dirPath ~= '' then

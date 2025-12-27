@@ -1,6 +1,7 @@
 local durp = require("lib/durationpicker")
 local wake = require("lib/wakeDialog")
 local safeLogger = require("lib/safeLogger")
+local menubarRegistry = require("lib/menubarRegistry")
 
 local obj = {}
 
@@ -447,7 +448,13 @@ function obj:start(config)
         obj._lastTriggeredMinute = saved["lastTriggeredMinute"]
     end
 
-    obj._menubar = hs.menubar.new():setMenu(renderMenu)
+    -- Get or create persistent menubar (survives soft reloads)
+    local mb, isNew = menubarRegistry.getOrCreate("lotus")
+    obj._menubar = mb
+
+    -- Always update menu callback (points to new code after reload)
+    obj._menubar:setMenu(renderMenu)
+
     obj._heartbeat = hs.timer.doEvery(timeConfig(obj).refreshRate, obj.heartbeat)
 
     wake:onSleep(onSleep):onWake(onWake):start()
@@ -466,7 +473,8 @@ function obj:saveState()
     hs.settings.set("lastTriggeredMinute", obj._lastTriggeredMinute)
 end
 
-function obj:stop()
+-- Soft stop: cleanup resources but preserve menubar (for soft reload)
+function obj:softStop()
     obj:saveState()
     if obj._notif then
         obj._notif:withdraw()
@@ -483,9 +491,15 @@ function obj:stop()
     if obj._heartbeat then
         obj._heartbeat:stop()
     end
-    if obj._menubar then
-      obj._menubar:delete()
-    end
+    -- NOTE: Do NOT delete menubar - it persists across soft reloads
+    obj._menubar = nil
+    return self
+end
+
+-- Hard stop: full cleanup including menubar (for hard reload)
+function obj:stop()
+    obj:softStop()
+    menubarRegistry.delete("lotus")
     return self
 end
 

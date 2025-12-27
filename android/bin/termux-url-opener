@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+
+export PATH="$HOME/bin:$PATH"
+
+# Termux URL opener for YouTube downloads
+# Place in ~/bin/termux-url-opener to handle shared URLs
+# Requires: yt-dlp, ffmpeg, (optional) ai-summary for summaries
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
+YTDL_OUTPUT_DIR="$HOME/storage/downloads/ytdl"
+YTDL_AUDIO_CODE="bestaudio"
+YTDL_VIDEO_CODE="bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4]"
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+_ytdl_extract_video_id() {
+    local input="$1"
+    if [[ "$input" =~ ^(https|www|youtube) ]]; then
+        echo "$input" | sed 's/.*v=\([^&]*\).*/\1/'
+    else
+        echo "$input"
+    fi
+}
+
+_ytdl_run() {
+    local ytid="$1"
+    shift
+    local extra_args=("$@")
+
+    echo "yt-dlp ${extra_args[*]} -- \"$ytid\""
+    local output
+    output=$(yt-dlp "${extra_args[@]}" -- "$ytid" 2>&1)
+    local exit_code=$?
+    echo "$output"
+
+    # Retry with cookies if age-restricted
+    if [[ $exit_code -ne 0 ]]; then
+        if echo "$output" | grep -qiE 'Sign in to confirm your age|age-restricted|login required'; then
+            echo ""
+            echo "[Age-restricted detected, retrying with cookies...]"
+            output=$(yt-dlp "${extra_args[@]}" --cookies-from-browser chrome -- "$ytid" 2>&1)
+            exit_code=$?
+            echo "$output"
+        fi
+    fi
+
+    return $exit_code
+}
+
+_ytdl_convert_mp4_to_m4a() {
+    local out_dir="$1"
+    local ytid="$2"
+
+    for mp4_file in "$out_dir"/*"$ytid"*.mp4; do
+        if [[ -f "$mp4_file" ]]; then
+            local m4a_file="${mp4_file%.mp4}.m4a"
+            if [[ ! -f "$m4a_file" ]]; then
+                echo "[Converting] $mp4_file -> $m4a_file"
+                ffmpeg -i "$mp4_file" -vn -acodec copy "$m4a_file" && rm "$mp4_file"
+            fi
+        fi
+    done
+}
+
+# ============================================================================
+# DOWNLOAD FUNCTIONS
+# ============================================================================
+
+_ytdl_download_audio() {
+    local ytid="$1"
+    local out_dir="$YTDL_OUTPUT_DIR/audio"
+    mkdir -p "$out_dir"
+
+    local output_path="$out_dir/%(channel)s - %(title)s [%(id)s].%(ext)s"
+
+    if _ytdl_run "$ytid" -o "$output_path" -f "$YTDL_AUDIO_CODE" -x --audio-format m4a; then
+        echo "[Audio download complete]"
+        return 0
+    else
+        return 1
+    fi
+}
+
+_ytdl_download_video() {
+    local ytid="$1"
+    local out_dir="$YTDL_OUTPUT_DIR/video"
+    mkdir -p "$out_dir"
+
+    local output_path="$out_dir/%(channel)s - %(title)s [%(id)s].%(ext)s"
+
+    if _ytdl_run "$ytid" -o "$output_path" -f "$YTDL_VIDEO_CODE" --merge-output-format mp4; then
+        echo "[Video download complete]"
+        return 0
+    else
+        return 1
+    fi
+}
+
+_ytdl_download_summary() {
+    local url="$1"
+    echo "[Generating AI summary...]"
+    ai-summary "$url"
+    echo ""
+    read -rp "Press Enter to exit..."
+}
+
+# ============================================================================
+# MAIN
+# ============================================================================
+
+input="${1:-}"
+
+# If no argument, check clipboard or prompt
+if [[ -z "$input" ]]; then
+    if command -v termux-clipboard-get &>/dev/null; then
+        input=$(termux-clipboard-get)
+    fi
+
+    if [[ -z "$input" ]] || ! [[ "$input" =~ youtube|youtu\.be ]]; then
+        read -rp "YouTube URL: " input
+    fi
+fi
+
+if [[ -z "$input" ]]; then
+    echo "ERROR: No URL provided"
+    exit 1
+fi
+
+# Extract video ID
+video_id=$(_ytdl_extract_video_id "$input")
+
+echo "=== Termux YouTube Downloader ==="
+echo "URL: $input"
+echo "ID:  $video_id"
+echo "================================="
+echo ""
+echo "Select download type:"
+echo "  [a] Audio (m4a)"
+echo "  [v] Video (mp4)"
+echo "  [s] Summary (AI)"
+echo ""
+read -rp "Choice (a/v/s): " choice
+
+case "$choice" in
+    a|A|audio)
+        _ytdl_download_audio "$input"
+        ;;
+    v|V|video)
+        _ytdl_download_video "$input"
+        ;;
+    s|S|summary)
+        _ytdl_download_summary "$input"
+        ;;
+    *)
+        echo "Invalid choice. Use a, v, or s."
+        exit 1
+        ;;
+esac
+
+echo ""
+echo "Done! Files saved to: $YTDL_OUTPUT_DIR"

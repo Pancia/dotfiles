@@ -74,7 +74,7 @@ func showSanctuaryNotification() {
     log("Notification: Showing sanctuary notification via Hammerspoon")
 
     let task = Process()
-    task.executableURL = URL(fileURLWithPath: "/Applications/Hammerspoon.app/Contents/Resources/extensions/hs/ipc/bin/hs")
+    task.executableURL = URL(fileURLWithPath: "/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs")
     task.arguments = ["-c", "sanctuaryNotify()"]
 
     do {

@@ -81,41 +81,52 @@ local function getOrCreateKey(serviceName)
   return key
 end
 
--- Encrypt data to file
-local function encryptToFile(data, key, filepath)
+-- Encrypt data to file (async to avoid blocking keyboard input)
+local function encryptToFileAsync(data, key, filepath, callback)
   local jsonStr = json.encode(data)
   if not jsonStr then
     hs.printf("[clipboard] Failed to encode JSON")
-    return false
+    if callback then callback(false) end
+    return
   end
 
   local tmpIn = os.tmpname()
   local f = io.open(tmpIn, "w")
   if not f then
     hs.printf("[clipboard] Failed to create temp file")
-    return false
+    if callback then callback(false) end
+    return
   end
   f:write(jsonStr)
   f:close()
 
-  -- Ensure parent directory exists
+  -- Ensure parent directory exists (sync but fast)
   local dir = filepath:match("(.*/)")
   if dir then
     hs.execute(string.format("mkdir -p %q", dir))
   end
 
-  local cmd = string.format(
-    "openssl enc -aes-256-cbc -salt -pbkdf2 -in %q -out %q -pass pass:%s 2>/dev/null",
-    tmpIn, filepath, key
-  )
-  local _, status = hs.execute(cmd)
-  os.remove(tmpIn)
+  -- Run openssl asynchronously
+  local task = hs.task.new("/usr/bin/openssl", function(exitCode, stdout, stderr)
+    os.remove(tmpIn)
+    if exitCode ~= 0 then
+      hs.printf("[clipboard] Encryption failed: %s", stderr or "unknown error")
+      if callback then callback(false) end
+      return
+    end
+    if callback then callback(true) end
+  end, {
+    "enc", "-aes-256-cbc", "-salt", "-pbkdf2",
+    "-in", tmpIn,
+    "-out", filepath,
+    "-pass", "pass:" .. key
+  })
 
-  if not status then
-    hs.printf("[clipboard] Encryption failed")
-    return false
+  if not task:start() then
+    os.remove(tmpIn)
+    hs.printf("[clipboard] Failed to start encryption task")
+    if callback then callback(false) end
   end
-  return true
 end
 
 -- Decrypt data from file
@@ -184,6 +195,7 @@ function M:start(config)
   self.frequency = config.frequency or 0.8
   self.hist_size = config.hist_size or 50
   self.paste_on_select = config.paste_on_select or false
+  self.show_copied_alert = config.show_copied_alert ~= false -- default true
   self.display_max_length = config.display_max_length or 100
   self.service_name = config.service_name or "SecureClipboard"
   self.storage_path = config.storage_path or
@@ -200,6 +212,10 @@ function M:start(config)
   self.history = decryptFromFile(self.key, self.storage_path)
   self.history = dedupeAndResize(self.history, self.hist_size)
   hs.printf("[clipboard] Loaded %d items", #self.history)
+
+  -- Async save state
+  self._saving = false
+  self._pendingSave = false
 
   -- Track clipboard changes
   self.lastChange = pasteboard.changeCount()
@@ -275,11 +291,38 @@ function M:checkClipboard()
 
   -- Persist
   self:save()
+
+  -- Show alert
+  if self.show_copied_alert then
+    local preview = content:gsub("\n", " "):gsub("%s+", " ")
+    if #preview > 40 then
+      preview = preview:sub(1, 40) .. "..."
+    end
+    hs.alert.show("Copied: " .. preview, 0.5)
+  end
 end
 
 function M:save()
   if not self.key then return end
-  encryptToFile(self.history, self.key, self.storage_path)
+
+  -- If already saving, mark that we need another save when done
+  if self._saving then
+    self._pendingSave = true
+    return
+  end
+
+  self._saving = true
+  local historySnapshot = {table.unpack(self.history)} -- Copy to avoid race conditions
+
+  encryptToFileAsync(historySnapshot, self.key, self.storage_path, function(success)
+    self._saving = false
+
+    -- If more changes came in while saving, save again
+    if self._pendingSave then
+      self._pendingSave = false
+      self:save()
+    end
+  end)
 end
 
 function M:buildChoices(query)

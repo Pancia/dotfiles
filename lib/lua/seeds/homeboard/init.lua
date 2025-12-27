@@ -1,3 +1,5 @@
+local menubarRegistry = require("lib/menubarRegistry")
+
 local obj = {}
 
 obj.spoonPath = os.getenv("HOME").."/dotfiles/lib/lua/seeds/homeboard/"
@@ -86,16 +88,32 @@ function obj:start(config)
     for line in hs.execute("find "..obj.videosPath.." -type f -not -path '*/\\.*'"):gmatch("[^\n]+") do
         table.insert(obj.videos, line)
     end
-    obj._menubar = hs.menubar.new()
+
+    -- Get or create persistent menubar (survives soft reloads)
+    local mb, isNew = menubarRegistry.getOrCreate("homeboard")
+    obj._menubar = mb
+
+    -- Always update callback (points to new code after reload)
     obj._menubar:setClickCallback(obj.showHomeBoard)
 
-    print(obj.spoonPath.."/home.png")
-    obj._menubar:setIcon(obj.spoonPath.."/home.png")
+    -- Only set icon if newly created (avoid flicker on reload)
+    if isNew then
+        obj._menubar:setIcon(obj.spoonPath.."/home.png")
+    end
     return self
 end
 
+-- Soft stop: cleanup resources but preserve menubar (for soft reload)
+function obj:softStop()
+    -- NOTE: Do NOT delete menubar - it persists across soft reloads
+    obj._menubar = nil
+    return self
+end
+
+-- Hard stop: full cleanup including menubar (for hard reload)
 function obj:stop()
-    obj._menubar:delete()
+    obj:softStop()
+    menubarRegistry.delete("homeboard")
     return self
 end
 

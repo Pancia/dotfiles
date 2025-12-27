@@ -1,0 +1,6 @@
+#!/usr/bin/env fish
+# CJSON - Compact JSON encoder/decoder
+# Wrapper for lib/python/cjson.py
+
+set -l script_dir (dirname (status filename))
+python3 "$script_dir/../lib/python/cjson.py" $argv

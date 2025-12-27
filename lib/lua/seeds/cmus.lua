@@ -1,5 +1,6 @@
 local obj = {}
 
+local menubarRegistry = require("lib/menubarRegistry")
 local cmusRemotePath = nil
 
 function cmusRemote(action)
@@ -133,31 +134,44 @@ function onSleep()
 end
 
 -- see bin/cmus-status-display
+-- msg format: "status::artist - title" (e.g., "playing::Artist - Title")
 function obj:onIPCMessage(_id, msg)
+    local status, trackInfo = string.match(msg, "^(.-)::(.*)$")
+    if not status then
+        -- Fallback for old format without status
+        status = isPlaying() and "playing" or "paused"
+        trackInfo = msg
+    end
+
     local title = ""
-    if isPlaying() then
-        title = string.format("🎵%23s ⏸", msg)
-    elseif string.len(msg) == 0 then
+    if status == "playing" then
+        title = string.format("🎵%23s ⏸", trackInfo)
+    elseif string.len(trackInfo or "") == 0 then
         title = string.format("🎵nil▶️")
     else
-        title = string.format("🎵%23s ▶️", msg)
+        title = string.format("🎵%23s ▶️", trackInfo)
     end
     local styledTitle = hs.styledtext.new(title, {["font"] = {["name"] = "Menlo-Regular"}})
     obj._controlsMenu:setTitle(styledTitle)
 end
 
 function obj:initMenuTitle()
-    res, status = cmusRemote("--raw status")
-    artist = ""; title = ""
-    if status then
-        artist = string.match(res, "tag artist ([^\n]+)")
-        title = string.match(res, "tag title ([^\n]+)")
+    res, ok = cmusRemote("--raw status")
+    artist = ""; title = ""; playStatus = "stopped"
+    if ok then
+        artist = string.match(res, "tag artist ([^\n]+)") or ""
+        title = string.match(res, "tag title ([^\n]+)") or ""
+        if string.match(res, "status playing") then
+            playStatus = "playing"
+        elseif string.match(res, "status paused") then
+            playStatus = "paused"
+        end
     end
-    if title == "" then
-        obj:onIPCMessage(0, "")
-    else
-        obj:onIPCMessage(0, string.format("%.10s - %.10s", artist, title))
+    local trackInfo = ""
+    if title ~= "" then
+        trackInfo = string.format("%.10s - %.10s", artist, title)
     end
+    obj:onIPCMessage(0, playStatus .. "::" .. trackInfo)
 end
 
 function openInITerm(command)
@@ -399,17 +413,48 @@ function obj:toggleControlsCanvas()
     end
 end
 
+-- Global IPC state (survives soft reloads like menubarRegistry)
+-- We store the module reference so callback can find it after reloads
+if not rawget(_G, "__CMUS_IPC__") then
+    rawset(_G, "__CMUS_IPC__", { port = nil, module = nil })
+end
+
 function obj:start(config)
     wake:onSleep(onSleep):start()
     bindMediaKeys()
-    -- Try to create IPC port, handling stale port from previous session
-    local ok, port = pcall(hs.ipc.localPort, "cmus", obj.onIPCMessage)
-    if ok then
-        obj._ipcPort = port
+
+    local ipcState = rawget(_G, "__CMUS_IPC__")
+
+    -- Store reference to this module instance (use package.loaded to ensure we get the right one)
+    -- hammerspoon.lua uses "seeds.cmus" (dot notation)
+    ipcState.module = package.loaded["seeds.cmus"] or obj
+
+    -- Get existing port or create new one
+    if ipcState.port then
+        obj._ipcPort = ipcState.port
+        hs.printf("[cmus] Reusing existing IPC port")
     else
-        hs.printf("[cmus] Warning: could not create IPC port (may be stale): %s", tostring(port))
+        -- Create port - callback looks up module dynamically to survive reloads
+        local ok, port = pcall(hs.ipc.localPort, "cmus", function(id, msg)
+            local state = rawget(_G, "__CMUS_IPC__")
+            if state and state.module then
+                state.module:onIPCMessage(id, msg)
+            end
+        end)
+        if ok then
+            obj._ipcPort = port
+            ipcState.port = port
+            hs.printf("[cmus] Created new IPC port")
+        else
+            hs.printf("[cmus] Warning: could not create IPC port: %s", tostring(port))
+        end
     end
-    obj._controlsMenu = hs.menubar.new()
+
+    -- Get or create persistent menubar (survives soft reloads)
+    local mb, isNew = menubarRegistry.getOrCreate("cmus")
+    obj._controlsMenu = mb
+
+    -- Always update callback (points to new code after reload)
     obj._controlsMenu:setClickCallback(function()
         obj:toggleControlsCanvas()
     end)
@@ -421,13 +466,15 @@ function obj:start(config)
         if exitCode == 0 then
             cmusRemotePath = stdout:gsub("%s+$", "")
         end
+        -- Always refresh title on start to ensure sync (even on soft reload)
         obj:initMenuTitle()
         hs.printf("[async] cmus.init: %.1fms", (hs.timer.absoluteTime() - start) / 1e6)
     end, {"cmus-remote"})
     obj._whichTask:start()
 end
 
-function obj:stop()
+-- Soft stop: cleanup resources but preserve menubar and IPC port (for soft reload)
+function obj:softStop()
     obj:hideControlsCanvas()
     if obj._whichTask then
         obj._whichTask:terminate()
@@ -437,14 +484,22 @@ function obj:stop()
         obj._canvas:delete()
         obj._canvas = nil
     end
-    if obj._ipcPort then
-        obj._ipcPort:delete()
-        obj._ipcPort = nil
+    -- NOTE: Do NOT delete IPC port or menubar - they persist across soft reloads
+    obj._ipcPort = nil
+    obj._controlsMenu = nil
+end
+
+-- Hard stop: full cleanup including menubar and IPC port (for hard reload)
+function obj:stop()
+    obj:softStop()
+    -- Clean up global IPC state
+    local ipcState = rawget(_G, "__CMUS_IPC__")
+    if ipcState and ipcState.port then
+        ipcState.port:delete()
+        ipcState.port = nil
+        ipcState.module = nil
     end
-    if obj._controlsMenu then
-        obj._controlsMenu:delete()
-        obj._controlsMenu = nil
-    end
+    menubarRegistry.delete("cmus")
 end
 
 return obj

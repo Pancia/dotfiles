@@ -127,7 +127,7 @@
                                     }
                                 },
                                 "to": {
-                                    "shell_command": "open -na ghostty --args --window-width=120 --window-height=30 -e /Users/anthony/dotfiles/bin/window-switcher"
+                                    "shell_command": "/Users/anthony/Developer/bin/hs -c 'seeds.hermes:showWindowMode()'"
                                 },
                                 "type": "basic"
                             }
@@ -168,7 +168,7 @@
                         ]
                     },
                     {
-                        "description": "ctrl-cmd-space -> hermes (ghostty centered, app mode)",
+                        "description": "ctrl-cmd-space -> hermes app launcher",
                         "manipulators": [
                             {
                                 "from": {
@@ -181,26 +181,7 @@
                                     }
                                 },
                                 "to": {
-                                    "shell_command": "/Users/anthony/dotfiles/bin/hermes-centered apps"
-                                },
-                                "type": "basic"
-                            }
-                        ]
-                    },
-                    {
-                        "description": "cmd-space -> hermes (ghostty centered)",
-                        "manipulators": [
-                            {
-                                "from": {
-                                    "key_code": "spacebar",
-                                    "modifiers": {
-                                        "mandatory": [
-                                            "left_command"
-                                        ]
-                                    }
-                                },
-                                "to": {
-                                    "shell_command": "/Users/anthony/dotfiles/bin/hermes-centered"
+                                    "shell_command": "/Users/anthony/Developer/bin/hs -c 'seeds.hermes:showAppMode()'"
                                 },
                                 "type": "basic"
                             }

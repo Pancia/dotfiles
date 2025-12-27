@@ -1,7 +1,7 @@
 local obj = {}
 
 local HOME = os.getenv("HOME")
-local log_path = HOME .. "/private/logs/monitor/"
+local log_path = HOME .. "/.local/share/monitor/"
 local interval = 60
 
 -- Activity tracking variables
