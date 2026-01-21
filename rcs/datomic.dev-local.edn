@@ -1,2 +1,1 @@
-;<[.datomic/dev-local.edn]>
 {:storage-dir :mem}

@@ -15,8 +15,13 @@ module EXE
     end
     Kernel.system("export DISABLE_AUTO_TITLE='true'")
     Kernel.system("printf '\e]1;#{command.strip.split(/\s\s+/).join(" ")}\a'")
-    Kernel.system(command)
-    exitstatus = $?.exitstatus
+    saved_stty = `stty -g 2>/dev/null`.strip rescue nil
+    begin
+      Kernel.system(command)
+      exitstatus = $?.exitstatus
+    ensure
+      system("stty #{saved_stty} 2>/dev/null") if saved_stty && !saved_stty.empty?
+    end
     Kernel.system("export DISABLE_AUTO_TITLE=''")
     exit exitstatus if exitstatus
   end

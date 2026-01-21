@@ -76,29 +76,39 @@ class TranscribeRequest(BaseModel):
     sections: list[str] | None = None  # e.g., ["40:00-45:35", "1:20:00-1:25:00"]
 
 
-DEFAULT_SUMMARY_PROMPT = """Summarize this transcript in two sections:
+DEFAULT_SUMMARY_PROMPT = """Summarize the provided content in three sections:
 
 ## Summary
-Provide a concise summary of the main points and key takeaways.
+Provide a concise summary in two paragraphs:
+1. **Personal relevance:** How this content connects to my path and what I should take from it
+2. **Content summary:** A standalone summary of the main points and key takeaways
 
 ## Personal Relevance
 Extract what's most relevant to my life path and current focus:
 
-Core Purpose: Shepherd-king building a loving family and powerful kingdom rooted in reality, community, and frontier exploration of technology, culture, and consciousness. Creating structures that protect space for play, experimentation, and connection with the divine.
+**Core Purpose:** Shepherd-king building a loving family and powerful kingdom rooted in reality, community, and frontier exploration of technology, culture, and consciousness. Creating structures that protect space for play, experimentation, and connection with the divine.
 
-Key Themes I'm Working With:
+**Key Themes I'm Working With:**
 - Sovereignty over duty: joy-first living, rest doesn't need to be earned, heaven is NOW
 - Transformation from "good boy" performing for approval to Sacred Sovereign following the flame
-- Embodied wisdom over intellectual understanding - must live it before teaching it
+- Embodied wisdom over intellectual understanding—must live it before teaching it
 - VR psychodrama and techno-shamanic work through Creative Heartbeats
 - Integration of programmer, mystic, healer, teacher, and revolutionary
 - Physical/mental/spiritual health as sacred foundation
 - Men's academy, alchemical circles, art of transformation
 - Archetypal work: Odin, Freya, Kali, Shakti-Lila, Dionysian masculine
 
-Current Focus Areas: health (body as teacher), sanctuary/automation tools, creative expression, family healing, attention sovereignty
+**Current Focus Areas:** Health (body as teacher), sanctuary/automation tools, creative expression, family healing, attention sovereignty
 
-For this section, be selective - only include genuinely relevant insights. If nothing connects meaningfully, say so briefly."""
+For this section, be selective—only include genuinely relevant insights. If nothing connects meaningfully, say so briefly.
+
+## Deep Dive
+Provide a more detailed exploration of the content. Choose whatever format best serves the material—this might be a structured breakdown of key arguments, a timeline of events, annotated quotes, a concept map, technical details, or something else entirely. Let the content dictate the form.
+
+---- END OF SUMMARY SECTIONS ----
+
+## Formatting Guidelines
+- No markdown tables (broken on mobile)—use lists or prose instead """
 
 
 class SummarizeRequest(BaseModel):
@@ -440,7 +450,12 @@ async def run_claude_summary(transcript: str, prompt: str) -> str:
         log(f"Claude stderr: {stderr.decode()[:500]}")
         raise Exception(f"Claude summarization failed: {stderr.decode()}")
 
-    return stdout.decode()
+    result = stdout.decode().strip()
+    if not result:
+        log(f"Claude returned empty response. stderr: {stderr.decode()[:500]}")
+        raise Exception("Claude returned empty response - possible API timeout or rate limit")
+
+    return result
 
 
 async def summarize_stream(

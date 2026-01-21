@@ -1,5 +1,3 @@
-#<[.config/cmus/rc]>
-
 colorscheme solarized-light
 
 set lib_sort=album

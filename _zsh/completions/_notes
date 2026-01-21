@@ -1,2 +1,0 @@
-#compdef _notes		notes
-function _notes { __eval_completion notes --zsh-completions }

@@ -142,11 +142,12 @@ local watch = engage("seeds.watch.init", {
 
 local sanctuary = engage("seeds.sanctuary", {})
 
-local curfew = engage("seeds.curfew", {
-    triggerTime = {hour = 23, minute = 45},
-    resetTime = {hour = 6, minute = 0},
-    holdDuration = 15
-})
+local curfew = nil
+--engage("seeds.curfew", {
+--    triggerTime = {hour = 22, minute = 30},
+--    resetTime = {hour = 6, minute = 0},
+--    holdDuration = 15
+--})
 
 local superwhisper = engage("seeds.superwhisper", {})
 
@@ -158,6 +159,14 @@ local clipboard = engage("seeds.clipboard", {
 
 local hermes = engage("seeds.hermes.init", {
   hotkey = {{"cmd"}, "space"},
+})
+
+local cursor = engage("seeds.cursor", {
+  hotkey = {{"cmd", "ctrl"}, "m"},
+  style = "circle",  -- "circle", "crosshair", or "ring"
+  size = 32,
+  strokeWidth = 3,
+  strokeColor = {red = 0.7, green = 0.3, blue = 1, alpha = 0.95},
 })
 
 local _engageElapsed = (hs.timer.absoluteTime() - _engageStart) / 1e6
@@ -186,6 +195,7 @@ if superwhisper then seeds.superwhisper = superwhisper end
 if clipboard then seeds.clipboard = clipboard end
 if cmus then seeds.cmus = cmus end
 if hermes then seeds.hermes = hermes end
+if cursor then seeds.cursor = cursor end
 
 local hs_global_modifier = {"cmd", "ctrl"}
 
@@ -235,6 +245,7 @@ local function softReload()
         "seeds.clipboard",
         "seeds.hermes.init",
         "seeds.hermes.commands",
+        "seeds.cursor",
     }
 
     for _, modulePath in ipairs(seedModules) do

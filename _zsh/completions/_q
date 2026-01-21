@@ -1,2 +1,0 @@
-#compdef _q		q q! q_
-function _q { __eval_completion __q --zsh-completions }

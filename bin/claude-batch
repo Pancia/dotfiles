@@ -1,0 +1,179 @@
+#!/usr/bin/env fish
+# claude-batch - Run claude over multiple files with concurrency control
+#
+# Usage:
+#   claude-batch [OPTIONS] GLOB_PATTERN
+#   claude-batch [OPTIONS] -- FILE1 FILE2 ...
+#   find ... | claude-batch [OPTIONS]
+#
+# Options:
+#   -p, --prompt PROMPT    Prompt template ({file} = filename, {content} = file contents)
+#   -P, --prompt-file FILE Read prompt template from file
+#   -c, --concurrency N    Max concurrent jobs (default: 5)
+#   -o, --output-ext EXT   Output extension (default: .out.md, use - for stdout)
+#   -f, --force            Overwrite existing output files
+#   -n, --dry-run          Show what would be processed without running
+#   -h, --help             Show this help
+#
+# Examples:
+#   claude-batch -p "Summarize: {content}" "*.txt"
+#   claude-batch -p "Review this code: {content}" -o ".review.md" "src/*.py"
+#   find . -name "*.md" | claude-batch -p "Translate to Spanish: {content}"
+
+set -l CONCURRENCY 5
+set -l PROMPT ""
+set -l OUTPUT_EXT ".out.md"
+set -l FORCE false
+set -l DRY_RUN false
+set -l FILES
+
+# Parse arguments
+set -l i 1
+while test $i -le (count $argv)
+    switch $argv[$i]
+        case -p --prompt
+            set i (math $i + 1)
+            set PROMPT $argv[$i]
+        case -P --prompt-file
+            set i (math $i + 1)
+            set PROMPT (cat $argv[$i])
+        case -c --concurrency
+            set i (math $i + 1)
+            set CONCURRENCY $argv[$i]
+        case -o --output-ext
+            set i (math $i + 1)
+            set OUTPUT_EXT $argv[$i]
+        case -f --force
+            set FORCE true
+        case -n --dry-run
+            set DRY_RUN true
+        case -h --help
+            sed -n '2,21p' (status filename) | sed 's/^# //' | sed 's/^#//'
+            exit 0
+        case --
+            set i (math $i + 1)
+            set FILES $argv[$i..-1]
+            break
+        case '-*'
+            echo "Unknown option: $argv[$i]" >&2
+            exit 1
+        case '*'
+            # Treat as glob pattern
+            set FILES (eval "printf '%s\n' $argv[$i]" 2>/dev/null)
+    end
+    set i (math $i + 1)
+end
+
+# Read from stdin if no files specified
+if test (count $FILES) -eq 0
+    if not isatty stdin
+        while read -l line
+            set -a FILES $line
+        end
+    end
+end
+
+if test (count $FILES) -eq 0
+    echo "Error: No files specified" >&2
+    echo "Usage: claude-batch -p 'PROMPT' GLOB_PATTERN" >&2
+    exit 1
+end
+
+if test -z "$PROMPT"
+    echo "Error: No prompt specified (-p or -P)" >&2
+    exit 1
+end
+
+# Build file list, filtering already processed
+set -l to_process
+for file in $FILES
+    if not test -f "$file"
+        echo "SKIP: $file (not found)" >&2
+        continue
+    end
+
+    if test "$OUTPUT_EXT" != "-"
+        set -l outfile (string replace -r '\.[^.]+$' '' $file)$OUTPUT_EXT
+        if test -f "$outfile" -a "$FORCE" = "false"
+            echo "SKIP: $file (output exists)" >&2
+            continue
+        end
+    end
+
+    if test "$DRY_RUN" = "true"
+        set -l outfile (string replace -r '\.[^.]+$' '' $file)$OUTPUT_EXT
+        echo "WOULD PROCESS: $file -> $outfile" >&2
+    else
+        set -a to_process $file
+    end
+end
+
+set -l total (count $FILES)
+set -l processing (count $to_process)
+
+if test "$DRY_RUN" = "true"
+    echo "----------------------------------------" >&2
+    echo "Dry run complete. Would process $processing of $total files." >&2
+    exit 0
+end
+
+if test $processing -eq 0
+    echo "Nothing to process." >&2
+    exit 0
+end
+
+echo "Processing $processing of $total files with concurrency $CONCURRENCY" >&2
+
+# Write prompt to temp file for worker to read
+set -l prompt_file (mktemp)
+set -l progress_file (mktemp)
+set -l status_file (mktemp)
+printf '%s' $PROMPT > $prompt_file
+
+# Start progress monitor in background
+fish -c "
+    set processing $processing
+    set total $total
+    set skipped (math $total - $processing)
+    set last_status_line 0
+
+    # Print initial progress bar immediately
+    set bar (string repeat -n 30 '-')
+    printf '[%s] %d/%d  ' \"\$bar\" \$skipped \$total >&2
+
+    while test -f '$progress_file'
+        # Print new status lines
+        set status_count (wc -l < '$status_file' 2>/dev/null | string trim)
+        test -z \"\$status_count\"; and set status_count 0
+        if test \$status_count -gt \$last_status_line
+            set new_start (math \$last_status_line + 1)
+            tail -n +\$new_start '$status_file' 2>/dev/null | while read -l line
+                printf '\r\033[K%s\n' \"\$line\" >&2
+            end
+            set last_status_line \$status_count
+        end
+
+        # Update progress bar
+        set done (wc -l < '$progress_file' 2>/dev/null | string trim)
+        test -z \"\$done\"; and set done 0
+        set filled (math -s0 \"\$done * 30 / \$processing\")
+        set empty (math -s0 \"30 - \$filled\")
+        set bar (string repeat -n \$filled '#')(string repeat -n \$empty '-')
+        printf '\r[%s] %d/%d  ' \"\$bar\" (math \$done + \$skipped) \$total >&2
+        test \$done -ge \$processing; and break
+        sleep 0.3
+    end
+    echo '' >&2
+" &
+set -l monitor_pid $last_pid
+
+# Process files in parallel using xargs (null-delimited for filenames with spaces/quotes)
+printf '%s\0' $to_process | xargs -0 -P $CONCURRENCY -I {} claude-batch-worker {} $prompt_file $OUTPUT_EXT $progress_file $status_file
+
+# Wait for progress display to finish
+sleep 0.5
+rm -f $prompt_file $progress_file $status_file
+kill $monitor_pid 2>/dev/null
+
+echo "----------------------------------------" >&2
+echo "Done!" >&2

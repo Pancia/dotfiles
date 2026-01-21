@@ -2,62 +2,68 @@ local obj = {}
 
 local menubarRegistry = require("lib/menubarRegistry")
 local cmusRemotePath = nil
+local currentStatus = "stopped"  -- Track state from IPC messages
 
+-- Sync version: only used for initMenuTitle() at startup
 function cmusRemote(action)
     if not cmusRemotePath then return "", false end
     return hs.execute(cmusRemotePath.." "..action)
 end
 
+-- Async version: fire-and-forget for user actions (IPC will update state)
+local function cmusRemoteAsync(action)
+    if not cmusRemotePath then return end
+    hs.task.new("/bin/sh", nil, {"-c", cmusRemotePath .. " " .. action}):start()
+end
+
 function isActive()
-    _, status = cmusRemote("--raw status")
-    return status
+    return currentStatus ~= "stopped"
 end
 
 function isPlaying()
-    status = cmusRemote("--raw status")
-    return string.match(status, "status playing")
+    return currentStatus == "playing"
 end
 
 function obj:playOrPause()
     if isActive() then
         -- NOTE: --pause toggles play/pause
-        cmusRemote("--pause")
+        cmusRemoteAsync("--pause")
     end
 end
 
 function obj:prevTrack()
     if isActive() then
-        cmusRemote("--prev")
+        cmusRemoteAsync("--prev")
     end
 end
 
 function obj:nextTrack()
     if isActive() then
-        cmusRemote("--next")
+        cmusRemoteAsync("--next")
     end
 end
 
 function obj:seekForwards(num)
     return function()
-        cmusRemote("--seek +"..num)
+        cmusRemoteAsync("--seek +"..num)
     end
 end
 
 function obj:seekBackwards(num)
     return function()
-        cmusRemote("--seek -"..num)
+        cmusRemoteAsync("--seek -"..num)
     end
 end
 
 function obj:incVolume()
     if isActive() and isPlaying() then
-        cmusRemote("--volume +5")
+        cmusRemoteAsync("--volume +5")
     end
 end
 
 function obj:decVolume()
     if isActive() and isPlaying() then
-        cmusRemote("--volume -5")
+        cmusRemoteAsync("--volume -5")
     end
 end
 
@@ -136,12 +142,20 @@ end
 -- see bin/cmus-status-display
 -- msg format: "status::artist - title" (e.g., "playing::Artist - Title")
 function obj:onIPCMessage(_id, msg)
+    -- Validate message: reject if nil, empty, or looks like the message ID
+    if not msg or msg == "" or msg == tostring(_id) then
+        return
+    end
+
     local status, trackInfo = string.match(msg, "^(.-)::(.*)$")
     if not status then
         -- Fallback for old format without status
-        status = isPlaying() and "playing" or "paused"
+        status = currentStatus ~= "stopped" and currentStatus or "paused"
         trackInfo = msg
     end
+
+    -- Update cached state for isActive()/isPlaying()
+    currentStatus = status
 
     local title = ""
     if status == "playing" then
@@ -157,7 +171,7 @@ end
 
 function obj:initMenuTitle()
     res, ok = cmusRemote("--raw status")
-    artist = ""; title = ""; playStatus = "stopped"
+    local artist = ""; local title = ""; local playStatus = "stopped"
     if ok then
         artist = string.match(res, "tag artist ([^\n]+)") or ""
         title = string.match(res, "tag title ([^\n]+)") or ""
@@ -167,9 +181,11 @@ function obj:initMenuTitle()
             playStatus = "paused"
         end
     end
+    -- Update cached state
+    currentStatus = playStatus
     local trackInfo = ""
     if title ~= "" then
-        trackInfo = string.format("%.10s - %.10s", artist, title)
+        trackInfo = string.format("%.20s - %.20s", artist, title)
     end
     obj:onIPCMessage(0, playStatus .. "::" .. trackInfo)
 end
@@ -435,10 +451,11 @@ function obj:start(config)
         hs.printf("[cmus] Reusing existing IPC port")
     else
         -- Create port - callback looks up module dynamically to survive reloads
-        local ok, port = pcall(hs.ipc.localPort, "cmus", function(id, msg)
+        -- Callback signature: function(self, msgID, msgData)
+        local ok, port = pcall(hs.ipc.localPort, "cmus", function(_self, msgID, msgData)
             local state = rawget(_G, "__CMUS_IPC__")
             if state and state.module then
-                state.module:onIPCMessage(id, msg)
+                state.module:onIPCMessage(msgID, msgData)
             end
         end)
         if ok then
@@ -459,18 +476,20 @@ function obj:start(config)
         obj:toggleControlsCanvas()
     end)
 
-    -- Find cmus-remote path asynchronously
+    -- Find cmus-remote path (check common Homebrew locations since HS PATH is limited)
     local start = hs.timer.absoluteTime()
-    obj._whichTask = hs.task.new("/usr/bin/which", function(exitCode, stdout, stderr)
-        obj._whichTask = nil
-        if exitCode == 0 then
-            cmusRemotePath = stdout:gsub("%s+$", "")
+    local candidates = {
+        "/opt/homebrew/bin/cmus-remote",  -- Apple Silicon Homebrew
+        "/usr/local/bin/cmus-remote",     -- Intel Homebrew
+    }
+    for _, path in ipairs(candidates) do
+        if hs.fs.attributes(path) then
+            cmusRemotePath = path
+            break
         end
-        -- Always refresh title on start to ensure sync (even on soft reload)
-        obj:initMenuTitle()
-        hs.printf("[async] cmus.init: %.1fms", (hs.timer.absoluteTime() - start) / 1e6)
-    end, {"cmus-remote"})
-    obj._whichTask:start()
+    end
+    obj:initMenuTitle()
+    hs.printf("[sync] cmus.init: %.1fms (path=%s)", (hs.timer.absoluteTime() - start) / 1e6, cmusRemotePath or "nil")
 end
 
 -- Soft stop: cleanup resources but preserve menubar and IPC port (for soft reload)

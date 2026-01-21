@@ -1,10 +1,10 @@
 module CMD
   def start(opts)
-    opts.banner = "Usage: start"
-    opts.info = "start"
+    opts.banner = "Usage: start FIXME"
+    opts.info = "FIXME"
     lambda { |*args|
       EXE.bash %{
-        uv run python main.py
+        flutter run
       }
     }
   end

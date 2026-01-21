@@ -1,0 +1,37 @@
+#!/usr/bin/env fish
+# Worker script for claude-batch - processes a single file
+# Usage: claude-batch-worker FILE PROMPT_FILE OUTPUT_EXT [PROGRESS_FILE] [STATUS_FILE]
+
+set file $argv[1]
+set prompt_file $argv[2]
+set output_ext $argv[3]
+set progress_file $argv[4]
+set status_file $argv[5]
+
+set outfile (string replace -r '\.[^.]+$' '' $file)$output_ext
+set content (cat $file)
+set filename (basename $file)
+set prompt (cat $prompt_file)
+
+set expanded (string replace -a '{file}' $filename $prompt)
+set expanded (string replace -a '{content}' $content $expanded)
+
+if test -n "$status_file"
+    echo "START: $filename" >> $status_file
+end
+set result (printf '%s' $expanded | claude -p --tools '' 2>/dev/null)
+
+if test $output_ext = '-'
+    printf '=== %s ===\n%s\n\n' $filename $result
+else
+    printf '%s\n' $result > $outfile
+end
+
+if test -n "$status_file"
+    echo "DONE: $filename" >> $status_file
+end
+
+# Signal completion for progress tracking
+if test -n "$progress_file"
+    echo $filename >> $progress_file
+end

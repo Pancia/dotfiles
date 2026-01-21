@@ -1,2 +1,0 @@
-#compdef _music		music
-function _music { __eval_completion music --zsh-completions }

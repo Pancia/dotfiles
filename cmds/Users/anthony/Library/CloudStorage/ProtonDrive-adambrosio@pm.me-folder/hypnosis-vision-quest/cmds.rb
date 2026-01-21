@@ -1,10 +1,10 @@
 module CMD
-  def start(opts)
-    opts.banner = "Usage: start"
-    opts.info = "start"
+  def example(opts)
+    opts.banner = "Usage: example"
+    opts.info = "FIXME"
     lambda { |*args|
       EXE.bash %{
-        uv run python main.py
+        echo "FIXME"
       }
     }
   end

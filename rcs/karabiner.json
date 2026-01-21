@@ -134,14 +134,14 @@
                         ]
                     },
                     {
-                        "description": "eject -> finder (current space)",
+                        "description": "eject -> iterm (centered)",
                         "manipulators": [
                             {
                                 "from": {
                                     "key_code": "eject"
                                 },
                                 "to": {
-                                    "shell_command": "/Users/anthony/dotfiles/bin/finder-here"
+                                    "shell_command": "/Users/anthony/dotfiles/bin/iterm-here"
                                 },
                                 "type": "basic"
                             }

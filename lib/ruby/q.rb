@@ -49,7 +49,7 @@ class CMDS
   def self.editreg(opts)
     opts.info = "Edit a register using $EDITOR."
     lambda { |name|
-      execute("$EDITOR #{reg_file(name)}")
+      execute("$EDITOR -c 'set ft=fish' #{reg_file(name)}")
     }
   end
 end

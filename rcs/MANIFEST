@@ -1,0 +1,25 @@
+# RC Symlink Manifest
+# Format: source -> destination
+# Lines starting with # are comments
+claude_desktop_config.json      -> $HOME/Library/Application Support/Claude/claude_desktop_config.json
+clj-kondo.edn                   -> $HOME/.config/clj-kondo/config.edn
+clojure-lsp.config.edn          -> $HOME/.lsp/config.edn
+clojure.deps.edn                -> $HOME/.config/clojure/deps.edn
+cmus.rc                         -> $HOME/.config/cmus/rc
+config.fish                     -> $HOME/.config/fish/config.fish
+datomic.dev-local.edn           -> $HOME/.datomic/dev-local.edn
+ghostty.config                  -> $HOME/.config/ghostty/config
+gitconfig                       -> $HOME/.gitconfig
+gradle.properties               -> $HOME/.gradle/gradle.properties
+hammerspoon.lua                 -> $HOME/.hammerspoon/init.lua
+ideavimrc                       -> $HOME/.config/ideavim/ideavimrc
+ignore                          -> $HOME/.ignore
+karabiner.json                  -> $HOME/.config/karabiner/karabiner.json
+kitty.conf                      -> $HOME/.config/kitty/kitty.conf
+llm-command-extra-models.yaml   -> $HOME/Library/Application Support/io.datasette.llm/extra-openai-models.yaml
+nvim-init.vim                   -> $HOME/.config/nvim/init.vim
+peco.json                       -> $HOME/.config/peco/config.json
+pymodoro-config.yaml            -> $HOME/.config/pymodoro/config.yaml
+shadow-cljs.config.edn          -> $HOME/.shadow-cljs/config.edn
+ssh.config                      -> $HOME/.ssh/config
+zprint.edn                      -> $HOME/.zprint.edn

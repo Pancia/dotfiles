@@ -19,8 +19,8 @@
 #
 
 function output
-    set -l args (string escape -- $argv)
-    set -l escaped (echo $args | iconv -s -c -t ascii | sed 's/\\//g')
+    # Convert to ASCII and escape for Lua double-quoted string: \ → \\, " → \"
+    set -l escaped (printf '%s' $argv | iconv -s -c -t ascii | string replace -a '\\' '\\\\' | string replace -a '"' '\\"')
     set -l command "local port = hs.ipc.remotePort(\"cmus\"); port:sendMessage(\"$escaped\", 123); port:delete()"
     hs -c "$command"
 end

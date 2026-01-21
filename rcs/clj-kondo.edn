@@ -1,4 +1,3 @@
-;<[.config/clj-kondo/config.edn]>
 {:skip-comments true
 
  ;:config-paths ["/Users/pancia/dotfiles/lib/clojure/my-kondo"]

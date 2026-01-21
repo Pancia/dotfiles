@@ -4,5 +4,5 @@ if test -d "$PYENV_ROOT/bin"
     fish_add_path --prepend "$PYENV_ROOT/bin"
 end
 if command -v pyenv >/dev/null
-    pyenv init - | source
+    pyenv init - fish | source
 end

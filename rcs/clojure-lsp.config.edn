@@ -1,4 +1,3 @@
-;<[.lsp/config.edn]>
 {
  :auto-add-ns-to-new-files? false
  :hover {:clojuredocs true}

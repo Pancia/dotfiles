@@ -6,19 +6,64 @@ function _not_same_inode
 end
 
 function _ENSURE_RCS
-    for rc in (find $HOME/dotfiles/rcs -type f -not -name '.*' -not -path '*/_*')
-        set -l first_line (head -n 1 $rc)
-        # Skip files without <[...]> metadata header
-        if not string match -rq '<\[.*\]>' -- $first_line
+    set -l manifest "$HOME/dotfiles/rcs/MANIFEST"
+    if not test -f "$manifest"
+        if status is-interactive; and isatty stderr
+            echo "[_ENSURE_RCS] warning: $manifest not found" >&2
+        end
+        return 1
+    end
+
+    # Collect all source files listed in manifest
+    set -l manifest_files
+
+    while read -l line
+        # Skip comments and empty lines
+        string match -rq '^\s*#' -- $line; and continue
+        string match -rq '^\s*$' -- $line; and continue
+
+        # Parse "source -> destination" format
+        set -l parts (string split ' -> ' -- $line)
+        if test (count $parts) -ne 2
+            continue
+        end
+
+        set -l rc_name (string trim -- $parts[1])
+        set -l rc_dest (string trim -- $parts[2])
+        # Expand $HOME in destination path
+        set -l rc_dest (string replace '$HOME' "$HOME" -- $rc_dest)
+        set -l rc_path "$HOME/dotfiles/rcs/$rc_name"
+
+        set -a manifest_files $rc_name
+
+        if not test -f "$rc_path"
             if status is-interactive; and isatty stderr
-                echo "[_ENSURE_RCS] warning: $rc missing <[dest]> header" >&2
+                echo "[_ENSURE_RCS] warning: $rc_path not found" >&2
             end
             continue
         end
-        set -l rc_dest (echo $first_line | sed -E 's/.*<\[(.*)\]>.*/\1/')
-        if not test -f "$HOME/$rc_dest"; or _not_same_inode "$HOME/$rc_dest" "$rc"
-            mkdir -p (dirname "$HOME/$rc_dest")
-            ln -f "$rc" "$HOME/$rc_dest"
+
+        if not test -f "$rc_dest"; or _not_same_inode "$rc_dest" "$rc_path"
+            mkdir -p (dirname "$rc_dest")
+            ln -f "$rc_path" "$rc_dest"
+        end
+    end < "$manifest"
+
+    # Check for files in rcs/ not listed in manifest
+    if status is-interactive; and isatty stderr
+        for rc_file in $HOME/dotfiles/rcs/*
+            # Skip directories
+            test -d "$rc_file"; and continue
+
+            set -l filename (basename $rc_file)
+            # Skip MANIFEST itself and common non-rc items
+            test "$filename" = "MANIFEST"; and continue
+            string match -q '__pycache__' -- $filename; and continue
+            string match -q '*.pyc' -- $filename; and continue
+
+            if not contains -- $filename $manifest_files
+                echo "[_ENSURE_RCS] warning: rcs/$filename not in MANIFEST" >&2
+            end
         end
     end
 end

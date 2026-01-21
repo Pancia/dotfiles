@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# Convert VTT (WebVTT) subtitle file to plain text
+# Strips timing, positioning, inline tags, and deduplicates lines
+
+input="$1"
+output="${input%.vtt}.txt"
+
+sed -E '
+  /^WEBVTT/d
+  /^Kind:/d
+  /^Language:/d
+  /^NOTE/d
+  /^$/d
+  /^[0-9]+$/d
+  /-->/d
+  s/<[^>]+>//g
+  s/ align:.*//
+  s/^[[:space:]]+//
+  s/[[:space:]]+$//
+' "$input" \
+  | awk 'NF' \
+  | uniq \
+  | fold -w 80 -s > "$output"

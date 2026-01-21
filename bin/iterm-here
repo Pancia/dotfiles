@@ -1,0 +1,49 @@
+#!/Users/anthony/.pyenv/versions/3.11.11/bin/python3.11
+
+import iterm2
+import AppKit
+import subprocess
+
+# Ensure iTerm is running (required for iterm2 API connection)
+ws = AppKit.NSWorkspace.sharedWorkspace()
+iterm_running = any(
+    app.bundleIdentifier() == "com.googlecode.iterm2"
+    for app in ws.runningApplications()
+)
+if not iterm_running:
+    ws.launchApplication_("iTerm")
+
+async def main(connection):
+    app = await iterm2.async_get_app(connection)
+
+    # Create the new window
+    window = await iterm2.Window.async_create(connection)
+
+    # Get screen dimensions and center the window
+    screen = AppKit.NSScreen.mainScreen()
+    screen_frame = screen.frame()
+    screen_width = screen_frame.size.width
+    screen_height = screen_frame.size.height
+
+    frame = await window.async_get_frame()
+    new_x = (screen_width - frame.size.width) / 2
+    new_y = (screen_height - frame.size.height) / 2
+
+    await window.async_set_frame(iterm2.Frame(
+        iterm2.Point(new_x, new_y),
+        iterm2.Size(frame.size.width, frame.size.height)
+    ))
+
+    # Use AppleScript to activate iTerm and focus this specific window
+    window_id = window.window_id
+    subprocess.run([
+        "osascript", "-e",
+        f'''
+        tell application "iTerm2"
+            activate
+            set index of window id "{window_id}" to 1
+        end tell
+        '''
+    ])
+
+iterm2.run_until_complete(main, True)
