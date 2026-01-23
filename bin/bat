@@ -1,0 +1,10 @@
+#!/bin/bash
+# Wrapper for bat that auto-detects macOS dark/light mode
+
+if defaults read -g AppleInterfaceStyle &>/dev/null; then
+    theme="Monokai Extended"
+else
+    theme="Monokai Extended Light"
+fi
+
+exec /opt/homebrew/bin/bat --theme="$theme" "$@"
