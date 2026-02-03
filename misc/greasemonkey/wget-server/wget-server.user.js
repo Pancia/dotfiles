@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         wget_server YouTube Downloader
 // @namespace    http://dotfiles.local/
-// @version      1.1
+// @version      1.2
 // @description  Download YouTube videos via wget_server API with two-step workflow
 // @match        *://www.youtube.com/*
 // @match        *://youtube.com/*
@@ -92,6 +92,20 @@
     }
 
     // =========================================================================
+    // Logging
+    // =========================================================================
+
+    const LOG_PREFIX = '[wget_server]';
+
+    function log(...args) {
+        console.log(LOG_PREFIX, ...args);
+    }
+
+    function logError(...args) {
+        console.error(LOG_PREFIX, ...args);
+    }
+
+    // =========================================================================
     // API Client
     // =========================================================================
 
@@ -99,36 +113,81 @@
         const config = await getConfig();
         const url = config.serverUrl.replace(/\/$/, '') + endpoint;
 
+        log(`API Request: ${method} ${url}`);
+        if (data) {
+            log('Request data:', JSON.stringify(data));
+        }
+
         return new Promise((resolve, reject) => {
-            GMC.xmlHttpRequest({
-                method: method,
-                url: url,
-                headers: {
-                    'Authorization': getAuthHeader(config),
-                    'Content-Type': 'application/json'
-                },
-                data: data ? JSON.stringify(data) : null,
-                onload: function(response) {
-                    if (response.status >= 200 && response.status < 300) {
-                        try {
-                            resolve(JSON.parse(response.responseText));
-                        } catch (e) {
-                            resolve(response.responseText);
+            log('Initiating GM xmlHttpRequest...');
+
+            try {
+                GMC.xmlHttpRequest({
+                    method: method,
+                    url: url,
+                    headers: {
+                        'Authorization': getAuthHeader(config),
+                        'Content-Type': 'application/json'
+                    },
+                    data: data ? JSON.stringify(data) : null,
+                    onload: function(response) {
+                        log(`Response status: ${response.status}`);
+                        log(`Response headers:`, response.responseHeaders);
+                        log(`Response body:`, response.responseText?.substring(0, 500));
+
+                        if (response.status >= 200 && response.status < 300) {
+                            try {
+                                const parsed = JSON.parse(response.responseText);
+                                log('Parsed response:', parsed);
+                                resolve(parsed);
+                            } catch (e) {
+                                log('Response is not JSON, returning raw text');
+                                resolve(response.responseText);
+                            }
+                        } else {
+                            logError(`HTTP Error ${response.status}:`, response.responseText);
+                            reject({
+                                status: response.status,
+                                message: response.responseText
+                            });
                         }
-                    } else {
+                    },
+                    onerror: function(error) {
+                        logError('Network error object:', error);
+                        logError('Error details:', {
+                            status: error.status,
+                            statusText: error.statusText,
+                            readyState: error.readyState,
+                            responseHeaders: error.responseHeaders,
+                            finalUrl: error.finalUrl
+                        });
                         reject({
-                            status: response.status,
-                            message: response.responseText
+                            status: 0,
+                            message: 'Network error: ' + (error.statusText || 'Unknown')
+                        });
+                    },
+                    ontimeout: function() {
+                        logError('Request timed out');
+                        reject({
+                            status: 0,
+                            message: 'Request timed out'
+                        });
+                    },
+                    onabort: function() {
+                        logError('Request aborted');
+                        reject({
+                            status: 0,
+                            message: 'Request aborted'
                         });
                     }
-                },
-                onerror: function(error) {
-                    reject({
-                        status: 0,
-                        message: 'Network error: ' + (error.statusText || 'Unknown')
-                    });
-                }
-            });
+                });
+            } catch (e) {
+                logError('Exception calling xmlHttpRequest:', e);
+                reject({
+                    status: 0,
+                    message: 'Exception: ' + e.message
+                });
+            }
         });
     }
 
@@ -579,15 +638,23 @@
     }
 
     async function handleDownloadClick() {
+        log('Download button clicked');
+        const config = await getConfig();
+        log('Current config:', { serverUrl: config.serverUrl, username: config.username, hasPassword: !!config.password });
+
         if (!(await isConfigured())) {
+            log('Not configured, showing setup dialog');
             await showSetupDialog();
             return;
         }
 
         try {
+            log('Fetching modes from server...');
             const modesData = await fetchModes();
+            log('Modes received:', modesData);
             showModeDialog(modesData.modes, getCurrentUrl());
         } catch (err) {
+            logError('Failed to fetch modes:', err);
             if (err.status === 401) {
                 showToast('Authentication failed - check credentials', 'error');
                 await showSetupDialog();
@@ -616,8 +683,14 @@
                     .attr('id', 'wget-server-btn')
                     .addClass('wget-btn')
                     .text('📥')
-                    .attr('title', 'Download with wget_server')
-                    .on('click', handleDownloadClick);
+                    .attr('title', 'Download with wget_server (Shift+click for settings)')
+                    .on('click', function(e) {
+                        if (e.shiftKey) {
+                            showSetupDialog();
+                        } else {
+                            handleDownloadClick();
+                        }
+                    });
 
                 $('.ytd-masthead > #end').before(btn);
             });
@@ -626,7 +699,13 @@
 
     function init() {
         // Prevent running in iframes
-        if (window.top !== window.self) return;
+        if (window.top !== window.self) {
+            log('Skipping init - running in iframe');
+            return;
+        }
+
+        log('Initializing wget_server userscript v1.2');
+        log('GM API available:', typeof GM !== 'undefined' ? 'GM.*' : 'GM_*');
 
         injectStyles();
         createOverlay();
