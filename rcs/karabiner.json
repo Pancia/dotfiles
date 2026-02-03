@@ -222,7 +222,16 @@
                     }
                 ]
             },
-            "devices": [],
+            "devices": [
+                {
+                    "identifiers": {
+                        "is_keyboard": true,
+                        "product_id": 615,
+                        "vendor_id": 76
+                    },
+                    "keyboard_type": "ansi"
+                }
+            ],
             "fn_function_keys": [
                 {
                     "from": {
@@ -343,7 +352,8 @@
             ],
             "virtual_hid_keyboard": {
                 "caps_lock_delay_milliseconds": 0,
-                "keyboard_type": "ansi"
+                "keyboard_type": "ansi",
+                "keyboard_type_v2": "ansi"
             }
         }
     ]

@@ -1,6 +1,7 @@
 local json = require("hs.json")
 local safeLogger = require("lib/safeLogger")
 local menubarRegistry = require("lib/menubarRegistry")
+local perfmon = require("lib/perfmon")
 
 local obj = {}
 
@@ -381,7 +382,16 @@ function obj:queryEventsAsync(callback)
         obj._queryTask = nil
     end
 
+    -- Track when the task was started
+    local taskStartTime = hs.timer.absoluteTime()
+
     obj._queryTask = hs.task.new(obj.pythonPath, function(exitCode, stdout, stderr)
+        -- Log how long the Python task took
+        local taskElapsed = (hs.timer.absoluteTime() - taskStartTime) / 1e6
+        if taskElapsed > 500 then  -- Log if Python took > 100ms
+            hs.printf("[PERFMON SLOW] async calendar.pythonTask: %.2fms", taskElapsed)
+        end
+
         obj._queryTask = nil
 
         if exitCode ~= 0 then
@@ -391,7 +401,9 @@ function obj:queryEventsAsync(callback)
         end
 
         -- Parse JSON
-        local success, data = pcall(json.decode, stdout)
+        local success, data = perfmon.track("calendar.jsonParse", function()
+            return pcall(json.decode, stdout)
+        end)
         if not success then
             obj._logger.ef("Failed to parse JSON: %s", data)
             if callback then callback(nil) end
@@ -618,20 +630,28 @@ function obj:processEvents(events)
 end
 
 function obj:heartbeat()
-    obj._logger.vf("Calendar heartbeat - polling events...")
+    perfmon.track("calendar.heartbeat", function()
+        obj._logger.vf("Calendar heartbeat - polling events...")
 
-    -- Query events asynchronously
-    obj:queryEventsAsync(function(events)
-        -- Process events and trigger actions
-        obj:processEvents(events)
+        -- Query events asynchronously
+        obj:queryEventsAsync(function(events)
+            perfmon.track("calendar.heartbeat.callback", function()
+                -- Process events and trigger actions
+                perfmon.track("calendar.processEvents", function()
+                    obj:processEvents(events)
+                end)
 
-        -- Cleanup old triggers periodically (every ~100 polls = ~100 minutes)
-        if math.random(100) == 1 then
-            obj:cleanupOldTriggers()
-        end
+                -- Cleanup old triggers periodically (every ~100 polls = ~100 minutes)
+                if math.random(100) == 1 then
+                    obj:cleanupOldTriggers()
+                end
 
-        -- Update menubar
-        obj:renderMenuBar()
+                -- Update menubar
+                perfmon.track("calendar.renderMenuBar", function()
+                    obj:renderMenuBar()
+                end)
+            end)
+        end)
     end)
 end
 

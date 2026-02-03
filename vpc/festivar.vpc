@@ -26,11 +26,11 @@
             "area": "iterm",
             "dir": "$HOME/projects/work/festivar-webapp/",
             "tabs": [
-                "$ mcp",
-                "$ browser",
-                "$ server",
-                "$ vim",
-                "$ claude",
+                "@ mcp",
+                "@ browser",
+                "@ server",
+                "@ vim",
+                "@ claude",
                 "git status"
             ]
         },

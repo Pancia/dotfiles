@@ -61,17 +61,16 @@ function _ytdl_run
     return $exit_code
 end
 
-function _ytdl_convert_mp4_to_m4a
+function _ytdl_convert_to_m4a
     set -l out_dir $argv[1]
     set -l ytid $argv[2]
-    # Only convert mp4 files matching this video ID
-    for mp4_file in $out_dir/*__#__$ytid.mp4
-        if test -f "$mp4_file"
-            set -l m4a_file (string replace -r '\.mp4$' '.m4a' -- $mp4_file)
+    for src_file in $out_dir/*__#__$ytid.{mp4,webm}
+        if test -f "$src_file"
+            set -l m4a_file (string replace -r '\.[^.]+$' '.m4a' -- $src_file)
             if not test -f "$m4a_file"
-                echo "[Converting] $mp4_file -> $m4a_file"
-                ffmpeg -i $mp4_file $m4a_file
-                and trash $mp4_file
+                echo "[Converting] $src_file -> $m4a_file"
+                ffmpeg -i $src_file $m4a_file
+                and trash $src_file
             end
         end
     end
@@ -103,7 +102,7 @@ function _ytdl_download_media
     if _ytdl_run $ytid -o $output_path -f $format_code $merge_args
         # Only convert mp4 to m4a for audio formats, not video
         if test "$download_type" != "video"
-            _ytdl_convert_mp4_to_m4a "$YTDL_OUTPUT_DIR/$download_type" $ytid
+            _ytdl_convert_to_m4a "$YTDL_OUTPUT_DIR/$download_type" $ytid
         end
         return 0
     else

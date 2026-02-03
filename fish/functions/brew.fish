@@ -16,6 +16,32 @@ function _brew_mark_updated --description 'Record brew update timestamp'
 end
 
 function brew --description 'Homebrew with update prompts' --wraps brew
+    # For upgrade commands, capture output to detect "already installed" message
+    if test "$argv[1]" = "upgrade"; and test (count $argv) -gt 1; and isatty stdout
+        set -l output (command brew $argv 2>&1)
+        set -l brew_status $status
+        echo -n "$output"
+
+        # Check if we got the "already installed" message
+        if string match -q "*the latest version is already installed*" "$output"
+            echo
+            echo (set_color brblack)"─── dotfiles/brew ───"(set_color normal)
+            read -P "Run 'brew update' and retry upgrade? [y/N] " -n 1 response
+            if string match -qi 'y' "$response"
+                echo
+                command brew update
+                set -l update_status $status
+                if test $update_status -eq 0
+                    echo
+                    command brew $argv
+                    set brew_status $status
+                end
+                _brew_mark_updated
+            end
+        end
+        return $brew_status
+    end
+
     command brew $argv
     set -l brew_status $status
 

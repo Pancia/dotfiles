@@ -32,9 +32,25 @@ function _ENSURE_RCS
         set -l rc_dest (string trim -- $parts[2])
         # Expand $HOME in destination path
         set -l rc_dest (string replace '$HOME' "$HOME" -- $rc_dest)
-        set -l rc_path "$HOME/dotfiles/rcs/$rc_name"
 
-        set -a manifest_files $rc_name
+        # Support absolute paths (starting with / or $HOME) for rc_name
+        set -l rc_path
+        if string match -rq '^(/|\$HOME)' -- $rc_name
+            set rc_path (string replace '$HOME' "$HOME" -- $rc_name)
+        else
+            set rc_path "$HOME/dotfiles/rcs/$rc_name"
+        end
+
+        set -a manifest_files (basename $rc_name)
+
+        # Handle directories (use symlinks since hard links don't work for dirs)
+        if test -d "$rc_path"
+            if not test -L "$rc_dest"; or test (readlink "$rc_dest") != "$rc_path"
+                mkdir -p (dirname "$rc_dest")
+                ln -sfn "$rc_path" "$rc_dest"
+            end
+            continue
+        end
 
         if not test -f "$rc_path"
             if status is-interactive; and isatty stderr
@@ -183,7 +199,7 @@ alias gca __git_use_g
 alias gcai __git_use_g
 alias gd  __git_use_g
 alias gds __git_use_g
-alias gl  __git_use_g
+alias gl  'git log --graph --all --decorate --abbrev-commit'
 alias gs  'git status'
 alias gsave __git_use_g
 alias gshow __git_use_g

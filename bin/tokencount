@@ -1,64 +1,15 @@
 #!/usr/bin/env python3.11
 
-import anthropic
 import tiktoken
 import sys
-import os
-from pathlib import Path
-
-def get_api_key():
-    """Get API key from config file or environment."""
-    # Try config file first
-    config_path = Path.home() / ".config" / "anthropic" / "api_key"
-    if config_path.exists():
-        return config_path.read_text().strip()
-
-    # Fall back to environment variable
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("Error: No API key found. Create ~/.config/anthropic/api_key or set ANTHROPIC_API_KEY", file=sys.stderr)
-        sys.exit(1)
-    return api_key
-
-def count_tokens_anthropic(text, model="claude-sonnet-4-5-20250929"):
-    """Count tokens using Anthropic API (accurate for Claude models)."""
-    client = anthropic.Anthropic(api_key=get_api_key())
-
-    response = client.messages.count_tokens(
-        model=model,
-        messages=[
-            {
-                "role": "user",
-                "content": text
-            }
-        ]
-    )
-
-    return response.input_tokens, response
-
-def count_tokens_openai(text, encoding_name="cl100k_base"):
-    """Count tokens using tiktoken (accurate for OpenAI models)."""
-    encoding = tiktoken.get_encoding(encoding_name)
-    tokens = encoding.encode(text)
-    return len(tokens)
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: tokencount.py <file_path> [model]")
+        print("Usage: tokencount <file_path>")
         sys.exit(1)
 
-    file_path = sys.argv[1]
-    model = sys.argv[2] if len(sys.argv) > 2 else "claude-sonnet-4-5-20250929"
+    with open(sys.argv[1], 'r', encoding='utf-8') as f:
+        text = f.read()
 
-    with open(file_path, 'r', encoding='utf-8') as file:
-        text = file.read()
-
-    # Count tokens with both tokenizers
-    anthropic_count, api_response = count_tokens_anthropic(text, model)
-    openai_count = count_tokens_openai(text)
-
-    # Display results
-    print(f"Claude (Anthropic):  {anthropic_count:,} tokens")
-    print(f"GPT (OpenAI):        {openai_count:,} tokens")
-    print(f"Difference:          {abs(anthropic_count - openai_count):,} tokens ({((anthropic_count - openai_count) / openai_count * 100):+.1f}%)")
-    print(f"\nAPI cost:            Free or negligible (not showing in usage dashboard)")
+    encoding = tiktoken.get_encoding("cl100k_base")
+    print(f"{len(encoding.encode(text)):,}")

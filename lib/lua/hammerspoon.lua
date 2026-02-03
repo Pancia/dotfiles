@@ -3,6 +3,9 @@ local _coreStart = hs.timer.absoluteTime()
 
 local HOME = os.getenv("HOME")
 
+-- Load performance monitor (exports to _G.perfmon for console access)
+require("lib/perfmon")
+
 local _spoonStart = hs.timer.absoluteTime()
 local install = hs.loadSpoon("SpoonInstall")
 install.use_syncinstall = true

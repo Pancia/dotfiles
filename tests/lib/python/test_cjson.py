@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """Tests for CJSON encoder/decoder."""
 
+import sys
+from pathlib import Path
+
 import pytest
+
+# Add lib/python to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "lib" / "python"))
+
 from cjson import encode, decode, scan_strings, build_dictionary, is_homogeneous_array
 
 
@@ -247,13 +254,15 @@ class TestCLI:
             {"name": "Bob", "dept": "Engineering"},
         ]}
 
+        lib_python = Path(__file__).parent.parent.parent.parent / "lib" / "python"
+
         # Encode
         encode_proc = subprocess.run(
             ["python3", "cjson.py", "encode"],
             input=json.dumps(data),
             capture_output=True,
             text=True,
-            cwd="/Users/anthony/dotfiles/lib/python",
+            cwd=str(lib_python),
         )
         assert encode_proc.returncode == 0
         encoded = json.loads(encode_proc.stdout)
@@ -264,7 +273,7 @@ class TestCLI:
             input=json.dumps(encoded),
             capture_output=True,
             text=True,
-            cwd="/Users/anthony/dotfiles/lib/python",
+            cwd=str(lib_python),
         )
         assert decode_proc.returncode == 0
         decoded = json.loads(decode_proc.stdout)
@@ -276,13 +285,14 @@ class TestCLI:
         import json
 
         data = {"a": "repeat", "b": "repeat", "c": "repeat"}
+        lib_python = Path(__file__).parent.parent.parent.parent / "lib" / "python"
 
         proc = subprocess.run(
             ["python3", "cjson.py", "stats"],
             input=json.dumps(data),
             capture_output=True,
             text=True,
-            cwd="/Users/anthony/dotfiles/lib/python",
+            cwd=str(lib_python),
         )
         assert proc.returncode == 0
         stats = json.loads(proc.stdout)
@@ -297,13 +307,14 @@ class TestCLI:
         import json
 
         data = {"key": "value"}
+        lib_python = Path(__file__).parent.parent.parent.parent / "lib" / "python"
 
         proc = subprocess.run(
             ["python3", "cjson.py", "encode", "--pretty"],
             input=json.dumps(data),
             capture_output=True,
             text=True,
-            cwd="/Users/anthony/dotfiles/lib/python",
+            cwd=str(lib_python),
         )
         assert proc.returncode == 0
         # Pretty output should have newlines
@@ -315,6 +326,7 @@ class TestCLI:
 
         # Two occurrences of "x"
         data = {"a": "x", "b": "x"}
+        lib_python = Path(__file__).parent.parent.parent.parent / "lib" / "python"
 
         # With min_freq=2, should alias
         proc2 = subprocess.run(
@@ -322,7 +334,7 @@ class TestCLI:
             input=json.dumps(data),
             capture_output=True,
             text=True,
-            cwd="/Users/anthony/dotfiles/lib/python",
+            cwd=str(lib_python),
         )
         # With min_freq=3, shouldn't alias
         proc3 = subprocess.run(
@@ -330,7 +342,7 @@ class TestCLI:
             input=json.dumps(data),
             capture_output=True,
             text=True,
-            cwd="/Users/anthony/dotfiles/lib/python",
+            cwd=str(lib_python),
         )
 
         assert proc2.returncode == 0

@@ -65,6 +65,7 @@ echo -e "$display"
 
 input=""
 seq_length=${#sequence}
+error_state=false
 while true; do
     IFS= read -n 1 -s -r char
 
@@ -72,17 +73,36 @@ while true; do
     if [[ "$char" == $'\x7f' || "$char" == $'\x08' ]]; then
         if [[ -n "$input" ]]; then
             input="${input%?}"  # Remove last character
+            error_state=false
             echo -ne "\r\033[K${input}"  # Clear line and redisplay
         fi
         continue
     fi
 
-    input="${input}${char}"
-    display_input="${input}"
-    echo -ne "\r${display_input}"
-    if [[ "${input: -$seq_length}" == "$sequence" ]]; then
-        echo
-        break
+    # If in error state, ignore all input except backspace
+    if [[ "$error_state" == true ]]; then
+        continue
+    fi
+
+    # Check if this character is correct
+    pos=${#input}
+    expected_char="${sequence:$pos:1}"
+
+    if [[ "$char" == "$expected_char" ]]; then
+        # Correct character
+        input="${input}${char}"
+        echo -ne "\r\033[K${input}"
+
+        # Check if complete
+        if [[ "$input" == "$sequence" ]]; then
+            echo
+            break
+        fi
+    else
+        # Wrong character - show error and block
+        input="${input}${char}"
+        error_state=true
+        echo -ne "\r\033[K\033[41m${input}\033[0m"  # Red background
     fi
 done
 

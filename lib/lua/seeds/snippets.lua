@@ -1,4 +1,5 @@
 local obj = {}
+local perfmon = require("lib/perfmon")
 
 -- Configuration
 obj.snippets_file = os.getenv("HOME").."/ProtonDrive/_config/snippets.txt"
@@ -135,60 +136,62 @@ end
 
 -- Handle keystrokes for text expansion
 function obj:handleKeystroke(event)
-  local keyCode = event:getKeyCode()
-  local flags = event:getFlags()
+  return perfmon.track("snippets.eventtap.keystroke", function()
+    local keyCode = event:getKeyCode()
+    local flags = event:getFlags()
 
-  -- Ignore if modifiers are held (except shift)
-  if flags.cmd or flags.alt or flags.ctrl then
-    self._buffer = ""
-    return false
-  end
-
-  local char = event:getCharacters()
-
-  -- Reset buffer on certain keys
-  if keyCode == hs.keycodes.map["return"] or
-     keyCode == hs.keycodes.map["escape"] or
-     keyCode == hs.keycodes.map["tab"] or
-     keyCode == hs.keycodes.map["space"] then
-    self._buffer = ""
-    return false
-  end
-
-  -- Handle backspace
-  if keyCode == hs.keycodes.map["delete"] then
-    if #self._buffer > 0 then
-      self._buffer = self._buffer:sub(1, -2)
-    end
-    return false
-  end
-
-  -- Only track printable characters
-  if char and #char == 1 then
-    self._buffer = self._buffer .. char
-
-    -- Keep buffer limited to max trigger length
-    if #self._buffer > self._max_trigger_length then
-      self._buffer = self._buffer:sub(-self._max_trigger_length)
+    -- Ignore if modifiers are held (except shift)
+    if flags.cmd or flags.alt or flags.ctrl then
+      self._buffer = ""
+      return false
     end
 
-    -- Check if buffer ends with any trigger
-    for trigger, content in pairs(self._triggers) do
-      if self._buffer:sub(-#trigger) == trigger then
-        -- Found a match - delete trigger and insert content
-        hs.timer.doAfter(0, function()
-          deleteChars(#trigger)
-          hs.timer.doAfter(0.05, function()
-            typeText(content)
+    local char = event:getCharacters()
+
+    -- Reset buffer on certain keys
+    if keyCode == hs.keycodes.map["return"] or
+       keyCode == hs.keycodes.map["escape"] or
+       keyCode == hs.keycodes.map["tab"] or
+       keyCode == hs.keycodes.map["space"] then
+      self._buffer = ""
+      return false
+    end
+
+    -- Handle backspace
+    if keyCode == hs.keycodes.map["delete"] then
+      if #self._buffer > 0 then
+        self._buffer = self._buffer:sub(1, -2)
+      end
+      return false
+    end
+
+    -- Only track printable characters
+    if char and #char == 1 then
+      self._buffer = self._buffer .. char
+
+      -- Keep buffer limited to max trigger length
+      if #self._buffer > self._max_trigger_length then
+        self._buffer = self._buffer:sub(-self._max_trigger_length)
+      end
+
+      -- Check if buffer ends with any trigger
+      for trigger, content in pairs(self._triggers) do
+        if self._buffer:sub(-#trigger) == trigger then
+          -- Found a match - delete trigger and insert content
+          hs.timer.doAfter(0, function()
+            deleteChars(#trigger)
+            hs.timer.doAfter(0.05, function()
+              typeText(content)
+            end)
           end)
-        end)
-        self._buffer = ""
-        return false
+          self._buffer = ""
+          return false
+        end
       end
     end
-  end
 
-  return false
+    return false
+  end)
 end
 
 -- Start the text expansion eventtap (async)

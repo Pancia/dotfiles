@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Start ollama serve, run a chat, then clean up
+
+set -e
+
+MODEL="llama3.1:8b"
+
+while getopts "m:" opt; do
+    case $opt in
+        m) MODEL="$OPTARG" ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+cleanup() {
+    if [[ -n "$OLLAMA_PID" ]]; then
+        kill "$OLLAMA_PID" 2>/dev/null
+        wait "$OLLAMA_PID" 2>/dev/null
+    fi
+}
+trap cleanup EXIT
+
+# Start serve in background
+ollama serve &>/dev/null &
+OLLAMA_PID=$!
+
+# Wait for server to be ready
+for i in {1..30}; do
+    if curl -s http://localhost:11434/api/tags &>/dev/null; then
+        break
+    fi
+    sleep 0.1
+done
+
+# Run the model
+ollama run "$MODEL" "$@"

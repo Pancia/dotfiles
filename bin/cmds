@@ -1,17 +1,21 @@
 #!/usr/bin/env ruby
 
 require "cli.rb"
+require "shellwords"
 
 $cmds_base_dir = "/Users/#{%x[whoami].strip}/dotfiles/cmds/"
 $cmds_file = "/Users/#{%x[whoami].strip}/dotfiles/cmds/#{%x[pwd].strip}/cmds.rb"
 
 module EXE
   def self.bash(command, opts={silent: false})
-    temp = "/tmp/command.bash"
+    cmd_name = command.strip.split(/\s/).first.split('/').last.gsub(/[^a-zA-Z0-9_-]/, '_')[0..20]
+    dir_name = File.basename(Dir.pwd)
+    timestamp = Time.now.strftime("%Y-%m-%d %H:%M:%S")
+    temp = "/tmp/#{cmd_name} @ #{dir_name} @ #{timestamp}.bash"
     pretty_command = command.lstrip.split(/\s\s+/).join(" \\\n")
     unless opts[:silent]
       File.write(temp, pretty_command)
-      Kernel.system("bat -P #{temp}")
+      Kernel.system("bat -P --style=header,grid #{temp.shellescape}")
     end
     Kernel.system("export DISABLE_AUTO_TITLE='true'")
     Kernel.system("printf '\e]1;#{command.strip.split(/\s\s+/).join(" ")}\a'")
@@ -27,11 +31,14 @@ module EXE
   end
 
   def self.fish(command, opts={silent: false})
-    temp = "/tmp/command.fish"
+    cmd_name = command.strip.split(/\s/).first.split('/').last.gsub(/[^a-zA-Z0-9_-]/, '_')[0..20]
+    dir_name = File.basename(Dir.pwd)
+    timestamp = Time.now.strftime("%Y-%m-%d %H:%M:%S")
+    temp = "/tmp/#{cmd_name} @ #{dir_name} @ #{timestamp}.fish"
     pretty_command = command.lstrip.split(/\s\s+/).join(" \\\n")
     unless opts[:silent]
       File.write(temp, pretty_command)
-      Kernel.system("bat -P #{temp}")
+      Kernel.system("bat -P --style=header,grid #{temp.shellescape}")
     end
     Kernel.system("fish", "-c", command)
     exitstatus = $?.exitstatus

@@ -1,0 +1,11 @@
+
+#!/data/data/com.termux/files/usr/bin/bash
+
+tmp=$(mktemp)
+curl -sN -X POST http://Anthonys-Mac-mini.local:8765/summarize \
+  -H "Content-Type: application/json" \
+    -d "{\"url\": \"$1\"}" | tee "$tmp"
+    echo
+    grep '^data:' "$tmp" | tail -1 | sed 's/^data: //' | jq -r '.saved_to, .summary'
+    rm "$tmp"
+

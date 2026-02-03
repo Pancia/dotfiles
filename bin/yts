@@ -1,30 +1,261 @@
 #!/usr/bin/env fish
 
-# Usage: yt-summarize URL [-s SECTIONS] [-c CONTEXT]
-# Examples:
-#   yt-summarize "https://youtube.com/watch?v=xxx"
-#   yt-summarize "https://youtube.com/watch?v=xxx" -s 40:00-45:35
-#   yt-summarize "https://youtube.com/watch?v=xxx" -s 40:00-45:35,1:20:00-1:25:00
-#   yt-summarize "https://youtube.com/watch?v=xxx" -c "I'm interested in the business strategy aspects"
-#   yt-summarize "https://youtube.com/watch?v=xxx" -s 10:00-15:00 -c "Focus on the meditation techniques"
+# YouTube transcribe/summarize service CLI (v1.3.0)
+# See: ~/dotfiles/services/youtube-transcribe/
 
-argparse 's/sections=' 'c/context=' 'h/help' -- $argv
+set -l base_url "http://localhost:8765"
+set -l jobs_dir ~/.local/state/youtube-transcribe/jobs
+set -l logs_dir ~/.local/state/youtube-transcribe/logs
+
+# Handle history subcommand before argparse
+if test (count $argv) -ge 1 -a "$argv[1]" = history
+    set -e argv[1]
+    argparse 'j/json' 'l/limit=' 'a/all' 's/state=' 'h/help' -- $argv
+    or exit 1
+
+    if set -q _flag_help
+        echo "Usage: yts history [OPTIONS]"
+        echo
+        echo "Show job history"
+        echo
+        echo "Options:"
+        echo "  -j, --json         Output as JSON"
+        echo "  -l, --limit N      Number of entries (default: 20)"
+        echo "  -a, --all          Show all history"
+        echo "  -s, --state STATE  Filter by state (complete/error/interrupted)"
+        echo "  -h, --help         Show this help"
+        exit 0
+    end
+
+    set -l limit 20
+    if set -q _flag_limit
+        set limit $_flag_limit
+    end
+    if set -q _flag_all
+        set limit 9999
+    end
+
+    # Collect job data
+    set -l job_data
+    set -l count 0
+
+    # Get log files sorted by modification time (newest first)
+    for log_file in (ls -t $logs_dir/*.log 2>/dev/null)
+        set -l job_id (basename $log_file .log)
+        set -l json_file $jobs_dir/$job_id.json
+
+        set -l state unknown
+        set -l job_type unknown
+        set -l title "Unknown"
+        set -l date ""
+
+        if test -f "$json_file"
+            set state (jq -r '.state // "unknown"' $json_file 2>/dev/null)
+            set job_type (jq -r '.job_type // "unknown"' $json_file 2>/dev/null)
+            set title (jq -r '.title // "Unknown"' $json_file 2>/dev/null)
+            set date (jq -r '.started_at // ""' $json_file 2>/dev/null | string replace 'T' ' ' | string sub -l 16)
+        else
+            # Parse log header for fallback info
+            set -l header (head -3 $log_file 2>/dev/null)
+            set job_type (echo $header | string match -r '\((\w+)\)' | tail -1)
+            set date (stat -f '%Sm' -t '%Y-%m-%d %H:%M' $log_file 2>/dev/null)
+        end
+
+        # Apply state filter
+        if set -q _flag_state
+            if test "$state" != "$_flag_state"
+                continue
+            end
+        end
+
+        # Add to results
+        set count (math $count + 1)
+        if test $count -gt $limit
+            break
+        end
+
+        if set -q _flag_json
+            set -a job_data "{\"job_id\": \"$job_id\", \"state\": \"$state\", \"type\": \"$job_type\", \"date\": \"$date\", \"title\": \"$(echo $title | string replace -a '"' '\\"')\"}"
+        else
+            # Truncate title for display
+            set -l display_title (echo $title | string sub -l 45)
+            if test (string length "$title") -gt 45
+                set display_title "$display_title..."
+            end
+            # Store as pipe-separated (tabs don't work well in fish lists)
+            set -a job_data "$job_id|$state|$job_type|$date|$display_title"
+        end
+    end
+
+    if set -q _flag_json
+        echo "["
+        set -l first true
+        for item in $job_data
+            if test "$first" = true
+                set first false
+            else
+                echo ","
+            end
+            echo -n "  $item"
+        end
+        echo
+        echo "]"
+    else
+        # Print header
+        printf "%-10s %-12s %-10s %-18s %s\n" "JOB_ID" "STATE" "TYPE" "DATE" "TITLE"
+        printf "%-10s %-12s %-10s %-18s %s\n" "------" "-----" "----" "----" "-----"
+        # Print data (pipe-separated rows)
+        for row in $job_data
+            set -l parts (string split '|' $row)
+            printf "%-10s %-12s %-10s %-18s %s\n" $parts[1] $parts[2] $parts[3] $parts[4] $parts[5]
+        end
+    end
+    exit 0
+end
+
+argparse 's/sections=' 'c/context=' 't/transcribe' 'H/health' 'S/status=' 'L/logs=?' 'T/tail=' 'i/info' 'k/kill=' 'K/kill-all' 'Z/service-log' 'h/help' -- $argv
 or exit 1
 
-if set -q _flag_help; or test (count $argv) -lt 1
-    echo "Usage: yt-summarize URL [-s SECTIONS] [-c CONTEXT]"
+if set -q _flag_help
+    echo "Usage: yts [OPTIONS] [URL]"
+    echo
+    echo "Commands:"
+    echo "  yts URL                    Transcribe and summarize a video"
+    echo "  yts -t URL                 Transcribe only (no summary)"
+    echo "  yts history                Show job history"
+    echo "  yts -H, --health           Check service health"
+    echo "  yts -S, --status ID        Get status of a job"
+    echo "  yts -L, --logs [ID]        Get logs for a job (interactive picker if no ID)"
+    echo "  yts -k, --kill ID          Kill a specific job"
+    echo "  yts -K, --kill-all         Kill all active jobs"
+    echo "  yts -Z, --service-log      View service log (follow mode)"
+    echo "  yts -i, --info             Show API info"
     echo
     echo "Options:"
     echo "  -s, --sections  Comma-separated time ranges (e.g., 40:00-45:35,1:20:00-1:25:00)"
     echo "  -c, --context   Additional context for the summary prompt"
+    echo "  -T, --tail N    Number of log lines for --health (default: 20)"
     echo "  -h, --help      Show this help"
     echo
     echo "Examples:"
-    echo "  yt-summarize 'https://youtube.com/watch?v=xxx'"
-    echo "  yt-summarize 'https://youtube.com/watch?v=xxx' -s 40:00-45:35"
-    echo "  yt-summarize 'https://youtube.com/watch?v=xxx' -s 10:00-20:00,30:00-35:00"
-    echo "  yt-summarize 'https://youtube.com/watch?v=xxx' -c 'Focus on productivity tips'"
+    echo "  yts 'https://youtube.com/watch?v=xxx'"
+    echo "  yts 'https://youtube.com/watch?v=xxx' -s 40:00-45:35"
+    echo "  yts 'https://youtube.com/watch?v=xxx' -c 'Focus on productivity tips'"
+    echo "  yts -t 'https://youtube.com/watch?v=xxx'  # transcribe only"
+    echo "  yts --health"
+    echo "  yts --logs                 # interactive picker"
+    echo "  yts --kill abc123          # kill specific job"
+    echo "  yts --kill-all             # kill all jobs"
+    echo "  yts history                # show recent jobs"
+    echo "  yts history --state error  # show failed jobs"
     exit 0
+end
+
+# Service log viewer
+if set -q _flag_service_log
+    set -l log_file ~/.log/services/youtube-transcribe.log
+    if test -f "$log_file"
+        less +GF "$log_file"
+    else
+        echo "Service log not found: $log_file"
+        exit 1
+    end
+    exit 0
+end
+
+# Health check
+if set -q _flag_health
+    set -l tail_param ""
+    if set -q _flag_tail
+        # If tail specified, include logs
+        set tail_param "?logs=true&tail=$_flag_tail"
+    end
+    curl -s "$base_url/health$tail_param" | jq .
+    exit $status
+end
+
+# Helper function to pick a job interactively
+function __yts_pick_job
+    set -l jobs_dir ~/.local/state/youtube-transcribe/jobs
+    set -l logs_dir ~/.local/state/youtube-transcribe/logs
+
+    # Build list for fzf
+    set -l entries
+    for log_file in (ls -t $logs_dir/*.log 2>/dev/null)
+        set -l job_id (basename $log_file .log)
+        set -l json_file $jobs_dir/$job_id.json
+        set -l date (stat -f '%Sm' -t '%Y-%m-%d %H:%M' $log_file 2>/dev/null)
+
+        if test -f "$json_file"
+            set -l title (jq -r '.title // "Unknown"' $json_file 2>/dev/null | string sub -l 50)
+            set -l state (jq -r '.state // "unknown"' $json_file 2>/dev/null)
+            set -a entries "$job_id\t$state\t$date\t$title"
+        else
+            set -a entries "$job_id\tunknown\t$date\t(no metadata)"
+        end
+    end
+
+    if test (count $entries) -eq 0
+        echo "No jobs found" >&2
+        return 1
+    end
+
+    # Run fzf and extract job ID
+    set -l selected (printf '%s\n' $entries | fzf --header="Select job (ID / STATE / DATE / TITLE)" --with-nth=1.. --delimiter='\t')
+    or return 1
+
+    echo $selected | string split \t | head -1
+end
+
+# Job logs
+if set -q _flag_logs
+    set -l job_id $_flag_logs
+
+    # If empty or not provided, show picker
+    if test -z "$job_id"
+        set job_id (__yts_pick_job)
+        or exit 1
+    end
+
+    set -l log_file $logs_dir/$job_id.log
+    if test -f "$log_file"
+        less "$log_file"
+    else
+        echo "Log file not found: $log_file"
+        exit 1
+    end
+    exit 0
+end
+
+# Job status
+if set -q _flag_status
+    curl -s "$base_url/status/$_flag_status" | jq .
+    exit $status
+end
+
+# API info
+if set -q _flag_info
+    curl -s "$base_url/" | jq .
+    exit $status
+end
+
+# Kill specific job
+if set -q _flag_kill
+    curl -s -X DELETE "$base_url/jobs/$_flag_kill" | jq .
+    exit $status
+end
+
+# Kill all jobs
+if set -q _flag_kill_all
+    curl -s -X DELETE "$base_url/jobs" | jq .
+    exit $status
+end
+
+# URL required for transcribe/summarize
+if test (count $argv) -lt 1
+    echo "Error: URL required for transcribe/summarize"
+    echo "Run 'yts --help' for usage"
+    exit 1
 end
 
 set -l url $argv[1]
@@ -49,9 +280,18 @@ end
 
 set -l payload "{$(string join ', ' $payload_parts)}"
 
-set -l output (curl -sN -X POST http://localhost:8765/summarize \
+# Choose endpoint
+set -l endpoint summarize
+if set -q _flag_transcribe
+    set endpoint transcribe
+end
+
+set -l output (curl -sN -X POST "$base_url/$endpoint" \
     -H "Content-Type: application/json" \
     -d "$payload" | tee /dev/stderr)
+
+# Extract job_id from the job event
+set -l job_id (echo $output | string match -r '"job_id": "([^"]+)"' | tail -1)
 
 # Extract saved_to path from the complete event
 set -l saved_to (echo $output | string match -r '"saved_to": "([^"]+)"' | tail -1)
@@ -61,4 +301,11 @@ if test -n "$saved_to" -a -f "$saved_to"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo
     cat "$saved_to"
+end
+
+# Show job ID for log retrieval
+if test -n "$job_id"
+    echo
+    echo "Job ID: $job_id"
+    echo "View logs: yts --logs $job_id"
 end

@@ -175,7 +175,7 @@ end
 # Section inbox: Display Inbox Journals
 # =============================================================================
 function _sanctuary_inbox
-    set -l journal_files (find /Users/anthony/Cloud/_inbox/Journals -type f \( -name "*.md" -o -name "*.txt" \) 2>/dev/null)
+    set -l journal_files (find /Users/anthony/Cloud/_inbox/Journals -type f \( -name "*.md" -o -name "*.txt" \) 2>/dev/null | sort)
     if test (count $journal_files) -gt 0
         echo "───────────────────────────────────────────────────────────────────────────"
         echo
