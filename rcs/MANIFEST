@@ -23,3 +23,41 @@ pymodoro-config.yaml            -> $HOME/.config/pymodoro/config.yaml
 shadow-cljs.config.edn          -> $HOME/.shadow-cljs/config.edn
 ssh.config                      -> $HOME/.ssh/config
 zprint.edn                      -> $HOME/.zprint.edn
+
+# Claude Code agents (individual files, allows adding personal agents too)
+$HOME/projects/fulcrologic-claude-settings/agents/agent-writer.md     -> $HOME/.claude/agents/agent-writer.md
+$HOME/projects/fulcrologic-claude-settings/agents/architect.md        -> $HOME/.claude/agents/architect.md
+$HOME/projects/fulcrologic-claude-settings/agents/bdd-tester.md       -> $HOME/.claude/agents/bdd-tester.md
+$HOME/projects/fulcrologic-claude-settings/agents/critique.md         -> $HOME/.claude/agents/critique.md
+$HOME/projects/fulcrologic-claude-settings/agents/deps-upgrade.md     -> $HOME/.claude/agents/deps-upgrade.md
+$HOME/projects/fulcrologic-claude-settings/agents/doc-writer.md       -> $HOME/.claude/agents/doc-writer.md
+$HOME/projects/fulcrologic-claude-settings/agents/fulcro-ui-tester.md -> $HOME/.claude/agents/fulcro-ui-tester.md
+$HOME/projects/fulcrologic-claude-settings/agents/optimizer.md        -> $HOME/.claude/agents/optimizer.md
+$HOME/projects/fulcrologic-claude-settings/agents/rad-scaffolder.md   -> $HOME/.claude/agents/rad-scaffolder.md
+$HOME/projects/fulcrologic-claude-settings/agents/skill-writer.md     -> $HOME/.claude/agents/skill-writer.md
+$HOME/projects/fulcrologic-claude-settings/agents/statechart-writer.md -> $HOME/.claude/agents/statechart-writer.md
+
+# Claude Code skills (external paths from fulcrologic-claude-settings)
+# Note: directories use symlinks (hard links don't work for dirs)
+$HOME/projects/fulcrologic-claude-settings/skills/clojure             -> $HOME/.claude/skills/clojure
+$HOME/projects/fulcrologic-claude-settings/skills/clojure-repl        -> $HOME/.claude/skills/clojure-repl
+$HOME/projects/fulcrologic-claude-settings/skills/fulcro              -> $HOME/.claude/skills/fulcro
+$HOME/projects/fulcrologic-claude-settings/skills/fulcro-i18n         -> $HOME/.claude/skills/fulcro-i18n
+$HOME/projects/fulcrologic-claude-settings/skills/fulcro-rad          -> $HOME/.claude/skills/fulcro-rad
+$HOME/projects/fulcrologic-claude-settings/skills/fulcro-spec-tdd     -> $HOME/.claude/skills/fulcro-spec-tdd
+$HOME/projects/fulcrologic-claude-settings/skills/fulcro-uism         -> $HOME/.claude/skills/fulcro-uism
+$HOME/projects/fulcrologic-claude-settings/skills/datomic             -> $HOME/.claude/skills/datomic
+$HOME/projects/fulcrologic-claude-settings/skills/pathom              -> $HOME/.claude/skills/pathom
+$HOME/projects/fulcrologic-claude-settings/skills/eql-processing      -> $HOME/.claude/skills/eql-processing
+$HOME/projects/fulcrologic-claude-settings/skills/statechart          -> $HOME/.claude/skills/statechart
+$HOME/projects/fulcrologic-claude-settings/skills/guardrails          -> $HOME/.claude/skills/guardrails
+$HOME/projects/fulcrologic-claude-settings/skills/seed-data           -> $HOME/.claude/skills/seed-data
+$HOME/projects/fulcrologic-claude-settings/skills/date-time           -> $HOME/.claude/skills/date-time
+$HOME/projects/fulcrologic-claude-settings/skills/deps-upgrade        -> $HOME/.claude/skills/deps-upgrade
+$HOME/projects/fulcrologic-claude-settings/skills/clj-stubs           -> $HOME/.claude/skills/clj-stubs
+$HOME/projects/fulcrologic-claude-settings/skills/tufte               -> $HOME/.claude/skills/tufte
+$HOME/projects/fulcrologic-claude-settings/skills/io-layer-testing    -> $HOME/.claude/skills/io-layer-testing
+$HOME/projects/fulcrologic-claude-settings/skills/dataico-exploration -> $HOME/.claude/skills/dataico-exploration
+
+# Personal skills from dotfiles
+$HOME/dotfiles/ai/skills/flet                                         -> $HOME/.claude/skills/flet
