@@ -1,10 +1,14 @@
 // ==UserScript==
 // @name         wget_server YouTube Downloader
 // @namespace    http://dotfiles.local/
-// @version      1.0
+// @version      1.1
 // @description  Download YouTube videos via wget_server API with two-step workflow
 // @match        *://www.youtube.com/*
 // @match        *://youtube.com/*
+// @grant        GM.xmlHttpRequest
+// @grant        GM.setValue
+// @grant        GM.getValue
+// @grant        GM.registerMenuCommand
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -17,6 +21,44 @@
     'use strict';
 
     // =========================================================================
+    // GM API Compatibility Layer
+    // =========================================================================
+
+    // Support both GM.* (Greasemonkey 4+) and GM_* (Tampermonkey, older GM) APIs
+    const GMC = {
+        async getValue(key, defaultValue) {
+            if (typeof GM !== 'undefined' && GM.getValue) {
+                return await GM.getValue(key, defaultValue);
+            } else if (typeof GM_getValue !== 'undefined') {
+                return GM_getValue(key, defaultValue);
+            }
+            return defaultValue;
+        },
+        async setValue(key, value) {
+            if (typeof GM !== 'undefined' && GM.setValue) {
+                return await GM.setValue(key, value);
+            } else if (typeof GM_setValue !== 'undefined') {
+                return GM_setValue(key, value);
+            }
+        },
+        xmlHttpRequest(details) {
+            if (typeof GM !== 'undefined' && GM.xmlHttpRequest) {
+                return GM.xmlHttpRequest(details);
+            } else if (typeof GM_xmlhttpRequest !== 'undefined') {
+                return GM_xmlhttpRequest(details);
+            }
+            throw new Error('No GM xmlHttpRequest API available');
+        },
+        registerMenuCommand(name, callback) {
+            if (typeof GM !== 'undefined' && GM.registerMenuCommand) {
+                return GM.registerMenuCommand(name, callback);
+            } else if (typeof GM_registerMenuCommand !== 'undefined') {
+                return GM_registerMenuCommand(name, callback);
+            }
+        }
+    };
+
+    // =========================================================================
     // Config Manager
     // =========================================================================
 
@@ -26,27 +68,26 @@
         PASSWORD: 'wget_server_password'
     };
 
-    function getConfig() {
+    async function getConfig() {
         return {
-            serverUrl: GM_getValue(CONFIG_KEYS.SERVER_URL, ''),
-            username: GM_getValue(CONFIG_KEYS.USERNAME, ''),
-            password: GM_getValue(CONFIG_KEYS.PASSWORD, '')
+            serverUrl: await GMC.getValue(CONFIG_KEYS.SERVER_URL, ''),
+            username: await GMC.getValue(CONFIG_KEYS.USERNAME, ''),
+            password: await GMC.getValue(CONFIG_KEYS.PASSWORD, '')
         };
     }
 
-    function saveConfig(serverUrl, username, password) {
-        GM_setValue(CONFIG_KEYS.SERVER_URL, serverUrl);
-        GM_setValue(CONFIG_KEYS.USERNAME, username);
-        GM_setValue(CONFIG_KEYS.PASSWORD, password);
+    async function saveConfig(serverUrl, username, password) {
+        await GMC.setValue(CONFIG_KEYS.SERVER_URL, serverUrl);
+        await GMC.setValue(CONFIG_KEYS.USERNAME, username);
+        await GMC.setValue(CONFIG_KEYS.PASSWORD, password);
     }
 
-    function isConfigured() {
-        const config = getConfig();
+    async function isConfigured() {
+        const config = await getConfig();
         return config.serverUrl && config.username && config.password;
     }
 
-    function getAuthHeader() {
-        const config = getConfig();
+    function getAuthHeader(config) {
         return 'Basic ' + btoa(config.username + ':' + config.password);
     }
 
@@ -54,16 +95,16 @@
     // API Client
     // =========================================================================
 
-    function apiRequest(endpoint, method, data) {
-        return new Promise((resolve, reject) => {
-            const config = getConfig();
-            const url = config.serverUrl.replace(/\/$/, '') + endpoint;
+    async function apiRequest(endpoint, method, data) {
+        const config = await getConfig();
+        const url = config.serverUrl.replace(/\/$/, '') + endpoint;
 
-            GM_xmlhttpRequest({
+        return new Promise((resolve, reject) => {
+            GMC.xmlHttpRequest({
                 method: method,
                 url: url,
                 headers: {
-                    'Authorization': getAuthHeader(),
+                    'Authorization': getAuthHeader(config),
                     'Content-Type': 'application/json'
                 },
                 data: data ? JSON.stringify(data) : null,
@@ -84,7 +125,7 @@
                 onerror: function(error) {
                     reject({
                         status: 0,
-                        message: 'Network error: ' + error.statusText
+                        message: 'Network error: ' + (error.statusText || 'Unknown')
                     });
                 }
             });
@@ -337,8 +378,8 @@
     // Dialog Builders
     // =========================================================================
 
-    function showSetupDialog() {
-        const config = getConfig();
+    async function showSetupDialog() {
+        const config = await getConfig();
         const content = `
             <h2>wget_server Setup</h2>
             <label for="wget-server-url">Server URL</label>
@@ -356,7 +397,7 @@
         showModal(content);
 
         $('#wget-cancel').on('click', closeModal);
-        $('#wget-save-config').on('click', function() {
+        $('#wget-save-config').on('click', async function() {
             const serverUrl = $('#wget-server-url').val().trim();
             const username = $('#wget-username').val().trim();
             const password = $('#wget-password').val();
@@ -366,7 +407,7 @@
                 return;
             }
 
-            saveConfig(serverUrl, username, password);
+            await saveConfig(serverUrl, username, password);
             closeModal();
             showToast('Configuration saved');
         });
@@ -538,8 +579,8 @@
     }
 
     async function handleDownloadClick() {
-        if (!isConfigured()) {
-            showSetupDialog();
+        if (!(await isConfigured())) {
+            await showSetupDialog();
             return;
         }
 
@@ -549,7 +590,7 @@
         } catch (err) {
             if (err.status === 401) {
                 showToast('Authentication failed - check credentials', 'error');
-                showSetupDialog();
+                await showSetupDialog();
             } else {
                 showToast('Failed to connect: ' + (err.message || 'Network error'), 'error');
             }
@@ -602,7 +643,7 @@
         }).observe(document.body, { childList: true, subtree: true });
 
         // Register menu command for settings
-        GM_registerMenuCommand('wget_server Settings', showSetupDialog);
+        GMC.registerMenuCommand('wget_server Settings', showSetupDialog);
     }
 
     // Wait for DOM
