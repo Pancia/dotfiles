@@ -68,6 +68,7 @@ brew 'bitwarden-cli'
 
 # System Utilities
 brew 'restic'
+brew 'tailscale'
 brew 'switchaudio-osx'
 brew 'terminal-notifier'
 brew 'yabai'

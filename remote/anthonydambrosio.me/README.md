@@ -22,11 +22,26 @@ OpenBSD 7.8 VPS on Vultr running Headscale (self-hosted Tailscale).
 
 ```
 A    anthonydambrosio.me      144.202.100.108  TTL 600
-A    *.anthonydambrosio.me    144.202.100.108  TTL 600
 A    hs.anthonydambrosio.me   144.202.100.108  TTL 600
 ```
 
 ## Configuration Files
+
+### /etc/pf.conf
+```
+set skip on lo
+
+block return all
+
+# Allow inbound SSH, HTTP (ACME), HTTPS (relayd) only
+pass in proto tcp to port { 22 80 443 }
+
+# Allow all outbound (needed for DNS, pkg updates, ACME, DERP)
+pass out all
+
+# Port build user does not need network
+block return out log proto {tcp udp} user _pbuild
+```
 
 ### /etc/headscale/config.yaml
 ```yaml
@@ -55,6 +70,10 @@ database:
     path: /var/db/headscale/db.sqlite
     write_ahead_log: true
 
+policy:
+  mode: file
+  path: "/etc/headscale/acl.hujson"
+
 dns:
   magic_dns: true
   base_domain: tail.anthonydambrosio.me
@@ -64,6 +83,22 @@ dns:
       - 1.0.0.1
 
 unix_socket: /var/run/headscale/headscale.sock
+```
+
+### /etc/headscale/acl.hujson
+```json
+{
+  "groups": {
+    "group:admin": ["anthony@"]
+  },
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["group:admin"],
+      "dst": ["group:admin:*"]
+    }
+  ]
+}
 ```
 
 ### /etc/relayd.conf
@@ -115,7 +150,7 @@ domain hs.anthonydambrosio.me {
 - **Key**: `/etc/ssl/private/hs.anthonydambrosio.me.key`
 - **Symlink**: `/etc/ssl/hs.anthonydambrosio.me.crt` -> fullchain.pem (for relayd)
 
-Renew with:
+Auto-renewed weekly via root crontab (Sunday 4am). Manual renewal:
 ```sh
 doas acme-client -v hs.anthonydambrosio.me && doas rcctl restart relayd
 ```
@@ -172,6 +207,26 @@ doas rcctl restart relayd
 # View logs
 doas tail -f /var/log/messages
 ```
+
+## Security
+
+See [SECURITY-AUDIT-2026-02-05.md](SECURITY-AUDIT-2026-02-05.md) for full audit results.
+
+**Remediated 2026-02-06:**
+- pf.conf locked down (only 22/80/443 inbound)
+- Tailscale stateful filtering enabled
+- Headscale ACL policy created (`/etc/headscale/acl.hujson`)
+- macOS application firewall enabled
+- TLS cert auto-renewal cron added (weekly)
+- SQLite daily backup cron added
+- db.sqlite permissions tightened to 640
+
+## Automated Crons (root)
+
+| Schedule | Command | Purpose |
+|----------|---------|---------|
+| Daily 3am | `cp db.sqlite db.sqlite.bak` | Headscale DB backup |
+| Sunday 4am | `acme-client && rcctl restart relayd` | TLS cert renewal |
 
 ## System Maintenance
 
