@@ -6,12 +6,23 @@ import tty
 import termios
 import subprocess
 
+# Theme detection (macOS light/dark mode)
+def _is_dark_mode():
+    try:
+        subprocess.run(['defaults', 'read', '-g', 'AppleInterfaceStyle'],
+                       capture_output=True, check=True)
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+_dark = _is_dark_mode()
+
 # ANSI colors
 BOLD_CYAN = '\033[1;96m'
-BOLD_WHITE = '\033[1;37m'
+BOLD_WHITE = '\033[1;37m' if _dark else '\033[1;30m'
 BOLD_YELLOW = '\033[1;93m'
 YELLOW = '\033[33m'
-DIM = '\033[2;37m'
+DIM = '\033[2;37m' if _dark else '\033[2;30m'
 RESET = '\033[0m'
 CYAN = '\033[36m'
 GREEN = '\033[32m'
