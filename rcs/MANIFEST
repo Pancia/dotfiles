@@ -22,6 +22,8 @@ peco.json                       -> $HOME/.config/peco/config.json
 pymodoro-config.yaml            -> $HOME/.config/pymodoro/config.yaml
 shadow-cljs.config.edn          -> $HOME/.shadow-cljs/config.edn
 ssh.config                      -> $HOME/.ssh/config
+tmux.conf                       -> $HOME/.tmux.conf
+tmux-which-key.config.yaml      -> $HOME/.tmux/plugins/tmux-which-key/config.yaml
 zprint.edn                      -> $HOME/.zprint.edn
 
 # Claude Code agents (individual files, allows adding personal agents too)
@@ -58,6 +60,7 @@ $HOME/projects/fulcrologic-claude-settings/skills/clj-stubs           -> $HOME/.
 $HOME/projects/fulcrologic-claude-settings/skills/tufte               -> $HOME/.claude/skills/tufte
 $HOME/projects/fulcrologic-claude-settings/skills/io-layer-testing    -> $HOME/.claude/skills/io-layer-testing
 $HOME/projects/fulcrologic-claude-settings/skills/dataico-exploration -> $HOME/.claude/skills/dataico-exploration
+$HOME/projects/fulcrologic-claude-settings/skills/macos-sandboxing   -> $HOME/.claude/skills/macos-sandboxing
 
 # Personal skills from dotfiles
 $HOME/dotfiles/ai/skills/flet                                         -> $HOME/.claude/skills/flet
