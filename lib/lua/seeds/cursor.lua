@@ -116,6 +116,14 @@ local function updatePosition()
     obj._canvas:topLeft({x = pos.x - size/2, y = pos.y - size/2})
 end
 
+local function enableDND()
+    hs.execute("shortcuts run 'turn on dnd' 2>/dev/null &")
+end
+
+local function disableDND()
+    hs.execute("shortcuts run 'turn off dnd' 2>/dev/null &")
+end
+
 local function enable()
     if obj._enabled then return end
 
@@ -130,6 +138,9 @@ local function enable()
 
     -- Initial position
     updatePosition()
+
+    -- Enable DND to prevent notifications from freezing Parsec stream
+    enableDND()
 
     obj._enabled = true
     hs.alert.show("Cursor overlay ON", 0.5)
@@ -147,6 +158,9 @@ local function disable()
         obj._canvas:delete()
         obj._canvas = nil
     end
+
+    -- Disable DND when overlay is off
+    disableDND()
 
     obj._enabled = false
     hs.alert.show("Cursor overlay OFF", 0.5)
