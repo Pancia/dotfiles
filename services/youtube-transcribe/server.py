@@ -375,7 +375,7 @@ async def subscribe_to_job(job: Job, replay_from: int = 0) -> AsyncGenerator[dic
         while True:
             try:
                 # Wait for event with timeout for keep-alive pings
-                event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                event = await asyncio.wait_for(queue.get(), timeout=3.0)
 
                 # Sentinel value means job is complete
                 if event is None:
@@ -703,6 +703,7 @@ async def get_video_info(url: str, job: Job | None = None) -> dict:
         url,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        env={**os.environ, "PYTHONUNBUFFERED": "1"},
     )
 
     if job:
@@ -764,6 +765,7 @@ async def download_audio(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
+        env={**os.environ, "PYTHONUNBUFFERED": "1"},
     )
 
     if job:
@@ -945,6 +947,7 @@ async def transcribe_audio(
         "-m", model,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,  # Combine stderr into stdout for verbose output
+        env={**os.environ, "PYTHONUNBUFFERED": "1"},
     )
 
     if job:
@@ -954,6 +957,7 @@ async def transcribe_audio(
 
     # Pattern: [00:00.000 --> 00:05.000] text
     timestamp_pattern = re.compile(r"\[(\d+:\d+\.\d+)\s*-->\s*(\d+:\d+\.\d+)\]")
+    last_reported_bucket = -1  # Throttle: only emit once per 5% bucket
 
     try:
         async for line in proc.stdout:
@@ -970,7 +974,10 @@ async def transcribe_audio(
             if match:
                 end_time = parse_timestamp(match.group(2))
                 percent = min(100, (end_time / duration) * 100) if duration > 0 else 0
-                yield {"status": "transcribing", "percent": round(percent, 1), "timestamp": match.group(2)}
+                bucket = int(percent // 5)
+                if bucket > last_reported_bucket:
+                    last_reported_bucket = bucket
+                    yield {"status": "transcribing", "percent": round(percent, 1), "timestamp": match.group(2)}
 
         await proc.wait()
 
