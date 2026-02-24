@@ -377,13 +377,13 @@ class TransitCalculator:
                 name, year, month, day, hour, minute,
                 bd.city, bd.nation,
                 lat=bd.lat, lng=bd.lng, tz_str=bd.tz_str,
-                houses_system_identifier="W"
+                houses_system_identifier="A"
             )
         else:
             return AstrologicalSubject(
                 name, year, month, day, hour, minute,
                 bd.city, bd.nation,
-                houses_system_identifier="W",
+                houses_system_identifier="A",
                 geonames_username=self.config.geonames_username
             )
 
@@ -923,7 +923,7 @@ class TransitCalculator:
         subject = AstrologicalSubject(
             "Transit", date.year, date.month, date.day, 12, 0,
             "London", "GB",
-            houses_system_identifier="W",
+            houses_system_identifier="A",
             geonames_username=self.config.geonames_username
         )
 
