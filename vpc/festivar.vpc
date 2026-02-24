@@ -15,8 +15,6 @@
         "urls": [
             "http://localhost:9630/build/main",
             "http://localhost:3000/",
-            "https://book.fulcrologic.com/RAD.html",
-            "https://book.fulcrologic.com/"
         ]
     },
     "Tuple": {
@@ -26,7 +24,6 @@
             "area": "iterm",
             "dir": "$HOME/projects/work/festivar-webapp/",
             "tabs": [
-                "@ mcp",
                 "@ browser",
                 "@ server",
                 "@ vim",

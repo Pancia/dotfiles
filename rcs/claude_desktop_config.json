@@ -1,9 +1,12 @@
 {
   "mcpServers": {},
+  "isDxtAutoUpdatesEnabled": false,
   "preferences": {
+    "chromeExtensionEnabled": false,
     "quickEntryShortcut": {
       "accelerator": "Alt+Cmd+Space"
     },
-    "chromeExtensionEnabled": false
+    "coworkScheduledTasksEnabled": false,
+    "sidebarMode": "chat"
   }
 }
