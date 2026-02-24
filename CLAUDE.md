@@ -9,7 +9,7 @@ dotfiles/
 ├── fish/           # Fish shell configuration (primary shell)
 ├── nvim/           # Neovim configuration (Lua + Vimscript)
 ├── lib/lua/        # Hammerspoon configuration (macOS automation)
-├── rcs/            # Config files with symlink metadata
+├── rcs/            # Config files managed via rcs/MANIFEST symlinks
 ├── bin/            # CLI utilities (50+ scripts)
 ├── services/       # Background LaunchAgent services
 ├── vpc/            # VPC workspace definitions
@@ -25,11 +25,12 @@ dotfiles/
 ## Key Patterns
 
 ### RC Metadata System
-Files in `rcs/` contain a metadata header specifying their symlink destination:
+Files in `rcs/` are managed via `rcs/MANIFEST` using `source -> destination` format:
 ```
-#<[.config/karabiner/karabiner.json]>
+tmux.conf -> $HOME/.tmux.conf
+ghostty.config -> $HOME/.config/ghostty/config
 ```
-The `_ENSURE_RCS()` function in `fish/config.fish` parses these headers and creates symlinks from `~/dotfiles/rcs/file` to `~/.config/karabiner/karabiner.json`.
+The `_ENSURE_RCS()` function in `fish/config.fish` parses the MANIFEST and creates symlinks from `~/dotfiles/rcs/file` to the destination. It runs automatically in the background on every Fish shell startup (`_ENSURE_RCS &`). Some `rcs/` files have vestigial `#<[...]>` inline headers that are no longer parsed. Directories are always symlinked; files are also symlinked (not hardlinked).
 
 ### Seed Architecture (Hammerspoon)
 Hammerspoon modules in `lib/lua/seeds/` follow a standard interface:
@@ -129,6 +130,21 @@ cmds test yt -k "cache" # Run tests matching pattern
 | **Karabiner** | Keyboard customization | `rcs/karabiner.json` |
 | **Yabai** | Window tiling | (via VPC workspaces) |
 | **Astro** | Astrological transits | `bin/astro`, `~/.local/share/astro/` |
+
+### Hours Calculation
+`lib/python/hours.py` - Parse time entries and calculate hours worked with optional multipliers.
+
+```python
+from lib.python.hours import calc_hours
+calc_hours([
+    "1/29 : 01:00 - 01:50 (ai-mult 2.00) - description",
+    "2/3  : 19:40 - 01:00 - no multiplier, defaults to 1x",
+])
+```
+
+Format: `DATE : HH:MM - HH:MM (ai-mult N.NN) - description`
+- Handles overnight spans (e.g. 23:55 - 01:55)
+- `(ai-mult ...)` and description are optional
 
 ## Detailed Documentation
 
