@@ -5,6 +5,8 @@ import sys
 import argparse
 from pathlib import Path
 
+sys.stdout.reconfigure(line_buffering=True)
+
 def main():
     parser = argparse.ArgumentParser(description="Transcribe audio file using MLX Whisper")
     parser.add_argument("audio_file", help="Path to audio file to transcribe")

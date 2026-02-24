@@ -5,11 +5,24 @@ import sys
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: tokencount <file_path>")
+        print("Usage: tokencount <file_path> [file_path ...]")
         sys.exit(1)
 
-    with open(sys.argv[1], 'r', encoding='utf-8') as f:
-        text = f.read()
-
     encoding = tiktoken.get_encoding("cl100k_base")
-    print(f"{len(encoding.encode(text)):,}")
+    files = sys.argv[1:]
+    counts = []
+
+    for filepath in files:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            text = f.read()
+        count = len(encoding.encode(text))
+        counts.append((count, filepath))
+
+    total = sum(c for c, _ in counts)
+    width = len(str(total))
+
+    for count, filepath in counts:
+        print(f"{count:>{width}} {filepath}")
+
+    if len(files) > 1:
+        print(f"{total:>{width}} total")
