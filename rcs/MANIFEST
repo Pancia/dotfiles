@@ -2,6 +2,7 @@
 # Format: source -> destination
 # Lines starting with # are comments
 claude_desktop_config.json      -> $HOME/Library/Application Support/Claude/claude_desktop_config.json
+claude-user-claude.md           -> $HOME/.claude/CLAUDE.md
 clj-kondo.edn                   -> $HOME/.config/clj-kondo/config.edn
 clojure-lsp.config.edn          -> $HOME/.lsp/config.edn
 clojure.deps.edn                -> $HOME/.config/clojure/deps.edn
@@ -64,3 +65,4 @@ $HOME/projects/fulcrologic-claude-settings/skills/macos-sandboxing   -> $HOME/.c
 
 # Personal skills from dotfiles
 $HOME/dotfiles/ai/skills/flet                                         -> $HOME/.claude/skills/flet
+$HOME/dotfiles/ai/skills/cmds                                         -> $HOME/.claude/skills/cmds

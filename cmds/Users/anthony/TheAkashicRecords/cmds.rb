@@ -1,17 +1,7 @@
 module CMD
-  def example(opts)
-    opts.banner = "Usage: example"
-    opts.info = "FIXME"
-    lambda { |*args|
-      EXE.bash %{
-        echo "FIXME"
-      }
-    }
-  end
-
   def start(opts)
-    opts.banner = "Usage: start FIXME"
-    opts.info = "FIXME"
+    opts.banner = "Usage: start"
+    opts.info = "Launch Claude Code with personal assistant prompt"
     lambda { |*args|
       EXE.fish %{
           my-claude-code-wrapper --system-prompt (cat personal-assistant-prompt.txt | string collect)

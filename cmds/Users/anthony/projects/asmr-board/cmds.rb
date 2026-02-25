@@ -1,7 +1,7 @@
 module CMD
   def start(opts)
     opts.banner = "Usage: start"
-    opts.info = "start"
+    opts.info = "Run main.py via uv"
     lambda { |*args|
       EXE.bash %{
         uv run python main.py

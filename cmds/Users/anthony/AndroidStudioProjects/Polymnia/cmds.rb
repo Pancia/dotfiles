@@ -1,7 +1,7 @@
 module CMD
   def start(opts)
-    opts.banner = "Usage: example"
-    opts.info = "FIXME"
+    opts.banner = "Usage: start"
+    opts.info = "Build release APK, install, and launch Polymnia"
     lambda { |*args|
       EXE.bash %{
         ./gradlew installRelease --no-daemon && adb shell am start -n com.dayzerostudio.polymnia/.MainActivity
@@ -9,8 +9,8 @@ module CMD
     }
   end
   def logcat(opts)
-    opts.banner = "Usage: example"
-    opts.info = "FIXME"
+    opts.banner = "Usage: logcat"
+    opts.info = "Tail Android logcat for Polymnia"
     lambda { |*args|
       EXE.bash %{
         adb logcat --pid="$(adb shell pidof -s com.dayzerostudio.polymnia)"

@@ -1,7 +1,7 @@
 module CMD
   def timer(opts)
     opts.banner = "Usage: timer"
-    opts.info = "timer"
+    opts.info = "Run sanctuary timer"
     lambda { |*args|
       EXE.bash %{
         fish timer.fish
@@ -10,8 +10,8 @@ module CMD
   end
 
   def main(opts)
-    opts.banner = "Usage: main"
-    opts.info = "main"
+    opts.banner = "Usage: main [args...]"
+    opts.info = "Run main sanctuary session"
     lambda { |*args|
       EXE.bash %{
         fish main-claude.fish #{args.join " "}

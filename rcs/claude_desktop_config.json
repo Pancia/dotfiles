@@ -6,7 +6,7 @@
     "quickEntryShortcut": {
       "accelerator": "Alt+Cmd+Space"
     },
-    "coworkScheduledTasksEnabled": false,
+    "coworkScheduledTasksEnabled": true,
     "sidebarMode": "chat"
   }
 }

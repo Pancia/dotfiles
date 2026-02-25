@@ -134,6 +134,55 @@ class CMDS extend CMD
       end
     }
   end
+  def self.path(opts)
+    opts.info = "Print the cmds.rb file path for the current directory."
+    lambda {
+      puts $cmds_file
+    }
+  end
+  def self.describe(opts)
+    opts.info = "List commands with descriptions (plain text, no formatting)."
+    lambda {
+      commands = CMDS.methods - $old_methods
+      commands.sort.each do |cmd|
+        o = OptionParser.new
+        CMDS.send(cmd, o)
+        puts "#{cmd}: #{o.info}"
+      end
+    }
+  end
+  def self.init(opts)
+    opts.banner = "Usage: cmds init [function_name]"
+    opts.info = "Create cmds.rb from template (no editor). Optionally scaffold a function."
+    lambda { |*args|
+      if File.file? $cmds_file
+        STDERR.puts "Already exists: #{$cmds_file}"
+        puts $cmds_file
+        return
+      end
+      system("mkdir -p #{File.dirname($cmds_file).shellescape}")
+      system("cp #{$cmds_base_dir}/template.rb #{$cmds_file}")
+      func_name = args.first
+      if func_name
+        content = File.read($cmds_file)
+        func_template = <<~RUBY.chomp
+
+	def #{func_name}(opts)
+		opts.banner = "Usage: #{func_name} FIXME"
+		opts.info = "FIXME"
+		lambda { |*args|
+			EXE.bash %{
+				echo "FIXME"
+			}
+		}
+	end
+        RUBY
+        new_content = content.sub(/^(module CMD\b.*?)(^end\b)/m) { "#{$1}#{func_template}\n#{$2}" }
+        File.write($cmds_file, new_content)
+      end
+      puts $cmds_file
+    }
+  end
 end
 
 $old_methods = CMDS.methods

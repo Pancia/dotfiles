@@ -1,7 +1,7 @@
 module CMD
   def start(opts)
-    opts.banner = "Usage: start FIXME"
-    opts.info = "FIXME"
+    opts.banner = "Usage: start"
+    opts.info = "Run Flutter app"
     lambda { |*args|
       EXE.bash %{
         flutter run

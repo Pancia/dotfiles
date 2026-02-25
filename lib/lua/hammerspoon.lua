@@ -145,12 +145,11 @@ local watch = engage("seeds.watch.init", {
 
 local sanctuary = engage("seeds.sanctuary", {})
 
-local curfew = nil
---engage("seeds.curfew", {
---    triggerTime = {hour = 22, minute = 30},
---    resetTime = {hour = 6, minute = 0},
---    holdDuration = 15
---})
+local curfew = engage("seeds.curfew", {
+    triggerTime = {hour = 22, minute = 30},
+    resetTime = {hour = 6, minute = 0},
+    holdDuration = 15
+})
 
 local superwhisper = engage("seeds.superwhisper", {})
 

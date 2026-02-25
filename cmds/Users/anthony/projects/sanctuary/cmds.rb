@@ -1,7 +1,7 @@
 module CMD
   def service_restart(opts)
     opts.banner = "Usage: service_restart"
-    opts.info = "service_restart"
+    opts.info = "Restart sanctuary service and tail logs"
     lambda { |*args|
       EXE.bash %{
         service restart sanctuary && service log sanctuary
@@ -10,7 +10,7 @@ module CMD
   end
   def dev(opts)
     opts.banner = "Usage: dev"
-    opts.info = "dev"
+    opts.info = "Run npm dev server"
     lambda { |*args|
       EXE.bash %{
         npm run dev
@@ -19,7 +19,7 @@ module CMD
   end
   def vim(opts)
     opts.banner = "Usage: vim"
-    opts.info = "vim"
+    opts.info = "Open project files in nvim"
     lambda { |*args|
       EXE.bash %{
         nvim documents/hello-world.md index.html
