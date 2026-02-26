@@ -153,6 +153,10 @@ local curfew = engage("seeds.curfew", {
 
 local superwhisper = engage("seeds.superwhisper", {})
 
+local emoji = engage("seeds.emoji", {
+  hotkey = {{"cmd", "ctrl"}, "e"},
+})
+
 local clipboard = engage("seeds.clipboard", {
   hotkey = {{"cmd", "ctrl"}, "p"},
   hist_size = 50,
@@ -194,6 +198,7 @@ if calendar then seeds.calendar = calendar end
 if sanctuary then seeds.sanctuary = sanctuary end
 if curfew then seeds.curfew = curfew end
 if superwhisper then seeds.superwhisper = superwhisper end
+if emoji then seeds.emoji = emoji end
 if clipboard then seeds.clipboard = clipboard end
 if cmus then seeds.cmus = cmus end
 if hermes then seeds.hermes = hermes end
@@ -244,6 +249,7 @@ local function softReload()
         "seeds.sanctuary",
         "seeds.curfew",
         "seeds.superwhisper",
+        "seeds.emoji",
         "seeds.clipboard",
         "seeds.hermes.init",
         "seeds.hermes.commands",

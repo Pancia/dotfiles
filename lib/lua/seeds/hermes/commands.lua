@@ -223,7 +223,7 @@ return {
 
     l = {"LOCK IT DOWN", "launch-lock-screen-dialog"},
 
-    j = {"Emoji Picker", [[hs -c 'hs.eventtap.keyStroke({"cmd", "ctrl", "alt", "shift"}, "j")']]},
+    j = {"Emoji Picker", "emoji-pick"},
 
     f = {
         _desc = "+finder",

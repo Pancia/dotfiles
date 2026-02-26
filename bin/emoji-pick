@@ -1,0 +1,41 @@
+#!/usr/bin/env fish
+
+# Emoji picker using fzf
+# Reads emoji_data.json and presents a fuzzy-searchable list
+# Selected emoji is copied to clipboard
+
+set -l data_file ~/dotfiles/lib/lua/seeds/emoji_data.json
+
+if not test -f $data_file
+    echo "Error: $data_file not found" >&2
+    exit 1
+end
+
+set -l selection (python3 -c "
+import json, sys
+with open(sys.argv[1]) as f:
+    data = json.load(f)
+for e in data:
+    aliases = ' '.join(':' + a + ':' for a in e.get('aliases', []))
+    tags = ' '.join(e.get('tags', []))
+    print(f\"{e['emoji']}\t{e['description']}\t{aliases}\t{tags}\")
+" $data_file | fzf --prompt="emoji> " \
+    --delimiter="\t" \
+    --with-nth=1,2,3 \
+    --preview-window=hidden \
+    --multi \
+    --header "" \
+    --bind "space:toggle+bg-transform-header:echo {+1}" \
+    --bind "enter:select+accept")
+
+if test -z "$selection"
+    exit 0
+end
+
+set -l emojis
+for line in $selection
+    set -a emojis (string split \t -- $line)[1]
+end
+set -l result (string join "" -- $emojis)
+printf '%s' $result | pbcopy
+echo "Copied: $result"

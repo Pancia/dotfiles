@@ -306,7 +306,8 @@ function obj:handleMessage(msg)
                                   cmd:match("^man%s") or
                                   cmd:match("^cmus") or
                                   cmd:match("^ytdl$") or
-                                  cmd:match("^ytdl%s")
+                                  cmd:match("^ytdl%s") or
+                                  cmd:match("^emoji%-pick")
 
             if needsTerminal then
                 -- Interactive command - open in Ghostty
