@@ -1,0 +1,24 @@
+{
+    "space": "current",
+    "yabai": {
+        "enabled": true,
+        "layout": {
+            "template": [
+                "iterm",
+                "iterm"
+            ]
+        }
+    },
+    "iTerm2": {
+        "area": "iterm",
+        "dir": "$HOME/projects/altera/",
+        "tabs": [
+            [
+                {"cmd": "echo @ start", "size": 47},
+                {"cmd": "echo @ log_live", "size": 21},
+                "echo @ status_live"],
+            ["echo @ docs", "echo cc"],
+            ["echo vim", "echo claude"]
+        ]
+    }
+}

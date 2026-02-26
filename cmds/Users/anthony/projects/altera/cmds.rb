@@ -24,7 +24,7 @@ module CMD
     opts.info = "Live Altera status (11s interval, no events)"
     lambda { |*args|
       EXE.bash %{
-        alt status --live --interval 11 --no-events
+        alt status --live --interval 30 --no-events
       }
     }
   end

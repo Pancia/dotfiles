@@ -151,6 +151,26 @@ class WindowQuery:
             return None
 
     @staticmethod
+    def find_all_window_ids_by_app(app_name: str) -> set[int]:
+        """Get all current window IDs for an app."""
+        windows = WindowQuery.run_yabai(['query', '--windows'])
+        if not windows:
+            return set()
+        return {w['id'] for w in windows if w.get('app') == app_name}
+
+    @staticmethod
+    def find_new_window_by_app(app_name: str, existing_ids: set[int], max_retries: int = 10, delay: float = 0.5) -> Optional[int]:
+        """Find a newly created window by diffing against a previous snapshot."""
+        for attempt in range(max_retries):
+            current_ids = WindowQuery.find_all_window_ids_by_app(app_name)
+            new_ids = current_ids - existing_ids
+            if new_ids:
+                return new_ids.pop()
+            time.sleep(delay)
+        print(f"Warning: Could not find new window for {app_name}")
+        return None
+
+    @staticmethod
     def find_window_by_app(app_name: str, max_retries: int = 10, delay: float = 0.5, debug: bool = False) -> Optional[int]:
         """Find window ID for an app, with retries."""
         for attempt in range(max_retries):
@@ -224,14 +244,15 @@ class YabaiManager:
         display_id = self.display_selector.selected_display_id
         self._run_yabai(['window', str(window_id), '--display', str(display_id)])
 
-    def position_window(self, app_name: str, window_config: dict):
+    def position_window(self, app_name: str, window_config: dict, window_id: int = None):
         """Position a window using grid + resize + offset."""
         if not window_config:
             return
 
-        # Find window (needed for display move even if yabai positioning disabled)
+        # Use provided window_id or find by app name
         debug = window_config.get('debug', False)
-        window_id = WindowQuery.find_window_by_app(app_name, debug=debug)
+        if not window_id:
+            window_id = WindowQuery.find_window_by_app(app_name, debug=debug)
         if not window_id:
             return
 
@@ -629,15 +650,15 @@ class AppLauncher:
 
         iterm_script = Path.home() / 'dotfiles' / 'bin' / 'iterm.py'
 
-        try:
-            subprocess.run(
-                [str(iterm_script), term_dir, term_tabs],
-                check=True
-            )
-            print("  iTerm done")
+        # Pass --maximize if yabai layout covers full screen for this area,
+        # since yabai can't manage iTerm2 windows (empty AX roles)
+        cmd = [str(iterm_script), term_dir, term_tabs]
+        if config.get('area') or config.get('grid'):
+            cmd.append('--maximize')
 
-            # Position with yabai
-            self.yabai.position_window('iTerm2', config)
+        try:
+            subprocess.run(cmd, check=True)
+            print("  iTerm done")
         except subprocess.CalledProcessError as e:
             print(f"  Warning: iTerm launch failed: {e}")
 

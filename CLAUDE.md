@@ -146,6 +146,26 @@ Format: `DATE : HH:MM - HH:MM (ai-mult N.NN) - description`
 - Handles overnight spans (e.g. 23:55 - 01:55)
 - `(ai-mult ...)` and description are optional
 
+### VPC Workspaces
+
+Virtual Private Context (VPC) workspaces are pre-configured desktop environments launched via Hammerspoon Hermes.
+
+**Launching:** `Cmd+Space` -> `v` -> pick workspace (e.g. `a` for altera, `f` for festivar)
+
+**Testing from CLI:** `python3 ~/dotfiles/bin/vpc.py ~/dotfiles/vpc/<name>.vpc`
+
+**Creating a new VPC:** Copy `vpc/template.vpc` and edit, or inspect an existing one like `vpc/festivar.vpc`.
+
+**Key files:**
+- `vpc/*.vpc` - Workspace definitions (JSON)
+- `bin/vpc.py` - Main orchestrator
+- `bin/iterm.py` - iTerm2 tab/split launcher (uses iterm2 Python API)
+- `bin/kitty.py` - Kitty tab/split launcher
+
+**Yabai note:** Yabai cannot manage iTerm2 windows (empty AX roles). When a VPC has a yabai layout for iTerm, `vpc.py` passes `--maximize` to `iterm.py` which uses the iterm2 API to set the window frame directly.
+
+See [docs/vpc-schema.md](docs/vpc-schema.md) for the full VPC file format specification.
+
 ## Detailed Documentation
 
 | Document | Contents |
@@ -154,6 +174,7 @@ Format: `DATE : HH:MM - HH:MM (ai-mult N.NN) - description`
 | [docs/neovim.md](docs/neovim.md) | Neovim plugins, LSP, keymaps, settings |
 | [docs/hammerspoon.md](docs/hammerspoon.md) | Seeds, hotkeys, VPC system, Spoons |
 | [docs/services.md](docs/services.md) | LaunchAgents, VPC workspaces, bin utilities |
+| [docs/vpc-schema.md](docs/vpc-schema.md) | VPC file format specification |
 | [docs/astro.md](docs/astro.md) | Astrological transit tracker CLI |
 
 ## File Locations
