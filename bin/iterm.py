@@ -9,8 +9,20 @@ import asyncio
 print("[iterm.py/debug]: args:", sys.argv)
 directory = sys.argv[1]
 tabs = json.loads(sys.argv[2])
-maximize = "--maximize" in sys.argv
-print("[iterm.py/debug]: dir & tabs", directory, tabs, "maximize:", maximize)
+
+# Parse --frame x,y,w,h or --maximize
+target_frame = None
+for i, arg in enumerate(sys.argv):
+    if arg == "--frame" and i + 1 < len(sys.argv):
+        parts = sys.argv[i + 1].split(",")
+        target_frame = tuple(int(p) for p in parts)
+    elif arg == "--maximize":
+        screen = AppKit.NSScreen.mainScreen()
+        visible = screen.visibleFrame()
+        target_frame = (int(visible.origin.x), int(visible.origin.y),
+                        int(visible.size.width), int(visible.size.height))
+
+print("[iterm.py/debug]: dir & tabs", directory, tabs, "frame:", target_frame)
 
 AppKit.NSWorkspace.sharedWorkspace().launchApplication_("iterm")
 
@@ -85,13 +97,12 @@ async def main(connection):
     window = await iterm2.Window.async_create(connection)
     await asyncio.sleep(0.5)
 
-    # Maximize window to fill the visible screen area
-    if maximize:
-        screen = AppKit.NSScreen.mainScreen()
-        visible = screen.visibleFrame()
+    # Set window frame if specified (--frame or --maximize)
+    if target_frame:
+        x, y, w, h = target_frame
         frame = iterm2.util.Frame(
-            iterm2.util.Point(int(visible.origin.x), int(visible.origin.y)),
-            iterm2.util.Size(int(visible.size.width), int(visible.size.height))
+            iterm2.util.Point(x, y),
+            iterm2.util.Size(w, h)
         )
         await window.async_set_frame(frame)
         await asyncio.sleep(0.3)

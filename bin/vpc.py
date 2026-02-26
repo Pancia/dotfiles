@@ -31,6 +31,16 @@ class GridBounds:
         height = self.max_row - self.min_row
         return f"{self.total_rows}:{self.total_cols}:{self.min_col}:{self.min_row}:{width}:{height}"
 
+    def to_pixel_frame(self, screen_x: int, screen_y: int, screen_w: int, screen_h: int) -> tuple[int, int, int, int]:
+        """Convert grid bounds to pixel coordinates given screen dimensions."""
+        cell_w = screen_w / self.total_cols
+        cell_h = screen_h / self.total_rows
+        x = screen_x + int(self.min_col * cell_w)
+        y = screen_y + int(self.min_row * cell_h)
+        w = int((self.max_col - self.min_col) * cell_w)
+        h = int((self.max_row - self.min_row) * cell_h)
+        return x, y, w, h
+
 
 class VPCConfig:
     """Parse and validate .vpc JSON configuration files."""
@@ -650,17 +660,61 @@ class AppLauncher:
 
         iterm_script = Path.home() / 'dotfiles' / 'bin' / 'iterm.py'
 
-        # Pass --maximize if yabai layout covers full screen for this area,
-        # since yabai can't manage iTerm2 windows (empty AX roles)
+        # Yabai can't manage iTerm2 windows (empty AX roles), so calculate
+        # the pixel frame from the grid area and let iterm.py set it directly.
         cmd = [str(iterm_script), term_dir, term_tabs]
-        if config.get('area') or config.get('grid'):
-            cmd.append('--maximize')
+        frame = self._iterm_frame_for_config(config)
+        if frame:
+            cmd.extend(['--frame', frame])
 
         try:
             subprocess.run(cmd, check=True)
             print("  iTerm done")
         except subprocess.CalledProcessError as e:
             print(f"  Warning: iTerm launch failed: {e}")
+
+    def _iterm_frame_for_config(self, config: dict) -> Optional[str]:
+        """Calculate pixel frame string for iTerm from area/grid config."""
+        if not self.yabai.enabled:
+            return None
+
+        # Get screen visible area via python (AppKit not available here, use yabai)
+        try:
+            result = subprocess.run(
+                ['yabai', '-m', 'query', '--displays', '--display'],
+                capture_output=True, text=True, check=True, timeout=2
+            )
+            display = json.loads(result.stdout)
+            sf = display['frame']
+            sx, sy, sw, sh = int(sf['x']), int(sf['y']), int(sf['w']), int(sf['h'])
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+                json.JSONDecodeError, KeyError):
+            return None
+
+        if 'area' in config:
+            area = config['area']
+            layout = self.yabai.yabai_config.get('layout', {})
+            template = layout.get('template', [])
+            if not template:
+                return None
+            try:
+                bounds = YabaiManager._parse_grid_template(template, area)
+                x, y, w, h = bounds.to_pixel_frame(sx, sy, sw, sh)
+                return f"{x},{y},{w},{h}"
+            except ValueError:
+                return None
+        elif 'grid' in config:
+            # Parse manual grid spec: rows:cols:start_x:start_y:width:height
+            parts = config['grid'].split(':')
+            if len(parts) == 6:
+                tr, tc, gx, gy, gw, gh = (int(p) for p in parts)
+                cell_w, cell_h = sw / tc, sh / tr
+                x = sx + int(gx * cell_w)
+                y = sy + int(gy * cell_h)
+                w = int(gw * cell_w)
+                h = int(gh * cell_h)
+                return f"{x},{y},{w},{h}"
+        return None
 
     def launch_kitty(self, config: dict):
         """Launch Kitty with configured tabs."""

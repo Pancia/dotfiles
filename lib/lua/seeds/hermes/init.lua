@@ -319,8 +319,21 @@ function obj:handleMessage(msg)
                 -- Background shell command
                 self._logger.i("Executing (shell):", cmd)
                 hs.task.new("/opt/homebrew/bin/fish", function(exitCode, stdout, stderr)
+                    -- Log output to file
+                    local logDir = os.getenv("HOME") .. "/.log/hermes"
+                    os.execute("mkdir -p " .. logDir)
+                    local logFile = io.open(logDir .. "/latest.log", "a")
+                    if logFile then
+                        logFile:write("\n--- " .. os.date("%Y-%m-%d %H:%M:%S") .. " ---\n")
+                        logFile:write("$ " .. cmd .. "\n")
+                        logFile:write("exit: " .. tostring(exitCode) .. "\n\n")
+                        if stdout and #stdout > 0 then logFile:write(stdout) end
+                        if stderr and #stderr > 0 then logFile:write("\n--- stderr ---\n" .. stderr) end
+                        logFile:close()
+                    end
                     if exitCode ~= 0 then
                         self._logger.w("Command failed:", exitCode, stderr)
+                        hs.notify.new({title = "Hermes", informativeText = "Command failed: " .. cmd}):send()
                     end
                 end, {"-c", cmd}):start()
             end

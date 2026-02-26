@@ -14,7 +14,7 @@
         "area": "browser",
         "urls": [
             "http://localhost:9630/build/main",
-            "http://localhost:3000/",
+            "http://localhost:3000/"
         ]
     },
     "Tuple": {
