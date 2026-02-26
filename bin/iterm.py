@@ -29,7 +29,7 @@ def parse_pane(pane):
     return pane["cmd"], pane.get("vertical", True), pane.get("size")
 
 
-async def setup_tab(tab, directory, tab_data):
+async def setup_tab(window, tab, directory, tab_data):
     """Set up a tab with optional split panes.
 
     tab_data can be:
@@ -72,7 +72,10 @@ async def setup_tab(tab, directory, tab_data):
                 else:
                     rows = int(total_rows * size_pct / 100)
                     session.preferred_size = iterm2.util.Size(session.grid_size.width, rows)
+        # Save and restore window frame so layout update doesn't shrink the window
+        saved_frame = await window.async_get_frame()
         await tab.async_update_layout()
+        await window.async_set_frame(saved_frame)
 
 
 async def main(connection):
@@ -94,13 +97,13 @@ async def main(connection):
         await asyncio.sleep(0.3)
 
     # First tab
-    await setup_tab(window.current_tab, directory, tabs[0])
+    await setup_tab(window, window.current_tab, directory, tabs[0])
 
     # Additional tabs
     for t in tabs[1:]:
         tab = await window.async_create_tab()
         await asyncio.sleep(0.3)
-        await setup_tab(tab, directory, t)
+        await setup_tab(window, tab, directory, t)
 
 
 iterm2.run_until_complete(main, True)

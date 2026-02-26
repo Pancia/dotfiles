@@ -18,7 +18,10 @@
                 {"cmd": "echo @ log_live", "size": 21},
                 "echo @ status_live"],
             ["echo @ docs", "echo cc"],
-            ["echo vim", "echo claude"]
+            [
+                {"cmd": "echo vim", "size": 40}
+                , "echo claude"
+            ]
         ]
     }
 }
