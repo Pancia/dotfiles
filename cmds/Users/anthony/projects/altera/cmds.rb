@@ -34,7 +34,7 @@ module CMD
     opts.info = "Open TODO.md in vim"
     lambda { |*args|
       EXE.fish %{
-        vim TODO.md
+        vim TODO.md docs/roadmap.md
       }
     }
   end

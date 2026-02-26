@@ -4,7 +4,6 @@
         "enabled": true,
         "layout": {
             "template": [
-                "iterm",
                 "iterm"
             ]
         }
@@ -14,13 +13,13 @@
         "dir": "$HOME/projects/altera/",
         "tabs": [
             [
-                {"cmd": "echo @ start", "size": 47},
-                {"cmd": "echo @ log_live", "size": 21},
-                "echo @ status_live"],
-            ["echo @ docs", "echo cc"],
+                {"cmd": "@ start", "size": 47},
+                {"cmd": "@ log_live", "size": 21},
+                "@ status_live"],
+            ["@ docs", "cc"],
             [
-                {"cmd": "echo vim", "size": 40}
-                , "echo claude"
+                {"cmd": "vim", "size": 40}
+                , "gs"
             ]
         ]
     }
