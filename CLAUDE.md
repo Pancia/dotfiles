@@ -166,6 +166,10 @@ Virtual Private Context (VPC) workspaces are pre-configured desktop environments
 
 See [docs/vpc-schema.md](docs/vpc-schema.md) for the full VPC file format specification.
 
+### Process Labeling
+
+`bin/proc-label` sets custom process names in Activity Monitor using Python's `setproctitle` — the only method that works on macOS (exec -a, Ruby setproctitle, and symlinks only affect `ps`). See [docs/proc-label.md](docs/proc-label.md).
+
 ## Detailed Documentation
 
 | Document | Contents |
@@ -176,6 +180,7 @@ See [docs/vpc-schema.md](docs/vpc-schema.md) for the full VPC file format specif
 | [docs/services.md](docs/services.md) | LaunchAgents, VPC workspaces, bin utilities |
 | [docs/vpc-schema.md](docs/vpc-schema.md) | VPC file format specification |
 | [docs/astro.md](docs/astro.md) | Astrological transit tracker CLI |
+| [docs/proc-label.md](docs/proc-label.md) | Process labeling for Activity Monitor |
 
 ## File Locations
 
