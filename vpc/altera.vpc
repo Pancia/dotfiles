@@ -16,7 +16,7 @@
                 {"cmd": "@ start", "size": 47},
                 {"cmd": "@ log_live", "size": 21},
                 "@ status_live"],
-            ["@ docs", "cc"],
+            ["@ docs", "@ claude"],
             [
                 {"cmd": "vim", "size": 40}
                 , "gs"
