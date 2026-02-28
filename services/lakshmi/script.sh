@@ -2,4 +2,4 @@
 
 echo (date)": Starting lakshmi content server on port 8420..."
 cd ~/projects/lakshmi/public
-python3 -m http.server 8420
+proc-label lakshmi python3 -m http.server 8420

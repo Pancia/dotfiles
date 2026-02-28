@@ -4,7 +4,7 @@ module CMD
     opts.info = "Run Flet app on port 8555"
     lambda { |*args|
       EXE.bash %{
-        uv run flet run --recursive --port 8555 #{args.join " "}
+        uv run --with setproctitle proc-label lakshmi flet run --recursive --port 8555 #{args.join " "}
       }
     }
   end

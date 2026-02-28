@@ -188,6 +188,13 @@ end
 $old_methods = CMDS.methods
 begin require $cmds_file if File.file? $cmds_file; rescue Exception => e; p e end
 
+dir_name = File.basename(Dir.pwd)
+cmd_name = ARGV.first || "cmds"
+if !ENV['CMDS_LABELED']
+  ENV['CMDS_LABELED'] = '1'
+  exec("proc-label", "cmds:#{cmd_name} [#{dir_name}]", "ruby", $0, *ARGV)
+end
+
 # NOTE: [[~/dotfiles/wiki/zsh_completion.wiki]]
 CLI.parse!(CMDS) { |opts|
   opts.on("-z", "--zsh-completions", "print zsh completion") do

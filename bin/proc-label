@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+"""Run a command with a custom process name in Activity Monitor.
+
+Usage: proc-label NAME command [args...]
+
+Examples:
+    proc-label asmr-board uv run python main.py
+    proc-label "claude [dotfiles]" claude --resume
+"""
+import os
+import shutil
+import sys
+
+if len(sys.argv) < 3:
+    print("Usage: proc-label NAME command [args...]", file=sys.stderr)
+    sys.exit(1)
+
+name = sys.argv[1]
+cmd = sys.argv[2]
+args = sys.argv[2:]
+
+import setproctitle
+setproctitle.setproctitle(name)
+
+cmd_path = shutil.which(cmd)
+if cmd_path is None:
+    print(f"proc-label: command not found: {cmd}", file=sys.stderr)
+    sys.exit(1)
+
+os.execvp(cmd_path, [name] + args[1:])

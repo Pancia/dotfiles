@@ -4,7 +4,7 @@ module CMD
     opts.info = "Run main.py via uv"
     lambda { |*args|
       EXE.bash %{
-        uv run python main.py
+        uv run --with setproctitle proc-label asmr-board python main.py
       }
     }
   end

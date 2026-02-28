@@ -6,14 +6,7 @@
     <string>org.pancia.youtube-transcribe</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/anthony/dotfiles/bin/service-wrapper</string>
-        <string>/Users/anthony/dotfiles/services/youtube-transcribe</string>
-        <string>/opt/homebrew/bin/uv</string>
-        <string>run</string>
-        <string>--with-requirements</string>
-        <string>requirements.txt</string>
-        <string>python</string>
-        <string>server.py</string>
+        <string>/Users/anthony/dotfiles/services/youtube-transcribe/dotfiles-services-youtube-transcribe.sh</string>
     </array>
     <key>RunAtLoad</key>
     <true/>

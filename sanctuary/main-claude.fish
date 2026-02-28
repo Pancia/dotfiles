@@ -219,7 +219,7 @@ $context
 Help me set a clear intention for this session. Start by acknowledging how I'm feeling, then help me arrive at a specific, achievable intention for my work on $g_focus_name."
 
     # Interactive Claude session for intention-setting
-    claude --system-prompt "$system_prompt" "$user_prompt"
+    my-claude-code-wrapper --process-label intention --system-prompt "$system_prompt" "$user_prompt"
 
     echo
     set_color --bold

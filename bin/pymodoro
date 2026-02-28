@@ -1,4 +1,4 @@
 #!/usr/bin/env fish
 pushd ~/projects/pymodoro
-uv run pymodoro $argv
+uv run --with setproctitle proc-label pymodoro pymodoro $argv
 popd
