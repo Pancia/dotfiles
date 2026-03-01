@@ -7,9 +7,12 @@ end
 
 # Get existing function names from current cmds.rb
 function __cmds_functions
-    set -l cmds_file "$HOME/dotfiles/cmds/"(pwd)"/cmds.rb"
-    if test -f "$cmds_file"
-        grep -oE 'def [a-z_][a-z0-9_]*' "$cmds_file" 2>/dev/null | string replace 'def ' ''
+    for root in "$HOME/dotfiles/cmds" "$HOME/private/cmds"
+        set -l cmds_file "$root/"(pwd)"/cmds.rb"
+        if test -f "$cmds_file"
+            grep -oE 'def [a-z_][a-z0-9_]*' "$cmds_file" 2>/dev/null | string replace 'def ' ''
+            return
+        end
     end
 end
 
