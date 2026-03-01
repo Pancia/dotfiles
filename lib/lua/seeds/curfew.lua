@@ -10,6 +10,7 @@ obj._logger = safeLogger.new("curfew", "info")
 -- Configuration (set via start())
 local config = {
     holdDuration = 15,   -- seconds to hold
+    warningMinutes = 15, -- notify this many minutes before curfew
 }
 
 -- State
@@ -20,6 +21,8 @@ obj._progressTimer = nil
 obj._mouseDownTap = nil
 obj._mouseUpTap = nil
 obj._isShowing = false
+obj._warningSent = false
+obj._warningNotification = nil
 
 function obj:scheduleNext()
     obj._timer = hs.timer.doAfter(60, function()
@@ -252,9 +255,59 @@ function obj:isWithinCurfew()
     return now >= trigger or now < reset
 end
 
+function obj:isWithinWarning()
+    local hour = tonumber(os.date("%H"))
+    local minute = tonumber(os.date("%M"))
+    local now = hour * 60 + minute
+    local trigger = config.triggerTime.hour * 60 + config.triggerTime.minute
+    local warningStart = trigger - config.warningMinutes
+
+    if warningStart < 0 then
+        -- Warning window wraps past midnight
+        warningStart = warningStart + 1440
+        return now >= warningStart or now < trigger
+    end
+
+    return now >= warningStart and now < trigger
+end
+
+function obj:showWarning()
+    if obj._warningNotification then
+        obj._warningNotification:withdraw()
+    end
+
+    local trigger = config.triggerTime.hour * 60 + config.triggerTime.minute
+    local now = tonumber(os.date("%H")) * 60 + tonumber(os.date("%M"))
+    local remaining = trigger - now
+    if remaining <= 0 then remaining = remaining + 1440 end
+
+    obj._warningNotification = hs.notify.new(nil, {
+        title = "Curfew",
+        informativeText = string.format("Curfew in %d minute%s", remaining, remaining == 1 and "" or "s"),
+        withdrawAfter = 0,
+        soundName = "default"
+    })
+    obj._warningNotification:send()
+    obj._warningSent = true
+    obj._logger.i("Warning notification sent: " .. remaining .. " minutes until curfew")
+end
+
 function obj:trigger()
     if obj._isShowing then return end
-    if not obj:isWithinCurfew() then return end
+
+    -- Warning notification before curfew
+    if obj:isWithinWarning() then
+        if not obj._warningSent then
+            obj:showWarning()
+        end
+        return
+    end
+
+    -- Reset warning flag when outside both windows
+    if not obj:isWithinCurfew() then
+        obj._warningSent = false
+        return
+    end
 
     obj._logger.i("Showing curfew overlay")
     obj._isShowing = true
@@ -296,6 +349,11 @@ function obj:stop()
     if obj._timer then
         obj._timer:stop()
         obj._timer = nil
+    end
+
+    if obj._warningNotification then
+        obj._warningNotification:withdraw()
+        obj._warningNotification = nil
     end
 
     obj:hide()
