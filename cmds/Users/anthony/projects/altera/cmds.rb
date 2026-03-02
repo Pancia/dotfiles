@@ -29,9 +29,9 @@ module CMD
     }
   end
 
-  def manual_test(opts)
-    opts.banner = "Usage: manual_test [args...]"
-    opts.info = "Run manual e2e tests via scripts/run-manual-test"
+  def scenario(opts)
+    opts.banner = "Usage: scenario [args...]"
+    opts.info = "Run an e2e test scenario via scripts/run-manual-test"
     lambda { |*args|
       EXE.bash %{
         ./scripts/run-manual-test #{args.join " "}
@@ -65,7 +65,7 @@ module CMD
     opts.info = "Open TODO.md in vim"
     lambda { |*args|
       EXE.fish %{
-        vim TODO.md docs/roadmap.md
+        vim altera/session-context.md TODO.md docs/roadmap.md
       }
     }
   end
