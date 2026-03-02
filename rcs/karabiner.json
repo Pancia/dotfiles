@@ -134,14 +134,14 @@
                         ]
                     },
                     {
-                        "description": "eject -> iterm (centered)",
+                        "description": "eject -> iterm (centered, ~/dotfiles)",
                         "manipulators": [
                             {
                                 "from": {
                                     "key_code": "eject"
                                 },
                                 "to": {
-                                    "shell_command": "/Users/anthony/dotfiles/bin/iterm-here"
+                                    "shell_command": "/Users/anthony/dotfiles/bin/iterm-here ~/dotfiles"
                                 },
                                 "type": "basic"
                             }

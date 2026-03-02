@@ -197,12 +197,12 @@ alias gaa __git_use_g
 alias gc  __git_use_g
 alias gca __git_use_g
 alias gcai __git_use_g
-alias gd  __git_use_g
-alias gds __git_use_g
+# gd -> fish/functions/gd.fish
+alias gds 'git diff --staged --color-words'
 alias gl  'git log --graph --all --decorate --abbrev-commit'
 alias gs  'git status'
 alias gsave __git_use_g
-alias gshow __git_use_g
+alias gshow 'git show --patch-with-raw'
 alias gstash __git_use_g
 alias gsw __git_use_g
 alias grs __git_use_g
@@ -223,6 +223,5 @@ if status is-interactive
     if isatty stdout
         echo "Remember to try out:"
         echo "scooter (find&replace), yazi(tui file manager), lazygit"
-        echo "d / p / v -- <TAB> or standalone"
     end
 end

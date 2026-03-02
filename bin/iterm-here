@@ -1,5 +1,6 @@
 #!/Users/anthony/.pyenv/versions/3.11.11/bin/python3.11
 
+import sys
 import iterm2
 import AppKit
 import subprocess
@@ -33,6 +34,11 @@ async def main(connection):
         iterm2.Point(new_x, new_y),
         iterm2.Size(frame.size.width, frame.size.height)
     ))
+
+    # cd to directory if specified
+    if len(sys.argv) > 1:
+        session = window.current_tab.current_session
+        await session.async_send_text(f"cd {sys.argv[1]}\n")
 
     # Use AppleScript to activate iTerm and focus this specific window
     window_id = window.window_id
