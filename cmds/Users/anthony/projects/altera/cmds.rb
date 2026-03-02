@@ -4,7 +4,7 @@ module CMD
     opts.info = "Start Altera and attach liaison"
     lambda { |*args|
       EXE.bash %{
-        alt start; sleep 1; alt liaison attach
+        alt start; alt liaison attach
       }
     }
   end
@@ -35,6 +35,17 @@ module CMD
     lambda { |*args|
       EXE.bash %{
         ./scripts/run-manual-test #{args.join " "}
+      }
+    }
+  end
+
+  def sandbox(opts)
+    opts.banner = "Usage: sandbox [name]"
+    opts.info = "Create a fresh blank project in /tmp/altera-tests for exploratory testing"
+    lambda { |*args|
+      name = args.first || "sandbox"
+      EXE.bash %{
+        ./scripts/sandbox "#{name}"
       }
     }
   end
