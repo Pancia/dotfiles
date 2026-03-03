@@ -100,26 +100,36 @@ def git_status_line():
 
     print(f"{bg}{black} {' '.join(parts)} {RESET}")
 
+# Chain: run multiple commands sequentially with headers between them
+class Chain(tuple):
+    """A sequence of shell commands to run with visual headers."""
+    pass
+
+def chain(*cmds):
+    """Create a chain of commands that display with headers."""
+    return Chain(cmds)
+
+
 # Menu structure - nested dicts are submenus, tuples are (description, command, stay_in_submenu)
 # stay_in_submenu=True stays in current submenu, False goes back to root
 COMMANDS = {
     '_desc': 'Git',
     'a': {
         '_desc': 'Add',
-        'f': ('Add file (fzf)', 'git ls-files -m -o --exclude-standard | fzf -m | xargs git add && git status', True),
-        '.': ('Add this directory', 'git add . && git status', True),
-        'a': ('Add all', 'git add --all && git status'),
-        'p': ('Add interactively', 'git add --patch && git status'),
+        'f': ('Add file (fzf)', chain('git ls-files -m -o --exclude-standard | fzf -m | xargs git add', 'git status'), True),
+        '.': ('Add this directory', chain('git add .', 'git status'), True),
+        'a': ('Add all', chain('git add --all', 'git status')),
+        'p': ('Add interactively', chain('git add --patch', 'git status')),
     },
     'b': ('Blame (fzf)', 'git ls-files | fzf | xargs git blame'),
     'c': {
         '_desc': 'Commit',
-        'c': ('Commit', 'git commit --verbose && git status'),
-        'a': ('Commit all', 'git commit --verbose --all && git status'),
-        'm': ('Amend', 'git commit --amend --verbose && git status'),
-        'p': ('Commit interactively', 'git commit --patch && git status'),
-        'i': ('Commit (AI message)', 'ai_git_commit && git status'),
-        'I': ('Add all + AI commit', 'git add --all && ai_git_commit && git status'),
+        'c': ('Commit', chain('git commit --verbose', 'git status')),
+        'a': ('Commit all', chain('git commit --verbose --all', 'git status')),
+        'm': ('Amend', chain('git commit --amend --verbose', 'git status')),
+        'p': ('Commit interactively', chain('git commit --patch', 'git status')),
+        'i': ('Commit (AI message)', chain('ai_git_commit', 'git status')),
+        'I': ('Add all + AI commit', chain('git add --all', 'ai_git_commit', 'git status')),
     },
     'd': {
         '_desc': 'Diff',
@@ -129,31 +139,31 @@ COMMANDS = {
     },
     'f': {
         '_desc': 'Fetch/Pull',
-        'f': ('Fetch all', 'git fetch --all --prune && git status'),
-        'l': ('Pull', 'git pull && git status'),
+        'f': ('Fetch all', chain('git fetch --all --prune', 'git status')),
+        'l': ('Pull', chain('git pull', 'git status')),
     },
     'h': ('Show (last commit)', 'git show --color-words'),
     'l': ('Log graph', 'git log --graph --all --decorate --abbrev-commit'),
     'p': {
         '_desc': 'Push',
-        'p': ('Push', 'git push && git status'),
-        'f': ('Push force++', 'git push --force-with-lease --force-if-includes && git status'),
+        'p': ('Push', chain('git push', 'git status')),
+        'f': ('Push force++', chain('git push --force-with-lease --force-if-includes', 'git status')),
         },
-    'u': ('Pull', 'git pull && git status'),
+    'u': ('Pull', chain('git pull', 'git status')),
     'r': {
         '_desc': 'Restore',
-        's': ('Unstage (fzf)', 'git diff --staged --name-only | fzf -m | xargs git restore --staged && git status', True),
-        'r': ('Restore file (fzf)', 'git diff --name-only | fzf -m | xargs git restore && git status', True),
+        's': ('Unstage (fzf)', chain('git diff --staged --name-only | fzf -m | xargs git restore --staged', 'git status'), True),
+        'r': ('Restore file (fzf)', chain('git diff --name-only | fzf -m | xargs git restore', 'git status'), True),
     },
     's': ('Status', 'git status'),
     't': {
         '_desc': 'Stash',
-        't': ('Stash', 'git stash && git status'),
-        's': ('Stash save (named)', 'git stash save && git status'),
-        'p': ('Stash pop', 'git stash pop && git status'),
+        't': ('Stash', chain('git stash', 'git status')),
+        's': ('Stash save (named)', chain('git stash save', 'git status')),
+        'p': ('Stash pop', chain('git stash pop', 'git status')),
         'l': ('Stash list', 'git stash list', True),
     },
-    'w': ('Switch branch (fzf)', 'git branch -a | fzf | xargs git checkout && git status'),
+    'w': ('Switch branch (fzf)', chain('git branch -a | fzf | xargs git checkout', 'git status')),
     '=': ('Edit this menu', ['nvim', __file__, '-c', '/^COMMANDS', '-c', 'normal zt'], False, True),  # go to root, reload
 }
 
@@ -233,6 +243,18 @@ def print_menu(commands, path=''):
 
 def execute_command(command):
     """Execute a git command."""
+    if isinstance(command, Chain):
+        for i, cmd in enumerate(command):
+            if i > 0:
+                print()
+            print(f"{DIM}{'=' * 40}")
+            print(f" {cmd}")
+            print(f"{'=' * 40}{RESET}")
+            print()
+            result = subprocess.run(cmd, shell=True, executable='/opt/homebrew/bin/fish')
+            if result.returncode != 0:
+                break
+        return
     if isinstance(command, list):
         # Direct execution without shell
         print(f"{DIM}$ {' '.join(command)}{RESET}\n")
