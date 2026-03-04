@@ -30,7 +30,7 @@ Files in `rcs/` are managed via `rcs/MANIFEST` using `source -> destination` for
 tmux.conf -> $HOME/.tmux.conf
 ghostty.config -> $HOME/.config/ghostty/config
 ```
-The `_ENSURE_RCS()` function in `fish/config.fish` parses the MANIFEST and creates symlinks from `~/dotfiles/rcs/file` to the destination. It runs automatically in the background on every Fish shell startup (`_ENSURE_RCS &`). Some `rcs/` files have vestigial `#<[...]>` inline headers that are no longer parsed. Directories are always symlinked; files are also symlinked (not hardlinked).
+The `_ENSURE_RCS()` function in `fish/config.fish` parses the MANIFEST and creates symlinks from `~/dotfiles/rcs/file` to the destination. It runs automatically in the background on every Fish shell startup (`_ENSURE_RCS &`). Some `rcs/` files have vestigial `#<[...]>` inline headers that are no longer parsed. Directories are symlinked; files are hard linked.
 
 ### Seed Architecture (Hammerspoon)
 Hammerspoon modules in `lib/lua/seeds/` follow a standard interface:
