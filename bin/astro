@@ -20,12 +20,17 @@ Run with: uv run --with kerykeion ~/dotfiles/bin/astro <command>
 
 import argparse
 import json
+import os
 import sys
 import swisseph as swe
 from dataclasses import dataclass, asdict, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
+
+os.environ['KERYKEION_GEONAMES_CACHE_NAME'] = str(
+    Path.home() / ".local" / "share" / "astro" / "geonames_cache"
+)
 
 
 # =============================================================================

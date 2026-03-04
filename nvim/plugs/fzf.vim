@@ -1,12 +1,16 @@
 let g:fzf_layout = { 'window': { 'width': 1.0, 'height': 0.8 } }
 let g:fzf_preview_window = ['up:50%', 'ctrl-/']
 
-command! Project call fzf#run(fzf#wrap({
-  \ 'source': 'git ls-files --other --exclude-standard --cached',
-  \ 'dir': systemlist('git rev-parse --show-toplevel')[0],
-  \ 'sink': 'e',
-  \ 'options': ['--preview', 'bat --style=numbers --color=always {} 2>/dev/null || cat {}']
-  \ }))
+function! s:project(dir)
+  call fzf#run(fzf#wrap({
+    \ 'source': 'git ls-files --other --exclude-standard --cached',
+    \ 'dir': a:dir,
+    \ 'sink': 'e',
+    \ 'options': ['--preview', 'bat --style=numbers --color=always {} 2>/dev/null || cat {}']
+    \ }))
+endfunction
+
+command! Project call s:project(fnamemodify(finddir('.git', '.;'), ':h'))
 
 function! FilesWithParentNav(dir)
   let start_dir = a:dir != '' ? a:dir : '.'
@@ -34,9 +38,9 @@ endfunction
 command! -nargs=? FilesUp call FilesWithParentNav(<q-args>)
 
 function! SmartFuzzyFind()
-    let git_dir = system('git rev-parse --is-inside-work-tree 2>/dev/null')
-    if v:shell_error == 0
-        execute 'Project'
+    let git_dir = finddir('.git', '.;')
+    if git_dir !=# ''
+        call s:project(fnamemodify(git_dir, ':h'))
     else
         call FilesWithParentNav('.')
     endif

@@ -5,6 +5,8 @@ call SEMICOLON_GROUP('d', '+dotfiles')
 call SEMICOLON_CMD('dv', ':e ~/dotfiles/nvim/init.vim | cd ~/dotfiles/nvim', 'vimrc dotfiles')
 call SEMICOLON_CMD('df', ':cd ~/dotfiles/fish | edit config.fish', 'edit fish config')
 call SEMICOLON_CMD('dF', ':cd ~/dotfiles/fish/functions', 'edit fish functions')
+call SEMICOLON_CMD('ds', ':profile start /tmp/fzf-profile.log | profile func SmartFuzzyFind | call SmartFuzzyFind()', 'Profile SmartFuzzyFind (start)')
+call SEMICOLON_CMD('dp', ':profile stop | echo "Profile saved to /tmp/fzf-profile.log"', 'Profile stop')
 
 call SEMICOLON_GROUP('b', '+buffers')
 call SEMICOLON_CMD('bD', ':%bd', 'delete all buffers')

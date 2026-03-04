@@ -55,7 +55,10 @@ module CMD
     opts.info = "Launch Claude Code wrapper"
     lambda { |*args|
       EXE.fish %{
-        my-claude-code-wrapper --process-label claude
+        set -l timestamp (date +%H:%M:%S)
+        set -l label (basename (pwd))
+        set label "$label $timestamp"
+        proc-label "claude [$label]" alt ai run claude #{args.join " "}
       }
     }
   end
@@ -65,7 +68,7 @@ module CMD
     opts.info = "Open TODO.md in vim"
     lambda { |*args|
       EXE.fish %{
-        vim altera/session-context.md TODO.md docs/roadmap.md
+        vim altera/sitrep.md TODO.md docs/roadmap.md
       }
     }
   end

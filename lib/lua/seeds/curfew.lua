@@ -23,6 +23,7 @@ obj._mouseUpTap = nil
 obj._isShowing = false
 obj._warningSent = false
 obj._warningNotification = nil
+obj._lastDismissed = 0  -- timestamp of last dismissal
 
 function obj:scheduleNext()
     obj._timer = hs.timer.doAfter(60, function()
@@ -294,6 +295,7 @@ end
 
 function obj:trigger()
     if obj._isShowing then return end
+    if hs.timer.secondsSinceEpoch() - obj._lastDismissed < 300 then return end
 
     -- Warning notification before curfew
     if obj:isWithinWarning() then
@@ -318,6 +320,7 @@ end
 
 function obj:hide()
     obj._logger.i("Hiding curfew overlay")
+    obj._lastDismissed = hs.timer.secondsSinceEpoch()
     obj._isShowing = false
     obj:endHold()
     obj:cleanupEventTaps()

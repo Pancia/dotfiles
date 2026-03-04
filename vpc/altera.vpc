@@ -18,7 +18,7 @@
                 "@ status_live"],
             ["@ docs", "@ claude"],
             [
-                {"cmd": "vim", "size": 40}
+                {"cmd": "vim .claude/settings.local.json", "size": 40}
                 , "gs"
             ]
         ]
