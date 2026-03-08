@@ -1,5 +1,7 @@
 if test -f ~/dotfiles/vendor/MANIFEST.json
-    set -l last_check_file ~/dotfiles/cache/vendor-last-check
+    set -l cache_dir ~/.cache/dotfiles
+    test -d $cache_dir; or mkdir -p $cache_dir
+    set -l last_check_file $cache_dir/vendor-last-check
     set -l now (date +%s)
     set -l threshold 604800
     set -l should_check 0
