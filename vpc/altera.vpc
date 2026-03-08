@@ -13,7 +13,7 @@
         "dir": "$HOME/projects/altera/",
         "tabs": [
             {"title": "Server", "panes": [
-                {"cmd": "@ start", "title": "Start"},
+                {"cmd": "@ start", "size": 34, "title": "Start"},
                 {"cmd": "@ dashboard", "title": "Status"}
             ]},
             {"title": "Dev", "panes": [
@@ -21,7 +21,7 @@
                 {"cmd": "@ claude", "title": "Claude"}
             ]},
             {"title": "Config", "panes": [
-                {"cmd": "vim .claude/settings.local.json ~/dotfiles/vpc/altera.vpc", "size": 40, "title": "Settings"},
+                {"cmd": "vim .claude/settings.local.json ~/dotfiles/vpc/altera.vpc (cmds path)", "size": 40, "title": "Settings"},
                 {"cmd": "gs", "title": "Git"}
             ]},
             {"title": "Business", "panes": [

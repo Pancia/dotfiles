@@ -166,6 +166,16 @@ Virtual Private Context (VPC) workspaces are pre-configured desktop environments
 
 See [docs/vpc-schema.md](docs/vpc-schema.md) for the full VPC file format specification.
 
+### Website Crawler
+
+`bin/crawl-sitemap` — recursively crawls a website and lists all internal pages. BFS traversal, skips static assets, deduplicates.
+
+```bash
+crawl-sitemap <url>              # list all pages
+crawl-sitemap <url> -v           # show progress + depth
+crawl-sitemap <url> --depth 2    # limit crawl depth
+```
+
 ### Process Labeling
 
 `bin/proc-label` sets custom process names in Activity Monitor using Python's `setproctitle` — the only method that works on macOS (exec -a, Ruby setproctitle, and symlinks only affect `ps`). See [docs/proc-label.md](docs/proc-label.md).
