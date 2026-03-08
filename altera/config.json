@@ -1,0 +1,67 @@
+{
+  "repo_path": "",
+  "default_branch": "master",
+  "test_command": "",
+  "constraints": {
+    "budget_ceiling": 100,
+    "max_workers": 4,
+    "max_queue_depth": 10
+  },
+  "heartbeat_timeouts": {
+    "warn_timeout": "5m",
+    "critical_timeout": "10m",
+    "dead_timeout": "20m"
+  },
+  "default_workflow": "default",
+  "prompts": {},
+  "sandbox": {
+    "worker": {
+      "preset": "",
+      "allowed_domains": [
+        "api.anthropic.com",
+        "*.anthropic.com",
+        "proxy.golang.org",
+        "sum.golang.org",
+        "storage.googleapis.com"
+      ]
+    },
+    "resolver": {
+      "preset": "",
+      "allowed_domains": [
+        "api.anthropic.com",
+        "*.anthropic.com",
+        "proxy.golang.org",
+        "sum.golang.org",
+        "storage.googleapis.com"
+      ]
+    },
+    "liaison": {
+      "preset": "",
+      "allowed_domains": [
+        "api.anthropic.com",
+        "*.anthropic.com",
+        "proxy.golang.org",
+        "sum.golang.org",
+        "storage.googleapis.com",
+        "github.com",
+        "*.github.com",
+        "*.githubusercontent.com"
+      ]
+    },
+    "standalone": {
+      "preset": "",
+      "allowed_domains": [
+        "api.anthropic.com",
+        "*.anthropic.com",
+        "proxy.golang.org",
+        "sum.golang.org",
+        "storage.googleapis.com",
+        "github.com",
+        "*.github.com",
+        "*.githubusercontent.com"
+      ]
+    }
+  },
+  "source_guard": {},
+  "tui_hotkeys": {}
+}
