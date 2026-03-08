@@ -1,20 +1,11 @@
 module CMD
   def start(opts)
     opts.banner = "Usage: start"
-    opts.info = "Start Altera and attach liaison"
+    opts.info = "Start Altera and tmux attach to tui"
     lambda { |*args|
       EXE.bash %{
-        alt start; alt liaison attach
-      }
-    }
-  end
-
-  def log_live(opts)
-    opts.banner = "Usage: log_live"
-    opts.info = "Tail Altera logs"
-    lambda { |*args|
-      EXE.bash %{
-        alt log --tail
+        alt start --no-attach
+        alt tmux attach alt-liaison
       }
     }
   end
@@ -23,8 +14,8 @@ module CMD
     opts.banner = "Usage: dashboard"
     opts.info = "Live Altera tui dashboard"
     lambda { |*args|
-      EXE.bash %{
-        alt tui
+      EXE.fish %{
+        while not alt tmux run has-session -t alt-main 2>/dev/null; sleep 0.2; end; alt tmux attach alt-main
       }
     }
   end
@@ -63,8 +54,8 @@ module CMD
     }
   end
 
-  def docs(opts)
-    opts.banner = "Usage: docs"
+  def roadmap(opts)
+    opts.banner = "Usage: roadmap"
     opts.info = "Open TODO.md in vim"
     lambda { |*args|
       EXE.fish %{
