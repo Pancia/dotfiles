@@ -12,15 +12,19 @@
         "area": "iterm",
         "dir": "$HOME/projects/altera/",
         "tabs": [
-            [
-                {"cmd": "@ start", "size": 47},
-                {"cmd": "@ log_live", "size": 21},
-                "@ status_live"],
-            ["@ docs", "@ claude"],
-            [
-                {"cmd": "vim .claude/settings.local.json", "size": 40}
-                , "gs"
-            ]
+            {"title": "Server", "panes": [
+                {"cmd": "@ start", "size": 47, "title": "Start"},
+                {"cmd": "@ log_live", "size": 21, "title": "Logs"},
+                {"cmd": "@ status_live", "title": "Status"}
+            ]},
+            {"title": "Dev", "panes": [
+                {"cmd": "@ docs", "title": "Docs"},
+                {"cmd": "@ claude", "title": "Claude"}
+            ]},
+            {"title": "Config", "panes": [
+                {"cmd": "vim .claude/settings.local.json", "size": 40, "title": "Settings"},
+                {"cmd": "gs", "title": "Git"}
+            ]}
         ]
     }
 }

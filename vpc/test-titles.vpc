@@ -1,0 +1,17 @@
+{
+    "space": "current",
+    "iTerm2": {
+        "dir": "$HOME",
+        "tabs": [
+            {"title": "Shell", "cmd": "echo 'single pane with tab title'"},
+            {"title": "Split", "panes": [
+                {"cmd": "echo 'left pane'", "title": "Left"},
+                {"cmd": "echo 'right pane'", "title": "Right"}
+            ]},
+            {"title": "Mixed", "panes": [
+                {"cmd": "echo 'no pane title'"},
+                {"cmd": "echo 'has title'", "title": "Titled", "size": 30}
+            ]}
+        ]
+    }
+}

@@ -147,7 +147,7 @@ Any app name opens via `open -a`:
 
 ## Tab Format
 
-The `tabs` array defines terminal tabs. Each entry is either a single-pane tab or a multi-pane tab with splits.
+The `tabs` array defines terminal tabs. Each entry can be a string, array, or object.
 
 ### Single Pane
 
@@ -188,8 +188,26 @@ Use objects for orientation and size control:
 | `cmd` | string | required | Command to run |
 | `vertical` | bool | `true` | `true` = side-by-side, `false` = stacked |
 | `size` | int | equal | Percentage of available space |
+| `title` | string | none | Session name (shown in session title bar) |
 
 Panes without `size` get the remaining space. Each new pane splits from the previous one.
+
+### Tab Titles
+
+Use an object to set a tab title (shown in the tab bar). The object contains a `title` and either `cmd` (single pane) or `panes` (split panes):
+
+```json
+"tabs": [
+    {"title": "Server", "cmd": "@ start"},
+    {"title": "Dev", "panes": ["@ build", {"cmd": "@ log", "title": "Logs", "size": 30}]}
+]
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `title` | string | Tab bar title |
+| `cmd` | string | Command for single-pane tab |
+| `panes` | array | Pane definitions for multi-pane tab (same format as split pane arrays) |
 
 ## The `@` Prefix
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3.11
+# pyright: reportAttributeAccessIssue=false, reportPrivateImportUsage=false, reportOptionalMemberAccess=false
 
 import iterm2
 import AppKit
@@ -28,45 +29,77 @@ AppKit.NSWorkspace.sharedWorkspace().launchApplication_("iterm")
 
 
 def parse_pane(pane):
-    """Parse a pane definition into (cmd, vertical, size).
+    """Parse a pane definition into (cmd, vertical, size, title).
 
     Pane can be:
-      - "command"                           -> (cmd, True, None)
-      - {"cmd": "command"}                  -> (cmd, True, None)
-      - {"cmd": "command", "size": 50}      -> (cmd, True, 50)
-      - {"cmd": "command", "vertical": false, "size": 70}
+      - "command"                           -> (cmd, True, None, None)
+      - {"cmd": "command"}                  -> (cmd, True, None, None)
+      - {"cmd": "command", "size": 50}      -> (cmd, True, 50, None)
+      - {"cmd": "command", "vertical": false, "size": 70, "title": "Logs"}
     """
     if isinstance(pane, str):
-        return pane, True, None
-    return pane["cmd"], pane.get("vertical", True), pane.get("size")
+        return pane, True, None, None
+    return pane["cmd"], pane.get("vertical", True), pane.get("size"), pane.get("title")
+
+
+def _pane_command(directory, cmd, title=None):
+    """Build the shell command string for a pane, with optional title env var."""
+    prefix = f"set -gx VPC_PANE_TITLE '{title}'\n" if title else ""
+    return f"{prefix}cd {directory} && {cmd}\n"
+
+
+async def _set_pane_badge(session, title):
+    """Set the iTerm2 badge text for a session via the profile API."""
+    profile = iterm2.LocalWriteOnlyProfile()
+    profile.set_badge_text(title)
+    await session.async_set_profile_properties(profile)
 
 
 async def setup_tab(window, tab, directory, tab_data):
     """Set up a tab with optional split panes.
 
     tab_data can be:
-      - "command"           -> single pane
-      - ["cmd1", "cmd2"]    -> vertical splits, equal size
-      - [{"cmd": ..., "size": 50}, "cmd2"]  -> splits with sizing
+      - "command"                              -> single pane
+      - ["cmd1", "cmd2"]                       -> vertical splits, equal size
+      - [{"cmd": ..., "size": 50}, "cmd2"]     -> splits with sizing
+      - {"title": "Name", "cmd": "command"}    -> single pane with tab title
+      - {"title": "Name", "panes": [...]}      -> split panes with tab title
     """
+    tab_title = None
+
+    # Dict form: extract title, then normalize to string or list
+    if isinstance(tab_data, dict):
+        tab_title = tab_data.get("title")
+        if "panes" in tab_data:
+            tab_data = tab_data["panes"]
+        else:
+            tab_data = tab_data.get("cmd", "")
+
+    if tab_title:
+        await tab.async_set_title(tab_title)
+
     if isinstance(tab_data, str):
-        await tab.current_session.async_send_text(f"cd {directory} && {tab_data}\n")
+        await tab.current_session.async_send_text(_pane_command(directory, tab_data))
         return
 
     panes = [parse_pane(p) for p in tab_data]
-    first_cmd, _, _ = panes[0]
+    first_cmd, _, _, first_title = panes[0]
 
     # First pane uses the existing session
     first_session = tab.current_session
-    await first_session.async_send_text(f"cd {directory} && {first_cmd}\n")
+    if first_title:
+        await _set_pane_badge(first_session, first_title)
+    await first_session.async_send_text(_pane_command(directory, first_cmd, first_title))
 
     # Create remaining panes by splitting the previous session
     prev_session = first_session
     sessions = [first_session]
-    for cmd, vertical, _ in panes[1:]:
+    for cmd, vertical, _, pane_title in panes[1:]:
         await asyncio.sleep(0.3)
         new_session = await prev_session.async_split_pane(vertical=vertical)
-        await new_session.async_send_text(f"cd {directory} && {cmd}\n")
+        if pane_title:
+            await _set_pane_badge(new_session, pane_title)
+        await new_session.async_send_text(_pane_command(directory, cmd, pane_title))
         sessions.append(new_session)
         prev_session = new_session
 
@@ -76,7 +109,7 @@ async def setup_tab(window, tab, directory, tab_data):
         # Get total grid cells across all panes in the split direction
         total_cols = sum(s.grid_size.width for s in sessions)
         total_rows = sum(s.grid_size.height for s in sessions)
-        for session, (_, vertical, size_pct) in zip(sessions, panes):
+        for session, (_, vertical, size_pct, _) in zip(sessions, panes):
             if size_pct is not None:
                 if vertical:
                     cols = int(total_cols * size_pct / 100)
