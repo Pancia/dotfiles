@@ -22,7 +22,9 @@ func main() {
 		cmdList(os.Args[2:])
 	case "approve":
 		cmdApprove(os.Args[2:])
-	case "update", "check", "audit", "build", "install", "diff":
+	case "audit":
+		cmdAudit(os.Args[2:])
+	case "update", "check", "build", "install", "diff":
 		fmt.Fprintf(os.Stderr, "vendor %s: not implemented yet\n", os.Args[1])
 		os.Exit(1)
 	default:
@@ -41,7 +43,7 @@ Commands:
   approve   Approve the current state of a dependency
   update    Update a dependency to a new ref (not implemented)
   check     Check for available updates (not implemented)
-  audit     Audit changes since last review (not implemented)
+  audit     Audit a vendored dependency for security concerns
   build     Build a vendored dependency (not implemented)
   install   Install a vendored dependency (not implemented)
   diff      Show diff since last approved commit (not implemented)
