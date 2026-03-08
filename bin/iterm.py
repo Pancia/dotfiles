@@ -6,9 +6,10 @@ import AppKit
 import sys
 import json
 import asyncio
+import os
 
 print("[iterm.py/debug]: args:", sys.argv)
-directory = sys.argv[1]
+directory = json.loads(sys.argv[1])
 tabs = json.loads(sys.argv[2])
 
 # Parse --frame x,y,w,h or --maximize
@@ -76,7 +77,8 @@ async def setup_tab(window, tab, directory, tab_data):
             tab_data = tab_data.get("cmd", "")
 
     if tab_title:
-        await tab.async_set_title(tab_title)
+        short_dir = directory.rstrip("/").replace(os.environ.get("HOME", ""), "~")
+        await tab.async_set_title(tab_title + " - " + short_dir)
 
     if isinstance(tab_data, str):
         await tab.current_session.async_send_text(_pane_command(directory, tab_data))
