@@ -18,6 +18,8 @@ dotfiles/
 ├── misc/           # Miscellaneous tools and data
 ├── wiki/           # Personal wiki/knowledge base
 ├── ai/             # AI prompts and templates
+├── vendor/         # Vendored dependencies (MANIFEST.json tracked, clones gitignored)
+├── cmd/vendor/     # Vendor CLI source (Go)
 ├── install         # Installation script
 └── Brewfile        # Homebrew packages
 ```
@@ -175,6 +177,26 @@ crawl-sitemap <url>              # list all pages
 crawl-sitemap <url> -v           # show progress + depth
 crawl-sitemap <url> --depth 2    # limit crawl depth
 ```
+
+### Vendored Dependencies
+
+`bin/vendor` — Go CLI for managing external dependencies built from source with review-gated updates. Dependencies are cloned into `vendor/`, built locally, and symlinked to `~/.local/bin/`.
+
+```bash
+vendor add <name> <url> --ref <tag>   # Clone and register a dependency
+vendor list                            # Show all vendored deps
+vendor build <name>                    # Build from source
+vendor install <name>                  # Build + symlink binary
+vendor approve <name>                  # Approve current state after review
+```
+
+**Key files:**
+- `vendor/MANIFEST.json` — Dependency registry (tracked in git)
+- `vendor/*/` — Cloned repos (gitignored)
+- `cmd/vendor/` — CLI source code (Go, stdlib only)
+- `fish/conf.d/vendor_check.fish` — Weekly update check on shell startup
+
+**Install script:** `./install vendor` builds the CLI and runs `vendor install` for all entries.
 
 ### Process Labeling
 

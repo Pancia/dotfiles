@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -22,7 +23,11 @@ func main() {
 		cmdList(os.Args[2:])
 	case "approve":
 		cmdApprove(os.Args[2:])
-	case "update", "check", "audit", "build", "install", "diff":
+	case "build":
+		cmdBuild(os.Args[2:])
+	case "install":
+		cmdInstall(os.Args[2:])
+	case "update", "check", "audit", "diff":
 		fmt.Fprintf(os.Stderr, "vendor %s: not implemented yet\n", os.Args[1])
 		os.Exit(1)
 	default:
@@ -42,8 +47,8 @@ Commands:
   update    Update a dependency to a new ref (not implemented)
   check     Check for available updates (not implemented)
   audit     Audit changes since last review (not implemented)
-  build     Build a vendored dependency (not implemented)
-  install   Install a vendored dependency (not implemented)
+  build     Build a vendored dependency
+  install   Build and link a vendored dependency
   diff      Show diff since last approved commit (not implemented)
 `)
 }
@@ -340,6 +345,121 @@ func cmdApprove(args []string) {
 	fmt.Printf("Approved %s\n", name)
 	fmt.Printf("  commit:   %s\n", shortHash(head))
 	fmt.Printf("  reviewed: %s by %s\n", today, user)
+}
+
+// --------------------------------------------------------------------------
+// vendor build
+// --------------------------------------------------------------------------
+
+func cmdBuild(args []string) {
+	if len(args) < 1 {
+		fmt.Fprintf(os.Stderr, "Usage: vendor build <name>\n")
+		os.Exit(1)
+	}
+	name := args[0]
+
+	root, err := findDotfilesRoot()
+	if err != nil {
+		fatal(err)
+	}
+
+	manifest, err := LoadManifest(root)
+	if err != nil {
+		fatalf("failed to load manifest: %v", err)
+	}
+
+	entry, ok := manifest[name]
+	if !ok {
+		fatalf("unknown dependency: %s", name)
+	}
+
+	runBuild(root, name, entry)
+}
+
+// runBuild executes the install (build) command for a dependency.
+func runBuild(root, name string, entry ManifestEntry) {
+	if entry.Install == "" {
+		fatalf("no install command configured for %s", name)
+	}
+
+	repoDir := filepath.Join(root, "vendor", name)
+	if _, err := os.Stat(repoDir); os.IsNotExist(err) {
+		fatalf("vendor/%s does not exist", name)
+	}
+
+	fmt.Printf("Building %s: %s\n", name, entry.Install)
+
+	cmd := exec.Command("sh", "-c", entry.Install)
+	cmd.Dir = repoDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		fatalf("build failed for %s: %v", name, err)
+	}
+
+	fmt.Printf("Build succeeded for %s\n", name)
+}
+
+// --------------------------------------------------------------------------
+// vendor install
+// --------------------------------------------------------------------------
+
+func cmdInstall(args []string) {
+	if len(args) < 1 {
+		fmt.Fprintf(os.Stderr, "Usage: vendor install <name>\n")
+		os.Exit(1)
+	}
+	name := args[0]
+
+	root, err := findDotfilesRoot()
+	if err != nil {
+		fatal(err)
+	}
+
+	manifest, err := LoadManifest(root)
+	if err != nil {
+		fatalf("failed to load manifest: %v", err)
+	}
+
+	entry, ok := manifest[name]
+	if !ok {
+		fatalf("unknown dependency: %s", name)
+	}
+
+	// Build first.
+	runBuild(root, name, entry)
+
+	// Link binary.
+	if entry.LinkBinary == "" || entry.LinkTo == "" {
+		fmt.Println("No link_binary or link_to configured; skipping link step.")
+		return
+	}
+
+	src := filepath.Join(root, "vendor", name, entry.LinkBinary)
+	dst := entry.LinkTo
+	if strings.HasPrefix(dst, "~/") {
+		home, _ := os.UserHomeDir()
+		dst = filepath.Join(home, dst[2:])
+	}
+
+	// Ensure parent directory exists.
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		fatalf("failed to create directory for %s: %v", dst, err)
+	}
+
+	// Remove existing symlink if present.
+	if _, err := os.Lstat(dst); err == nil {
+		if err := os.Remove(dst); err != nil {
+			fatalf("failed to remove existing link %s: %v", dst, err)
+		}
+	}
+
+	if err := os.Symlink(src, dst); err != nil {
+		fatalf("failed to create symlink: %v", err)
+	}
+
+	fmt.Printf("Linked %s -> %s\n", dst, src)
 }
 
 // --------------------------------------------------------------------------
