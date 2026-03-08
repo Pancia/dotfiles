@@ -19,12 +19,12 @@ module CMD
     }
   end
 
-  def status_live(opts)
-    opts.banner = "Usage: status_live"
-    opts.info = "Live Altera status (11s interval, no events)"
+  def dashboard(opts)
+    opts.banner = "Usage: dashboard"
+    opts.info = "Live Altera tui dashboard"
     lambda { |*args|
       EXE.bash %{
-        alt status --live --interval 30 --no-events
+        alt tui
       }
     }
   end
@@ -68,7 +68,17 @@ module CMD
     opts.info = "Open TODO.md in vim"
     lambda { |*args|
       EXE.fish %{
-        vim altera/sitrep.md TODO.md docs/roadmap.md
+        vim altera/sitrep.md TODO.md docs/roadmap.md docs/launch-plan.md
+      }
+    }
+  end
+
+  def business(opts)
+    opts.banner = "Usage: business"
+    opts.info = "Open TODO.md in vim"
+    lambda { |*args|
+      EXE.fish %{
+        vim docs/business-model.md
       }
     }
   end

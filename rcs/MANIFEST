@@ -3,6 +3,7 @@
 # Lines starting with # are comments
 claude_desktop_config.json      -> $HOME/Library/Application Support/Claude/claude_desktop_config.json
 claude-ensure-rcs-hook.sh       -> $HOME/.claude/hooks/ensure-rcs.sh
+claude-keybindings.json         -> $HOME/.claude/keybindings.json
 claude-settings.json            -> $HOME/.claude/settings.json
 claude-user-claude.md           -> $HOME/.claude/CLAUDE.md
 clj-kondo.edn                   -> $HOME/.config/clj-kondo/config.edn
@@ -28,6 +29,7 @@ ssh.config                      -> $HOME/.ssh/config
 tmux.conf                       -> $HOME/.tmux.conf
 tmux-which-key.config.yaml      -> $HOME/.tmux/plugins/tmux-which-key/config.yaml
 zprint.edn                      -> $HOME/.zprint.edn
+hermes-commands.json            -> $HOME/.config/hermes/commands.json
 
 # Claude Code agents (individual files, allows adding personal agents too)
 $HOME/projects/fulcrologic-claude-settings/agents/agent-writer.md     -> $HOME/.claude/agents/agent-writer.md

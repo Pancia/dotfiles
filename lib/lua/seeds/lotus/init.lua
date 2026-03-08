@@ -72,7 +72,7 @@ function obj:triggerIntervalNotification()
         local notification = sound.notif()
         obj._notif = hs.notify.new(function()
             obj:onIntervalNotifCallback()
-        end, notification):send()
+        end, notification):withdrawAfter(10):send()
         clearCheck = hs.timer.doEvery(1, function()
             if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
                 if obj._notif:activationType() ~= hs.notify.activationTypes.none then
@@ -126,7 +126,7 @@ function obj:triggerClockNotification(soundIdx, triggerMinute)
         local notification = sound.notif()
         obj._clockNotif = hs.notify.new(function()
             obj:onClockNotifCallback(soundIdx)
-        end, notification):send()
+        end, notification):withdrawAfter(10):send()
 
         obj._clockClearCheck = hs.timer.doEvery(1, function()
             if obj._clockNotif and not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._clockNotif) then
@@ -326,7 +326,7 @@ function obj:notify()
     local sound = obj.sounds[obj._intervalSoundIdx]
     if sound.notif then
         local notification = sound.notif()
-        obj._notif = hs.notify.new(obj.notifCallback, notification):send()
+        obj._notif = hs.notify.new(obj.notifCallback, notification):withdrawAfter(10):send()
         clearCheck = hs.timer.doEvery(1, function()
             if not hs.fnutils.contains(hs.notify.deliveredNotifications(), obj._notif) then
                 if obj._notif:activationType() ~= hs.notify.activationTypes.none then

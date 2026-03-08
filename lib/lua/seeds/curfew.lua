@@ -252,8 +252,13 @@ function obj:isWithinCurfew()
     local trigger = config.triggerTime.hour * 60 + config.triggerTime.minute
     local reset = config.resetTime.hour * 60 + config.resetTime.minute
 
-    -- Curfew spans midnight: trigger if now >= triggerTime OR now < resetTime
-    return now >= trigger or now < reset
+    if trigger >= reset then
+        -- Curfew spans midnight (e.g. 23:00 - 07:00)
+        return now >= trigger or now < reset
+    else
+        -- Curfew within same day (e.g. 01:00 - 07:00)
+        return now >= trigger and now < reset
+    end
 end
 
 function obj:isWithinWarning()

@@ -22,16 +22,23 @@ function _brew_claude_release_notes --description 'Summarize Claude Code release
     echo "Fetching release notes..."
 
     set -l notes_file (mktemp /tmp/claude-release-notes.XXXXXX)
-    claude -p '/release-notes' > "$notes_file" 2>/dev/null
-
-    if test -s "$notes_file"
-        echo "Summarizing..."
-        echo
-        claude -p "Summarize the changes from version $old_ver to $new_ver. Be concise — bullet points, grouped by theme. Skip anything outside that version range. At the end, add a '## Highlights' section with a 1-2 paragraph high-level summary of the most important changes for someone who just wants the headlines." < "$notes_file"
-    else
-        echo "Could not fetch release notes."
+    set -l max_attempts 5
+    for i in (seq $max_attempts)
+        claude -p '/release-notes' > "$notes_file" 2>/dev/null
+        if test -s "$notes_file"; and grep -q "Version $new_ver" "$notes_file"
+            echo "Summarizing..."
+            echo
+            claude -p "Summarize the changes from version $old_ver to $new_ver. Be concise — bullet points, grouped by theme. Skip anything outside that version range. At the end, add a '## Highlights' section with a 1-2 paragraph high-level summary of the most important changes for someone who just wants the headlines." < "$notes_file"
+            rm -f "$notes_file"
+            return
+        end
+        if test $i -lt $max_attempts
+            echo "Release notes don't include $new_ver yet, retrying in 10s... ($i/$max_attempts)"
+            sleep 10
+        end
     end
 
+    echo "Release notes don't include $new_ver yet. Run /release-notes in a session later."
     rm -f "$notes_file"
 end
 

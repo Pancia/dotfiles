@@ -17,5 +17,5 @@ function my-claude-code-wrapper --description "Claude Code wrapper"
     else
         set label "$label $timestamp"
     end
-    proc-label "claude [$label]" claude $argv
+    proc-label "claude [$label]" claude --verbose $argv
 end

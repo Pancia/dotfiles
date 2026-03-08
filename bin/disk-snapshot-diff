@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SNAP_DIR="$HOME/.local/share/disk-snapshots"
+THRESHOLD_KB=$((100 * 1024))  # 100MB default
+
+usage() {
+    echo "Usage: disk-snapshot-diff [-t THRESHOLD_MB] [old.txt new.txt]"
+    echo "  -t  Minimum change in MB to display (default: 100)"
+    echo "  Without args, compares the two most recent snapshots."
+    exit 1
+}
+
+while getopts "t:h" opt; do
+    case "$opt" in
+        t) THRESHOLD_KB=$(( OPTARG * 1024 )) ;;
+        h) usage ;;
+        *) usage ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+if [[ $# -eq 2 ]]; then
+    OLD="$1"
+    NEW="$2"
+elif [[ $# -eq 0 ]]; then
+    mapfile -t snaps < <(ls -1 "$SNAP_DIR"/*.txt 2>/dev/null | sort)
+    if [[ ${#snaps[@]} -lt 2 ]]; then
+        echo "Need at least 2 snapshots in $SNAP_DIR"
+        exit 1
+    fi
+    OLD="${snaps[-2]}"
+    NEW="${snaps[-1]}"
+else
+    usage
+fi
+
+human_size() {
+    local kb="$1"
+    local abs_kb="${kb#-}"
+    local sign=""
+    [[ "$kb" -lt 0 ]] && sign="-"
+
+    if [[ "$abs_kb" -ge $((1024 * 1024)) ]]; then
+        printf "%s%.1fG" "$sign" "$(echo "scale=1; $abs_kb / 1048576" | bc)"
+    elif [[ "$abs_kb" -ge 1024 ]]; then
+        printf "%s%.0fM" "$sign" "$(echo "scale=0; $abs_kb / 1024" | bc)"
+    else
+        printf "%s%dK" "$sign" "$abs_kb"
+    fi
+}
+
+old_date="$(basename "$OLD" .txt)"
+new_date="$(basename "$NEW" .txt)"
+echo "Comparing $old_date -> $new_date"
+echo ""
+
+# Parse a snapshot file into section -> (path -> size_kb) mappings
+# Output format: section<TAB>path<TAB>size_kb
+parse_snapshot() {
+    local file="$1"
+    local section=""
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^===\ (.+)\ ===$ ]]; then
+            section="${BASH_REMATCH[1]}"
+        elif [[ -n "$line" && -n "$section" ]]; then
+            local size path
+            size="$(echo "$line" | awk '{print $1}')"
+            path="$(echo "$line" | awk '{$1=""; print substr($0,2)}')"
+            if [[ -n "$size" && -n "$path" && "$size" =~ ^[0-9]+$ ]]; then
+                printf '%s\t%s\t%s\n' "$section" "$path" "$size"
+            fi
+        fi
+    done < "$file"
+}
+
+# Build associative arrays from parsed data
+declare -A old_sizes new_sizes
+declare -A sections_seen
+
+while IFS=$'\t' read -r section path size; do
+    old_sizes["$section|$path"]="$size"
+    sections_seen["$section"]=1
+done < <(parse_snapshot "$OLD")
+
+while IFS=$'\t' read -r section path size; do
+    new_sizes["$section|$path"]="$size"
+    sections_seen["$section"]=1
+done < <(parse_snapshot "$NEW")
+
+# Collect all unique section|path keys
+declare -A all_keys
+for key in "${!old_sizes[@]}" "${!new_sizes[@]}"; do
+    all_keys["$key"]=1
+done
+
+# Group by section and compute deltas
+had_output=false
+while IFS= read -r section; do
+    section_lines=()
+
+    while IFS= read -r key; do
+        [[ "$key" != "$section|"* ]] && continue
+        path="${key#"$section|"}"
+
+        old_kb="${old_sizes[$key]:-0}"
+        new_kb="${new_sizes[$key]:-0}"
+        delta=$(( new_kb - old_kb ))
+        abs_delta="${delta#-}"
+
+        if [[ "$old_kb" -eq 0 && "$new_kb" -gt 0 ]]; then
+            # New path
+            if [[ "$new_kb" -ge "$THRESHOLD_KB" ]]; then
+                section_lines+=("$(printf '  NEW    %s (%s)' "$path" "$(human_size "$new_kb")")")
+            fi
+        elif [[ "$new_kb" -eq 0 && "$old_kb" -gt 0 ]]; then
+            # Removed path
+            if [[ "$old_kb" -ge "$THRESHOLD_KB" ]]; then
+                section_lines+=("$(printf '  DEL    %s (was %s)' "$path" "$(human_size "$old_kb")")")
+            fi
+        elif [[ "$abs_delta" -ge "$THRESHOLD_KB" ]]; then
+            sign="+"
+            [[ "$delta" -lt 0 ]] && sign=""
+            section_lines+=("$(printf '  %s%s  %s' "$sign" "$(human_size "$delta")" "$path")")
+        fi
+    done < <(printf '%s\n' "${!all_keys[@]}" | sort)
+
+    if [[ ${#section_lines[@]} -gt 0 ]]; then
+        echo "=== $section ==="
+        printf '%s\n' "${section_lines[@]}"
+        echo ""
+        had_output=true
+    fi
+done < <(printf '%s\n' "${!sections_seen[@]}" | sort)
+
+if ! $had_output; then
+    echo "No significant changes (threshold: $(human_size "$THRESHOLD_KB"))."
+fi
