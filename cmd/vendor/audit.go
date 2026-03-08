@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -89,26 +91,57 @@ func cmdAudit(args []string) {
 		fatalf("vendor/%s does not exist", name)
 	}
 
+	// ── Header ───────────────────────────────────────────────────────
+
+	fmt.Printf("=== Vendor Audit: %s ===\n", name)
+	fmt.Printf("Repository: %s\n", entry.Repo)
+	fmt.Printf("Pinned: %s (ref: %s)\n", shortHash(entry.PinnedCommit), entry.Ref)
+	fmt.Printf("Reviewed: %s by %s\n", entry.LastReviewed, entry.ReviewedBy)
+	fmt.Println()
+
 	// ── Phase 1: Static scan ──────────────────────────────────────────
 
+	fmt.Println("Running static analysis...")
 	findings := staticScan(vendorDir, entry.Audit)
+
+	fmt.Println("--- Static Analysis ---")
+	if len(findings) == 0 {
+		fmt.Println("No security-relevant patterns found.")
+	} else {
+		for _, f := range findings {
+			fmt.Printf("[%s] %s:%d - %s\n", f.Category, f.File, f.Line, f.Pattern)
+			fmt.Printf("  > %s\n", f.Content)
+		}
+	}
+	fmt.Println()
+
 	directDeps, transitiveDeps := countDeps(vendorDir)
+	if directDeps > 0 || transitiveDeps > 0 {
+		fmt.Printf("Dependencies: %d direct, %d transitive\n", directDeps, transitiveDeps)
+		fmt.Println()
+	}
+
 	cargoAuditOutput := runCargoAudit(vendorDir)
+	fmt.Println("--- Cargo Audit ---")
+	fmt.Println(cargoAuditOutput)
+	fmt.Println()
 
 	// ── Phase 2: Claude review ────────────────────────────────────────
 
 	auditSummary := formatAuditSummary(name, entry, findings, directDeps, transitiveDeps, cargoAuditOutput)
 	claudeResponse := "skipped (--no-claude)"
-	if !*noClaude {
-		claudeResponse = runClaudeReview(root, auditSummary)
+	if *noClaude {
+		fmt.Println("Skipping AI review (--no-claude)")
+	} else {
+		fmt.Println("Running AI review...")
+		fmt.Println("--- AI Review ---")
+		claudeResponse = runClaudeReview(root, auditSummary, true)
+		fmt.Println()
 	}
 
-	// ── Phase 3: Report output ────────────────────────────────────────
+	// ── Save report ──────────────────────────────────────────────────
 
 	report := buildReport(name, entry, findings, directDeps, transitiveDeps, cargoAuditOutput, claudeResponse)
-
-	fmt.Print(report)
-
 	reportPath := filepath.Join(vendorDir, ".audit-report")
 	if err := os.WriteFile(reportPath, []byte(report), 0644); err != nil {
 		fatalf("failed to write audit report: %v", err)
@@ -285,7 +318,8 @@ func formatAuditSummary(name string, entry ManifestEntry, findings []scanFinding
 }
 
 // runClaudeReview shells out to the claude CLI for AI review.
-func runClaudeReview(root, auditSummary string) string {
+// When stream is true, output is written to stdout as it arrives.
+func runClaudeReview(root, auditSummary string, stream bool) string {
 	promptPath := filepath.Join(root, "vendor", "audit-prompt.md")
 	promptData, err := os.ReadFile(promptPath)
 	if err != nil {
@@ -317,6 +351,20 @@ func runClaudeReview(root, auditSummary string) string {
 
 	cmd := exec.Command(claudePath, "-p", "--system-prompt", string(promptData))
 	cmd.Stdin = input
+
+	if stream {
+		var buf bytes.Buffer
+		cmd.Stdout = io.MultiWriter(os.Stdout, &buf)
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			if buf.Len() > 0 {
+				return strings.TrimSpace(buf.String())
+			}
+			return fmt.Sprintf("error: %v", err)
+		}
+		return strings.TrimSpace(buf.String())
+	}
+
 	out, err := cmd.Output()
 	if err != nil {
 		if len(out) > 0 {
@@ -331,7 +379,7 @@ func runClaudeReview(root, auditSummary string) string {
 // Used by the update command to assess changes before approval.
 func runClaudeDiffAudit(root, name, diff string) string {
 	summary := fmt.Sprintf("Dependency: %s\nReview the following diff for security-relevant changes:\n\n%s", name, diff)
-	return runClaudeReview(root, summary)
+	return runClaudeReview(root, summary, false)
 }
 
 // buildReport constructs the final audit report string.
