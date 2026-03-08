@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>org.pancia.inari-evening</string>
+        <key>ProgramArguments</key>
+        <array>
+            <string>/opt/homebrew/bin/uv</string>
+            <string>run</string>
+            <string>inari.py</string>
+            <string>evening</string>
+        </array>
+        <key>WorkingDirectory</key>
+        <string>/Users/anthony/Library/CloudStorage/ProtonDrive-adambrosio@pm.me-folder/TheAkashicRecords/tools/telegram-briefing</string>
+        <key>StartCalendarInterval</key>
+        <dict>
+            <key>Hour</key>
+            <integer>21</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <key>StandardOutPath</key>
+        <string>/Users/anthony/.log/services/inari.log</string>
+        <key>StandardErrorPath</key>
+        <string>/Users/anthony/.log/services/inari.log</string>
+    </dict>
+</plist>

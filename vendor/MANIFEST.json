@@ -1,0 +1,24 @@
+{
+  "rtk": {
+    "repo": "https://github.com/rtk-ai/rtk.git",
+    "ref": "v0.27.2",
+    "pinned_commit": "34b2474d4cc13a7952db0227f91bb96252abc76f",
+    "last_reviewed": "2026-03-08",
+    "reviewed_by": "anthony",
+    "install": "cargo build --release",
+    "link_binary": "target/release/rtk",
+    "link_to": "~/.local/bin/rtk",
+    "notes": "",
+    "audit": {
+      "watch_patterns": [
+        "*.rs",
+        "Cargo.toml",
+        "Cargo.lock"
+      ],
+      "ignore_patterns": [
+        "tests/*",
+        "benches/*"
+      ]
+    }
+  }
+}

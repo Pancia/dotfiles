@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>org.pancia.inari-listen</string>
+        <key>ProgramArguments</key>
+        <array>
+            <string>/opt/homebrew/bin/fish</string>
+            <string>-l</string>
+            <string>-c</string>
+            <string>/opt/homebrew/bin/uv run inari.py listen</string>
+        </array>
+        <key>WorkingDirectory</key>
+        <string>/Users/anthony/Library/CloudStorage/ProtonDrive-adambrosio@pm.me-folder/TheAkashicRecords/tools/telegram-briefing</string>
+        <key>KeepAlive</key>
+        <true/>
+        <key>RunAtLoad</key>
+        <true/>
+        <key>StandardOutPath</key>
+        <string>/Users/anthony/.log/services/inari.log</string>
+        <key>StandardErrorPath</key>
+        <string>/Users/anthony/.log/services/inari.log</string>
+    </dict>
+</plist>
