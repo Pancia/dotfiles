@@ -22,3 +22,5 @@ fish/functions/fish_prompt.fish
 fish/functions/fzfm_fre_prune.clj
 tmp/
 cache/
+# Vendored dependency clones (MANIFEST.json is tracked)
+vendor/*/

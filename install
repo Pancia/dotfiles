@@ -79,6 +79,22 @@ task_manual() {
     # TASK spotlight search disable, bind cmd-space to show launchpad
 }
 
+task_vendor () {
+    # Build the vendor CLI if needed
+    if [ cmd/vendor/main.go -nt bin/vendor ] 2>/dev/null; then
+        echo "Building vendor CLI..."
+        (cd cmd/vendor && go build -o ../../bin/vendor .)
+    fi
+    if [ -x bin/vendor ]; then
+        local vendor_cmd="${HOME}/dotfiles/bin/vendor"
+        "$vendor_cmd" list --names | while read name; do
+            "$vendor_cmd" install "$name"
+        done
+    else
+        echo "Skipping vendor deps (Go not installed or build failed)"
+    fi
+}
+
 task_all () {
     task_init_dotfiles
     task_brew
@@ -89,6 +105,7 @@ task_all () {
     task_manual
     task_neovim
     task_opt
+    task_vendor
 }
 
 main() {
@@ -97,8 +114,9 @@ main() {
         '') task_all && exec fish ;;
         brew) task_brew ;;
         gitconfig|git) task_gitconfig ;;
-        help) echo "init brew gitconfig neovim opt" ;;
+        help) echo "init brew gitconfig neovim opt vendor" ;;
         init) task_init_dotfiles ;;
+        vendor) task_vendor ;;
         manual) task_manual ;;
         neovim|nvim|vim) task_neovim ;;
         opt) task_opt ;;
