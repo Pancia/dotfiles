@@ -1,0 +1,46 @@
+{
+    "space": "current",
+    "wallpapers": {
+        "files": [
+            {
+                "path": "$HOME/Pictures/walls/01.jpg",
+                "position": [0, 0],
+                "size": [960, 540],
+                "zoom": 1.0
+            },
+            {
+                "path": "$HOME/Pictures/walls/02.jpg",
+                "position": [960, 0],
+                "size": [960, 540]
+            },
+            {
+                "path": "$HOME/Pictures/walls/03.jpg",
+                "position": [0, 540],
+                "size": [960, 540]
+            },
+            {
+                "path": "$HOME/Pictures/walls/04.jpg",
+                "position": [960, 540],
+                "size": [960, 540]
+            },
+            {
+                "path": "$HOME/Pictures/walls/05.jpg",
+                "position": [1920, 0],
+                "size": [640, 360]
+            },
+            {
+                "path": "$HOME/Pictures/walls/06.jpg",
+                "position": [1920, 360],
+                "size": [640, 360]
+            },
+            {
+                "path": "$HOME/Pictures/walls/07.jpg",
+                "position": [1920, 720],
+                "size": [640, 360]
+            },
+            {
+                "path": "$HOME/Pictures/walls/08.jpg"
+            }
+        ]
+    }
+}

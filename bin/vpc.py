@@ -647,6 +647,8 @@ class AppLauncher:
             self.launch_qutebrowser(config)
         elif app_name == 'CotEditor':
             self.launch_coteditor(config)
+        elif app_name == 'wallpapers':
+            self.launch_image_wall(config)
         else:
             # Generic app - just open it
             self.launch_generic(app_name, config)
@@ -840,6 +842,17 @@ class AppLauncher:
 
         # Position with yabai
         self.yabai.position_window(app_name, config)
+
+    def launch_image_wall(self, config: dict):
+        """Launch image-wall for wallpaper display."""
+        print("Launching image-wall...")
+        subprocess.run(['killall', 'image-wall'], capture_output=True)
+        time.sleep(0.2)
+        subprocess.run(['hs', '-c', 'hs.alert.show("Wallpapers: opening...")'])
+        image_wall = Path.home() / 'dotfiles' / 'bin' / 'image-wall'
+        subprocess.Popen([str(image_wall), str(self.config.config_path)])
+        subprocess.run(['hs', '-c', 'hs.alert.show("Wallpapers: done!")'])
+        print("  image-wall done")
 
     def launch_coteditor(self, config: dict):
         """Launch board file in CotEditor."""

@@ -95,6 +95,11 @@ task_vendor () {
     fi
 }
 
+task_image_wall () {
+    echo "Building image-wall..."
+    (cd cmd/image-wall && swiftc -O -framework AppKit -o ../../bin/image-wall main.swift)
+}
+
 task_all () {
     task_init_dotfiles
     task_brew
@@ -106,6 +111,7 @@ task_all () {
     task_neovim
     task_opt
     task_vendor
+    task_image_wall
 }
 
 main() {
@@ -114,9 +120,10 @@ main() {
         '') task_all && exec fish ;;
         brew) task_brew ;;
         gitconfig|git) task_gitconfig ;;
-        help) echo "init brew gitconfig neovim opt vendor" ;;
+        help) echo "init brew gitconfig neovim opt vendor image-wall" ;;
         init) task_init_dotfiles ;;
         vendor) task_vendor ;;
+        image-wall) task_image_wall ;;
         manual) task_manual ;;
         neovim|nvim|vim) task_neovim ;;
         opt) task_opt ;;
