@@ -3,7 +3,7 @@
 <plist version="1.0">
     <dict>
         <key>Label</key>
-        <string>org.pancia.inari-listen</string>
+        <string>org.pancia.inari</string>
         <key>ProgramArguments</key>
         <array>
             <string>/opt/homebrew/bin/fish</string>
@@ -12,7 +12,7 @@
             <string>/opt/homebrew/bin/uv run inari.py listen</string>
         </array>
         <key>WorkingDirectory</key>
-        <string>/Users/anthony/Library/CloudStorage/ProtonDrive-adambrosio@pm.me-folder/TheAkashicRecords/tools/telegram-briefing</string>
+        <string>/Users/anthony/Library/CloudStorage/ProtonDrive-adambrosio@pm.me-folder/TheAkashicRecords/tools/inari</string>
         <key>KeepAlive</key>
         <true/>
         <key>RunAtLoad</key>
