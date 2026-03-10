@@ -367,7 +367,7 @@ func runClaudeReview(root, vendorDir, auditSummary string, stream bool) string {
 
 	cmd := exec.Command(claudePath, "-p",
 		"--allowedTools", "Read,Grep,Glob,Bash(read-only)",
-		"-a", vendorDir,
+		"--add-dir", vendorDir,
 		"--system-prompt", string(promptData))
 	cmd.Stdin = input
 
