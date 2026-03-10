@@ -59,7 +59,7 @@ class ImageCanvasView: NSView {
     }
 
     override func scrollWheel(with event: NSEvent) {
-        let delta = event.scrollingDeltaY * 0.02
+        let delta = event.scrollingDeltaY * 0.005
         zoom = min(10.0, max(0.1, zoom + delta))
         needsDisplay = true
     }
@@ -81,7 +81,7 @@ class WallWindow: NSWindow {
         isRestorable = false
         backgroundColor = .black
         level = .normal
-        collectionBehavior = [.moveToActiveSpace, .ignoresCycle]
+        collectionBehavior = [.moveToActiveSpace]
     }
 }
 
@@ -257,7 +257,7 @@ guard let config = try? JSONDecoder().decode(VPCConfig.self, from: configData) e
 }
 
 let app = NSApplication.shared
-app.setActivationPolicy(.accessory)
+app.setActivationPolicy(.regular)
 
 let delegate = AppDelegate()
 delegate.entries = config.wallpapers.files
