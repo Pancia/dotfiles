@@ -2,10 +2,9 @@ package main
 
 import (
 	"bufio"
-	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -59,6 +58,53 @@ var securityPatterns = []struct {
 	{"Process", "subprocess"},
 	{"Process", "system("},
 	{"Process", "popen"},
+}
+
+type streamEvent struct {
+	Type    string         `json:"type"`
+	Message *streamMessage `json:"message,omitempty"`
+	Result  string         `json:"result,omitempty"`
+}
+
+type streamMessage struct {
+	Content []contentBlock `json:"content"`
+}
+
+type contentBlock struct {
+	Type  string          `json:"type"`
+	Text  string          `json:"text,omitempty"`
+	Name  string          `json:"name,omitempty"`
+	Input json.RawMessage `json:"input,omitempty"`
+}
+
+type auditReview struct {
+	ToolCalls []string // human-readable log lines
+	Text      string   // final assessment
+}
+
+func formatToolCall(name string, rawInput json.RawMessage) string {
+	var input map[string]interface{}
+	json.Unmarshal(rawInput, &input)
+	switch name {
+	case "Read":
+		return fmt.Sprintf("Read %s", input["file_path"])
+	case "Grep":
+		s := fmt.Sprintf("Grep %q", input["pattern"])
+		if p, ok := input["path"]; ok {
+			s += fmt.Sprintf(" in %s", p)
+		}
+		return s
+	case "Glob":
+		return fmt.Sprintf("Glob %s", input["pattern"])
+	case "Bash":
+		cmd := fmt.Sprintf("%s", input["command"])
+		if len(cmd) > 60 {
+			cmd = cmd[:60] + "..."
+		}
+		return fmt.Sprintf("Bash %s", cmd)
+	default:
+		return name
+	}
 }
 
 func cmdAudit(args []string) {
@@ -130,19 +176,19 @@ func cmdAudit(args []string) {
 	// ── Phase 2: Claude review ────────────────────────────────────────
 
 	auditSummary := formatAuditSummary(name, entry, findings, directDeps, transitiveDeps, cargoAuditOutput)
-	claudeResponse := "skipped (--no-claude)"
+	review := auditReview{Text: "skipped (--no-claude)"}
 	if *noClaude {
 		fmt.Println("Skipping AI review (--no-claude)")
 	} else {
 		fmt.Println("Running AI review...")
 		fmt.Println("--- AI Review ---")
-		claudeResponse = runClaudeReview(root, vendorDir, auditSummary, true)
+		review = runClaudeReview(root, vendorDir, auditSummary, true)
 		fmt.Println()
 	}
 
 	// ── Save report ──────────────────────────────────────────────────
 
-	report := buildReport(name, entry, findings, directDeps, transitiveDeps, cargoAuditOutput, claudeResponse)
+	report := buildReport(name, entry, findings, directDeps, transitiveDeps, cargoAuditOutput, review)
 
 	auditsDir := filepath.Join(vendorDir, ".audits")
 	if err := os.MkdirAll(auditsDir, 0755); err != nil {
@@ -334,76 +380,101 @@ func formatAuditSummary(name string, entry ManifestEntry, findings []scanFinding
 }
 
 // runClaudeReview shells out to the claude CLI for AI review.
-// When stream is true, output is written to stdout as it arrives.
-func runClaudeReview(root, vendorDir, auditSummary string, stream bool) string {
+// When stream is true, tool call summaries are printed to stderr as they happen.
+func runClaudeReview(root, vendorDir, auditSummary string, stream bool) auditReview {
 	promptPath := filepath.Join(root, "vendor", "audit-prompt.md")
 	promptData, err := os.ReadFile(promptPath)
 	if err != nil {
-		return fmt.Sprintf("skipped (cannot read audit-prompt.md: %v)", err)
+		return auditReview{Text: fmt.Sprintf("skipped (cannot read audit-prompt.md: %v)", err)}
 	}
 
 	claudePath, err := exec.LookPath("claude")
 	if err != nil {
-		return "skipped (claude not found)"
+		return auditReview{Text: "skipped (claude not found)"}
 	}
 
 	tmpFile, err := os.CreateTemp("", "vendor-audit-*.txt")
 	if err != nil {
-		return fmt.Sprintf("skipped (cannot create temp file: %v)", err)
+		return auditReview{Text: fmt.Sprintf("skipped (cannot create temp file: %v)", err)}
 	}
 	defer os.Remove(tmpFile.Name())
 
 	if _, err := tmpFile.WriteString(auditSummary); err != nil {
 		tmpFile.Close()
-		return fmt.Sprintf("skipped (cannot write temp file: %v)", err)
+		return auditReview{Text: fmt.Sprintf("skipped (cannot write temp file: %v)", err)}
 	}
 	tmpFile.Close()
 
 	input, err := os.Open(tmpFile.Name())
 	if err != nil {
-		return fmt.Sprintf("skipped (cannot open temp file: %v)", err)
+		return auditReview{Text: fmt.Sprintf("skipped (cannot open temp file: %v)", err)}
 	}
 	defer input.Close()
 
-	cmd := exec.Command(claudePath, "-p",
+	cmd := exec.Command("env", "-u", "CLAUDECODE", claudePath, "-p",
+		"--verbose", "--output-format", "stream-json",
 		"--allowedTools", "Read,Grep,Glob,Bash(read-only)",
 		"--add-dir", vendorDir,
 		"--system-prompt", string(promptData))
 	cmd.Stdin = input
+	cmd.Stderr = os.Stderr
 
-	if stream {
-		var buf bytes.Buffer
-		cmd.Stdout = io.MultiWriter(os.Stdout, &buf)
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			if buf.Len() > 0 {
-				return strings.TrimSpace(buf.String())
-			}
-			return fmt.Sprintf("error: %v", err)
-		}
-		return strings.TrimSpace(buf.String())
-	}
-
-	out, err := cmd.Output()
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		if len(out) > 0 {
-			return strings.TrimSpace(string(out))
-		}
-		return fmt.Sprintf("error: %v", err)
+		return auditReview{Text: fmt.Sprintf("error: %v", err)}
 	}
-	return strings.TrimSpace(string(out))
+
+	if err := cmd.Start(); err != nil {
+		return auditReview{Text: fmt.Sprintf("error: %v", err)}
+	}
+
+	var review auditReview
+	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		var ev streamEvent
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			continue
+		}
+		switch ev.Type {
+		case "assistant":
+			if ev.Message == nil {
+				continue
+			}
+			for _, block := range ev.Message.Content {
+				if block.Type == "tool_use" {
+					summary := formatToolCall(block.Name, block.Input)
+					review.ToolCalls = append(review.ToolCalls, summary)
+					if stream {
+						fmt.Fprintf(os.Stderr, "  → %s\n", summary)
+					}
+				}
+			}
+		case "result":
+			review.Text = ev.Result
+		}
+	}
+
+	if err := cmd.Wait(); err != nil {
+		if review.Text == "" {
+			review.Text = fmt.Sprintf("error: %v", err)
+		}
+	}
+
+	return review
 }
 
 // runClaudeDiffAudit sends a diff to Claude for security review.
 // Used by the update command to assess changes before approval.
-func runClaudeDiffAudit(root, name, diff string) string {
+func runClaudeDiffAudit(root, name, diff string) auditReview {
 	summary := fmt.Sprintf("Dependency: %s\nReview the following diff for security-relevant changes:\n\n%s", name, diff)
 	vendorDir := filepath.Join(root, "vendor", name)
 	return runClaudeReview(root, vendorDir, summary, false)
 }
 
 // buildReport constructs the final audit report string.
-func buildReport(name string, entry ManifestEntry, findings []scanFinding, direct, transitive int, cargoAudit, claudeResponse string) string {
+func buildReport(name string, entry ManifestEntry, findings []scanFinding, direct, transitive int, cargoAudit string, review auditReview) string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "=== Vendor Audit: %s ===\n", name)
@@ -433,7 +504,14 @@ func buildReport(name string, entry ManifestEntry, findings []scanFinding, direc
 	fmt.Fprintln(&b)
 
 	fmt.Fprintln(&b, "--- AI Review ---")
-	fmt.Fprintln(&b, claudeResponse)
+	if len(review.ToolCalls) > 0 {
+		fmt.Fprintln(&b, "Investigation:")
+		for _, tc := range review.ToolCalls {
+			fmt.Fprintf(&b, "  → %s\n", tc)
+		}
+		fmt.Fprintln(&b)
+	}
+	fmt.Fprintln(&b, review.Text)
 	fmt.Fprintln(&b)
 
 	return b.String()
