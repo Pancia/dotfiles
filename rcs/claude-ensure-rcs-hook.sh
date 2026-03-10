@@ -22,6 +22,18 @@ if [ "$MODE" = "post" ]; then
 fi
 
 if [ "$MODE" = "pre" ]; then
+    # Block edits to LaunchAgent plists — edit the source in services/ instead
+    if [[ "$FILE_PATH" == "$HOME/Library/LaunchAgents/org.pancia."*".plist" ]]; then
+        basename=$(basename "$FILE_PATH")
+        source_path=$(find "$HOME/dotfiles/services" -name "$basename" -print -quit 2>/dev/null)
+        if [ -n "$source_path" ]; then
+            echo "Blocked: $FILE_PATH is a managed LaunchAgent. Edit the source file at $source_path instead." >&2
+        else
+            echo "Blocked: $FILE_PATH is a managed LaunchAgent. Edit the source in ~/dotfiles/services/ instead." >&2
+        fi
+        exit 2
+    fi
+
     while IFS= read -r line; do
         [[ "$line" =~ ^[[:space:]]*# ]] && continue
         [[ -z "${line// /}" ]] && continue
