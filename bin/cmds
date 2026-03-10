@@ -148,10 +148,17 @@ class CMDS extend CMD
     opts.info = "List commands with descriptions (plain text, no formatting)."
     lambda {
       commands = CMDS.methods - $old_methods
+      if commands.empty?
+        STDERR.puts "No commands defined for #{$pwd}"
+        exit 1
+      end
+      dir_name = File.basename($pwd)
+      puts "cmds: #{dir_name} (#{commands.length} commands)"
+      puts ""
       commands.sort.each do |cmd|
         o = OptionParser.new
         CMDS.send(cmd, o)
-        puts "#{cmd}: #{o.info}"
+        puts "  #{cmd}: #{o.info}"
       end
     }
   end
