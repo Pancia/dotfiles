@@ -183,6 +183,7 @@ func cmdAudit(args []string) {
 		fmt.Println("Running AI review...")
 		fmt.Println("--- AI Review ---")
 		review = runClaudeReview(root, vendorDir, auditSummary, true)
+		fmt.Println(review.Text)
 		fmt.Println()
 	}
 
