@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // scanFinding records a single pattern match during static analysis.
@@ -135,18 +136,33 @@ func cmdAudit(args []string) {
 	} else {
 		fmt.Println("Running AI review...")
 		fmt.Println("--- AI Review ---")
-		claudeResponse = runClaudeReview(root, auditSummary, true)
+		claudeResponse = runClaudeReview(root, vendorDir, auditSummary, true)
 		fmt.Println()
 	}
 
 	// ── Save report ──────────────────────────────────────────────────
 
 	report := buildReport(name, entry, findings, directDeps, transitiveDeps, cargoAuditOutput, claudeResponse)
-	reportPath := filepath.Join(vendorDir, ".audit-report")
+
+	auditsDir := filepath.Join(vendorDir, ".audits")
+	if err := os.MkdirAll(auditsDir, 0755); err != nil {
+		fatalf("failed to create .audits directory: %v", err)
+	}
+
+	timestamp := time.Now().Format("2006-01-02T15-04-05")
+	reportFile := timestamp + ".txt"
+	reportPath := filepath.Join(auditsDir, reportFile)
 	if err := os.WriteFile(reportPath, []byte(report), 0644); err != nil {
 		fatalf("failed to write audit report: %v", err)
 	}
-	fmt.Printf("Report saved to vendor/%s/.audit-report\n", name)
+
+	latestLink := filepath.Join(auditsDir, "latest")
+	os.Remove(latestLink) // remove old symlink if exists
+	if err := os.Symlink(reportFile, latestLink); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not create latest symlink: %v\n", err)
+	}
+
+	fmt.Printf("Report saved to vendor/%s/.audits/%s\n", name, reportFile)
 }
 
 // staticScan walks the vendor directory searching for security-relevant patterns.
@@ -319,7 +335,7 @@ func formatAuditSummary(name string, entry ManifestEntry, findings []scanFinding
 
 // runClaudeReview shells out to the claude CLI for AI review.
 // When stream is true, output is written to stdout as it arrives.
-func runClaudeReview(root, auditSummary string, stream bool) string {
+func runClaudeReview(root, vendorDir, auditSummary string, stream bool) string {
 	promptPath := filepath.Join(root, "vendor", "audit-prompt.md")
 	promptData, err := os.ReadFile(promptPath)
 	if err != nil {
@@ -349,7 +365,10 @@ func runClaudeReview(root, auditSummary string, stream bool) string {
 	}
 	defer input.Close()
 
-	cmd := exec.Command(claudePath, "-p", "--system-prompt", string(promptData))
+	cmd := exec.Command(claudePath, "-p",
+		"--allowedTools", "Read,Grep,Glob,Bash(read-only)",
+		"-a", vendorDir,
+		"--system-prompt", string(promptData))
 	cmd.Stdin = input
 
 	if stream {
@@ -379,7 +398,8 @@ func runClaudeReview(root, auditSummary string, stream bool) string {
 // Used by the update command to assess changes before approval.
 func runClaudeDiffAudit(root, name, diff string) string {
 	summary := fmt.Sprintf("Dependency: %s\nReview the following diff for security-relevant changes:\n\n%s", name, diff)
-	return runClaudeReview(root, summary, false)
+	vendorDir := filepath.Join(root, "vendor", name)
+	return runClaudeReview(root, vendorDir, summary, false)
 }
 
 // buildReport constructs the final audit report string.
