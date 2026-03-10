@@ -3,43 +3,44 @@
     "wallpapers": {
         "files": [
             {
-                "path": "$HOME/Pictures/walls/01.jpg",
-                "position": [0, 0],
-                "size": [960, 540],
-                "zoom": 1.0
+                "path": "$HOME/Library/CloudStorage/ProtonDrive-adambrosio@pm.me-folder/Photos/fav-wallpapers/Screenshot 2026-01-23 at 01.26.36.png",
+                "position": [0, 25],
+                "size": [1920, 1055]
             },
             {
-                "path": "$HOME/Pictures/walls/02.jpg",
-                "position": [960, 0],
-                "size": [960, 540]
+                "path": "$HOME/Library/CloudStorage/ProtonDrive-adambrosio@pm.me-folder/Photos/fav-wallpapers/acer.png",
+                "position": [0, 25],
+                "size": [1920, 1055]
             },
             {
-                "path": "$HOME/Pictures/walls/03.jpg",
-                "position": [0, 540],
-                "size": [960, 540]
+                "path": "$HOME/Library/CloudStorage/ProtonDrive-adambrosio@pm.me-folder/Photos/fav-wallpapers/arzopa.png",
+                "position": [4, 29],
+                "size": [1916, 1051]
             },
             {
-                "path": "$HOME/Pictures/walls/04.jpg",
-                "position": [960, 540],
-                "size": [960, 540]
+                "path": "$HOME/Library/CloudStorage/ProtonDrive-adambrosio@pm.me-folder/Photos/favs/128935060_p17_master1200.jpg",
+                "position": [1426, 25],
+                "size": [708, 1055]
             },
             {
-                "path": "$HOME/Pictures/walls/05.jpg",
-                "position": [1920, 0],
-                "size": [640, 360]
+                "path": "$HOME/Library/CloudStorage/ProtonDrive-adambrosio@pm.me-folder/Photos/favs/128935060_p14_master1200.jpg",
+                "position": [0, 25],
+                "size": [712, 1055]
             },
             {
-                "path": "$HOME/Pictures/walls/06.jpg",
-                "position": [1920, 360],
-                "size": [640, 360]
+                "path": "$HOME/Library/CloudStorage/ProtonDrive-adambrosio@pm.me-folder/Photos/favs/117966941_p0_master1200.jpg",
+                "position": [1212, 25],
+                "size": [708, 1055]
             },
             {
-                "path": "$HOME/Pictures/walls/07.jpg",
-                "position": [1920, 720],
-                "size": [640, 360]
+                "path": "$HOME/Library/CloudStorage/ProtonDrive-adambrosio@pm.me-folder/Photos/fav-wallpapers/anime-flowers-wallpaper.jpeg",
+                "position": [499, 451],
+                "size": [979, 629]
             },
             {
-                "path": "$HOME/Pictures/walls/08.jpg"
+                "path": "$HOME/Library/CloudStorage/ProtonDrive-adambrosio@pm.me-folder/Photos/fav-wallpapers/Screenshot 2025-11-03 at 00.14.21.png",
+                "position": [0, 600],
+                "size": [779, 429]
             }
         ]
     }
