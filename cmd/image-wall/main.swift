@@ -81,7 +81,7 @@ class WallWindow: NSWindow {
         isRestorable = false
         backgroundColor = .black
         level = .normal
-        collectionBehavior = [.stationary, .ignoresCycle]
+        collectionBehavior = [.moveToActiveSpace, .ignoresCycle]
     }
 }
 
