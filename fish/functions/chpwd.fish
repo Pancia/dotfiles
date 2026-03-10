@@ -57,6 +57,14 @@ function listVims --description 'List available vim sessions'
     end
 end
 
+function listClaudeSessions --description 'List Claude sessions if present'
+    set -l sessions (ccs list)
+    if test -n "$sessions"
+        echo "&> Claude sessions:"
+        echo "$sessions"
+    end
+end
+
 function showPlans --description 'List PLAN-* files in dotfiles directory'
     string match -q '*/dotfiles' (pwd); or return
     set -l plans (ls PLAN-* 2>/dev/null)
@@ -90,6 +98,7 @@ function chpwd_hook --on-variable PWD
     cache 15 showTodos
     cache 15 showCmds
     cache 5 listVims
+    cache 5 listClaudeSessions
     cache 5 showPlans
 end
 
