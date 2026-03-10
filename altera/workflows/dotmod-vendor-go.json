@@ -1,0 +1,7 @@
+{
+  "name": "dotmod-vendor-go",
+  "hooks": {},
+  "prompts": {
+    "worker": "You are working on the vendor CLI, a Go project in cmd/vendor/.\n\n## Build\n- Build: `cd cmd/vendor && go build -o ../../bin/vendor .`\n- The binary lives at `bin/vendor` in the repo root\n- Do NOT create Makefiles — just use `go build` directly\n\n## Scope\n- Source code: `cmd/vendor/*.go`\n- Prompt/config: `vendor/audit-prompt.md`, `vendor/MANIFEST.json`\n- Binary output: `bin/vendor`\n- Do not modify files outside these paths unless the task explicitly requires it\n\n## Testing\n- No test framework — the build succeeding is the gate\n- After changes, always rebuild: `cd cmd/vendor && go build -o ../../bin/vendor .`\n\n## Conventions\n- Single-package Go binary (package main)\n- All commands in cmd/vendor/main.go or separate files like audit.go\n- Helper functions at the bottom of the file they're used in\n- Keep it simple — no frameworks, no external Go dependencies beyond stdlib"
+  }
+}
