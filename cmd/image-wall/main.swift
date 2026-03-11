@@ -219,18 +219,20 @@ func runSnapshotMode() -> Int32 {
 class AppDelegate: NSObject, NSApplicationDelegate {
     var windows: [WallWindow] = []
     var entries: [ImageEntry] = []
+    var signalSource: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         windows = createWindows(entries: entries)
 
         // Register SIGUSR1 handler for snapshot
+        signal(SIGUSR1, SIG_IGN) // Let dispatch source handle it
         let src = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
         src.setEventHandler { [weak self] in
             guard let self = self else { return }
             writeSnapshot(windows: self.windows)
         }
         src.resume()
-        signal(SIGUSR1, SIG_IGN) // Let dispatch source handle it
+        signalSource = src
     }
 }
 
