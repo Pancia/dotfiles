@@ -1,5 +1,7 @@
 import AppKit
 import Foundation
+import ObjectiveC
+import UniformTypeIdentifiers
 
 // MARK: - Config Parsing
 
@@ -8,6 +10,8 @@ struct ImageEntry: Codable {
     let position: [Double]?
     let size: [Double]?
     let zoom: Double?
+    let pan: [Double]?
+    let lock: Bool?
 }
 
 struct WallpapersConfig: Codable {
@@ -28,6 +32,7 @@ class ImageCanvasView: NSView {
     let image: NSImage
     var zoom: Double
     let filePath: String
+    var panOffset: CGPoint = .zero
 
     init(image: NSImage, zoom: Double, filePath: String) {
         self.image = image
@@ -52,16 +57,47 @@ class ImageCanvasView: NSView {
         let scale = max(viewW / imgW, viewH / imgH) * zoom
         let drawW = imgW * scale
         let drawH = imgH * scale
-        let drawX = (viewW - drawW) / 2.0
-        let drawY = (viewH - drawH) / 2.0
+        let drawX = (viewW - drawW) / 2.0 + Double(panOffset.x)
+        let drawY = (viewH - drawH) / 2.0 + Double(panOffset.y)
 
         image.draw(in: NSRect(x: drawX, y: drawY, width: drawW, height: drawH))
     }
 
+    override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
+        menu.removeAllItems()
+        if let delegate = NSApplication.shared.delegate as? AppDelegate {
+            delegate.addImageMenuItems(to: menu, canvas: self)
+        }
+    }
+
+    private var lastScrollSaveTime: Date = .distantPast
+
     override func scrollWheel(with event: NSEvent) {
-        let delta = event.scrollingDeltaY * 0.005
-        zoom = min(10.0, max(0.1, zoom + delta))
-        needsDisplay = true
+        guard !((window as? WallWindow)?.isLocked ?? false) else { return }
+
+        if event.modifierFlags.contains(.option) {
+            // Option+scroll = pan
+            if let w = window as? WallWindow, Date().timeIntervalSince(lastScrollSaveTime) > 0.5 {
+                (NSApplication.shared.delegate as? AppDelegate)?.imageUndoManager.saveState(for: w)
+                lastScrollSaveTime = Date()
+            }
+            panOffset.x += event.scrollingDeltaX * 2.0
+            panOffset.y -= event.scrollingDeltaY * 2.0
+            needsDisplay = true
+        } else if event.modifierFlags.contains(.control) {
+            // Ctrl+scroll = zoom
+            if let w = window as? WallWindow, Date().timeIntervalSince(lastScrollSaveTime) > 0.5 {
+                (NSApplication.shared.delegate as? AppDelegate)?.imageUndoManager.saveState(for: w)
+                lastScrollSaveTime = Date()
+            }
+            let delta = event.scrollingDeltaY * 0.005
+            zoom = min(10.0, max(0.1, zoom + delta))
+            needsDisplay = true
+        }
+    }
+
+    var filename: String {
+        (filePath as NSString).lastPathComponent
     }
 }
 
@@ -69,6 +105,10 @@ class ImageCanvasView: NSView {
 
 class WallWindow: NSWindow {
     override var canBecomeKey: Bool { true }
+
+    var isLocked = false {
+        didSet { isMovableByWindowBackground = !isLocked }
+    }
 
     init(rect: NSRect) {
         super.init(
@@ -82,6 +122,14 @@ class WallWindow: NSWindow {
         backgroundColor = .black
         level = .normal
         collectionBehavior = [.moveToActiveSpace]
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if !isLocked {
+            // About to drag-move — save state for undo
+            (NSApplication.shared.delegate as? AppDelegate)?.imageUndoManager.saveState(for: self)
+        }
+        super.mouseDown(with: event)
     }
 }
 
@@ -132,6 +180,17 @@ func createWindows(entries: [ImageEntry]) -> [WallWindow] {
         let rect = NSRect(x: winX, y: winY, width: winW, height: winH)
         let window = WallWindow(rect: rect)
         let canvas = ImageCanvasView(image: image, zoom: zoom, filePath: entry.path)
+
+        // Apply pan offset if present
+        if let pan = entry.pan, pan.count == 2 {
+            canvas.panOffset = CGPoint(x: pan[0], y: pan[1])
+        }
+
+        // Apply lock if present
+        if entry.lock == true {
+            window.isLocked = true
+        }
+
         window.contentView = canvas
         window.orderFront(nil)
         windows.append(window)
@@ -142,8 +201,8 @@ func createWindows(entries: [ImageEntry]) -> [WallWindow] {
 
 // MARK: - Snapshot
 
-func writeSnapshot(windows: [WallWindow]) {
-    guard let screen = NSScreen.main else { return }
+func buildSnapshotEntries(windows: [WallWindow]) -> [[String: Any]] {
+    guard let screen = NSScreen.main else { return [] }
     let screenH = screen.frame.height
     let home = NSHomeDirectory()
 
@@ -157,14 +216,29 @@ func writeSnapshot(windows: [WallWindow]) {
 
         let portablePath = canvas.filePath.replacingOccurrences(of: home, with: "$HOME")
 
-        let entry: [String: Any] = [
+        var entry: [String: Any] = [
             "path": portablePath,
             "position": [Int(frame.origin.x), Int(topY)],
             "size": [Int(frame.width), Int(frame.height)],
             "zoom": canvas.zoom
         ]
+
+        if canvas.panOffset.x != 0 || canvas.panOffset.y != 0 {
+            entry["pan"] = [round(Double(canvas.panOffset.x) * 100) / 100,
+                            round(Double(canvas.panOffset.y) * 100) / 100]
+        }
+
+        if window.isLocked {
+            entry["lock"] = true
+        }
+
         entries.append(entry)
     }
+    return entries
+}
+
+func writeSnapshot(windows: [WallWindow]) {
+    let entries = buildSnapshotEntries(windows: windows)
 
     guard let data = try? JSONSerialization.data(
         withJSONObject: entries,
@@ -214,15 +288,105 @@ func runSnapshotMode() -> Int32 {
     return 0
 }
 
+// MARK: - Undo System
+
+struct WindowState {
+    let zoom: Double
+    let panOffset: CGPoint
+    let windowFrame: NSRect
+}
+
+struct UndoEntry {
+    let window: WallWindow
+    let state: WindowState
+}
+
+class ImageUndoManager {
+    private var undoStack: [UndoEntry] = []
+    private var redoStack: [UndoEntry] = []
+    private let maxDepth = 50
+
+    func saveState(for window: WallWindow) {
+        guard let canvas = window.contentView as? ImageCanvasView else { return }
+        let state = WindowState(zoom: canvas.zoom, panOffset: canvas.panOffset, windowFrame: window.frame)
+        undoStack.append(UndoEntry(window: window, state: state))
+        if undoStack.count > maxDepth { undoStack.removeFirst() }
+        redoStack.removeAll()
+    }
+
+    func undo() {
+        guard let entry = undoStack.popLast() else { return }
+        guard let canvas = entry.window.contentView as? ImageCanvasView else { return }
+        // Save current state to redo
+        let current = WindowState(zoom: canvas.zoom, panOffset: canvas.panOffset, windowFrame: entry.window.frame)
+        redoStack.append(UndoEntry(window: entry.window, state: current))
+        // Restore
+        canvas.zoom = entry.state.zoom
+        canvas.panOffset = entry.state.panOffset
+        entry.window.setFrame(entry.state.windowFrame, display: true)
+        canvas.needsDisplay = true
+    }
+
+    func redo() {
+        guard let entry = redoStack.popLast() else { return }
+        guard let canvas = entry.window.contentView as? ImageCanvasView else { return }
+        // Save current state to undo
+        let current = WindowState(zoom: canvas.zoom, panOffset: canvas.panOffset, windowFrame: entry.window.frame)
+        undoStack.append(UndoEntry(window: entry.window, state: current))
+        // Restore
+        canvas.zoom = entry.state.zoom
+        canvas.panOffset = entry.state.panOffset
+        entry.window.setFrame(entry.state.windowFrame, display: true)
+        canvas.needsDisplay = true
+    }
+
+    func purge(window: WallWindow) {
+        undoStack.removeAll { $0.window === window }
+        redoStack.removeAll { $0.window === window }
+    }
+
+    var canUndo: Bool { !undoStack.isEmpty }
+    var canRedo: Bool { !redoStack.isEmpty }
+}
+
+private var kCanvasKey: UInt8 = 0
+
 // MARK: - App Delegate
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var windows: [WallWindow] = []
     var entries: [ImageEntry] = []
+    var configPath: String = ""
     var signalSource: DispatchSourceSignal?
+    var statusItem: NSStatusItem?
+    let imageUndoManager = ImageUndoManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         windows = createWindows(entries: entries)
+
+        // Set up context menus on each window (willOpenMenu rebuilds dynamically)
+        for window in windows {
+            if let canvas = window.contentView as? ImageCanvasView {
+                canvas.menu = NSMenu()
+            }
+        }
+
+        setupMainMenu()
+
+        // Create menu bar status item
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if let button = statusItem?.button {
+            var img: NSImage? = nil
+            if #available(macOS 11.0, *) {
+                img = NSImage(systemSymbolName: "photo.on.rectangle", accessibilityDescription: "Image Wall")
+            }
+            if let img = img {
+                button.image = img
+            } else {
+                button.title = "IW"
+            }
+        }
+        rebuildMenu()
 
         // Register SIGUSR1 handler for snapshot
         signal(SIGUSR1, SIG_IGN) // Let dispatch source handle it
@@ -233,6 +397,413 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         src.resume()
         signalSource = src
+    }
+
+    // MARK: - Main Menu Bar
+
+    func setupMainMenu() {
+        let mainMenu = NSMenu()
+
+        // App menu
+        let appMenuItem = NSMenuItem()
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "About Image Wall", action: nil, keyEquivalent: "")
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(withTitle: "Quit Image Wall", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenuItem.submenu = appMenu
+        mainMenu.addItem(appMenuItem)
+
+        // File menu
+        let fileMenuItem = NSMenuItem()
+        let fileMenu = NSMenu(title: "File")
+        let addItem = fileMenu.addItem(withTitle: "Add Image...", action: #selector(doAddImage), keyEquivalent: "o")
+        addItem.target = self
+        let saveItem = fileMenu.addItem(withTitle: "Save to VPC", action: #selector(doSaveToVPC), keyEquivalent: "s")
+        saveItem.target = self
+        fileMenu.addItem(NSMenuItem.separator())
+        let snapItem = fileMenu.addItem(withTitle: "Snapshot", action: #selector(doSnapshot), keyEquivalent: "")
+        snapItem.target = self
+        let reloadItem = fileMenu.addItem(withTitle: "Reload from VPC", action: #selector(doReload), keyEquivalent: "r")
+        reloadItem.target = self
+        fileMenuItem.submenu = fileMenu
+        mainMenu.addItem(fileMenuItem)
+
+        // Edit menu
+        let editMenuItem = NSMenuItem()
+        let editMenu = NSMenu(title: "Edit")
+        let undoItem = editMenu.addItem(withTitle: "Undo", action: #selector(doUndo), keyEquivalent: "z")
+        undoItem.target = self
+        let redoItem = editMenu.addItem(withTitle: "Redo", action: #selector(doRedo), keyEquivalent: "Z")
+        redoItem.target = self
+        editMenuItem.submenu = editMenu
+        mainMenu.addItem(editMenuItem)
+
+        NSApp.mainMenu = mainMenu
+    }
+
+    @objc func doUndo() {
+        imageUndoManager.undo()
+    }
+
+    @objc func doRedo() {
+        imageUndoManager.redo()
+    }
+
+    // MARK: - Menu Building
+
+    func rebuildMenu() {
+        let menu = NSMenu()
+
+        menu.addItem(withTitle: "Snapshot", action: #selector(doSnapshot), keyEquivalent: "")
+            .target = self
+        menu.addItem(withTitle: "Reload from VPC", action: #selector(doReload), keyEquivalent: "")
+            .target = self
+
+        menu.addItem(NSMenuItem.separator())
+
+        menu.addItem(withTitle: "Add Image...", action: #selector(doAddImage), keyEquivalent: "")
+            .target = self
+
+        menu.addItem(NSMenuItem.separator())
+
+        menu.addItem(withTitle: "Save to VPC", action: #selector(doSaveToVPC), keyEquivalent: "")
+            .target = self
+
+        menu.addItem(NSMenuItem.separator())
+
+        // Per-image submenus
+        for window in windows {
+            guard let canvas = window.contentView as? ImageCanvasView else { continue }
+            let submenu = NSMenu()
+            addImageMenuItems(to: submenu, canvas: canvas)
+            let item = NSMenuItem(title: canvas.filename, action: nil, keyEquivalent: "")
+            item.submenu = submenu
+            menu.addItem(item)
+        }
+
+        menu.addItem(NSMenuItem.separator())
+
+        menu.addItem(withTitle: "Quit", action: #selector(doQuit), keyEquivalent: "q")
+            .target = self
+
+        menu.delegate = self
+        statusItem?.menu = menu
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        // Only rebuild the status item menu (not context menus)
+        guard menu === statusItem?.menu else { return }
+        rebuildMenu()
+    }
+
+    func buildContextMenu(for canvas: ImageCanvasView) -> NSMenu {
+        let menu = NSMenu()
+        addImageMenuItems(to: menu, canvas: canvas)
+        return menu
+    }
+
+    func addImageMenuItems(to menu: NSMenu, canvas: ImageCanvasView) {
+        // Zoom submenu
+        let zoomSubmenu = NSMenu()
+        let currentZoom = NSMenuItem(title: String(format: "Zoom: %.2fx", canvas.zoom), action: nil, keyEquivalent: "")
+        currentZoom.isEnabled = false
+        zoomSubmenu.addItem(currentZoom)
+        zoomSubmenu.addItem(NSMenuItem.separator())
+
+        for (label, value) in [("Reset (1.0x)", 1.0), ("50%", 0.5), ("75%", 0.75), ("100%", 1.0), ("150%", 1.5), ("200%", 2.0)] {
+            let item = NSMenuItem(title: label, action: #selector(doSetZoom(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = (canvas, value)
+            zoomSubmenu.addItem(item)
+        }
+
+        zoomSubmenu.addItem(NSMenuItem.separator())
+
+        let zoomIn = NSMenuItem(title: "Zoom In (+0.25)", action: #selector(doZoomStep(_:)), keyEquivalent: "")
+        zoomIn.target = self
+        zoomIn.representedObject = (canvas, 0.25)
+        zoomSubmenu.addItem(zoomIn)
+
+        let zoomOut = NSMenuItem(title: "Zoom Out (-0.25)", action: #selector(doZoomStep(_:)), keyEquivalent: "")
+        zoomOut.target = self
+        zoomOut.representedObject = (canvas, -0.25)
+        zoomSubmenu.addItem(zoomOut)
+
+        zoomSubmenu.addItem(NSMenuItem.separator())
+
+        let sliderItem = NSMenuItem()
+        let slider = NSSlider(value: canvas.zoom, minValue: 0.1, maxValue: 5.0, target: self, action: #selector(doSliderZoom(_:)))
+        slider.frame = NSRect(x: 20, y: 0, width: 160, height: 24)
+        slider.isContinuous = true
+        objc_setAssociatedObject(slider, &kCanvasKey, canvas, .OBJC_ASSOCIATION_ASSIGN)
+        let sliderContainer = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
+        sliderContainer.addSubview(slider)
+        sliderItem.view = sliderContainer
+        zoomSubmenu.addItem(sliderItem)
+
+        let zoomItem = NSMenuItem(title: "Zoom", action: nil, keyEquivalent: "")
+        zoomItem.submenu = zoomSubmenu
+        menu.addItem(zoomItem)
+
+        // Reset Pan
+        let resetPan = NSMenuItem(title: "Reset Pan", action: #selector(doResetPan(_:)), keyEquivalent: "")
+        resetPan.target = self
+        resetPan.representedObject = canvas
+        menu.addItem(resetPan)
+
+        // Lock Position
+        let lockItem = NSMenuItem(title: "Lock Position", action: #selector(doToggleLock(_:)), keyEquivalent: "")
+        lockItem.target = self
+        lockItem.representedObject = canvas
+        lockItem.state = (canvas.window as? WallWindow)?.isLocked == true ? .on : .off
+        menu.addItem(lockItem)
+
+        // Snap to Edge submenu
+        let snapSubmenu = NSMenu()
+        for (label, tag) in [("Top-Left", 0), ("Top-Right", 1), ("Bottom-Left", 2), ("Bottom-Right", 3), ("Fill Screen", 4), ("Center", 5)] {
+            let item = NSMenuItem(title: label, action: #selector(doSnapEdge(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = canvas
+            item.tag = tag
+            snapSubmenu.addItem(item)
+        }
+        let snapItem = NSMenuItem(title: "Snap to Edge", action: nil, keyEquivalent: "")
+        snapItem.submenu = snapSubmenu
+        menu.addItem(snapItem)
+
+        // Edit Size submenu
+        let sizeSubmenu = NSMenu()
+        for (label, w, h) in [("200 x 200", 200.0, 200.0), ("400 x 300", 400.0, 300.0), ("640 x 480", 640.0, 480.0), ("800 x 600", 800.0, 600.0), ("1024 x 768", 1024.0, 768.0), ("1920 x 1080", 1920.0, 1080.0)] {
+            let item = NSMenuItem(title: label, action: #selector(doSetSize(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = (canvas, w, h)
+            sizeSubmenu.addItem(item)
+        }
+        let sizeItem = NSMenuItem(title: "Edit Size...", action: nil, keyEquivalent: "")
+        sizeItem.submenu = sizeSubmenu
+        menu.addItem(sizeItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // Remove Image
+        let removeItem = NSMenuItem(title: "Remove Image", action: #selector(doRemoveImage(_:)), keyEquivalent: "")
+        removeItem.target = self
+        removeItem.representedObject = canvas
+        menu.addItem(removeItem)
+    }
+
+    // MARK: - Global Actions
+
+    @objc func doSnapshot() {
+        writeSnapshot(windows: windows)
+        print("Snapshot written to /tmp/image-wall-snapshot.json")
+    }
+
+    @objc func doReload() {
+        guard !configPath.isEmpty else { return }
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: configPath)),
+              let config = try? JSONDecoder().decode(VPCConfig.self, from: data) else {
+            print("Error: Could not reload config from \(configPath)")
+            return
+        }
+
+        // Close all existing windows
+        for window in windows {
+            window.orderOut(nil)
+        }
+        windows.removeAll()
+
+        entries = config.wallpapers.files
+        windows = createWindows(entries: entries)
+
+        // Set up context menus (willOpenMenu rebuilds dynamically)
+        for window in windows {
+            if let canvas = window.contentView as? ImageCanvasView {
+                canvas.menu = NSMenu()
+            }
+        }
+
+        rebuildMenu()
+        print("Reloaded from \(configPath)")
+    }
+
+    @objc func doAddImage() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.png, .jpeg, .gif, .tiff, .bmp, .webP]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        let path = url.path
+        guard let image = NSImage(contentsOfFile: path) else {
+            print("Error: Could not load image: \(path)")
+            return
+        }
+
+        let home = NSHomeDirectory()
+        let portablePath = path.replacingOccurrences(of: home, with: "$HOME")
+
+        // Default size from image or 400x400
+        let winW: Double
+        let winH: Double
+        if let rep = image.representations.first {
+            winW = min(Double(rep.pixelsWide), 800)
+            winH = min(Double(rep.pixelsHigh), 600)
+        } else {
+            winW = 400
+            winH = 400
+        }
+
+        // Center on screen
+        guard let screen = NSScreen.main else { return }
+        let screenFrame = screen.frame
+        let winX = screenFrame.origin.x + (screenFrame.width - winW) / 2.0
+        let winY = screenFrame.origin.y + (screenFrame.height - winH) / 2.0
+
+        let rect = NSRect(x: winX, y: winY, width: winW, height: winH)
+        let window = WallWindow(rect: rect)
+        let canvas = ImageCanvasView(image: image, zoom: 1.0, filePath: portablePath)
+        canvas.menu = NSMenu()
+        window.contentView = canvas
+        window.orderFront(nil)
+        windows.append(window)
+
+        rebuildMenu()
+    }
+
+    @objc func doSaveToVPC() {
+        guard !configPath.isEmpty else { return }
+
+        // Read existing VPC as raw JSON to preserve non-wallpaper keys
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: configPath)),
+              var vpcDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            print("Error: Could not read VPC file for saving")
+            return
+        }
+
+        let entries = buildSnapshotEntries(windows: windows)
+
+        // Update wallpapers.files
+        if var wallpapers = vpcDict["wallpapers"] as? [String: Any] {
+            wallpapers["files"] = entries
+            vpcDict["wallpapers"] = wallpapers
+        } else {
+            vpcDict["wallpapers"] = ["files": entries]
+        }
+
+        guard let outData = try? JSONSerialization.data(
+            withJSONObject: vpcDict,
+            options: [.prettyPrinted, .sortedKeys]
+        ) else {
+            print("Error: Could not serialize VPC data")
+            return
+        }
+
+        do {
+            try outData.write(to: URL(fileURLWithPath: configPath))
+            print("Saved to \(configPath)")
+        } catch {
+            print("Error: Could not write to \(configPath): \(error)")
+        }
+    }
+
+    @objc func doQuit() {
+        NSApplication.shared.terminate(nil)
+    }
+
+    // MARK: - Per-Image Actions
+
+    @objc func doSetZoom(_ sender: NSMenuItem) {
+        guard let (canvas, value) = sender.representedObject as? (ImageCanvasView, Double) else { return }
+        if let w = canvas.window as? WallWindow { imageUndoManager.saveState(for: w) }
+        canvas.zoom = value
+        canvas.needsDisplay = true
+        rebuildMenu()
+    }
+
+    @objc func doZoomStep(_ sender: NSMenuItem) {
+        guard let (canvas, delta) = sender.representedObject as? (ImageCanvasView, Double) else { return }
+        if let w = canvas.window as? WallWindow { imageUndoManager.saveState(for: w) }
+        canvas.zoom = min(10.0, max(0.1, canvas.zoom + delta))
+        canvas.needsDisplay = true
+        rebuildMenu()
+    }
+
+    @objc func doSliderZoom(_ sender: NSSlider) {
+        guard let canvas = objc_getAssociatedObject(sender, &kCanvasKey) as? ImageCanvasView else { return }
+        canvas.zoom = sender.doubleValue
+        canvas.needsDisplay = true
+    }
+
+    @objc func doResetPan(_ sender: NSMenuItem) {
+        guard let canvas = sender.representedObject as? ImageCanvasView else { return }
+        if let w = canvas.window as? WallWindow { imageUndoManager.saveState(for: w) }
+        canvas.panOffset = .zero
+        canvas.needsDisplay = true
+    }
+
+    @objc func doToggleLock(_ sender: NSMenuItem) {
+        guard let canvas = sender.representedObject as? ImageCanvasView,
+              let wallWindow = canvas.window as? WallWindow else { return }
+        wallWindow.isLocked = !wallWindow.isLocked
+        rebuildMenu()
+    }
+
+    @objc func doSnapEdge(_ sender: NSMenuItem) {
+        guard let canvas = sender.representedObject as? ImageCanvasView,
+              let window = canvas.window as? WallWindow,
+              let screen = NSScreen.main else { return }
+        imageUndoManager.saveState(for: window)
+
+        let screenFrame = screen.frame
+        let screenW = screenFrame.width
+        let screenH = screenFrame.height
+        let menuBarH: Double = 25
+        let winW = window.frame.width
+        let winH = window.frame.height
+
+        let newFrame: NSRect
+        switch sender.tag {
+        case 0: // Top-Left
+            newFrame = NSRect(x: 0, y: screenH - menuBarH - winH, width: winW, height: winH)
+        case 1: // Top-Right
+            newFrame = NSRect(x: screenW - winW, y: screenH - menuBarH - winH, width: winW, height: winH)
+        case 2: // Bottom-Left
+            newFrame = NSRect(x: 0, y: 0, width: winW, height: winH)
+        case 3: // Bottom-Right
+            newFrame = NSRect(x: screenW - winW, y: 0, width: winW, height: winH)
+        case 4: // Fill Screen
+            newFrame = NSRect(x: 0, y: 0, width: screenW, height: screenH - menuBarH)
+        case 5: // Center
+            newFrame = NSRect(x: (screenW - winW) / 2, y: (screenH - winH) / 2, width: winW, height: winH)
+        default:
+            return
+        }
+
+        window.setFrame(newFrame, display: true)
+    }
+
+    @objc func doSetSize(_ sender: NSMenuItem) {
+        guard let (canvas, w, h) = sender.representedObject as? (ImageCanvasView, Double, Double),
+              let window = canvas.window as? WallWindow else { return }
+        imageUndoManager.saveState(for: window)
+
+        let oldFrame = window.frame
+        // Keep the top-left corner stable (adjust y since macOS uses bottom-left origin)
+        let newY = oldFrame.origin.y + oldFrame.height - h
+        let newFrame = NSRect(x: oldFrame.origin.x, y: newY, width: w, height: h)
+        window.setFrame(newFrame, display: true)
+    }
+
+    @objc func doRemoveImage(_ sender: NSMenuItem) {
+        guard let canvas = sender.representedObject as? ImageCanvasView,
+              let window = canvas.window as? WallWindow else { return }
+
+        window.orderOut(nil)
+        imageUndoManager.purge(window: window)
+        windows.removeAll { $0 === window }
+        rebuildMenu()
     }
 }
 
@@ -263,5 +834,6 @@ app.setActivationPolicy(.regular)
 
 let delegate = AppDelegate()
 delegate.entries = config.wallpapers.files
+delegate.configPath = configPath
 app.delegate = delegate
 app.run()
