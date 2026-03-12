@@ -877,7 +877,7 @@ class TransitCalculator:
             'venus': 'venus', 'mars': 'mars', 'jupiter': 'jupiter',
             'saturn': 'saturn', 'uranus': 'uranus', 'neptune': 'neptune',
             'pluto': 'pluto', 'chiron': 'chiron',
-            'true_node': 'true_node', 'mean_node': 'mean_node',
+            'true_node': 'true_north_lunar_node', 'mean_node': 'mean_node',
             'mean_lilith': 'mean_lilith', 'true_lilith': 'true_lilith',
         }
         attr = attr_map.get(planet_name.lower(), planet_name.lower())
@@ -1502,6 +1502,12 @@ Examples:
     display_g.add_argument('--summary-only', action='store_true',
                           help='Show summary only, no timeline')
 
+    # --- Natal ---
+    natal_p = subparsers.add_parser('natal', help='Display natal chart positions')
+    natal_p.add_argument('chart', nargs='?', help='Chart name (uses default)')
+    natal_p.add_argument('--json', dest='json_output', action='store_true',
+                         help='Output as JSON')
+
     # --- Utility ---
     subparsers.add_parser('clear-cache', help='Clear transit cache')
     subparsers.add_parser('config', help='Show configuration')
@@ -1674,6 +1680,100 @@ Examples:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
         except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == 'natal':
+        try:
+            chart = storage.load_chart(get_chart_name(args.chart))
+            bd = chart.birth_data
+            natal = transit_calc._make_subject(
+                bd.full_name, bd.year, bd.month, bd.day, bd.hour, bd.minute, bd
+            )
+            transit_calc._cache_coords(chart, natal)
+            natal_cusps = transit_calc._calculate_natal_houses(natal)
+
+            # Collect planet positions
+            planet_names = [
+                'Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn',
+                'Uranus', 'Neptune', 'Pluto', 'Chiron', 'True_Node', 'Mean_Lilith',
+            ]
+            planets_data = {}
+            for pname in planet_names:
+                obj = transit_calc._get_planet_obj(natal, pname)
+                if obj:
+                    sign = getattr(obj, 'sign', '')
+                    abs_pos = getattr(obj, 'abs_pos', 0.0)
+                    speed = getattr(obj, 'speed', 0.0) if hasattr(obj, 'speed') else 0.0
+                    house = transit_calc._planet_in_natal_house(abs_pos, natal_cusps)
+                    degree = abs_pos % 30
+                    display_name = pname.replace('_', ' ')
+                    if display_name == 'True Node':
+                        display_name = 'North Node'
+                    planets_data[display_name] = {
+                        'sign': sign, 'house': house,
+                        'degree': round(degree, 2), 'speed': round(speed, 2),
+                    }
+
+            # South Node = opposite of North Node
+            if 'North Node' in planets_data:
+                nn = planets_data['North Node']
+                signs = ['Ari', 'Tau', 'Gem', 'Can', 'Leo', 'Vir',
+                         'Lib', 'Sco', 'Sag', 'Cap', 'Aqu', 'Pis']
+                nn_idx = signs.index(nn['sign']) if nn['sign'] in signs else 0
+                sn_sign = signs[(nn_idx + 6) % 12]
+                nn_obj = transit_calc._get_planet_obj(natal, 'True_Node')
+                sn_abs = (getattr(nn_obj, 'abs_pos', 0.0) + 180) % 360
+                sn_house = transit_calc._planet_in_natal_house(sn_abs, natal_cusps)
+                planets_data['South Node'] = {
+                    'sign': sn_sign, 'house': sn_house,
+                    'degree': round(sn_abs % 30, 2), 'speed': 0.0,
+                }
+
+            # Collect house cusps
+            signs_list = ['Ari', 'Tau', 'Gem', 'Can', 'Leo', 'Vir',
+                          'Lib', 'Sco', 'Sag', 'Cap', 'Aqu', 'Pis']
+            houses_data = {}
+            for hnum, cusp_deg in sorted(natal_cusps.items()):
+                sign = signs_list[int(cusp_deg / 30) % 12]
+                houses_data[str(hnum)] = {
+                    'sign': sign, 'degree': round(cusp_deg % 30, 2),
+                }
+
+            asc = houses_data.get('1', {})
+            mc = houses_data.get('10', {})
+
+            if args.json_output:
+                output = {
+                    'planets': planets_data,
+                    'houses': houses_data,
+                    'ascendant': asc,
+                    'midheaven': mc,
+                }
+                print(json.dumps(output, indent=2))
+            else:
+                print(f"Natal Chart: {chart.birth_data.full_name}")
+                print(f"Born: {bd.year}-{bd.month:02d}-{bd.day:02d} "
+                      f"{bd.hour:02d}:{bd.minute:02d} — {bd.city}, {bd.nation}")
+                print()
+                print("Planets:")
+                for name, data in planets_data.items():
+                    sym = formatter.SIGN_SYMBOLS.get(data['sign'], data['sign'])
+                    print(f"  {name:<14} {sym} {data['sign']:<3} {data['degree']:6.2f}°  "
+                          f"House {data['house']:<2}  spd {data['speed']:+.2f}")
+                print()
+                print("House Cusps:")
+                for hnum in range(1, 13):
+                    data = houses_data[str(hnum)]
+                    sym = formatter.SIGN_SYMBOLS.get(data['sign'], data['sign'])
+                    label = ""
+                    if hnum == 1:
+                        label = " (ASC)"
+                    elif hnum == 10:
+                        label = " (MC)"
+                    print(f"  House {hnum:<3} {sym} {data['sign']:<3} {data['degree']:6.2f}°{label}")
+
+        except FileNotFoundError as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
 
