@@ -1,3 +1,3 @@
 function akr
-    cd ~/Cloud/TheAkashicRecords && cmds start
+    cd ~/TheAkashicRecords && cmds start
 end
