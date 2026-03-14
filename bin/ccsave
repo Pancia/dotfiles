@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Save current Claude Code session to .claude-sessions
+# Usage: ccsave [title]
+set -euo pipefail
+
+if [ -z "${CLAUDE_SESSION_ID:-}" ]; then
+    echo "Not inside a Claude Code session (no CLAUDE_SESSION_ID)" >&2
+    exit 1
+fi
+
+id="$CLAUDE_SESSION_ID"
+title="${*}"
+timestamp=$(date '+%Y-%m-%d %H:%M')
+file="$(pwd)/.claude-sessions"
+
+# Dedup by id
+if [ -f "$file" ]; then
+    grep -v "^${id}	" "$file" > "$file.tmp" 2>/dev/null || true
+    mv "$file.tmp" "$file"
+fi
+
+if [ -n "$title" ]; then
+    printf '%s\t%s\t%s\n' "$id" "$timestamp" "$title" >> "$file"
+    echo "Saved session: $id ($timestamp — $title)"
+else
+    printf '%s\t%s\n' "$id" "$timestamp" >> "$file"
+    echo "Saved session: $id ($timestamp)"
+fi

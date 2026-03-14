@@ -111,7 +111,7 @@ function _ccs_help
     echo "ccs [add|list|rm|open|help]"
     echo "  add <id> [title]   Add a session (also accepts 'claude --resume <id>')"
     echo "  list               List sessions in current directory"
-    echo "  rm <id>            Remove a session"
+    echo "  remove <id>        Remove a session"
     echo "  resume             Pick and resume a session (fzf)"
     echo "  help               Show this help"
 end
@@ -122,7 +122,7 @@ function ccs --description 'Claude Code Sessions - manage per-directory sessions
             _ccs_add $argv[2..-1]
         case list ls
             _ccs_list
-        case rm remove
+        case remove
             _ccs_remove $argv[2..-1]
         case resume ''
             _ccs_open

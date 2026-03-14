@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Claude Code statusline script
+# Reads JSON from stdin, outputs formatted status line
+# Caches rate limit API calls to /tmp/claude-rate-limits.json (60s TTL)
+
+CACHE_FILE="/tmp/claude-rate-limits.json"
+CACHE_TTL=300
+BACKOFF_FILE="/tmp/claude-rate-limits.backoff"
+BACKOFF_TTL=300
+
+input=$(cat)
+
+# --- CWD ---
+cwd=$(echo "$input" | jq -r '.workspace.current_dir')
+short_cwd="${cwd/#$HOME/~}"
+IFS='/' read -ra PARTS <<< "$short_cwd"
+[ ${#PARTS[@]} -gt 3 ] && short_cwd=".../${PARTS[-2]}/${PARTS[-1]}"
+
+# --- Task prefix (alt) ---
+task_prefix=""
+command -v alt > /dev/null 2>&1 && task_prefix=$(alt statusline 2>/dev/null)
+
+# --- Git info ---
+git_info=""
+if git -C "$cwd" rev-parse --git-dir > /dev/null 2>&1; then
+  branch=$(git -C "$cwd" --no-optional-locks branch --show-current 2>/dev/null || echo "detached")
+  staged=$(git -C "$cwd" --no-optional-locks diff --cached --numstat 2>/dev/null | wc -l | tr -d ' ')
+  unstaged=$(git -C "$cwd" --no-optional-locks diff --numstat 2>/dev/null | wc -l | tr -d ' ')
+  untracked=$(git -C "$cwd" --no-optional-locks ls-files --others --exclude-standard 2>/dev/null | wc -l | tr -d ' ')
+  git_parts=""
+  [ "$staged" -gt 0 ] && git_parts="${git_parts}+${staged} "
+  [ "$unstaged" -gt 0 ] && git_parts="${git_parts}!${unstaged} "
+  [ "$untracked" -gt 0 ] && git_parts="${git_parts}?${untracked} "
+  [ -n "$git_parts" ] && git_info=" [git]: ${branch} ${git_parts}" || git_info=" [git]: ${branch}"
+fi
+
+# --- Context window % ---
+context_info=""
+usage=$(echo "$input" | jq '.context_window.used_percentage // empty' 2>/dev/null)
+if [ -n "$usage" ]; then
+  context_info="${usage}%"
+fi
+
+# --- Rate limits (cached API call) ---
+rate_info=""
+refresh_cache=false
+
+if [ -f "$CACHE_FILE" ]; then
+  cache_age=$(( $(date +%s) - $(stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0) ))
+  [ "$cache_age" -ge "$CACHE_TTL" ] && refresh_cache=true
+else
+  refresh_cache=true
+fi
+
+if $refresh_cache; then
+  # Skip if in backoff period from a previous failure
+  if [ -f "$BACKOFF_FILE" ]; then
+    backoff_age=$(( $(date +%s) - $(stat -f %m "$BACKOFF_FILE" 2>/dev/null || echo 0) ))
+    [ "$backoff_age" -lt "$BACKOFF_TTL" ] && refresh_cache=false
+  fi
+fi
+
+if $refresh_cache; then
+  rm -f "$BACKOFF_FILE"
+  token=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['claudeAiOauth']['accessToken'])" 2>/dev/null)
+  if [ -n "$token" ]; then
+    result=$(curl -s --max-time 3 "https://api.anthropic.com/api/oauth/usage" \
+      -H "Authorization: Bearer $token" \
+      -H "anthropic-beta: oauth-2025-04-20" \
+      -H "User-Agent: claude-code/2.1.74" 2>/dev/null)
+    if echo "$result" | jq -e '.five_hour' > /dev/null 2>&1; then
+      echo "$result" > "$CACHE_FILE"
+    else
+      touch "$BACKOFF_FILE"
+    fi
+  else
+    touch "$BACKOFF_FILE"
+  fi
+fi
+
+if [ -f "$CACHE_FILE" ]; then
+  five_h=$(jq -r '.five_hour.utilization // empty' "$CACHE_FILE" 2>/dev/null)
+  seven_d=$(jq -r '.seven_day.utilization // empty' "$CACHE_FILE" 2>/dev/null)
+  if [ -n "$five_h" ] && [ -n "$seven_d" ]; then
+    rate_info=" (5h:${five_h%.*}% 7d:${seven_d%.*}%)"
+  fi
+fi
+
+# --- Model & Agent ---
+model=$(echo "$input" | jq -r '.model.display_name // ""')
+agent=$(echo "$input" | jq -r '.agent.name // ""')
+model_info=""
+[ -n "$model" ] && model_info=" [${model}]"
+agent_info=""
+[ -n "$agent" ] && agent_info=" (agent: ${agent})"
+
+# --- Output ---
+printf "%s%s %s%s%s%s%s" "$context_info" "$rate_info" "$task_prefix" "$short_cwd" "$git_info" "$model_info" "$agent_info"

@@ -14,6 +14,7 @@ Usage:
     astro forecast [NAME] --days N   # N-day forecast from today
     astro forecast --date YYYY-MM-DD # Forecast from specific date
     astro mundane --days N       # Mundane transits (transit-to-transit)
+    astro natal [NAME]           # Full birth chart (planets, houses, aspects)
 
 Run with: uv run --with kerykeion ~/dotfiles/bin/astro <command>
 """
@@ -1743,12 +1744,29 @@ Examples:
             asc = houses_data.get('1', {})
             mc = houses_data.get('10', {})
 
+            # Calculate natal aspects
+            from kerykeion import NatalAspects
+            natal_aspects_calc = NatalAspects(natal)
+            aspects_data = []
+            for asp in natal_aspects_calc.relevant_aspects:
+                p1 = asp['p1_name'].replace('_', ' ')
+                p2 = asp['p2_name'].replace('_', ' ')
+                if p1 == 'True North Lunar Node':
+                    p1 = 'North Node'
+                if p2 == 'True North Lunar Node':
+                    p2 = 'North Node'
+                aspects_data.append({
+                    'p1': p1, 'p2': p2,
+                    'aspect': asp['aspect'], 'orb': round(asp['orbit'], 2),
+                })
+
             if args.json_output:
                 output = {
                     'planets': planets_data,
                     'houses': houses_data,
                     'ascendant': asc,
                     'midheaven': mc,
+                    'aspects': aspects_data,
                 }
                 print(json.dumps(output, indent=2))
             else:
@@ -1772,6 +1790,15 @@ Examples:
                     elif hnum == 10:
                         label = " (MC)"
                     print(f"  House {hnum:<3} {sym} {data['sign']:<3} {data['degree']:6.2f}°{label}")
+                print()
+                print("Natal Aspects:")
+                for a in aspects_data:
+                    p1_sym = formatter.PLANET_SYMBOLS.get(a['p1'], '')
+                    p2_sym = formatter.PLANET_SYMBOLS.get(a['p2'], '')
+                    asp_sym = formatter.ASPECT_SYMBOLS.get(a['aspect'], a['aspect'])
+                    p1_label = f"{p1_sym} {a['p1']}" if p1_sym else a['p1']
+                    p2_label = f"{p2_sym} {a['p2']}" if p2_sym else a['p2']
+                    print(f"  {p1_label:<16} {asp_sym} {a['aspect']:<12} {p2_label:<16} orb {a['orb']:+.2f}°")
 
         except FileNotFoundError as e:
             print(f"Error: {e}", file=sys.stderr)

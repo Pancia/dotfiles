@@ -1,4 +1,4 @@
-function my-claude-code-wrapper --description "Claude Code wrapper"
+function my-claude-code-wrapper --description "Claude Code wrapper" --wraps claude
     argparse --ignore-unknown 'process-label=' -- $argv
 
     # Unlock keychain for SSH/mosh sessions so Claude can access stored credentials
