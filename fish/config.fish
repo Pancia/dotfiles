@@ -212,6 +212,7 @@ alias gpl __git_use_g
 
 # Abbreviations
 abbr -a cc my-claude-code-wrapper
+abbr -a ccu 'brew upgrade claude-code'
 abbr -a oo my-opencode-wrapper
 
 # Key bindings
