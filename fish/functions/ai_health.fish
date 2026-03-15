@@ -2,7 +2,9 @@
 function ai_health --description 'Health Chat with AI using claude'
     echo ""
     set_color yellow
+    echo "======================================================================="
     echo "~ ephemeral session ~ not persisted ~ not part of the akashic records ~"
+    echo "======================================================================="
     set_color normal
     echo ""
 

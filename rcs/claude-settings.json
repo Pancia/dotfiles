@@ -37,6 +37,16 @@
             "command": "~/.claude/hooks/ensure-rcs.sh pre"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/jj-snapshot.sh pre",
+            "timeout": 5000
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -65,6 +75,17 @@
           {
             "type": "command",
             "command": "ccsave-hook"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/jj-snapshot.sh stop",
+            "timeout": 5000
           }
         ]
       }
