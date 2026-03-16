@@ -8,7 +8,6 @@ function ai_health --description 'Health Chat with AI using claude'
     set_color normal
     echo ""
 
-    set -l user_prompt (string join " " $argv)
     my-claude-code-wrapper --process-label ai_health.fish --system-prompt (cat ~/private/ai/prompts/health.txt | string collect) \
-        -p "$user_prompt"
+        $argv
 end
