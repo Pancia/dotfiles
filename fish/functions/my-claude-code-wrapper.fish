@@ -1,5 +1,18 @@
 function my-claude-code-wrapper --description "Claude Code wrapper" --wraps claude
-    argparse --ignore-unknown 'process-label=' -- $argv
+    # Extract --process-label manually to avoid argparse treating -p as abbreviation
+    set -l process_label
+    set -l pass_argv
+    set -l skip_next 0
+    for arg in $argv
+        if test $skip_next -eq 1
+            set process_label $arg
+            set skip_next 0
+        else if test "$arg" = --process-label
+            set skip_next 1
+        else
+            set -a pass_argv $arg
+        end
+    end
 
     # Unlock keychain for SSH/mosh sessions so Claude can access stored credentials
     if set -q SSH_CONNECTION
@@ -12,10 +25,10 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
 
     set -l timestamp (date +%H:%M:%S)
     set -l label (basename (pwd))
-    if set -q _flag_process_label
-        set label "$label @ $_flag_process_label $timestamp"
+    if test -n "$process_label"
+        set label "$label @ $process_label $timestamp"
     else
         set label "$label $timestamp"
     end
-    proc-label "claude [$label]" claude --verbose $argv
+    proc-label "claude [$label]" claude --verbose $pass_argv
 end
