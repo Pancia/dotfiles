@@ -1,29 +1,37 @@
 module CMD
-  def service_restart(opts)
-    opts.banner = "Usage: service_restart"
-    opts.info = "Restart sanctuary service and tail logs"
+  def build(opts)
+    opts.banner = "Usage: build"
+    opts.info = "Build Sanctuary app (Debug)"
     lambda { |*args|
-      EXE.bash %{
-        service restart sanctuary && service log sanctuary
-      }
+      EXE.bash %{ just build }
     }
   end
-  def dev(opts)
-    opts.banner = "Usage: dev"
-    opts.info = "Run npm dev server"
+  def start(opts)
+    opts.banner = "Usage: start"
+    opts.info = "Build and launch Sanctuary app"
     lambda { |*args|
-      EXE.bash %{
-        npm run dev
-      }
+      EXE.bash %{ just run }
     }
   end
-  def vim(opts)
-    opts.banner = "Usage: vim"
-    opts.info = "Open project files in nvim"
+  def deps(opts)
+    opts.banner = "Usage: deps"
+    opts.info = "Resolve SPM package dependencies"
     lambda { |*args|
-      EXE.bash %{
-        nvim documents/hello-world.md index.html
-      }
+      EXE.bash %{ just deps }
+    }
+  end
+  def generate(opts)
+    opts.banner = "Usage: generate"
+    opts.info = "Regenerate Xcode project from project.yml"
+    lambda { |*args|
+      EXE.bash %{ just generate }
+    }
+  end
+  def kill(opts)
+    opts.banner = "Usage: kill"
+    opts.info = "Force-kill Sanctuary (escape stuck kiosk)"
+    lambda { |*args|
+      EXE.bash %{ just kill }
     }
   end
 end

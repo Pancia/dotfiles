@@ -128,7 +128,18 @@ function obj:stop()
   log.d("stop: complete")
 end
 
--- Export global function for hs -c access
+-- Cancel tracking without saving (called on escape)
+function obj:cancel()
+  if self._start_time then
+    log.i("cancel: discarding recording, was tracking for",
+      math.floor(hs.timer.secondsSinceEpoch() - self._start_time), "seconds")
+    self._start_time = nil
+  else
+    log.d("cancel: not tracking, nothing to discard")
+  end
+end
+
+-- Export global functions for hs -c access
 -- Uses a short delay to let window state settle after keystroke
 _G.superwhisperSync = function()
   log.d("superwhisperSync: global function called, scheduling sync in 0.3s")
@@ -136,6 +147,15 @@ _G.superwhisperSync = function()
     log.d("superwhisperSync: delayed sync executing")
     local result = obj:sync()
     log.d("superwhisperSync: sync returned", result)
+  end)
+  return true
+end
+
+_G.superwhisperCancel = function()
+  log.d("superwhisperCancel: global function called, scheduling cancel in 0.3s")
+  hs.timer.doAfter(0.3, function()
+    log.d("superwhisperCancel: delayed cancel executing")
+    obj:cancel()
   end)
   return true
 end

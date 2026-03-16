@@ -143,7 +143,7 @@ local watch = engage("seeds.watch.init", {
   }
 })
 
-local sanctuary = engage("seeds.sanctuary", {})
+local sanctuary = nil and engage("seeds.sanctuary", {})
 
 local curfew = nil and engage("seeds.curfew", {
     triggerTime = {hour = 22, minute = 30},
@@ -247,7 +247,7 @@ local function softReload()
         "seeds.calendar.init",
         "seeds.lotus.init",
         "seeds.watch.init",
-        "seeds.sanctuary",
+        -- "seeds.sanctuary",
         "seeds.curfew",
         "seeds.superwhisper",
         "seeds.emoji",
