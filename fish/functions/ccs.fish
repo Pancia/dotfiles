@@ -52,25 +52,28 @@ function _ccs_list --description 'List claude sessions'
     if not test -f "$file"
         return 1
     end
-    set -l entries (jq -r '[.id, .ts, .title] | @tsv' "$file" 2>/dev/null)
+    set -l entries (jq -r '[.id, .title, .ts] | @tsv' "$file" 2>/dev/null)
     if test -z "$entries"
         return 1
     end
     for entry in $entries
         set -l parts (string split \t "$entry")
         set -l id $parts[1]
-        set -l ts $parts[2]
-        set -l title $parts[3]
+        set -l title $parts[2]
+        set -l ts $parts[3]
         set -l meta
-        if test -n "$ts" -a -n "$title"
-            set meta "$ts — $title"
+        if test -n "$title" -a -n "$ts"
+            set meta "$title — $ts"
+        else if test -n "$title"
+            set meta "$title"
         else if test -n "$ts"
             set meta "$ts"
         end
+        set -l short_id (string sub -l 8 "$id")
         if test -n "$meta"
-            printf '  %s  %s\n' (set_color cyan)"$id"(set_color normal) (set_color brblack)"$meta"(set_color normal)
+            printf '  %s  %s\n' (set_color cyan)"$short_id"(set_color normal) (set_color brblack)"$meta"(set_color normal)
         else
-            printf '  %s\n' (set_color cyan)"$id"(set_color normal)
+            printf '  %s\n' (set_color cyan)"$short_id"(set_color normal)
         end
     end
 end
@@ -174,12 +177,12 @@ function _ccs_autotitle --description 'Auto-generate a title for a session using
             echo "No .claude-sessions file"
             return 1
         end
-        set -l lines (jq -r '[.id, .ts, .title] | @tsv' "$file" 2>/dev/null)
+        set -l lines (jq -r '[.id, (.id | .[0:8]), .title, .ts] | @tsv' "$file" 2>/dev/null)
         if test -z "$lines"
             echo "No sessions"
             return 1
         end
-        set -l choice (printf '%s\n' $lines | fzf --prompt="Autotitle session> " --no-sort)
+        set -l choice (printf '%s\n' $lines | fzf --with-nth=2.. --prompt="Autotitle session> " --no-sort)
         if test -z "$choice"
             return 1
         end
@@ -221,13 +224,13 @@ function _ccs_open --description 'Pick and resume a session'
         echo "No .claude-sessions file"
         return 1
     end
-    set -l lines (jq -r '[.id, .ts, .title] | @tsv' "$file" 2>/dev/null)
+    set -l lines (jq -r '[.id, (.id | .[0:8]), .title, .ts] | @tsv' "$file" 2>/dev/null)
     if test -z "$lines"
         echo "No sessions"
         return 1
     end
 
-    set -l choice (printf '%s\n' $lines | fzf --prompt="Claude session> " --no-sort)
+    set -l choice (printf '%s\n' $lines | fzf --with-nth=2.. --prompt="Claude session> " --no-sort)
     if test -n "$choice"
         set -l id (string split \t "$choice")[1]
         echo "Resuming session $id..."
