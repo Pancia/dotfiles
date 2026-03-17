@@ -116,7 +116,7 @@ COMMANDS = {
     '_desc': 'Git',
     'a': {
         '_desc': 'Add',
-        'f': ('Add file (fzf)', chain('git ls-files -m -o --exclude-standard | fzf -m | xargs git add', 'git status'), True),
+        'f': ('Add file (fzf)', chain('printf \'%s\\n\' (git ls-files -m -o --exclude-standard) (git ls-files -m -o --exclude-standard | xargs -n1 dirname 2>/dev/null) | sort -u | grep -v \'^\\.\\$\' | fzf -m --bind "space:toggle+down" --bind "enter:select+accept" --header "SPACE=toggle  ENTER=accept" | xargs git add', 'git status'), True),
         '.': ('Add this directory', chain('git add .', 'git status'), True),
         'a': ('Add all', chain('git add --all', 'git status')),
         'p': ('Add interactively', chain('git add --patch', 'git status')),
@@ -135,14 +135,18 @@ COMMANDS = {
         '_desc': 'Diff',
         'd': ('Diff', 'git diff --color-words', True),
         's': ('Diff staged', 'git diff --staged --color-words', True),
-        'f': ('Diff file (fzf)', 'git ls-files -m | fzf | xargs git diff --color-words', True),
+        'f': ('Diff file (fzf)', 'printf \'%s\\n\' (git ls-files -m) (git ls-files -m | xargs -n1 dirname 2>/dev/null) | sort -u | grep -v \'^\\.\\$\' | fzf -m --bind "space:toggle+down" --bind "enter:select+accept" --header "SPACE=toggle  ENTER=accept" | xargs git diff --color-words', True),
     },
     'f': {
         '_desc': 'Fetch/Pull',
         'f': ('Fetch all', chain('git fetch --all --prune', 'git status')),
         'l': ('Pull', chain('git pull', 'git status')),
     },
-    'h': ('Show (last commit)', 'git show --color-words'),
+    'h': {
+        '_desc': 'Show',
+        'h': ('Show (last commit)', 'git show --color-words'),
+        'f': ('Show commit (fzf)', 'git log --oneline --all | fzf --preview "git show --color-words {1}" | awk \'{print $1}\' | xargs git show --color-words'),
+    },
     'l': ('Log graph', 'git log --graph --all --decorate --abbrev-commit'),
     'p': {
         '_desc': 'Push',
@@ -152,8 +156,8 @@ COMMANDS = {
     'u': ('Pull', chain('git pull', 'git status')),
     'r': {
         '_desc': 'Restore',
-        's': ('Unstage (fzf)', chain('git diff --staged --name-only | fzf -m | xargs git restore --staged', 'git status'), True),
-        'r': ('Restore file (fzf)', chain('git diff --name-only | fzf -m | xargs git restore', 'git status'), True),
+        's': ('Unstage (fzf)', chain('printf \'%s\\n\' (git diff --staged --name-only) (git diff --staged --name-only | xargs -n1 dirname 2>/dev/null) | sort -u | grep -v \'^\\.\\$\' | fzf -m --bind "space:toggle+down" --bind "enter:select+accept" --header "SPACE=toggle  ENTER=accept" | xargs git restore --staged', 'git status'), True),
+        'r': ('Restore file (fzf)', chain('printf \'%s\\n\' (git diff --name-only) (git diff --name-only | xargs -n1 dirname 2>/dev/null) | sort -u | grep -v \'^\\.\\$\' | fzf -m --bind "space:toggle+down" --bind "enter:select+accept" --header "SPACE=toggle  ENTER=accept" | xargs git restore', 'git status'), True),
     },
     's': ('Status', 'git status'),
     't': {
