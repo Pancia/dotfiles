@@ -5,10 +5,25 @@ SNAP_DIR="$HOME/.local/share/disk-snapshots"
 THRESHOLD_KB=$((100 * 1024))  # 100MB default
 
 usage() {
-    echo "Usage: disk-snapshot-diff [-t THRESHOLD_MB] [old.txt new.txt]"
+    echo "Usage: disk-snapshot-diff [-t THRESHOLD_MB] [start [end]]"
     echo "  -t  Minimum change in MB to display (default: 100)"
-    echo "  Without args, compares the two most recent snapshots."
+    echo "  Args can be full paths or date stems (e.g. 2026-03-11)."
+    echo "  No args: compares the two most recent snapshots."
+    echo "  One arg: compares that snapshot to the latest."
+    echo "  Two args: compares start to end."
     exit 1
+}
+
+resolve_snap() {
+    local arg="$1"
+    if [[ -f "$arg" ]]; then
+        echo "$arg"
+    elif [[ -f "$SNAP_DIR/$arg.txt" ]]; then
+        echo "$SNAP_DIR/$arg.txt"
+    else
+        echo "Snapshot not found: $arg" >&2
+        exit 1
+    fi
 }
 
 while getopts "t:h" opt; do
@@ -20,11 +35,19 @@ while getopts "t:h" opt; do
 done
 shift $((OPTIND - 1))
 
+mapfile -t snaps < <(ls -1 "$SNAP_DIR"/*.txt 2>/dev/null | sort)
+
 if [[ $# -eq 2 ]]; then
-    OLD="$1"
-    NEW="$2"
+    OLD="$(resolve_snap "$1")"
+    NEW="$(resolve_snap "$2")"
+elif [[ $# -eq 1 ]]; then
+    OLD="$(resolve_snap "$1")"
+    if [[ ${#snaps[@]} -lt 1 ]]; then
+        echo "No snapshots in $SNAP_DIR" >&2
+        exit 1
+    fi
+    NEW="${snaps[-1]}"
 elif [[ $# -eq 0 ]]; then
-    mapfile -t snaps < <(ls -1 "$SNAP_DIR"/*.txt 2>/dev/null | sort)
     if [[ ${#snaps[@]} -lt 2 ]]; then
         echo "Need at least 2 snapshots in $SNAP_DIR"
         exit 1

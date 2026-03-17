@@ -22,6 +22,9 @@ scan() {
 scan "/" du -d 1 -k / > "$OUT"
 scan "~" du -d 1 -k "$HOME" >> "$OUT"
 scan "~/Library" du -d 1 -k "$HOME/Library" >> "$OUT"
+scan "~/Library/Caches" du -d 1 -k "$HOME/Library/Caches" >> "$OUT"
+scan "~/.cache" du -d 1 -k "$HOME/.cache" >> "$OUT"
+scan "~/.local" du -d 2 -k "$HOME/.local" >> "$OUT"
 scan "~/AndroidStudioProjects" du -d 1 -k "$HOME/AndroidStudioProjects" >> "$OUT"
 
 log "Scanning ~/projects (git repos) ..."
