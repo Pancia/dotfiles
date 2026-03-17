@@ -1,64 +1,81 @@
-#!/Users/anthony/.pyenv/versions/3.11.11/bin/python3
+#!/usr/bin/env fish
 
-import mlx_whisper
-import sys
-import argparse
-from pathlib import Path
+set model_path "$HOME/.local/share/whisper-cpp/models/ggml-large-v3-turbo.bin"
 
-sys.stdout.reconfigure(line_buffering=True)
+# Parse arguments
+set -l no_file false
+set -l audio_file
 
-def main():
-    parser = argparse.ArgumentParser(description="Transcribe audio file using MLX Whisper")
-    parser.add_argument("audio_file", help="Path to audio file to transcribe")
-    parser.add_argument("--model", "-m",
-                       default="base",
-                       choices=["tiny", "base", "small", "medium", "large", "turbo", "large-v3-turbo"],
-                       help="Whisper model size (default: base)")
-    parser.add_argument("--no-file", action="store_true",
-                       help="Don't create transcript file, only print to stdout")
+for arg in $argv
+    switch $arg
+        case --no-file
+            set no_file true
+        case '--help' '-h'
+            echo "Usage: transcribe [--no-file] <audio_file>"
+            echo ""
+            echo "Transcribe audio/video using whisper-cpp (large-v3-turbo)"
+            echo ""
+            echo "Options:"
+            echo "  --no-file  Don't create transcript file, only print to stdout"
+            exit 0
+        case '*'
+            set audio_file $arg
+    end
+end
 
-    args = parser.parse_args()
+if test -z "$audio_file"
+    echo "Usage: transcribe [--no-file] <audio_file>" >&2
+    exit 1
+end
 
-    # Map model sizes to correct HuggingFace repo names
-    model_map = {
-        "tiny": "mlx-community/whisper-tiny",
-        "base": "mlx-community/whisper-base.en-mlx",
-        "small": "mlx-community/whisper-small-mlx",
-        "medium": "mlx-community/whisper-medium-mlx",
-        "large": "mlx-community/whisper-large-v3-mlx",
-        "turbo": "mlx-community/whisper-turbo",
-        "large-v3-turbo": "mlx-community/whisper-large-v3-turbo"
-    }
+if not test -f "$audio_file"
+    echo "Error: file not found: $audio_file" >&2
+    exit 1
+end
 
-    model_path = model_map.get(args.model, f"mlx-community/whisper-{args.model}")
+if not test -f "$model_path"
+    echo "Error: model not found: $model_path" >&2
+    echo "Download it with:" >&2
+    echo "  curl -L -o $model_path https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin" >&2
+    exit 1
+end
 
-    # Transcribe using MLX with streaming output
-    transcript_lines = []
+# Check if input needs conversion (whisper-cpp only handles wav/mp3/ogg/flac natively)
+set -l ext (string lower (string replace -r '.*\.' '' "$audio_file"))
+set -l input_file "$audio_file"
 
-    # Use verbose=True to get segments as they're generated
-    result = mlx_whisper.transcribe(
-        args.audio_file,
-        path_or_hf_repo=model_path,
-        verbose=True,
-        word_timestamps=False
-    )
+if not contains $ext wav mp3 ogg flac
+    set -l tmp (mktemp -t transcribe.XXXXXX).wav
+    echo "Converting to WAV..." >&2
+    ffmpeg -i "$audio_file" -ar 16000 -ac 1 -c:a pcm_s16le "$tmp" -y -loglevel error
+    or begin
+        echo "Error: ffmpeg conversion failed" >&2
+        exit 1
+    end
+    set input_file "$tmp"
+end
 
-    # Collect all text from segments
-    if 'segments' in result:
-        for segment in result['segments']:
-            text = segment['text'].strip()
-            if text:
-                transcript_lines.append(text)
+# Transcribe
+set -l output (whisper-cli -m "$model_path" -f "$input_file" --no-prints -nt 2>&1)
+set -l status_code $status
 
-    # Write to file unless --no-file is specified
-    if not args.no_file and transcript_lines:
-        audio_path = Path(args.audio_file)
-        transcript_path = audio_path.parent / f"{audio_path.name}.transcript.txt"
+# Clean up temp file if we made one
+if test "$input_file" != "$audio_file"
+    rm -f "$input_file"
+end
 
-        with open(transcript_path, 'w') as f:
-            f.write('\n'.join(transcript_lines) + '\n')
+if test $status_code -ne 0
+    echo "Error: whisper-cli failed" >&2
+    echo $output >&2
+    exit 1
+end
 
-        print(f"\nTranscript saved to: {transcript_path}", file=sys.stderr)
+# Print to stdout
+printf '%s\n' $output
 
-if __name__ == "__main__":
-    main()
+# Write to file unless --no-file
+if test "$no_file" = false
+    set -l transcript_path "$audio_file.transcript.txt"
+    printf '%s\n' $output > "$transcript_path"
+    echo "Transcript saved to: $transcript_path" >&2
+end
