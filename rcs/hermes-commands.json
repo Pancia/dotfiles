@@ -2,10 +2,10 @@
     "c": ["calendar", {"interactive": "agenda 24"}],
     "d": {
         "_desc": "+dotfiles",
-        "e": ["Edit dotfiles", "cd ~/dotfiles && v"]
+        "e": ["Edit dotfiles", {"shell": "cd ~/dotfiles && v"}]
     },
     "l": ["LOCK IT DOWN", "launch-lock-screen-dialog"],
-    "j": ["Emoji Picker", "emoji-pick"],
+    "j": ["Emoji Picker", {"shell": "emoji-pick"}],
     "f": {
         "_desc": "+finder",
         "_": ["View spirituality", "finder-here $HOME/ProtonDrive/_spirituality"],
@@ -48,12 +48,12 @@
         "_desc": "+hermes",
         "r": ["Rebuild & Restart", "rebuild-hermes"],
         "c": ["HS Console", "hs -c 'hs.openConsole()'"],
-        "e": ["Edit Config", "nvim ~/dotfiles/rcs/hermes-commands.json"],
-        "s": ["Edit HS Seeds", "nvim ~/dotfiles/lib/lua/seeds/"]
+        "e": ["Edit Config", {"shell": "nvim ~/dotfiles/rcs/hermes-commands.json"}],
+        "s": ["Edit HS Seeds", {"shell": "nvim ~/dotfiles/lib/lua/seeds/"}]
     },
     "k": {
         "_desc": "+karabiner",
-        "e": ["Edit Config", "nvim ~/dotfiles/rcs/karabiner.json"],
+        "e": ["Edit Config", {"shell": "nvim ~/dotfiles/rcs/karabiner.json"}],
         "v": ["Event Viewer", "open -a 'Karabiner-EventViewer'"],
         "k": ["Karabiner Elements", "open -a 'Karabiner-Elements'"]
     },
@@ -62,7 +62,7 @@
     "v": "generator:vpc",
     "y": {
         "_desc": "+ytdl",
-        "i": ["ytdl interactive", "ytdl"],
+        "i": ["ytdl interactive", {"interactive": "ytdl"}],
         "y": ["ytdl clipboard", "ytdl clipboard"]
     },
     "u": {
@@ -72,11 +72,11 @@
     "m": {
         "_desc": "+music",
         "c": ["Play or Pause", "cmus-remote --pause"],
-        "e": ["Edit Track", "cmedit"],
+        "e": ["Edit Track", {"shell": "cmedit"}],
         "y": ["Redownload from Youtube", "cmytdl"],
         "a": ["Open Track in Audacity", "cmaudacity"],
-        "s": ["Select Track by Playlist", "music select"],
-        "t": ["Select Track by Tags", "music select --filter-by-tags"],
+        "s": ["Select Track by Playlist", {"shell": "music select"}],
+        "t": ["Select Track by Tags", {"shell": "music select --filter-by-tags"}],
         "n": ["Next Track", "cmus-remote --next"],
         "p": ["Prev Track", "cmus-remote --prev"],
         "l": ["Seek 10 Forwards", "cmus-remote --seek +10"],
@@ -87,6 +87,6 @@
         "k": ["Volume Up", "cmus-remote --volume +5"]
     },
     "t": ["open my yt playlists (WIP tv-board)", "open -na 'Brave Browser Beta' --args $(cat ~/Cloud/_config/my-youtube.playlists)"],
-    "=": ["edit Hermes config", "nvim ~/dotfiles/rcs/hermes-commands.json"],
+    "=": ["edit Hermes config", {"shell": "nvim ~/dotfiles/rcs/hermes-commands.json"}],
     "-": [{"shell:fish": "~/private/bin/superwhisper_status"}, "~/private/bin/superwhisper_reset"]
 }
