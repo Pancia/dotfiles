@@ -61,7 +61,7 @@ function listClaudeSessions --description 'List Claude sessions if present'
     set -l sessions (ccs list)
     if test -n "$sessions"
         echo "&> Claude sessions:"
-        echo "$sessions"
+        printf '%s\n' $sessions
     end
 end
 

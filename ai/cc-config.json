@@ -1,6 +1,7 @@
 {
     "skills": {
         "cmds":          "~/dotfiles/ai/skills/cmds",
+        "fish":          "~/dotfiles/ai/skills/fish",
         "flet":          "~/dotfiles/ai/skills/flet",
         "headscale":     "~/dotfiles/ai/skills/headscale",
         "*fulcrologic":  "~/projects/fulcrologic-claude-settings/skills/*"

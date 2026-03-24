@@ -5,6 +5,8 @@
   },
   "permissions": {
     "allow": [
+      "Bash(inbox-fetch-title:*)",
+      "Bash(inbox-tags:*)",
       "Bash(cmds path:*)",
       "Bash(cmds describe:*)",
       "Read(~/dotfiles/cmds/*)",

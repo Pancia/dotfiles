@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Check if URLs already exist in any _INDEX.md file.
+#
+# Usage: inbox-dedup <url> [<url> ...]
+#
+# Output: one line per URL:
+#   <url>\tFOUND\t<folder>
+#   <url>\tNEW
+
+set -euo pipefail
+
+INBOX="$HOME/Cloud/_inbox"
+
+if [ $# -eq 0 ]; then
+    echo "Usage: inbox-dedup <url> [<url> ...]" >&2
+    exit 1
+fi
+
+for url in "$@"; do
+    # Also check without trailing slash and vice versa
+    found=""
+    for index in "$INBOX"/*/_INDEX.md; do
+        [ -f "$index" ] || continue
+        folder=$(basename "$(dirname "$index")")
+        if grep -qF "$url" "$index" 2>/dev/null; then
+            found="$folder"
+            break
+        fi
+    done
+
+    # Also check ToRead.md and the special files
+    if [ -z "$found" ]; then
+        for special in "$INBOX/ToRead.md" "$HOME/TheAkashicRecords/later.md" "$HOME/TheAkashicRecords/tasks.md"; do
+            if [ -f "$special" ] && grep -qF "$url" "$special" 2>/dev/null; then
+                found=$(basename "$special")
+                break
+            fi
+        done
+    fi
+
+    if [ -n "$found" ]; then
+        printf '%s\tFOUND\t%s\n' "$url" "$found"
+    else
+        printf '%s\tNEW\n' "$url"
+    fi
+done

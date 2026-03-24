@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Save a URL to an inbox destination as a markdown file.
+#
+# Usage: inbox-save <destination> <url> [title]
+#
+# destination: folder name under ~/Cloud/_inbox/ (e.g. BBQueue, Reference, TODO)
+#              OR a special value:
+#              - "ToRead" → append to ~/Cloud/_inbox/ToRead.md
+#              - "later"  → append to ~/TheAkashicRecords/later.md
+#              - "tasks"  → append to ~/TheAkashicRecords/tasks.md
+# url:         the source URL
+# title:       optional page title (used for filename and heading)
+#
+# Creates: ~/Cloud/_inbox/<destination>/<kebab-case-title>.md
+
+set -euo pipefail
+
+INBOX="$HOME/Cloud/_inbox"
+
+dest="${1:?Usage: inbox-save <destination> <url> [title]}"
+url="${2:?Usage: inbox-save <destination> <url> [title]}"
+title="${3:-Untitled}"
+
+# Convert title to kebab-case filename
+to_kebab() {
+    echo "$1" \
+        | tr '[:upper:]' '[:lower:]' \
+        | sed 's/[^a-z0-9 -]//g' \
+        | sed 's/  */ /g' \
+        | sed 's/ /-/g' \
+        | cut -c1-80
+}
+
+case "$dest" in
+    ToRead)
+        echo "- [$title]($url)" >> "$INBOX/ToRead.md"
+        echo "Appended to ToRead.md: $title"
+        ;;
+    later)
+        echo "- [$title]($url)" >> "$HOME/TheAkashicRecords/later.md"
+        echo "Appended to later.md: $title"
+        ;;
+    tasks)
+        echo "- [ ] [$title]($url)" >> "$HOME/TheAkashicRecords/tasks.md"
+        echo "Appended to tasks.md: $title"
+        ;;
+    *)
+        dir="$INBOX/$dest"
+        if [ ! -d "$dir" ]; then
+            echo "Error: destination '$dir' does not exist" >&2
+            exit 1
+        fi
+
+        slug=$(to_kebab "$title")
+        filepath="$dir/${slug}.md"
+
+        # Avoid overwriting
+        if [ -f "$filepath" ]; then
+            filepath="$dir/${slug}-$(date +%s).md"
+        fi
+
+        cat > "$filepath" <<EOF
+---
+url: $url
+saved: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+---
+# $title
+EOF
+        echo "Saved to $dest/$slug.md"
+        ;;
+esac

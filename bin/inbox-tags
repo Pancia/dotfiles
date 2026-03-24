@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# List all tags in use across _INDEX.md files, with counts.
+#
+# Usage: inbox-tags              # all tags globally
+#        inbox-tags BBQueue      # tags for a specific folder
+#        inbox-tags --all        # per-folder breakdown
+
+set -euo pipefail
+
+INBOX="$HOME/Cloud/_inbox"
+
+extract_tags() {
+    # Pull "tags: foo, bar, baz" from lines, split and count
+    grep -h ', tags: ' "$@" 2>/dev/null \
+        | sed 's/.*tags: //' \
+        | sed 's/ \[.*//' \
+        | tr ',' '\n' \
+        | sed 's/^ *//;s/ *$//' \
+        | grep -v '^$' \
+        | sort | uniq -c | sort -rn
+}
+
+case "${1:-}" in
+    --all)
+        for index in "$INBOX"/*/_INDEX.md; do
+            folder=$(basename "$(dirname "$index")")
+            echo "=== $folder ==="
+            extract_tags "$index"
+            echo ""
+        done
+        ;;
+    "")
+        extract_tags "$INBOX"/*/_INDEX.md
+        ;;
+    *)
+        index="$INBOX/$1/_INDEX.md"
+        if [ ! -f "$index" ]; then
+            echo "No _INDEX.md found in $1" >&2
+            exit 1
+        fi
+        extract_tags "$index"
+        ;;
+esac

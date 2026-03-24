@@ -2,7 +2,6 @@
 
 import sounddevice as sd
 import numpy as np
-import mlx_whisper
 import webrtcvad
 import queue
 import threading
@@ -12,6 +11,12 @@ from datetime import datetime
 import os
 from pathlib import Path
 import subprocess
+import tempfile
+import wave
+import urllib.request
+import json
+import time
+import signal
 
 # Configuration
 SAMPLE_RATE = 16000  # Whisper expects 16kHz
@@ -24,21 +29,30 @@ MAX_CHUNK_DURATION = 10.0  # maximum chunk duration in seconds
 class LiveTranscriber:
     def __init__(self, model_size="base", output_dir=None, mic_device=None, computer_device=None,
                  vad_aggressiveness=VAD_AGGRESSIVENESS, silence_duration=SILENCE_DURATION,
-                 min_chunk_duration=MIN_CHUNK_DURATION, max_chunk_duration=MAX_CHUNK_DURATION):
-        # Set model path for MLX (optimized for Apple Silicon)
-        # Map model sizes to correct HuggingFace repo names
+                 min_chunk_duration=MIN_CHUNK_DURATION, max_chunk_duration=MAX_CHUNK_DURATION,
+                 server_url=None, server_port=8178):
+        # Set model path for whisper-cpp
+        model_dir = Path.home() / ".local/share/whisper-cpp/models"
         model_map = {
-            "tiny": "mlx-community/whisper-tiny",
-            "base": "mlx-community/whisper-base.en-mlx",  # Using English-only for speed
-            "small": "mlx-community/whisper-small-mlx",
-            "medium": "mlx-community/whisper-medium-mlx",
-            "large": "mlx-community/whisper-large-v3-mlx",
-            "turbo": "mlx-community/whisper-turbo",
-            "large-v3-turbo": "mlx-community/whisper-large-v3-turbo"
+            "tiny": "ggml-tiny.bin",
+            "base": "ggml-base.bin",
+            "small": "ggml-small.bin",
+            "medium": "ggml-medium.bin",
+            "large": "ggml-large-v3-turbo.bin",
         }
 
-        self.model_path = model_map.get(model_size, f"mlx-community/whisper-{model_size}")
-        print(f"Using {self.model_path} with MLX (Apple Silicon optimized)...", file=sys.stderr)
+        model_file = model_map.get(model_size, f"ggml-{model_size}.bin")
+        self.model_path = model_dir / model_file
+        if not self.model_path.exists():
+            print(f"Error: model not found: {self.model_path}", file=sys.stderr)
+            sys.exit(1)
+        self.server_url = server_url
+        self.server_port = server_port
+        self.server_process = None
+        if self.server_url:
+            print(f"Using external whisper-server at {self.server_url}", file=sys.stderr)
+        else:
+            print(f"Using {self.model_path} with whisper-server (port {self.server_port})...", file=sys.stderr)
         self.audio_queue = queue.Queue()
         self.running = True
 
@@ -69,16 +83,16 @@ class LiveTranscriber:
         # Query device info to get channel counts and sample rates
         devices = sd.query_devices()
         self.mic_channels = self._get_device_channels(devices[mic_device])
-        self.computer_channels = self._get_device_channels(devices[computer_device])
-
-        # Get native sample rates and use them (we'll resample later for Whisper)
         self.mic_sample_rate = int(devices[mic_device]['default_samplerate'])
-        self.computer_sample_rate = int(devices[computer_device]['default_samplerate'])
 
         print(f"Mic device: {devices[mic_device]['name']}", file=sys.stderr)
         print(f"  Channels: {self.mic_channels}, Sample rate: {self.mic_sample_rate} Hz", file=sys.stderr)
-        print(f"Computer device: {devices[computer_device]['name']}", file=sys.stderr)
-        print(f"  Channels: {self.computer_channels}, Sample rate: {self.computer_sample_rate} Hz", file=sys.stderr)
+
+        if computer_device is not None:
+            self.computer_channels = self._get_device_channels(devices[computer_device])
+            self.computer_sample_rate = int(devices[computer_device]['default_samplerate'])
+            print(f"Computer device: {devices[computer_device]['name']}", file=sys.stderr)
+            print(f"  Channels: {self.computer_channels}, Sample rate: {self.computer_sample_rate} Hz", file=sys.stderr)
 
         # Initialize VAD
         self.vad = webrtcvad.Vad(self.vad_aggressiveness)
@@ -292,6 +306,123 @@ class LiveTranscriber:
             self.computer_silence_frames = 0
             self.computer_chunk_start_time = None
 
+    def _get_server_url(self):
+        """Get the base URL for the whisper server"""
+        if self.server_url:
+            return self.server_url.rstrip('/')
+        return f"http://127.0.0.1:{self.server_port}"
+
+    def _start_server(self):
+        """Start whisper-server subprocess and wait for it to be ready"""
+        if self.server_url:
+            return  # Using external server
+
+        cmd = [
+            "whisper-server",
+            "-m", str(self.model_path),
+            "--port", str(self.server_port),
+            "--convert",
+            "-nt",
+        ]
+        print(f"Starting whisper-server...", file=sys.stderr)
+        self.server_process = subprocess.Popen(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+
+        # Wait for server to become ready (any HTTP response means it's up)
+        url = f"{self._get_server_url()}/inference"
+        for i in range(30):
+            try:
+                req = urllib.request.Request(url, method='GET')
+                urllib.request.urlopen(req, timeout=1)
+                break
+            except urllib.error.HTTPError:
+                break  # Server is up, just returned an error code
+            except (urllib.error.URLError, ConnectionError, OSError):
+                if self.server_process.poll() is not None:
+                    print(f"Error: whisper-server exited with code {self.server_process.returncode}", file=sys.stderr)
+                    sys.exit(1)
+                time.sleep(0.5)
+        else:
+            print("Error: whisper-server did not become ready within 15s", file=sys.stderr)
+            self._stop_server()
+            sys.exit(1)
+
+        print(f"whisper-server ready on port {self.server_port}", file=sys.stderr)
+
+    def _stop_server(self):
+        """Stop the whisper-server subprocess"""
+        if self.server_process and self.server_process.poll() is None:
+            self.server_process.terminate()
+            try:
+                self.server_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.server_process.kill()
+            print("whisper-server stopped", file=sys.stderr)
+
+    def _ensure_server(self):
+        """Restart the server if it has died"""
+        if self.server_url:
+            return  # External server, not our problem
+        if self.server_process and self.server_process.poll() is not None:
+            print("whisper-server died, restarting...", file=sys.stderr)
+            self._start_server()
+
+    def _post_audio(self, wav_path):
+        """POST a WAV file to whisper-server, returns response text"""
+        url = f"{self._get_server_url()}/inference"
+        boundary = b"----WhisperBoundary"
+        with open(wav_path, 'rb') as f:
+            file_data = f.read()
+
+        body = b""
+        body += b"--" + boundary + b"\r\n"
+        body += b'Content-Disposition: form-data; name="file"; filename="audio.wav"\r\n'
+        body += b"Content-Type: audio/wav\r\n\r\n"
+        body += file_data + b"\r\n"
+        body += b"--" + boundary + b"\r\n"
+        body += b'Content-Disposition: form-data; name="response_format"\r\n\r\n'
+        body += b"json\r\n"
+        body += b"--" + boundary + b"--\r\n"
+
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary.decode()}"},
+            method='POST'
+        )
+        resp = urllib.request.urlopen(req, timeout=30)
+        result = json.loads(resp.read().decode())
+        return result.get("text", "").strip()
+
+    def _transcribe_audio(self, audio_data):
+        """Transcribe audio data via whisper-server HTTP API, returns text"""
+        # Write audio to a temp WAV file
+        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        try:
+            with wave.open(tmp.name, 'wb') as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)  # 16-bit
+                wf.setframerate(SAMPLE_RATE)
+                audio_int16 = (audio_data * 32768).astype(np.int16)
+                wf.writeframes(audio_int16.tobytes())
+
+            try:
+                return self._post_audio(tmp.name)
+            except (urllib.error.URLError, ConnectionError, OSError):
+                # Server may have died — restart and retry once
+                self._ensure_server()
+                try:
+                    return self._post_audio(tmp.name)
+                except Exception as e:
+                    print(f"whisper-server error after restart: {e}", file=sys.stderr)
+                    return ""
+        except Exception as e:
+            print(f"whisper-server error: {e}", file=sys.stderr)
+            return ""
+        finally:
+            os.unlink(tmp.name)
+
     def transcription_worker(self):
         """Worker thread that processes audio chunks from the queue"""
         last_text_by_source = {}  # Track last text per source to deduplicate
@@ -300,29 +431,21 @@ class LiveTranscriber:
             try:
                 source, audio_data = self.audio_queue.get(timeout=1)
 
-                # Transcribe the audio chunk using MLX
-                result = mlx_whisper.transcribe(
-                    audio_data,
-                    path_or_hf_repo=self.model_path
-                )
+                text = self._transcribe_audio(audio_data)
+                if text:
+                    # Skip if this is identical to the last output from this source
+                    if last_text_by_source.get(source) == text:
+                        self.audio_queue.task_done()
+                        continue
 
-                # Process segments and deduplicate consecutive identical ones
-                if 'segments' in result:
-                    for segment in result['segments']:
-                        text = segment['text'].strip()
-                        if text:  # Only output non-empty transcriptions
-                            # Skip if this is identical to the last output from this source
-                            if last_text_by_source.get(source) == text:
-                                continue
+                    last_text_by_source[source] = text
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    output_line = f"[{timestamp}] {source}: {text}"
 
-                            last_text_by_source[source] = text
-                            timestamp = datetime.now().strftime("%H:%M:%S")
-                            output_line = f"[{timestamp}] {source}: {text}"
-
-                            # Output to both stdout and file
-                            print(output_line, flush=True)
-                            self.file_handle.write(output_line + "\n")
-                            self.file_handle.flush()
+                    # Output to both stdout and file
+                    print(output_line, flush=True)
+                    self.file_handle.write(output_line + "\n")
+                    self.file_handle.flush()
 
                 self.audio_queue.task_done()
 
@@ -349,41 +472,52 @@ class LiveTranscriber:
 
     def start(self):
         """Start live transcription"""
-        # Start transcription worker thread
-        transcription_thread = threading.Thread(target=self.transcription_worker)
-        transcription_thread.start()
+        self._start_server()
 
         try:
-            # Start both audio streams with appropriate channel counts and sample rates
-            with sd.InputStream(device=self.mic_device,
-                              channels=self.mic_channels,
-                              samplerate=self.mic_sample_rate,
-                              callback=self.audio_callback_mic):
-                with sd.InputStream(device=self.computer_device,
-                                  channels=self.computer_channels,
-                                  samplerate=self.computer_sample_rate,
-                                  callback=self.audio_callback_computer):
+            # Start transcription worker thread
+            transcription_thread = threading.Thread(target=self.transcription_worker)
+            transcription_thread.start()
+
+            try:
+                # Start audio streams
+                import contextlib
+                mic_stream = sd.InputStream(device=self.mic_device,
+                                          channels=self.mic_channels,
+                                          samplerate=self.mic_sample_rate,
+                                          callback=self.audio_callback_mic)
+                if self.computer_device is not None:
+                    computer_stream = sd.InputStream(device=self.computer_device,
+                                                    channels=self.computer_channels,
+                                                    samplerate=self.computer_sample_rate,
+                                                    callback=self.audio_callback_computer)
+                else:
+                    computer_stream = contextlib.nullcontext()
+
+                with mic_stream, computer_stream:
                     print("Press Ctrl+C to stop recording", file=sys.stderr)
                     print("\033[42m Recording started... \033[0m\n", file=sys.stderr)
                     # Keep running until interrupted
                     while self.running:
                         sd.sleep(1000)
 
-        except KeyboardInterrupt:
-            print("\n\nStopping recording...", file=sys.stderr)
-            self.running = False
+            except KeyboardInterrupt:
+                print("\n\nStopping recording...", file=sys.stderr)
+                self.running = False
 
-        # Flush any remaining buffered audio
-        print("Flushing remaining audio buffers...", file=sys.stderr)
-        self._flush_buffers()
+            # Flush any remaining buffered audio
+            print("Flushing remaining audio buffers...", file=sys.stderr)
+            self._flush_buffers()
 
-        # Wait for transcription thread to finish processing queue
-        print("Processing remaining transcriptions...", file=sys.stderr)
-        transcription_thread.join()
+            # Wait for transcription thread to finish processing queue
+            print("Processing remaining transcriptions...", file=sys.stderr)
+            transcription_thread.join()
 
-        # Close file
-        self.file_handle.close()
-        print(f"\nTranscript saved to: {self.output_file}", file=sys.stderr)
+            # Close file
+            self.file_handle.close()
+            print(f"\nTranscript saved to: {self.output_file}", file=sys.stderr)
+        finally:
+            self._stop_server()
 
 def get_current_audio_output():
     """Get the current system audio output device name"""
@@ -438,9 +572,9 @@ def main():
     parser.add_argument("--output-dir", "-o",
                        help="Directory to save transcript files (default: ~/transcripts)")
     parser.add_argument("--model", "-m",
-                       default="base",
+                       default="large",
                        choices=["tiny", "base", "small", "medium", "large"],
-                       help="Whisper model size (default: base)")
+                       help="Whisper model size (default: large, uses large-v3-turbo)")
     parser.add_argument("--mic-device",
                        help="Microphone device ID or name substring (use --list-devices to see options)")
     parser.add_argument("--computer-device",
@@ -465,6 +599,12 @@ def main():
                        type=float,
                        default=MAX_CHUNK_DURATION,
                        help="Maximum chunk duration in seconds (default: 10.0)")
+    parser.add_argument("--server-url",
+                       help="URL of an already-running whisper-server (skips auto-start)")
+    parser.add_argument("--server-port",
+                       type=int,
+                       default=8178,
+                       help="Port for auto-managed whisper-server (default: 8178)")
     parser.add_argument("--auto-switch-output",
                        action="store_true",
                        help="Automatically switch to Multi-Output Device and restore on exit")
@@ -474,13 +614,20 @@ def main():
 
     args = parser.parse_args()
 
+    # Handle SIGINT cleanly so Python exits with status 0 instead of
+    # re-raising the signal. This lets fish run subsequent commands
+    # after Ctrl+C (e.g. "begin; live-transcribe; end; date").
+    def _sigint_handler(sig, frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGINT, _sigint_handler)
+
     if args.list_devices:
         list_devices()
         return
 
-    # Check if devices are specified
-    if args.mic_device is None or args.computer_device is None:
-        print("Error: You must specify both --mic-device and --computer-device", file=sys.stderr)
+    # Check if mic device is specified
+    if args.mic_device is None:
+        print("Error: You must specify --mic-device", file=sys.stderr)
         print("Use --list-devices to see available options\n", file=sys.stderr)
         list_devices()
         sys.exit(1)
@@ -499,18 +646,18 @@ def main():
             list_devices()
             sys.exit(1)
 
-    try:
-        # Try to parse as integer first
-        computer_device = int(args.computer_device)
-    except ValueError:
-        # Otherwise treat as device name
+    computer_device = None
+    if args.computer_device is not None:
         try:
-            computer_device = find_device_by_name(args.computer_device)
-            print(f"Found computer device: {sd.query_devices(computer_device)['name']} (index {computer_device})", file=sys.stderr)
-        except ValueError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            list_devices()
-            sys.exit(1)
+            computer_device = int(args.computer_device)
+        except ValueError:
+            try:
+                computer_device = find_device_by_name(args.computer_device)
+                print(f"Found computer device: {sd.query_devices(computer_device)['name']} (index {computer_device})", file=sys.stderr)
+            except ValueError as e:
+                print(f"Error: {e}", file=sys.stderr)
+                list_devices()
+                sys.exit(1)
 
     # Handle audio output switching
     original_output = None
@@ -538,7 +685,9 @@ def main():
             vad_aggressiveness=args.vad_aggressiveness,
             silence_duration=args.silence_duration,
             min_chunk_duration=args.min_chunk_duration,
-            max_chunk_duration=args.max_chunk_duration
+            max_chunk_duration=args.max_chunk_duration,
+            server_url=args.server_url,
+            server_port=args.server_port
         )
 
         transcriber.start()

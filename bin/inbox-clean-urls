@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+"""Strip tracking parameters from URLs and normalize them.
+
+Usage: inbox-clean-urls < links.txt > cleaned.txt
+       inbox-clean-urls <url> [<url> ...]
+
+Strips: utm_*, fbclid, gclid, si, ref, etc.
+"""
+
+import sys
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+
+TRACKING_PARAMS = {
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "utm_cid", "utm_reader", "utm_name",
+    "fbclid", "gclid", "gclsrc", "gad_source", "gad_campaignid",
+    "dclid", "msclkid", "twclid",
+    "mc_cid", "mc_eid",
+    "ck_subscriber_id",
+    "ref", "referer", "referrer",
+    "source", "triedRedirect",
+    "showWelcomeOnShare",
+    "isFreemail",
+    "r",  # substack subscriber id
+    "nd", "dlsi", "si",  # spotify/youtube tracking
+}
+
+
+def clean_url(url: str) -> str:
+    parsed = urlparse(url)
+    params = parse_qs(parsed.query, keep_blank_values=True)
+    cleaned = {k: v for k, v in params.items() if k.lower() not in TRACKING_PARAMS}
+    new_query = urlencode(cleaned, doseq=True) if cleaned else ""
+    clean = urlunparse((
+        parsed.scheme, parsed.netloc, parsed.path,
+        parsed.params, new_query, "",
+    ))
+    return clean.rstrip("?")
+
+
+def main():
+    urls = sys.argv[1:]
+
+    if not sys.stdin.isatty():
+        for line in sys.stdin:
+            line = line.strip()
+            if line:
+                urls.append(line)
+
+    if not urls:
+        print("Usage: inbox-clean-urls <url> [<url> ...]", file=sys.stderr)
+        sys.exit(1)
+
+    for url in urls:
+        print(clean_url(url))
+
+
+if __name__ == "__main__":
+    main()

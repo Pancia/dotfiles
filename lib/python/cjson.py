@@ -309,12 +309,19 @@ def main():
 
     args = parser.parse_args()
 
-    # Read input
+    # Read input (supports both JSON and NDJSON)
     if hasattr(args, "file") and args.file:
         with open(args.file) as f:
-            data = json.load(f)
+            raw = f.read()
     else:
-        data = json.load(sys.stdin)
+        raw = sys.stdin.read()
+
+    stripped = raw.strip()
+    is_ndjson = stripped.startswith("{") and "\n" in stripped
+    if is_ndjson:
+        data = json.loads("[" + stripped.rstrip(",") + "]")
+    else:
+        data = json.loads(raw)
 
     # Process
     if args.command == "encode":

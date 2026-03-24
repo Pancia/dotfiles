@@ -13,16 +13,18 @@ title="${*}"
 timestamp=$(date '+%Y-%m-%d %H:%M')
 file="$(pwd)/.claude-sessions"
 
-# Dedup by id
+# Dedup by id (JSONL format, one JSON object per line)
 if [ -f "$file" ]; then
-    grep -v "^${id}	" "$file" > "$file.tmp" 2>/dev/null || true
+    jq -c "select(.id != \"$id\")" "$file" > "$file.tmp" 2>/dev/null || true
     mv "$file.tmp" "$file"
 fi
 
+# Append new entry as JSON
+jq -cn --arg id "$id" --arg ts "$timestamp" --arg title "$title" \
+    '{id: $id, ts: $ts, title: $title}' >> "$file"
+
 if [ -n "$title" ]; then
-    printf '%s\t%s\t%s\n' "$id" "$timestamp" "$title" >> "$file"
     echo "Saved session: $id ($timestamp — $title)"
 else
-    printf '%s\t%s\n' "$id" "$timestamp" >> "$file"
     echo "Saved session: $id ($timestamp)"
 fi

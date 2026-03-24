@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["httpx"]
+# ///
+"""Fetch just the <title> from a URL. Lightweight — no full page download.
+
+Usage: inbox-fetch-title <url> [<url> ...]
+       inbox-fetch-title -f <file>
+       echo "<url>" | inbox-fetch-title
+
+Output: one line per URL in format:
+  <url>\t<title>
+If title fetch fails:
+  <url>\t[FAILED: reason]
+"""
+
+import sys
+import re
+from pathlib import Path
+from urllib.parse import urlparse, parse_qs
+import httpx
+
+
+def extract_youtube_id(url: str) -> str | None:
+    """Extract video ID from various YouTube URL formats."""
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+    if "youtube.com" in host:
+        if parsed.path == "/watch":
+            return parse_qs(parsed.query).get("v", [None])[0]
+        for prefix in ("/shorts/", "/embed/", "/live/"):
+            if parsed.path.startswith(prefix):
+                return parsed.path[len(prefix):].split("/")[0].split("?")[0]
+    elif "youtu.be" in host:
+        return parsed.path.lstrip("/").split("/")[0].split("?")[0]
+    return None
+
+
+def is_youtube_playlist(url: str) -> bool:
+    """Check if URL is a YouTube playlist."""
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+    if "youtube.com" not in host:
+        return False
+    return parsed.path == "/playlist" or (
+        "list" in parse_qs(parsed.query) and "v" not in parse_qs(parsed.query)
+    )
+
+
+def fetch_youtube_title(url: str, video_id: str) -> str:
+    """Fetch YouTube video title via oembed API. Returns 'YT: Channel - Title'."""
+    try:
+        r = httpx.get(
+            f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json",
+            timeout=10,
+        )
+        r.raise_for_status()
+        data = r.json()
+        title = data.get("title", "[NO TITLE]")
+        channel = data.get("author_name", "")
+        if channel:
+            return f"YT: {channel} - {title}"
+        return f"YT: {title}"
+    except Exception as e:
+        return f"[FAILED: {e}]"
+
+
+def fetch_youtube_playlist_title(url: str) -> str:
+    """Fetch YouTube playlist title via oembed API. Returns 'YT Playlist: Channel - Title'."""
+    try:
+        r = httpx.get(
+            f"https://www.youtube.com/oembed?url={url}&format=json",
+            timeout=10,
+        )
+        r.raise_for_status()
+        data = r.json()
+        title = data.get("title", "[NO TITLE]")
+        channel = data.get("author_name", "")
+        if channel:
+            return f"YT Playlist: {channel} - {title}"
+        return f"YT Playlist: {title}"
+    except Exception as e:
+        return f"[FAILED: {e}]"
+
+
+def fetch_title(url: str) -> str:
+    """Fetch page title using a streaming request — stops reading after </title>."""
+    if is_youtube_playlist(url):
+        return fetch_youtube_playlist_title(url)
+
+    yt_id = extract_youtube_id(url)
+    if yt_id:
+        return fetch_youtube_title(url, yt_id)
+
+    try:
+        with httpx.stream(
+            "GET",
+            url,
+            follow_redirects=True,
+            timeout=10,
+            headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"},
+        ) as r:
+            buf = ""
+            for chunk in r.iter_text():
+                buf += chunk
+                m = re.search(r"<title[^>]*>(.*?)</title>", buf, re.IGNORECASE | re.DOTALL)
+                if m:
+                    title = m.group(1).strip()
+                    title = re.sub(r"\s+", " ", title)
+                    title = title.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+                    title = title.replace("&#39;", "'").replace("&quot;", '"').replace("&#x27;", "'")
+                    return title
+                if len(buf) > 65536:
+                    break
+            return "[NO TITLE FOUND]"
+    except Exception as e:
+        return f"[FAILED: {e}]"
+
+
+def main():
+    urls = []
+    args = sys.argv[1:]
+
+    # Handle -f <file> flag
+    if len(args) >= 2 and args[0] == "-f":
+        filepath = Path(args[1])
+        if not filepath.exists():
+            print(f"File not found: {filepath}", file=sys.stderr)
+            sys.exit(1)
+        for line in filepath.read_text().splitlines():
+            line = line.strip()
+            if line and line.startswith("http"):
+                urls.append(line)
+        args = args[2:]
+
+    urls.extend(args)
+
+    # Also read from stdin if piped
+    if not sys.stdin.isatty():
+        for line in sys.stdin:
+            line = line.strip()
+            if line and line.startswith("http"):
+                urls.append(line)
+
+    if not urls:
+        print("Usage: inbox-fetch-title [-f file] <url> [<url> ...]", file=sys.stderr)
+        sys.exit(1)
+
+    for url in urls:
+        title = fetch_title(url)
+        print(f"{url}\t{title}")
+
+
+if __name__ == "__main__":
+    main()

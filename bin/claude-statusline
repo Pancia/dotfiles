@@ -96,4 +96,6 @@ agent_info=""
 [ -n "$agent" ] && agent_info=" (agent: ${agent})"
 
 # --- Output ---
-printf "%s%s %s%s%s%s%s" "$context_info" "$rate_info" "$task_prefix" "$short_cwd" "$git_info" "$model_info" "$agent_info"
+line1="${context_info}${rate_info}${model_info}${agent_info}"
+line2="${task_prefix}${short_cwd}${git_info}"
+printf "%s\n%s" "$line1" "$line2"

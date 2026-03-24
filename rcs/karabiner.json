@@ -188,33 +188,6 @@
                         ]
                     },
                     {
-                        "description": "escape in superwhisper -> sync tracking state",
-                        "manipulators": [
-                            {
-                                "conditions": [
-                                    {
-                                        "bundle_identifiers": [
-                                            "^com\\.superduper\\.superwhisper$"
-                                        ],
-                                        "type": "frontmost_application_if"
-                                    }
-                                ],
-                                "from": {
-                                    "key_code": "escape"
-                                },
-                                "to": [
-                                    {
-                                        "key_code": "escape"
-                                    },
-                                    {
-                                        "shell_command": "/Users/anthony/Developer/bin/hs -c 'superwhisperCancel()'"
-                                    }
-                                ],
-                                "type": "basic"
-                            }
-                        ]
-                    },
-                    {
                         "description": "alt-space -> activate voice transcription",
                         "manipulators": [
                             {

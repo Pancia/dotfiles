@@ -210,15 +210,6 @@ alias gp  __git_use_g
 alias gpf __git_use_g
 alias gpl __git_use_g
 
-# Abbreviations
-abbr -a cc my-claude-code-wrapper
-abbr -a ccc cc-config
-abbr -a ccu 'brew upgrade claude-code'
-abbr -a oo my-opencode-wrapper
-abbr -a dd 'cd ~/dotfiles/'
-abbr -a aih 'ai_health \''
-abbr -a /q exit
-
 # Key bindings
 if status is-interactive
     # Bind Ctrl-L to clear screen while keeping tide prompt visible

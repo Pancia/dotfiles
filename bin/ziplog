@@ -1,6 +1,6 @@
 #!/bin/bash
 
-pushd ~/private/logs/monitor/
+pushd ~/.local/share/monitor/
 ls -lh
 echo "GO AHEAD? OR CTRL-C"
 read empty
@@ -12,7 +12,26 @@ find . -name "*.log.json" -type f -mtime +6d | while read -r file; do
         echo "Zip file already exists for $file, skipping..."
     fi
 done
+
+# Archive completed months into archive/YYYY_MM.zip
+# The cutoff month is: if day >= 8, include previous month; otherwise, two months ago
+if [ "$(date +%d)" -ge 8 ]; then
+    cutoff=$(date -v-1m +%Y_%m)
+else
+    cutoff=$(date -v-2m +%Y_%m)
+fi
+mkdir -p archive
+# Find all YYYY_MM prefixes present, archive any <= cutoff
+for month in $(ls -1 | grep -oE '^[0-9]{4}_[0-9]{2}' | sort -u); do
+    if [[ "$month" < "$cutoff" || "$month" == "$cutoff" ]]; then
+        echo "Archiving $month..."
+        zip -9 "archive/${month}.zip" ${month}_*
+        rm ${month}_*
+        echo "Archived to archive/${month}.zip"
+    fi
+done
+
 ls -lh
 echo "log size"
-du -ha ~/private/logs/ | sort -h
+du -ha ~/.local/share/monitor/ | sort -h
 popd

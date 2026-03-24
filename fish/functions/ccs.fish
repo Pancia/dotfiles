@@ -52,11 +52,11 @@ function _ccs_list --description 'List claude sessions'
     if not test -f "$file"
         return 1
     end
-    set -l entries (jq -r '[.id, .title, .ts] | @tsv' "$file" 2>/dev/null)
+    set -l entries (jq -r '[.id, .title, .ts] | @tsv' "$file" 2>/dev/null | string collect)
     if test -z "$entries"
         return 1
     end
-    for entry in $entries
+    for entry in (string split \n "$entries")
         set -l parts (string split \t "$entry")
         set -l id $parts[1]
         set -l title $parts[2]
@@ -107,13 +107,13 @@ function _ccs_rename --description 'Rename a claude session'
         return 1
     end
 
-    set -l before (cat "$file")
+    set -l before (string collect < "$file")
     jq -c --arg id "$id" --arg title "$new_title" \
         'if .id == $id then .title = $title else . end' "$file" > "$file.tmp"
     mv "$file.tmp" "$file"
 
     # Check if anything changed
-    if test "$before" = (cat "$file")
+    if test "$before" = (string collect < "$file")
         echo "Session $id not found"
         return 1
     end
