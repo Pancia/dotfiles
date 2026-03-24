@@ -14,11 +14,16 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
         end
     end
 
-    # Sync project skills and agents from .cc-config if present
+    # Sync project skills/agents/commands from .cc-config if changed
     if test -f .cc-config
-        set -l cc_profile (string match -v '//*' < .cc-config | string trim)
-        if test -n "$cc_profile"
-            cc-config sync $cc_profile
+        set -l cc_hash (md5 -q .cc-config)
+        set -l stamp .claude/.cc-sync-stamp
+        if not test -f $stamp; or test "$cc_hash" != (cat $stamp)
+            set -l cc_profile (string match -v '//*' < .cc-config | string trim)
+            if test -n "$cc_profile"
+                cc-config sync $cc_profile
+                echo $cc_hash > $stamp
+            end
         end
     end
 

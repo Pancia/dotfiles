@@ -298,10 +298,27 @@ function _cc_config_sync
         return 1
     end
 
-    # Sync both skills and agents
+    # Build set of all known names across all sections for typo detection
+    set -g _CC_ALL_KNOWN_NAMES
+    for section in skills agents commands
+        for entry in (_cc_config_resolve_registry $config_file $section)
+            set -a _CC_ALL_KNOWN_NAMES (string split \t $entry)[1]
+        end
+    end
+
+    set -g _CC_UNKNOWN_NAMES
+
     for section in skills agents commands
         _cc_config_sync_section $config_file $section $dry_run $targets
     end
+
+    # Warn once for names not found in any registry
+    for name in $_CC_UNKNOWN_NAMES
+        echo "Warning: '$name' not found in any registry" >&2
+    end
+
+    set -e _CC_ALL_KNOWN_NAMES
+    set -e _CC_UNKNOWN_NAMES
 end
 
 function _cc_config_sync_section
@@ -362,8 +379,8 @@ function _cc_config_sync_section
                 break
             end
         end
-        if test $found -eq 0
-            echo "Warning: $section '$name' not found in registry" >&2
+        if test $found -eq 0; and not contains $name $_CC_ALL_KNOWN_NAMES; and not contains $name $_CC_UNKNOWN_NAMES
+            set -a _CC_UNKNOWN_NAMES $name
         end
     end
 
