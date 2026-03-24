@@ -1,0 +1,55 @@
+{
+    "skills": {
+        "cmds":          "~/dotfiles/ai/skills/cmds",
+        "flet":          "~/dotfiles/ai/skills/flet",
+        "headscale":     "~/dotfiles/ai/skills/headscale",
+        "*fulcrologic":  "~/projects/fulcrologic-claude-settings/skills/*"
+    },
+
+    "agents": {
+        "*fulcrologic":  "~/projects/fulcrologic-claude-settings/agents/*"
+    },
+
+    "commands": {
+        "clj-start":     "~/dotfiles/ai/commands/clj-start.md"
+    },
+
+    "groups": {
+        "#GLOBAL": {
+            "skills": ["cmds"],
+            "agents": ["critique", "doc-writer", "optimizer"]
+        },
+
+        "#clojure": {
+            "skills": ["#GLOBAL", "clojure", "clojure-repl", "guardrails",
+                       "clj-stubs", "deps-upgrade"],
+            "agents": ["#GLOBAL", "bdd-tester", "deps-upgrade"],
+            "commands": ["clj-start"]
+        },
+
+        "#fulcro": {
+            "skills": ["#clojure", "fulcro", "fulcro-rad", "fulcro-uism",
+                       "fulcro-spec-tdd", "fulcro-i18n", "pathom", "statechart"],
+            "agents": ["#clojure", "fulcro-ui-tester", "rad-scaffolder",
+                       "statechart-writer", "skill-writer", "agent-writer", "architect"]
+        },
+
+        "#datomic": {
+            "skills": ["datomic", "seed-data"],
+            "agents": []
+        },
+
+        "#fulcrologic": {
+            "skills": ["#fulcro", "#datomic", "eql-processing",
+                       "io-layer-testing", "tufte", "date-time"],
+            "agents": ["#fulcro"]
+        },
+
+        "#macos": {
+            "skills": ["#GLOBAL", "macos-sandboxing"],
+            "agents": ["#GLOBAL"]
+        },
+
+        "#ALL": "*"
+    }
+}

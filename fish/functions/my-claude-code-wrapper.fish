@@ -14,6 +14,14 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
         end
     end
 
+    # Sync project skills and agents from .cc-config if present
+    if test -f .cc-config
+        set -l cc_profile (string match -v '//*' < .cc-config | string trim)
+        if test -n "$cc_profile"
+            cc-config sync $cc_profile
+        end
+    end
+
     # Unlock keychain for SSH/mosh sessions so Claude can access stored credentials
     if set -q SSH_CONNECTION
         echo "Unlocking keychain for remote session..."
