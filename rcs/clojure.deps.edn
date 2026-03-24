@@ -1,5 +1,4 @@
-{:mvn/local-repo "/Volumes/vansuny128/caches/m2/repository"
- :aliases
+{:aliases
    {:local/cider {:extra-deps {cider/cider-nrepl {:mvn/version "0.25.8"}}}
     :local/f3-dev
       {:override-deps
@@ -59,4 +58,5 @@
             {:local/root "/private/links/projects/lib/fulcro-spec"}}}
     :local/tee
       {:extra-deps
-         {tee/tee {:local/root "/private/links/dotfiles/lib/clojure/tee"}}}}}
+         {tee/tee {:local/root "/private/links/dotfiles/lib/clojure/tee"}}}}
+ :mvn/local-repo "/Volumes/vansuny128/caches/m2/repository"}

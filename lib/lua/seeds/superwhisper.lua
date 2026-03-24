@@ -70,34 +70,24 @@ function obj:hasRecordingWindow()
   return false
 end
 
--- Sync state: called from Karabiner on hotkey press
--- By the time this runs, voicetotext has already toggled the window state:
--- Window OPEN = we just STARTED recording (window appeared)
--- Window CLOSED = we just STOPPED recording (window disappeared)
+-- Sync state: called from Karabiner on hotkey press (toggle)
+-- Hotkey is always a toggle: if tracking, stop and save; if not, start.
+-- No window detection needed — escape/cancel is handled separately.
 function obj:sync()
   log.d("sync: called, _start_time =", self._start_time)
-  local windowOpen = self:hasRecordingWindow()
-  log.d("sync: windowOpen =", windowOpen, ", _start_time =", self._start_time)
 
-  if windowOpen then
-    -- Window open = we just STARTED a recording
-    if self._start_time then
-      log.i("sync: discarding previous tracking (cancelled)")
-    end
+  if self._start_time then
+    -- We were tracking, so this toggle means STOP
+    local duration = hs.timer.secondsSinceEpoch() - self._start_time
+    log.i("sync: recording ENDED, duration:", math.floor(duration), "seconds")
+    self:addSeconds(duration)
+    self._start_time = nil
+    return false
+  else
+    -- We weren't tracking, so this toggle means START
     self._start_time = hs.timer.secondsSinceEpoch()
     log.i("sync: recording STARTED at", self._start_time)
     return true
-  else
-    -- Window closed = we just STOPPED a recording
-    if self._start_time then
-      local duration = hs.timer.secondsSinceEpoch() - self._start_time
-      log.i("sync: recording ENDED, duration:", math.floor(duration), "seconds")
-      self:addSeconds(duration)
-      self._start_time = nil
-    else
-      log.d("sync: window closed but not tracking - ignoring")
-    end
-    return false
   end
 end
 
@@ -140,23 +130,16 @@ function obj:cancel()
 end
 
 -- Export global functions for hs -c access
--- Uses a short delay to let window state settle after keystroke
 _G.superwhisperSync = function()
-  log.d("superwhisperSync: global function called, scheduling sync in 0.3s")
-  hs.timer.doAfter(0.3, function()
-    log.d("superwhisperSync: delayed sync executing")
-    local result = obj:sync()
-    log.d("superwhisperSync: sync returned", result)
-  end)
+  log.d("superwhisperSync: global function called")
+  local result = obj:sync()
+  log.d("superwhisperSync: sync returned", result)
   return true
 end
 
 _G.superwhisperCancel = function()
-  log.d("superwhisperCancel: global function called, scheduling cancel in 0.3s")
-  hs.timer.doAfter(0.3, function()
-    log.d("superwhisperCancel: delayed cancel executing")
-    obj:cancel()
-  end)
+  log.d("superwhisperCancel: global function called")
+  obj:cancel()
   return true
 end
 

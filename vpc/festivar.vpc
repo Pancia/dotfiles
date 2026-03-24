@@ -33,9 +33,9 @@
         },
         {
             "area": "board",
-            "dir": "$HOME/ProtonDrive/wiki/personal",
+            "dir": "$HOME/TheAkashicRecords/",
             "tabs": [
-                "vim pages/work%2Ffestivar.md"
+                "vim work-festivar.md"
             ]
         }
     ]
