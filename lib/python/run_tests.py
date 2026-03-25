@@ -25,6 +25,11 @@ COMPONENTS = {
         "deps": [],
         "aliases": ["cjson", "python"],
     },
+    "bin/astro": {
+        "runner": "pytest",
+        "deps": ["kerykeion", "pyswisseph"],
+        "aliases": ["astro"],
+    },
     # Future components (tests don't exist yet):
     # "lib/lua": {
     #     "runner": "busted",

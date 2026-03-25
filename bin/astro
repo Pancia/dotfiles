@@ -478,9 +478,10 @@ class TransitCalculator:
             "Transit", now.year, now.month, now.day, now.hour, now.minute, bd
         )
 
-        # Calculate aspects
+        # Calculate aspects using natal house cusps for transit planet houses
+        natal_cusps = self._calculate_natal_houses(natal)
         aspects = SynastryAspects(transit, natal)
-        return self._parse_aspects(aspects.relevant_aspects, transit, natal)
+        return self._parse_aspects(aspects.relevant_aspects, transit, natal, natal_cusps)
 
     def compute_day_transits(self, natal_chart: NatalChart, date) -> list[TransitEvent]:
         """Compute transits for a specific date (at noon)."""
@@ -499,9 +500,10 @@ class TransitCalculator:
             "Transit", date.year, date.month, date.day, 12, 0, bd
         )
 
-        # Calculate aspects
+        # Calculate aspects using natal house cusps for transit planet houses
+        natal_cusps = self._calculate_natal_houses(natal)
         aspects = SynastryAspects(transit, natal)
-        return self._parse_aspects(aspects.relevant_aspects, transit, natal)
+        return self._parse_aspects(aspects.relevant_aspects, transit, natal, natal_cusps)
 
     # Major planets only (skip points, nodes, lilith, etc.)
     MAJOR_PLANETS = {'Sun', 'Moon', 'Mercury', 'Venus', 'Mars',
@@ -1033,43 +1035,31 @@ class TransitCalculator:
 
         return results
 
-    def _parse_aspects(self, raw_aspects: list, transit_subj, natal_subj) -> list[TransitEvent]:
-        """Convert kerykeion aspects to TransitEvent objects."""
+    def _parse_aspects(self, raw_aspects: list, transit_subj, natal_subj,
+                       natal_cusps: dict[int, float]) -> list[TransitEvent]:
+        """Convert kerykeion aspects to TransitEvent objects.
+
+        Transit planet houses are calculated against natal cusps (not transit chart houses).
+        Natal planet houses use kerykeion's house attribute (already from natal chart).
+        """
         events = []
 
-        # Build lookup for planet data
-        def get_planet_data(subj, name):
-            """Get sign/house for a planet by name."""
-            # Map common names to attribute names
-            attr_map = {
-                'Sun': 'sun', 'Moon': 'moon', 'Mercury': 'mercury',
-                'Venus': 'venus', 'Mars': 'mars', 'Jupiter': 'jupiter',
-                'Saturn': 'saturn', 'Uranus': 'uranus', 'Neptune': 'neptune',
-                'Pluto': 'pluto', 'Chiron': 'chiron',
-                'Ceres': 'ceres', 'Pallas': 'pallas', 'Juno': 'juno', 'Vesta': 'vesta',
-                'True_North_Lunar_Node': 'true_north_lunar_node',
-                'True_South_Lunar_Node': 'true_south_lunar_node',
-                'Mean_Lilith': 'mean_lilith',
-            }
-            attr = attr_map.get(name, name.lower())
-            planet = getattr(subj, attr, None)
+        def get_transit_planet_data(name):
+            """Get sign/house for a transit planet, using natal cusps for house."""
+            planet = self._get_planet_obj(transit_subj, name)
             if planet:
-                # Clean up house name (e.g., "Eighth_House" -> "8")
-                house = getattr(planet, 'house', '')
-                if house:
-                    house_map = {
-                        'First_House': '1', 'Second_House': '2', 'Third_House': '3',
-                        'Fourth_House': '4', 'Fifth_House': '5', 'Sixth_House': '6',
-                        'Seventh_House': '7', 'Eighth_House': '8', 'Ninth_House': '9',
-                        'Tenth_House': '10', 'Eleventh_House': '11', 'Twelfth_House': '12',
-                    }
-                    house = house_map.get(house, house)
-                return getattr(planet, 'sign', ''), house
+                sign = getattr(planet, 'sign', '')
+                house = self._planet_in_natal_house(planet.abs_pos, natal_cusps)
+                return sign, house
             return '', ''
 
+        def get_natal_planet_data(name):
+            """Get sign/house for a natal planet."""
+            return self._get_planet_position(natal_subj, name)
+
         for asp in raw_aspects:
-            t_sign, t_house = get_planet_data(transit_subj, asp['p1_name'])
-            n_sign, n_house = get_planet_data(natal_subj, asp['p2_name'])
+            t_sign, t_house = get_transit_planet_data(asp['p1_name'])
+            n_sign, n_house = get_natal_planet_data(asp['p2_name'])
 
             events.append(TransitEvent(
                 transit_planet=asp['p1_name'],
