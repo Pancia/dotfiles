@@ -210,7 +210,7 @@ function obj:createControlsCanvas()
 
     obj._canvas = hs.canvas.new({x = 0, y = 0, w = canvasWidth, h = canvasHeight})
     obj._canvas:level("popUpMenu")
-    obj._canvas:behavior({"canJoinAllSpaces", "stationary"})
+    obj._canvas:behavior({"moveToActiveSpace"})
 
     -- Background
     obj._canvas:appendElements({
@@ -356,55 +356,57 @@ function obj:showControlsCanvas()
         obj:createControlsCanvas()
     end
 
+    if not obj._controlsMenu then return end
     local menuFrame = obj._controlsMenu:frame()
+    local canvasFrame = obj._canvas:frame()
+    local menubarHeight = hs.screen.mainScreen():frame().y - hs.screen.mainScreen():fullFrame().y
+
     if menuFrame then
-        -- Find which screen contains the menubar item
-        local menuCenter = {x = menuFrame.x + menuFrame.w/2, y = menuFrame.y + menuFrame.h/2}
-        local targetScreen = hs.screen.find(menuCenter)
-
-        if targetScreen then
-            -- Position canvas below the menubar item on the same screen
-            obj._canvas:topLeft({x = menuFrame.x, y = menuFrame.y + menuFrame.h + 2})
-        else
-            -- Fallback to main screen if we can't determine the screen
-            local mainScreen = hs.screen.mainScreen()
-            local screenFrame = mainScreen:frame()
-            obj._canvas:topLeft({x = screenFrame.x + (screenFrame.w - obj._canvas:frame().w)/2,
-                                 y = screenFrame.y + 100})
+        -- Position canvas directly below the menubar item
+        local x = menuFrame.x
+        -- Clamp so canvas doesn't go off-screen right edge
+        local screen = hs.screen.mainScreen()
+        local screenFrame = screen:fullFrame()
+        if x + canvasFrame.w > screenFrame.x + screenFrame.w then
+            x = screenFrame.x + screenFrame.w - canvasFrame.w
         end
-
-        obj._canvas:show(0.2)
-
-        -- Watch for clicks outside canvas (using mouseUp to avoid interfering with button clicks)
-        if obj._eventtap then obj._eventtap:stop() end
-        obj._eventtap = hs.eventtap.new({hs.eventtap.event.types.leftMouseUp}, function(event)
-            local mousePos = hs.mouse.absolutePosition()
-            local canvasFrame = obj._canvas:frame()
-            print(string.format("[DEBUG] mousePos: x=%.2f, y=%.2f", mousePos.x, mousePos.y))
-            if canvasFrame then
-                print(string.format("[DEBUG] canvasFrame: x=%.2f, y=%.2f, w=%.2f, h=%.2f", canvasFrame.x, canvasFrame.y, canvasFrame.w, canvasFrame.h))
-                local isInside = hs.geometry.point(mousePos):inside(canvasFrame)
-                print(string.format("[DEBUG] isInside: %s", tostring(isInside)))
-                if not isInside then
-                    print("[DEBUG] Closing canvas - click was outside")
-                    obj:hideControlsCanvas()
-                else
-                    print("[DEBUG] Not closing - click was inside canvas")
-                end
-            else
-                print("[DEBUG] canvasFrame is nil")
-            end
-        end):start()
-
-        -- Watch for Escape key
-        if obj._escapeWatcher then obj._escapeWatcher:stop() end
-        obj._escapeWatcher = hs.eventtap.new({hs.eventtap.event.types.keyDown}, function(event)
-            if event:getKeyCode() == 53 then -- Escape key
-                obj:hideControlsCanvas()
-                return true
-            end
-        end):start()
+        obj._canvas:topLeft({x = x, y = menuFrame.y + menuFrame.h})
+    else
+        -- Fallback: use mouse position (click came from menubar)
+        local mouse = hs.mouse.absolutePosition()
+        local x = mouse.x - canvasFrame.w / 2
+        -- Clamp to screen
+        local screen = hs.mouse.getCurrentScreen() or hs.screen.mainScreen()
+        local screenFrame = screen:fullFrame()
+        if x < screenFrame.x then x = screenFrame.x end
+        if x + canvasFrame.w > screenFrame.x + screenFrame.w then
+            x = screenFrame.x + screenFrame.w - canvasFrame.w
+        end
+        obj._canvas:topLeft({x = x, y = screenFrame.y + menubarHeight})
     end
+
+    obj._canvas:show(0.2)
+
+    -- Watch for clicks outside canvas (using mouseUp to avoid interfering with button clicks)
+    if obj._eventtap then obj._eventtap:stop() end
+    obj._eventtap = hs.eventtap.new({hs.eventtap.event.types.leftMouseUp}, function(event)
+        local mousePos = hs.mouse.absolutePosition()
+        local canvasFrame = obj._canvas:frame()
+        if canvasFrame then
+            if not hs.geometry.point(mousePos):inside(canvasFrame) then
+                obj:hideControlsCanvas()
+            end
+        end
+    end):start()
+
+    -- Watch for Escape key
+    if obj._escapeWatcher then obj._escapeWatcher:stop() end
+    obj._escapeWatcher = hs.eventtap.new({hs.eventtap.event.types.keyDown}, function(event)
+        if event:getKeyCode() == 53 then -- Escape key
+            obj:hideControlsCanvas()
+            return true
+        end
+    end):start()
 end
 
 function obj:hideControlsCanvas()
