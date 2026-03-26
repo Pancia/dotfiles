@@ -14,7 +14,7 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
         end
     end
 
-    # Sync project skills/agents/commands from .cc-config if changed
+    # Sync project skills/agents/commands from .cc-config (or default group)
     if test -f .cc-config
         set -l cc_hash (md5 -q .cc-config)
         set -l stamp .claude/.cc-sync-stamp
@@ -23,6 +23,16 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
             if test -n "$cc_profile"
                 cc-config sync $cc_profile
                 echo $cc_hash > $stamp
+            end
+        end
+    else if test -d .claude
+        set -l config_file ~/dotfiles/ai/cc-config.json
+        set -l default_group (jq -r '.default // empty' $config_file)
+        if test -n "$default_group"
+            set -l stamp .claude/.cc-sync-stamp
+            if not test -f $stamp; or test "default:$default_group" != (cat $stamp)
+                cc-config sync $default_group
+                echo "default:$default_group" > $stamp
             end
         end
     end
@@ -62,7 +72,7 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
     if test $skip_review -eq 0; and test -d "$sessions_dir"
         set -l post_latest (ls -t "$sessions_dir"/*.jsonl 2>/dev/null | head -1)
         if test -n "$post_latest"
-            cc-session-review "$post_latest" &
+            fish -c "cc-session-review '$post_latest'" &>/dev/null &
             disown
         end
     end

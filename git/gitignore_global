@@ -1,6 +1,7 @@
 *~
 .*
 !.gitignore
+!.cc
 .DS_Store
 .lein-repl-history
 .nrepl-history

@@ -47,7 +47,7 @@ Hammerspoon modules in `lib/lua/seeds/` follow a standard interface:
 - Fisher plugins auto-installed on missing
 
 ### Fish Shell Gotchas
-Common pitfalls when writing Fish functions:
+Common pitfalls when writing Fish functions. The `/fish` skill has a comprehensive reference — load it when writing or modifying Fish code.
 
 | Gotcha | Wrong | Right |
 |--------|-------|-------|
@@ -72,6 +72,14 @@ if test $big
 end
 echo $msg  # works
 ```
+
+### Session Review
+After each interactive Claude Code session, a background Haiku process reviews the session transcript and suggests CLAUDE.md updates. Results are written to `.cc/pending-updates-<timestamp>-<session-id>.md`.
+
+**Key files:**
+- `fish/functions/my-claude-code-wrapper.fish` — triggers review on exit
+- `fish/functions/cc-session-review.fish` — sends summary + CLAUDE.md to Haiku
+- `bin/cc-session-summary` — extracts review-optimized session summary from JSONL
 
 ## Quick Reference
 

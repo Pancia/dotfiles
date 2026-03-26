@@ -1,4 +1,6 @@
 {
+    "default": "#GLOBAL",
+
     "skills": {
         "cmds":          "~/dotfiles/ai/skills/cmds",
         "fish":          "~/dotfiles/ai/skills/fish",

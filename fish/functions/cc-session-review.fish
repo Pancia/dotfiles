@@ -43,8 +43,8 @@ with open(sys.argv[1]) as f:
     set -l claude_md_content (cat "$claude_md")
     set -l session_id (basename "$jsonl" .jsonl)
     set -l ts (date '+%Y%m%d-%H%M%S')
-    set -l output_file "$cwd/.claude/pending-updates-$ts-"(string sub -l 8 "$session_id")".md"
-    mkdir -p "$cwd/.claude"
+    set -l output_file "$cwd/.cc/pending-updates-$ts-"(string sub -l 8 "$session_id")".md"
+    mkdir -p "$cwd/.cc"
 
     # Build prompt — write to temp file to avoid arg length limits
     set -l prompt_file (mktemp)
@@ -71,21 +71,26 @@ If changes are needed, respond with ONLY:
     printf '%s\n\n<claude-md>\n%s\n</claude-md>\n\n<session-log>\n%s\n</session-log>\n' \
         "$system_block" "$claude_md_content" "$summary" > "$prompt_file"
 
-    set -l response (claude -p --model haiku --output-format text < "$prompt_file" 2>/dev/null)
+    set -l response_file (mktemp)
+    claude -p --model haiku --output-format text < "$prompt_file" > "$response_file" 2>/dev/null
     rm -f "$prompt_file"
 
-    if test -z "$response"
+    if not test -s "$response_file"
+        rm -f "$response_file"
         return 1
     end
 
     # Check if no updates needed
-    if string match -q "*NO_UPDATES_NEEDED*" "$response"
+    if grep -q NO_UPDATES_NEEDED "$response_file"
+        rm -f "$response_file"
         return 0
     end
 
-    # Write pending updates
-    printf '# Pending CLAUDE.md Updates\n\n_Generated: %s_\n_Session: %s_\n\n%s\n' \
-        "$ts" "$session_id" "$response" > "$output_file"
+    # Write pending updates with header
+    printf '# Pending CLAUDE.md Updates\n\n_Generated: %s_\n_Session: %s_\n\n' \
+        "$ts" "$session_id" > "$output_file"
+    cat "$response_file" >> "$output_file"
+    rm -f "$response_file"
 
     echo "Session review: updates suggested → $output_file"
 end

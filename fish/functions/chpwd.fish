@@ -66,16 +66,15 @@ function listClaudeSessions --description 'List Claude sessions if present'
 end
 
 function showPendingUpdates --description 'Show pending CLAUDE.md update suggestions'
-    set -l files .claude/pending-updates-*.md
+    set -l files .cc/pending-updates-*.md
     set -l count (count $files 2>/dev/null)
     if test $count -gt 0
-        echo (set_color --bold d7871f)"&> $count pending CLAUDE.md update"(test $count -gt 1; and echo "s"; or echo "")" in .claude/"(set_color normal)
+        echo (set_color --bold d7871f)"&> $count pending CLAUDE.md update"(test $count -gt 1; and echo "s"; or echo "")" in .cc/"(set_color normal)
     end
 end
 
-function showPlans --description 'List PLAN-* files in dotfiles directory'
-    string match -q '*/dotfiles' (pwd); or return
-    set -l plans (ls PLAN-* 2>/dev/null)
+function showPlans --description 'List PLAN-* files in .cc directory'
+    set -l plans (ls .cc/PLAN-* 2>/dev/null)
     if test -n "$plans"
         echo "&> Plans:"
         for plan in $plans

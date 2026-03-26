@@ -67,6 +67,7 @@ or return  # handles Ctrl-C during read
 - **`string` builtin** for all manipulation: `string split`, `string match`, `string replace`, `string trim`, `string collect`, etc.
 - **`string match` uses globs by default** — use `string match -r` for regex. Forgetting `-r` is a common bug.
 - **Double quotes**: `"$var"` works but arrays expand differently than bash — `"$list"` joins with spaces, `$list` keeps elements separate.
+- **Multi-line capture loses newlines**: `set -l output (command)` splits output into a list by newlines. `"$output"` then joins with spaces, collapsing all lines into one. For multi-line output, write to a temp file instead: `command > $tmpfile`.
 - **Escape sequences work in quotes**: `\t`, `\n`, `\r` are interpreted in both single and double quotes (unlike bash). Use `printf` when you need precise control.
 - **No heredocs** (`<<EOF`). Use `printf`, multi-line quoted strings, or `echo` piped:
 
