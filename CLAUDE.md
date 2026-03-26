@@ -76,10 +76,20 @@ echo $msg  # works
 ### Session Review
 After each interactive Claude Code session, a background Haiku process reviews the session transcript and suggests CLAUDE.md updates. Results are written to `.cc/pending-updates-<timestamp>-<session-id>.md`.
 
-**Key files:**
-- `fish/functions/my-claude-code-wrapper.fish` — triggers review on exit
-- `fish/functions/cc-session-review.fish` — sends summary + CLAUDE.md to Haiku
-- `bin/cc-session-summary` — extracts review-optimized session summary from JSONL
+**How it works:**
+1. `bin/cc-session-summary` — extracts review-optimized session summary (human messages, file paths, tool use) with 150k char budget
+2. `fish/functions/cc-session-review.fish` — sends summary + current CLAUDE.md to Haiku, writes suggestions
+3. Triggered automatically by `fish/functions/my-claude-code-wrapper.fish` after `claude` exits (non-interactive invocations skipped)
+
+**Viewing suggestions:** Pending updates appear in `chpwd` output when you cd into a project with pending files (golden/orange highlight). Review the file, apply edits, then delete it.
+
+### Claude Code Project Artifacts
+
+Files in `.cc/` are Claude Code session artifacts:
+- `pending-updates-<ts>-<id>.md` — suggested CLAUDE.md edits from session reviews
+- `PLAN-*.md` — session plans and design documents
+
+Tracked in git via `!.cc` in `gitignore_global`.
 
 ## Quick Reference
 
@@ -129,6 +139,25 @@ cmds test yt -v         # Verbose output
 cmds test yt --cov      # With coverage report
 cmds test yt -k "cache" # Run tests matching pattern
 ```
+
+### Claude Code Config (cc-config)
+
+Project-level skill/agent/command configuration via `.cc-config` and `cc-config.json`:
+
+- **`.cc-config`** (local, per-project) — lists groups/skills/agents/commands to enable (one per line)
+- **`cc-config.json`** (global registry at `~/dotfiles/ai/`) — defines all available skills, agents, commands, and groups
+- **`"default"` key** in cc-config.json — group to auto-sync into `.claude/` when a project lacks `.cc-config`
+
+**Workflow:**
+```bash
+cc-config init    # Create .cc-config via fzf picker
+cc-config edit    # Edit .cc-config with reference comments
+cc-config show    # Show what's enabled for current project
+cc-config sync    # Manually sync (auto-runs on claude launch)
+cc-config list    # Show all registered skills/agents/commands
+```
+
+The wrapper auto-syncs on `claude` launch: if `.cc-config` exists, uses that; otherwise syncs the `"default"` group from `cc-config.json`.
 
 ## Primary Tools
 
