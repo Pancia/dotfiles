@@ -169,7 +169,17 @@ print("\n".join(msgs))
 end
 
 function _ccs_autotitle --description 'Auto-generate a title for a session using Haiku'
-    set -l id $argv[1]
+    # Parse --yes flag
+    set -l auto_apply 0
+    set -l id
+    for arg in $argv
+        switch $arg
+            case -y --yes
+                set auto_apply 1
+            case '*'
+                set id $arg
+        end
+    end
     if test -z "$id"
         # If no id given, let user pick
         set -l file (_ccs_file)
@@ -209,12 +219,17 @@ function _ccs_autotitle --description 'Auto-generate a title for a session using
         return 1
     end
 
-    echo "Suggested title: $title"
-    read -P "Apply? [Y/n] " -l confirm
-    if test -z "$confirm" -o "$confirm" = y -o "$confirm" = Y
+    if test $auto_apply -eq 1
+        echo "Title: $title"
         _ccs_rename "$id" "$title"
     else
-        echo "Cancelled"
+        echo "Suggested title: $title"
+        read -P "Apply? [Y/n] " -l confirm
+        if test -z "$confirm" -o "$confirm" = y -o "$confirm" = Y
+            _ccs_rename "$id" "$title"
+        else
+            echo "Cancelled"
+        end
     end
 end
 

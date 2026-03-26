@@ -27,4 +27,6 @@ if [ -n "$title" ]; then
     echo "Saved session: $id ($timestamp — $title)"
 else
     echo "Saved session: $id ($timestamp)"
+    # Auto-generate title using fish ccs function
+    fish -c "ccs autotitle --yes $id"
 fi
