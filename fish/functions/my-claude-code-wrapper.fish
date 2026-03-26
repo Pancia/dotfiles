@@ -72,6 +72,7 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
     if test $skip_review -eq 0; and test -d "$sessions_dir"
         set -l post_latest (ls -t "$sessions_dir"/*.jsonl 2>/dev/null | head -1)
         if test -n "$post_latest"
+            echo "📋 Reviewing session for CLAUDE.md updates (background)..."
             fish -c "cc-session-review '$post_latest'" &>/dev/null &
             disown
         end
