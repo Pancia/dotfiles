@@ -71,6 +71,7 @@
     },
     "m": {
         "_desc": "+music",
+        "_stay": true,
         "c": ["Play or Pause", "cmus-remote --pause"],
         "e": ["Edit Track", {"shell": "cmedit"}],
         "y": ["Redownload from Youtube", "cmytdl"],

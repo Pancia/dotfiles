@@ -10,7 +10,7 @@ export PATH="$HOME/bin:$PATH"
 # CONFIGURATION
 # ============================================================================
 
-YTDL_OUTPUT_DIR="$HOME/storage/downloads/"
+YTDL_OUTPUT_DIR="$HOME/storage/downloads/ytdl"
 YTDL_AUDIO_CODE="bestaudio"
 YTDL_VIDEO_CODE="bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4]"
 
@@ -73,7 +73,7 @@ _ytdl_convert_mp4_to_m4a() {
 
 _ytdl_download_audio() {
     local ytid="$1"
-    local out_dir="$YTDL_OUTPUT_DIR/"
+    local out_dir="$YTDL_OUTPUT_DIR/audio"
     mkdir -p "$out_dir"
 
     local output_path="$out_dir/%(channel)s - %(title)s [%(id)s].%(ext)s"
