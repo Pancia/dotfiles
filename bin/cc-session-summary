@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+"""Extract a review-oriented summary from a Claude Code session JSONL.
+
+Designed to fit within Haiku's 200k context (~150k chars budget for the summary).
+Prioritizes: human messages, file paths touched, assistant explanations.
+Omits: thinking blocks, full tool results, binary content.
+"""
+
+import json
+import sys
+
+CHAR_BUDGET = 150_000
+ASSISTANT_TEXT_MAX = 800  # per text block
+TOOL_RESULT_MAX = 200     # just enough to see errors
+
+
+def extract_summary(jsonl_path):
+    records = []
+    with open(jsonl_path) as f:
+        for line in f:
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+
+    entries = []  # (priority, text) — lower priority = keep first
+    files_touched = set()
+
+    for rec in records:
+        msg = rec.get("message", {})
+        role = msg.get("role")
+        content = msg.get("content", [])
+
+        if role == "user":
+            texts = _extract_texts(content)
+            for t in texts:
+                # User messages are high value — keep in full (but cap extreme ones)
+                entries.append((0, f"Human: {t[:3000]}"))
+
+            # Also capture file paths from tool_result blocks in user messages
+            for block in _iter_blocks(content):
+                if block.get("type") == "tool_result":
+                    result_text = _block_text(block)
+                    # Don't include full results, just note them
+                    if result_text:
+                        short = result_text[:TOOL_RESULT_MAX]
+                        if len(result_text) > TOOL_RESULT_MAX:
+                            short += "..."
+                        entries.append((2, f"  [tool result]: {short}"))
+
+        elif role == "assistant":
+            for block in _iter_blocks(content):
+                btype = block.get("type")
+
+                if btype == "text":
+                    text = block.get("text", "").strip()
+                    if text:
+                        short = text[:ASSISTANT_TEXT_MAX]
+                        if len(text) > ASSISTANT_TEXT_MAX:
+                            short += "..."
+                        entries.append((1, f"Assistant: {short}"))
+
+                elif btype == "tool_use":
+                    name = block.get("name", "?")
+                    inp = block.get("input", {})
+                    summary = _summarize_tool_use(name, inp, files_touched)
+                    if summary:
+                        entries.append((1, f"  [{name}]: {summary}"))
+
+                # Skip thinking blocks entirely
+
+    # Build the files-touched header
+    header_parts = []
+    if files_touched:
+        sorted_files = sorted(files_touched)
+        header_parts.append("Files touched in this session:\n" +
+                          "\n".join(f"  {f}" for f in sorted_files))
+
+    # Assemble within budget
+    header = "\n".join(header_parts)
+    budget = CHAR_BUDGET - len(header) - 200  # margin
+
+    # All entries in order, trim from middle if over budget
+    lines = [e[1] for e in entries]
+    total = sum(len(l) + 1 for l in lines)
+
+    if total > budget:
+        # Keep first 60% and last 30% of budget
+        head_budget = int(budget * 0.6)
+        tail_budget = int(budget * 0.3)
+
+        head_lines = []
+        head_used = 0
+        for l in lines:
+            cost = len(l) + 1
+            if head_used + cost > head_budget:
+                break
+            head_lines.append(l)
+            head_used += cost
+
+        tail_lines = []
+        tail_used = 0
+        for l in reversed(lines):
+            cost = len(l) + 1
+            if tail_used + cost > tail_budget:
+                break
+            tail_lines.insert(0, l)
+            tail_used += cost
+
+        lines = head_lines + ["\n... [middle of session omitted] ...\n"] + tail_lines
+
+    body = "\n".join(lines)
+
+    if header:
+        return header + "\n\n---\n\n" + body
+    return body
+
+
+def _iter_blocks(content):
+    if isinstance(content, list):
+        yield from content
+    elif isinstance(content, dict):
+        yield content
+
+
+def _extract_texts(content):
+    texts = []
+    if isinstance(content, str):
+        texts.append(content)
+    elif isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                texts.append(block["text"])
+    return texts
+
+
+def _block_text(block):
+    content = block.get("content", "")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for b in content:
+            if isinstance(b, dict) and b.get("type") == "text":
+                parts.append(b["text"])
+        return " ".join(parts)
+    return ""
+
+
+def _summarize_tool_use(name, inp, files_touched):
+    if name in ("Read", "Edit", "Write"):
+        path = inp.get("file_path", "")
+        if path:
+            files_touched.add(path)
+        if name == "Read":
+            return path
+        elif name == "Edit":
+            old = inp.get("old_string", "")[:80]
+            new = inp.get("new_string", "")[:80]
+            return f"{path} ({old!r} -> {new!r})"
+        elif name == "Write":
+            return f"{path} (new file)"
+
+    elif name == "Bash":
+        cmd = inp.get("command", "")[:200]
+        return cmd
+
+    elif name in ("Grep", "Glob"):
+        pattern = inp.get("pattern", "")
+        path = inp.get("path", "")
+        return f"{pattern} in {path}" if path else pattern
+
+    elif name == "Agent":
+        desc = inp.get("description", "")
+        return desc
+
+    elif name in ("TaskCreate", "TaskUpdate"):
+        return inp.get("subject", inp.get("status", ""))
+
+    # For other tools, just note the name
+    return ""
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print(f"Usage: {sys.argv[0]} <session.jsonl>", file=sys.stderr)
+        sys.exit(1)
+    print(extract_summary(sys.argv[1]))

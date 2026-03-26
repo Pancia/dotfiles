@@ -43,5 +43,27 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
     else
         set label "$label $timestamp"
     end
+    # Skip post-session review for non-interactive invocations
+    set -l skip_review 0
+    if contains -- -p $pass_argv; or contains -- --print $pass_argv
+        set skip_review 1
+    end
+
+    # Snapshot the most recent session JSONL before running
+    set -l sessions_dir "$HOME/.claude/projects/"(string replace -a '/' '-' (pwd))
+    set -l pre_latest
+    if test -d "$sessions_dir"
+        set pre_latest (ls -t "$sessions_dir"/*.jsonl 2>/dev/null | head -1)
+    end
+
     proc-label "claude [$label]" claude --verbose $pass_argv
+
+    # Post-session review: find the session JSONL and review in background
+    if test $skip_review -eq 0; and test -d "$sessions_dir"
+        set -l post_latest (ls -t "$sessions_dir"/*.jsonl 2>/dev/null | head -1)
+        if test -n "$post_latest"
+            cc-session-review "$post_latest" &
+            disown
+        end
+    end
 end
