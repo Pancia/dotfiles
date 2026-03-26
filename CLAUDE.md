@@ -47,7 +47,9 @@ Hammerspoon modules in `lib/lua/seeds/` follow a standard interface:
 - Fisher plugins auto-installed on missing
 
 ### Fish Shell Gotchas
-Common pitfalls when writing Fish functions. The `/fish` skill has a comprehensive reference — load it when writing or modifying Fish code.
+**REQUIRED: Run `/fish` before writing or modifying ANY `.fish` file.** Fish syntax differs from bash/zsh in subtle ways that cause bugs. Do not skip this step.
+
+Common pitfalls when writing Fish functions:
 
 | Gotcha | Wrong | Right |
 |--------|-------|-------|
