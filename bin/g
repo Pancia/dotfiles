@@ -518,7 +518,66 @@ def fzf_search_mode():
     return None
 
 
-def main():
+def list_commands(commands=None, prefix='', out=None):
+    """List all commands with their key paths."""
+    if commands is None:
+        commands = COMMANDS
+    if out is None:
+        out = []
+    for key, content in sorted(commands.items()):
+        if key.startswith('_'):
+            continue
+        path = prefix + key
+        if isinstance(content, tuple):
+            desc = content[0]
+            cmd = content[1]
+            if isinstance(cmd, Chain):
+                cmd_str = ' && '.join(cmd)
+            elif isinstance(cmd, list):
+                cmd_str = ' '.join(cmd)
+            else:
+                cmd_str = str(cmd)
+            out.append((path, desc, cmd_str))
+        else:
+            submenu_desc = content.get('_desc', key)
+            list_commands(content, path, out)
+    return out
+
+
+def run_keys(keys):
+    """Navigate the menu by key sequence and execute the resulting command."""
+    current = COMMANDS
+    for i, key in enumerate(keys):
+        if key not in current:
+            used = keys[:i] if i > 0 else ''
+            print(f"{RED}Unknown key '{key}' at position {i+1}{RESET}", file=sys.stderr)
+            if isinstance(current, dict):
+                avail = [k for k in current if not k.startswith('_')]
+                print(f"{DIM}Available: {' '.join(sorted(avail))}{RESET}", file=sys.stderr)
+            return 1
+        action = current[key]
+        if isinstance(action, tuple):
+            # Found a command — execute it
+            if i < len(keys) - 1:
+                print(f"{YELLOW}Warning: ignoring extra keys after '{keys[:i+1]}'{RESET}", file=sys.stderr)
+            execute_command(action[1])
+            return 0
+        else:
+            # Enter submenu
+            current = action
+    # Ended on a submenu, not a command
+    print(f"{RED}'{keys}' is a submenu, not a command. Add another key:{RESET}", file=sys.stderr)
+    for k, v in sorted(current.items()):
+        if k.startswith('_'):
+            continue
+        if isinstance(v, tuple):
+            print(f"  {BOLD_CYAN}{keys}{k}{RESET}  {v[0]}", file=sys.stderr)
+        else:
+            print(f"  {BOLD_YELLOW}{keys}{k}{RESET}  → {v.get('_desc', k)}", file=sys.stderr)
+    return 1
+
+
+def main_interactive():
     current = COMMANDS
     history = []
     path = ''
@@ -576,6 +635,35 @@ def main():
                 current = action
         else:
             print(f"{YELLOW}Unknown key: {repr(key)}{RESET}\n")
+
+
+def main():
+    if len(sys.argv) < 2:
+        main_interactive()
+        return
+
+    subcmd = sys.argv[1]
+
+    if subcmd in ('ls', 'help'):
+        entries = list_commands()
+        # Determine column widths
+        max_keys = max(len(e[0]) for e in entries)
+        max_desc = max(len(e[1]) for e in entries)
+        for path, desc, cmd in entries:
+            print(f"{BOLD_CYAN}{path:<{max_keys}}{RESET}  {BOLD_WHITE}{desc:<{max_desc}}{RESET}  {DIM}{cmd}{RESET}")
+
+    elif subcmd == 'run':
+        if len(sys.argv) < 3:
+            print(f"{RED}Usage: g run <keys>{RESET}", file=sys.stderr)
+            print(f"{DIM}Example: g run cc  (Commit → Commit){RESET}", file=sys.stderr)
+            sys.exit(1)
+        keys = sys.argv[2]
+        sys.exit(run_keys(keys))
+
+    else:
+        print(f"{RED}Unknown subcommand: {subcmd}{RESET}", file=sys.stderr)
+        print(f"{DIM}Usage: g [ls|help | run <keys>]{RESET}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == '__main__':

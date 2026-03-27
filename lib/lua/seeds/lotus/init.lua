@@ -69,7 +69,9 @@ function obj:speakTime()
     local hour = t.hour % 12
     if hour == 0 then hour = 12 end
     local msg = string.format("%d %02d", hour, t.min)
-    hs.task.new("/usr/bin/say", nil, {msg}):start()
+    local speaker = hs.speech.new()
+    speaker:volume(obj.speakVolume or 0.5)
+    speaker:speak(msg)
 end
 
 -- Trigger functions for interval and clock modes

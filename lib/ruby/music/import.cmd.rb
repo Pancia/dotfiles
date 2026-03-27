@@ -87,7 +87,7 @@ module MusicCMD
         p song if options[:verbose]
         if not options[:dry_run] then
           MusicDB.append song
-          execute("mv #{Shellwords.escape f} $MUSIC_DIR/#{uuid}.m4a")
+          execute("cp #{Shellwords.escape f} $MUSIC_DIR/#{uuid}.m4a && trash #{Shellwords.escape f}")
           MusicDB.tag([{"id" => uuid,
                         "artist" => artist,
                         "name" => name,
@@ -116,7 +116,7 @@ module MusicCMD
 
     if not options[:dry_run] then
       MusicDB.append song
-      execute("mv #{Shellwords.escape file} $MUSIC_DIR/#{uuid}.m4a")
+      execute("cp #{Shellwords.escape file} $MUSIC_DIR/#{uuid}.m4a && trash #{Shellwords.escape file}")
       MusicDB.tag([{"id" => uuid,
                     "artist" => artist,
                     "name" => name,
