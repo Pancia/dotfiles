@@ -5,8 +5,11 @@ module MusicCMD
 
   def select(opts)
     opts.banner = "Usage: select [OPTS]"
-    opts.info = "Select items to set as the playlist using `cmus-remote`"
-    opts.on("-f", "--filter FILTER", "Any string that `jq` will accept -- default: .playlist") { |jqf|
+    opts.info = "Search DB interactively and queue selected songs in cmus for playback"
+    opts.separator "    Opens fzf to pick items, then clears the cmus playlist and adds matching files."
+    opts.separator "    --filter controls what field is searched/displayed (default: .playlist)."
+    opts.separator ""
+    opts.on("-f", "--filter FILTER", "jq field expression to group/display by (default: .playlist)") { |jqf|
       $options[:filter] = jqf
     }
     opts.on("-t", "--filter-by-tags", "Filter by tags") {

@@ -1,10 +1,23 @@
 #!/usr/bin/env python3
-"""Git which-key modal menu - single-key navigation for git commands."""
+"""VCS which-key modal menu - single-key navigation for git/jj commands."""
 import sys
 import os
 import tty
 import termios
 import subprocess
+
+# Detect jj repo (check for .jj/ directory up the tree)
+def _is_jj_repo():
+    d = os.getcwd()
+    while True:
+        if os.path.isdir(os.path.join(d, '.jj')):
+            return True
+        parent = os.path.dirname(d)
+        if parent == d:
+            return False
+        d = parent
+
+IS_JJ = _is_jj_repo()
 
 # Theme detection (macOS light/dark mode)
 def _is_dark_mode():
@@ -27,10 +40,53 @@ RESET = '\033[0m'
 CYAN = '\033[36m'
 GREEN = '\033[32m'
 RED = '\033[31m'
+MAGENTA = '\033[35m'
+
+
+def jj_status_line():
+    """Display jj status line."""
+    def run(cmd):
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=2).stdout.strip()
+        except:
+            return ''
+
+    # Get current change and bookmark info
+    change_id = run(['jj', 'log', '--no-graph', '-r', '@', '-T', 'change_id.short(8)'])
+    if not change_id:
+        return
+
+    # Get bookmark (branch) if any
+    bookmark = run(['jj', 'log', '--no-graph', '-r', '@', '-T', 'bookmarks'])
+    desc = run(['jj', 'log', '--no-graph', '-r', '@', '-T', 'description.first_line()'])
+
+    # Check for changes
+    status = run(['jj', 'status'])
+    has_changes = 'Working copy changes:' in status
+    has_conflict = 'conflict' in status.lower()
+
+    if has_conflict:
+        bg = '\033[41m'  # Red
+    elif has_changes:
+        bg = '\033[43m'  # Yellow
+    else:
+        bg = '\033[42m'  # Green
+    black = '\033[30m'
+
+    parts = [f'jj:{change_id}']
+    if bookmark:
+        parts.append(bookmark)
+    if desc:
+        parts.append(desc[:40])
+
+    print(f"{bg}{black} {' '.join(parts)} {RESET}")
 
 
 def git_status_line():
     """Display git status line matching Tide prompt format."""
+    if IS_JJ:
+        return jj_status_line()
+
     def run(cmd):
         try:
             return subprocess.run(cmd, capture_output=True, text=True, timeout=2).stdout.strip()
@@ -112,7 +168,7 @@ def chain(*cmds):
 
 # Menu structure - nested dicts are submenus, tuples are (description, command, stay_in_submenu)
 # stay_in_submenu=True stays in current submenu, False goes back to root
-COMMANDS = {
+GIT_COMMANDS = {
     '_desc': 'Git',
     'a': {
         '_desc': 'Add',
@@ -168,8 +224,64 @@ COMMANDS = {
         'l': ('Stash list', 'git stash list', True),
     },
     'w': ('Switch branch (fzf)', chain('git branch -a | fzf | xargs git checkout', 'git status')),
-    '=': ('Edit this menu', ['nvim', __file__, '-c', '/^COMMANDS', '-c', 'normal zt'], False, True),  # go to root, reload
+    '=': ('Edit this menu', ['nvim', __file__, '-c', '/^GIT_COMMANDS', '-c', 'normal zt'], False, True),  # go to root, reload
 }
+
+JJ_COMMANDS = {
+    '_desc': 'Jujutsu',
+    'b': {
+        '_desc': 'Bookmark',
+        'c': ('Create', 'read -l -P "Bookmark name: " name; and jj bookmark create -r @ $name'),
+        'd': ('Delete', 'jj bookmark list | fzf | awk \'{print $1}\' | xargs jj bookmark delete'),
+        'l': ('List', 'jj bookmark list', True),
+        's': ('Set to @', 'jj bookmark list | fzf | awk \'{print $1}\' | xargs -I{} jj bookmark set {} -r @'),
+    },
+    'c': {
+        '_desc': 'Commit',
+        'c': ('Commit (describe + new)', chain('jj commit', 'jj status')),
+        'd': ('Describe @', chain('jj describe', 'jj log --limit 5')),
+        'p': ('Describe @-', chain('jj describe @-', 'jj log --limit 5')),
+    },
+    'd': {
+        '_desc': 'Diff',
+        'd': ('Diff (@)', 'jj diff', True),
+        'r': ('Diff revision', 'jj log --no-graph -T \'change_id.short(8) ++ " " ++ description.first_line() ++ "\\n"\' | fzf | awk \'{print $1}\' | xargs jj diff -r', True),
+        'f': ('Diff from parent', 'jj diff --from @-', True),
+    },
+    'e': ('Edit revision (fzf)', chain('jj log --no-graph -T \'change_id.short(8) ++ " " ++ description.first_line() ++ "\\n"\' | fzf | awk \'{print $1}\' | xargs jj edit', 'jj status')),
+    'f': ('Fetch', chain('jj git fetch', 'jj status')),
+    'h': {
+        '_desc': 'Show',
+        'h': ('Show @', 'jj show', True),
+        'p': ('Show @-', 'jj show @-', True),
+        'f': ('Show revision (fzf)', 'jj log --no-graph -T \'change_id.short(8) ++ " " ++ description.first_line() ++ "\\n"\' | fzf | awk \'{print $1}\' | xargs jj show', True),
+    },
+    'l': ('Log', 'jj log'),
+    'n': ('New (empty change)', chain('jj new', 'jj status')),
+    'p': {
+        '_desc': 'Push',
+        'p': ('Push', chain('jj git push', 'jj status')),
+        'a': ('Push all bookmarks', chain('jj git push --all', 'jj status')),
+        'c': ('Push + create tracking', chain('jj git push --allow-new', 'jj status')),
+    },
+    'q': {
+        '_desc': 'Squash',
+        'q': ('Squash into parent', chain('jj squash', 'jj log --limit 5')),
+        'i': ('Squash interactive', chain('jj squash --interactive', 'jj log --limit 5')),
+    },
+    'r': {
+        '_desc': 'Rebase/Restore',
+        'r': ('Restore file (fzf)', chain('jj diff --name-only | fzf -m --bind "space:toggle+down" --bind "enter:select+accept" --header "SPACE=toggle  ENTER=accept" | xargs -I{} jj restore --from @- {}', 'jj status'), True),
+        'b': ('Rebase onto (fzf)', 'jj log --no-graph -T \'change_id.short(8) ++ " " ++ description.first_line() ++ "\\n"\' | fzf | awk \'{print $1}\' | xargs -I{} jj rebase -r @ -d {}'),
+    },
+    's': ('Status', 'jj status'),
+    'S': ('Split', chain('jj split', 'jj log --limit 5')),
+    'u': ('Undo', chain('jj undo', 'jj status')),
+    'x': ('Abandon @', chain('jj abandon @', 'jj status')),
+    '=': ('Edit this menu', ['nvim', __file__, '-c', '/^JJ_COMMANDS', '-c', 'normal zt'], False, True),
+}
+
+COMMANDS = JJ_COMMANDS if IS_JJ else GIT_COMMANDS
 
 
 def getch():
@@ -274,11 +386,11 @@ def execute_command(command):
 
 def reload_commands():
     """Reload COMMANDS from this file."""
-    global COMMANDS
+    global COMMANDS, GIT_COMMANDS, JJ_COMMANDS
     with open(__file__, 'r') as f:
         source = f.read()
-    # Extract and exec just the COMMANDS definition
     exec(compile(source, __file__, 'exec'), globals())
+    COMMANDS = JJ_COMMANDS if IS_JJ else GIT_COMMANDS
     return COMMANDS
 
 
@@ -330,8 +442,11 @@ def main():
     history = []
     path = ''
 
-    # Show git status on startup
-    subprocess.run(['git', 'status'])
+    # Show status on startup
+    if IS_JJ:
+        subprocess.run(['jj', 'status'])
+    else:
+        subprocess.run(['git', 'status'])
     print()
 
     while True:

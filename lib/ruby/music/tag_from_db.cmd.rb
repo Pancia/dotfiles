@@ -4,7 +4,9 @@ module MusicCMD
 
   def tag_from_db(opts)
     opts.banner = "Usage: tag_from_db [OPTIONS]"
-    opts.info = "Sync file metadata from DB (re-tag files that have tags in DB)"
+    opts.info = "Bulk sync: write DB metadata into .m4a file tags for all songs"
+    opts.separator "    Re-tags every song (or --tags-only songs with tags set)."
+    opts.separator "    Only updates files where embedded metadata differs from DB."
     opts.separator ""
     opts.on("-w", "--workers N", Integer, "Parallel workers (default: 4)") { |w|
       $options[:workers] = w

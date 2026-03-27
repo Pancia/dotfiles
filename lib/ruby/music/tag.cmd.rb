@@ -3,10 +3,12 @@ require 'music/music_db.rb'
 module MusicCMD
 
   def tag(opts)
-    opts.banner = "Usage: tag [-s SONG_ID] TAGS*"
-    opts.info = "Tag SONG_ID with TAGS"
-    opts.separator "    SONG_ID: Song \"id\" or filename"
-    opts.separator "    TAGS format: <tag>[ <tag>]*"
+    opts.banner = "Usage: tag -s SONG_ID TAGS..."
+    opts.info = "Add tags to a song in the DB and update file metadata"
+    opts.separator "    Tags are appended to existing tags (duplicates removed), not replaced."
+    opts.separator "    SONG_ID is a UUID or filename (extension stripped). TAGS are space-separated."
+    opts.separator ""
+    opts.separator "    Example: music tag -s 3F2504E0-4F89-11D3-9A0C-0305E82C3301 chill ambient"
     opts.separator ""
     opts.on("-s", "--song-id SONG_ID", "Required: Apply the mark to SONG_ID") { |id|
       $options[:song_id] = id

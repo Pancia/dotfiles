@@ -36,8 +36,11 @@ module MusicCMD
 
   def edit(opts)
     opts.banner = "Usage: edit [OPTS] ITEM"
-    opts.info = "Edit the item interactively"
-    opts.separator "    ITEM: String, will be compared in `jq` to FILTER"
+    opts.info = "Edit song metadata interactively (prompts for field, then new value)"
+    opts.separator "    ITEM is matched against --filter field (default: .playlist) to find songs."
+    opts.separator "    For each match, displays the record and prompts for a field name to edit."
+    opts.separator "    Enter empty field name to finish editing a song. Updates DB and file metadata."
+    opts.separator "    NOTE: Interactive only — not suitable for scripted/AI use."
     opts.separator ""
     opts.on("-f", "--filter FILTER", "Any string that `jq` will accept -- default: .playlist") { |jqf|
       $options[:filter] = jqf

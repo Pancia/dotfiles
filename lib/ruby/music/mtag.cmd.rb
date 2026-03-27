@@ -4,7 +4,9 @@ module MusicCMD
 
   def fix_metadata(opts)
     opts.banner = "Usage: fix_metadata FILE"
-    opts.info = "retag files listed in FILE"
+    opts.info = "Re-tag files listed in FILE with metadata from the DB"
+    opts.separator "    FILE contains one .m4a path per line. Looks up each in the DB and re-writes metadata."
+    opts.separator ""
     lambda { |file|
       $options[:verbose] = true
       db = MusicDB.read()
@@ -20,8 +22,10 @@ module MusicCMD
   end
 
   def fix_album(opts)
-    opts.banner = "Usage: fix_metadata FILE"
-    opts.info = "rename each album listed in FILE and retag files"
+    opts.banner = "Usage: fix_album FILE"
+    opts.info = "Rename playlists listed in FILE and re-tag their files (interactive)"
+    opts.separator "    FILE contains one playlist name per line. Prompts for a new name for each."
+    opts.separator ""
     lambda { |file|
       $options[:verbose] = true
       db = MusicDB.read()
@@ -42,8 +46,10 @@ module MusicCMD
 
   def mtag(opts)
     opts.banner = "Usage: mtag [OPTS] ITEM"
-    opts.info = "Tag the file with metadata (uses ffmpeg)"
-    opts.separator "    ITEM: String, will be compared in `jq` to FILTER"
+    opts.info = "Write DB metadata into .m4a file tags via ffmpeg (DB -> file sync)"
+    opts.separator "    Reads song data from $MUSIC_DB and writes artist/title/album/genre"
+    opts.separator "    into the file's embedded metadata. Only updates fields that differ."
+    opts.separator "    ITEM is matched against --filter field (default: .id) to find songs."
     opts.separator ""
     opts.on("-n", "--dry-run", "Do not tag, just print") {
       $options[:dry_run] = true

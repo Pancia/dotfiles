@@ -3,10 +3,13 @@ require 'music/music_db.rb'
 module MusicCMD
 
   def mark(opts)
-    opts.banner = "Usage: mark [-s SONG_ID] [-t TEXT]"
-    opts.info = "Mark SONG_ID with TEXT or user supplied from stdin"
-    opts.separator "    SONG_ID: Song \"id\" or filename"
-    opts.separator "    TEXT: string to mark SONG_ID with"
+    opts.banner = "Usage: mark -s SONG_ID [-t TEXT]"
+    opts.info = "Set a free-text mark/note on a song"
+    opts.separator "    Without -t, prompts interactively for the mark text."
+    opts.separator "    With -t, sets the mark non-interactively (suitable for scripting/AI)."
+    opts.separator "    SONG_ID is a UUID or filename (extension stripped)."
+    opts.separator ""
+    opts.separator "    Example: music mark -s 3F2504E0-... -t 'needs re-tagging'"
     opts.separator ""
     opts.on("-s", "--song-id SONG_ID", "Apply the mark to SONG_ID") { |id|
       $options[:song_id] = id

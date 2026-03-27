@@ -4,7 +4,11 @@ module MusicCMD
 
   def import_ytdl(opts)
     opts.banner = "Usage: import_ytdl"
-    opts.info = "Imports all music ytdl from downloads"
+    opts.info = "Import all music from ~/Downloads/ytdl/music/ (interactive)"
+    opts.separator "    Expects files named: <artist>__$__<title>__#__<yt-id>.m4a"
+    opts.separator "    Top-level files get playlist 'TODO'; files in subdirs use dir name as playlist."
+    opts.separator "    Prompts for artist/name confirmation per file."
+    opts.separator ""
     lambda { ||
       Dir.chdir("#{%x[echo $HOME].strip}/Downloads/ytdl/music") {
         files = Dir["*"].filter(&File.method(:file?))
@@ -19,8 +23,8 @@ module MusicCMD
 
 
   def import(opts)
-    opts.banner = "Usage: import FILES"
-    opts.info = "Imports files into $MUSIC_DB & $MUSIC_DIR"
+    opts.banner = "Usage: import [OPTS] FILES..."
+    opts.info = "Import files into $MUSIC_DB & $MUSIC_DIR (interactive, prompts per file)"
     opts.on("-p", "--playlist PLAYLIST_NAME", "String to use as FILES's PLAYLIST metadata") { |pl|
       $options[:playlist] = pl
     }
@@ -33,8 +37,13 @@ module MusicCMD
   end
 
   def import_single(opts)
-    opts.banner = "Usage: import_single OPTIONS... FILE"
-    opts.info = "Imports a single file into $MUSIC_DB & $MUSIC_DIR (non-interactive)"
+    opts.banner = "Usage: import_single -a ARTIST -t TITLE -p PLAYLIST FILE"
+    opts.info = "Import one file into $MUSIC_DB & $MUSIC_DIR (non-interactive, scriptable)"
+    opts.separator "    All metadata is specified via flags — no prompts. Ideal for scripting/AI."
+    opts.separator "    Generates a UUID, moves the file to $MUSIC_DIR/<uuid>.m4a, and tags it."
+    opts.separator ""
+    opts.separator "    Example: music import_single -a 'Artist' -t 'Title' -p 'Playlist' song.m4a"
+    opts.separator ""
     opts.on("-p", "--playlist PLAYLIST_NAME", "(Required) String to use as FILE's PLAYLIST metadata") { |pl|
       $options[:playlist] = pl
     }

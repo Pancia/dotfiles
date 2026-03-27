@@ -217,7 +217,13 @@ function _ccs_autotitle --description 'Auto-generate a title for a session using
     end
 
     echo "Generating title..."
-    set -l title (printf '%s\n' $messages | claude -p --model haiku --system-prompt "You generate short titles for conversations. Reply with ONLY the title (3-8 words, no quotes), nothing else." "What is a good title for this conversation?")
+    set -l tmpfile (mktemp)
+    printf '%s\n' $messages | claude -p --model haiku --output-format json \
+        --system-prompt 'You generate short titles (3-8 words). Reply with ONLY a JSON object: {"title":"your title"}. No markdown fences, no explanation, no other text.' \
+        "Generate a title for this conversation." | jq -r '.result' > $tmpfile
+    # Strip markdown fences if present, then parse JSON
+    set -l title (string replace -r '```json?\s*' '' < $tmpfile | string replace -r '```\s*' '' | string trim | jq -r '.title')
+    rm -f $tmpfile
 
     if test -z "$title"
         echo "Failed to generate title"
