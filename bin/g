@@ -239,9 +239,11 @@ JJ_COMMANDS = {
     'c': {
         '_desc': 'Commit',
         'c': ('Commit (describe + new)', chain('jj commit', 'jj status')),
+        'C': ('Commit + advance master + push', chain('jj commit', 'jj bookmark set master -r @-', 'jj git push', 'jj log --limit 5')),
         'd': ('Describe @', chain('jj describe', 'jj log --limit 5')),
         'p': ('Describe @-', chain('jj describe @-', 'jj log --limit 5')),
         'i': ('Commit (AI message)', chain('ai_jj_commit', 'jj status')),
+        'I': ('AI commit + advance master + push', chain('ai_jj_commit', 'jj bookmark set master -r @-', 'jj git push', 'jj log --limit 5')),
     },
     'd': {
         '_desc': 'Diff',
@@ -262,8 +264,6 @@ JJ_COMMANDS = {
     'p': {
         '_desc': 'Push',
         'p': ('Push', chain('jj git push', 'jj status')),
-        'P': ('Commit + advance main + push', chain('jj commit', 'jj bookmark set main -r @-', 'jj git push', 'jj log --limit 5')),
-        'i': ('AI commit + advance main + push', chain('ai_jj_commit', 'jj bookmark set main -r @-', 'jj git push', 'jj log --limit 5')),
         'a': ('Push all bookmarks', chain('jj git push --all', 'jj status')),
         'c': ('Push + create tracking', chain('jj git push --allow-new', 'jj status')),
     },
