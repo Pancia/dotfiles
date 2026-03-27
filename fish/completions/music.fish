@@ -2,7 +2,7 @@
 
 # Get available subcommands by parsing --help output
 function __music_subcommands
-    music --help 2>/dev/null | string match -r '^\t(\w+)\t' | string replace -r '^\t(\w+)\t.*' '$1'
+    music --help 2>/dev/null | string replace -rf '^\t(\w+)\t.*' '$1'
 end
 
 # Complete subcommands

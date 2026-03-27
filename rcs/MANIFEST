@@ -15,6 +15,7 @@ config.fish                     -> $HOME/.config/fish/config.fish
 datomic.dev-local.edn           -> $HOME/.datomic/dev-local.edn
 ghostty.config                  -> $HOME/.config/ghostty/config
 gitconfig                       -> $HOME/.gitconfig
+jj-config.toml                  -> $HOME/.config/jj/config.toml
 gradle.properties               -> $HOME/.gradle/gradle.properties
 hammerspoon.lua                 -> $HOME/.hammerspoon/init.lua
 ideavimrc                       -> $HOME/.config/ideavim/ideavimrc
