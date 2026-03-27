@@ -19,10 +19,10 @@ function _tide_item_dashboard
     test $plan_count -gt 0; and set -a parts "P"
 
     # Claude Code sessions to resume
-    set -l cc_file (pwd)"/.claude-sessions"
+    set -l cc_file (pwd)"/.cc/sessions.json"
     if test -f "$cc_file"
-        set -l cc_count (string match -rv '^\s*$' < "$cc_file" | count)
-        test $cc_count -gt 0; and set -a parts "⎈"
+        set -l cc_count (jq 'length' "$cc_file" 2>/dev/null)
+        test -n "$cc_count" -a "$cc_count" -gt 0; and set -a parts "⎈"
     end
 
     if test (count $parts) -gt 0

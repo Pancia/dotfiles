@@ -75,6 +75,16 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
             echo "📋 Reviewing session for CLAUDE.md updates (background)..."
             fish -c "cc-session-review '$post_latest'" &>/dev/null &
             disown
+
+            # Back up session if it's a saved one
+            set -l session_id (basename "$post_latest" .jsonl)
+            if test -f .cc/sessions.json
+                set -l is_saved (jq -r --arg id "$session_id" '[.[].id] | index($id) // empty' .cc/sessions.json 2>/dev/null)
+                if test -n "$is_saved"
+                    _ccs_backup_session "$session_id" &>/dev/null &
+                    disown
+                end
+            end
         end
     end
 end

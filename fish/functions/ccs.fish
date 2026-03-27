@@ -1,8 +1,8 @@
 function _ccs_file
-    echo (pwd)"/.claude-sessions"
+    echo (pwd)"/.cc/sessions.json"
 end
 
-# All session data goes through jq. Each line is: {"id":"...","ts":"...","title":"..."}
+# All session data goes through jq. File is a JSON array of {id, ts, title} objects.
 
 function _ccs_add --description 'Add a claude session'
     set -l input (string join ' ' $argv)
@@ -30,15 +30,20 @@ function _ccs_add --description 'Add a claude session'
     set -l ts (date '+%Y-%m-%d %H:%M')
     set -l file (_ccs_file)
 
-    # Remove existing entry with same id
-    if test -f "$file"
-        set -l tmp (jq -c "select(.id != \"$id\")" "$file" 2>/dev/null)
-        printf '%s\n' $tmp > "$file"
-    end
+    # Build new entry
+    set -l new_entry (jq -cn --arg id "$id" --arg ts "$ts" --arg title "$title" \
+        '{id: $id, ts: $ts, title: $title}')
 
-    # Append new entry
-    jq -cn --arg id "$id" --arg ts "$ts" --arg title "$title" \
-        '{id: $id, ts: $ts, title: $title}' >> "$file"
+    mkdir -p (dirname "$file")
+
+    # Remove existing entry with same id, append new
+    if test -f "$file"
+        jq -c --arg id "$id" --argjson entry "$new_entry" \
+            '[.[] | select(.id != $id)] + [$entry]' "$file" > "$file.tmp"
+        mv "$file.tmp" "$file"
+    else
+        echo "[$new_entry]" > "$file"
+    end
 
     if test -n "$title"
         echo "Added session: $id ($ts — $title)"
@@ -52,7 +57,7 @@ function _ccs_list --description 'List claude sessions'
     if not test -f "$file"
         return 1
     end
-    set -l entries (jq -r '[.id, .title, .ts] | @tsv' "$file" 2>/dev/null | string collect)
+    set -l entries (jq -r '.[] | [.id, .title, .ts] | @tsv' "$file" 2>/dev/null | string collect)
     if test -z "$entries"
         return 1
     end
@@ -86,11 +91,11 @@ function _ccs_remove --description 'Remove a claude session'
     end
     set -l file (_ccs_file)
     if not test -f "$file"
-        echo "No .claude-sessions file"
+        echo "No sessions file"
         return 1
     end
-    set -l tmp (jq -c "select(.id != \"$id\")" "$file" 2>/dev/null)
-    printf '%s\n' $tmp > "$file"
+    jq -c --arg id "$id" '[.[] | select(.id != $id)]' "$file" > "$file.tmp"
+    mv "$file.tmp" "$file"
     echo "Removed session $id"
 end
 
@@ -103,13 +108,13 @@ function _ccs_rename --description 'Rename a claude session'
     end
     set -l file (_ccs_file)
     if not test -f "$file"
-        echo "No .claude-sessions file"
+        echo "No sessions file"
         return 1
     end
 
     set -l before (string collect < "$file")
     jq -c --arg id "$id" --arg title "$new_title" \
-        'if .id == $id then .title = $title else . end' "$file" > "$file.tmp"
+        '[.[] | if .id == $id then .title = $title else . end]' "$file" > "$file.tmp"
     mv "$file.tmp" "$file"
 
     # Check if anything changed
@@ -184,10 +189,10 @@ function _ccs_autotitle --description 'Auto-generate a title for a session using
         # If no id given, let user pick
         set -l file (_ccs_file)
         if not test -f "$file"
-            echo "No .claude-sessions file"
+            echo "No sessions file"
             return 1
         end
-        set -l lines (jq -r '[.id, (.id | .[0:8]), .title, .ts] | @tsv' "$file" 2>/dev/null)
+        set -l lines (jq -r '.[] | [.id, (.id | .[0:8]), .title, .ts] | @tsv' "$file" 2>/dev/null)
         if test -z "$lines"
             echo "No sessions"
             return 1
@@ -236,10 +241,10 @@ end
 function _ccs_open --description 'Pick and resume a session'
     set -l file (_ccs_file)
     if not test -f "$file"
-        echo "No .claude-sessions file"
+        echo "No sessions file"
         return 1
     end
-    set -l lines (jq -r '[.id, (.id | .[0:8]), .title, .ts] | @tsv' "$file" 2>/dev/null)
+    set -l lines (jq -r '.[] | [.id, (.id | .[0:8]), .title, .ts] | @tsv' "$file" 2>/dev/null)
     if test -z "$lines"
         echo "No sessions"
         return 1
@@ -253,14 +258,108 @@ function _ccs_open --description 'Pick and resume a session'
     end
 end
 
+function _ccs_backup_session --description 'Back up a single session JSONL as zstd'
+    set -l id $argv[1]
+    set -l jsonl (_ccs_session_jsonl "$id")
+    if test $status -ne 0
+        return 1
+    end
+
+    set -l backup_dir (pwd)"/.cc/session-backups"
+    set -l backup "$backup_dir/$id.jsonl.zst"
+    mkdir -p "$backup_dir"
+
+    # Skip if backup is newer than source
+    if test -f "$backup"
+        set -l src_mtime (stat -f %m "$jsonl")
+        set -l bak_mtime (stat -f %m "$backup")
+        if test "$bak_mtime" -ge "$src_mtime"
+            return 0
+        end
+    end
+
+    zstd -qf "$jsonl" -o "$backup"
+end
+
+function _ccs_backup --description 'Back up all saved session JSONLs'
+    set -l file (_ccs_file)
+    if not test -f "$file"
+        echo "No sessions file"
+        return 1
+    end
+
+    set -l ids (jq -r '.[].id' "$file" 2>/dev/null)
+    if test -z "$ids"
+        echo "No sessions"
+        return 1
+    end
+
+    set -l backed 0
+    set -l skipped 0
+    set -l missing 0
+    for id in $ids
+        _ccs_backup_session "$id"
+        set -l exit_code $status
+        if test $exit_code -eq 0
+            set backed (math $backed + 1)
+        else
+            set missing (math $missing + 1)
+        end
+    end
+
+    echo "Backup: $backed OK, $missing not found"
+end
+
+function _ccs_migrate --description 'Migrate .claude-sessions JSONL to .cc/sessions.json'
+    set -l old_file (pwd)"/.claude-sessions"
+    set -l new_file (_ccs_file)
+
+    if not test -f "$old_file"
+        echo "No .claude-sessions file to migrate"
+        return 1
+    end
+
+    if not test -s "$old_file"
+        echo "Empty .claude-sessions file"
+        rm "$old_file"
+        return 0
+    end
+
+    mkdir -p (dirname "$new_file")
+
+    # Convert JSONL to JSON array
+    set -l migrated (jq -sc '[.[] | select(. != null)]' "$old_file")
+
+    if test -f "$new_file"
+        # Merge: existing entries take precedence on id conflict
+        jq -c --argjson old "$migrated" \
+            '($old + .) | group_by(.id) | map(last)' "$new_file" > "$new_file.tmp"
+        mv "$new_file.tmp" "$new_file"
+    else
+        echo "$migrated" > "$new_file"
+    end
+
+    # Only delete old file if new file is valid JSON
+    if jq empty "$new_file" 2>/dev/null
+        echo "Migrated "(jq 'length' "$new_file")" sessions to .cc/sessions.json"
+        rm "$old_file"
+        echo "Removed .claude-sessions"
+    else
+        echo "Migration may have failed — keeping .claude-sessions"
+        return 1
+    end
+end
+
 function _ccs_help
-    echo "ccs [add|list|rename|autotitle|rm|resume|help]"
+    echo "ccs [add|list|rename|autotitle|rm|resume|backup|migrate|help]"
     echo "  add <id> [title]    Add a session (also accepts 'claude --resume <id>')"
     echo "  list                List sessions in current directory"
     echo "  rename <id> <title> Rename a session"
     echo "  autotitle [id]      Auto-generate a title using Haiku"
     echo "  remove <id>         Remove a session"
     echo "  resume              Pick and resume a session (fzf)"
+    echo "  backup              Back up saved session transcripts (zstd)"
+    echo "  migrate             Migrate .claude-sessions to .cc/sessions.json"
     echo "  help                Show this help"
 end
 
@@ -278,6 +377,10 @@ function ccs --description 'Claude Code Sessions - manage per-directory sessions
             _ccs_remove $argv[2..-1]
         case resume ''
             _ccs_open
+        case backup
+            _ccs_backup
+        case migrate
+            _ccs_migrate
         case help -h --help
             _ccs_help
         case '*'

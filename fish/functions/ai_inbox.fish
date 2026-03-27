@@ -85,25 +85,14 @@ function ai_inbox --description 'Triage web links into inbox system'
         set plain_urls (python3 ~/dotfiles/bin/inbox-clean-urls $plain_urls)
     end
 
-    # Move bare YouTube URLs from plain list to yt list (will prompt for type)
-    set -l non_yt_urls
-    for url in $plain_urls
-        if string match -qr 'youtube\.com|youtu\.be' -- $url
-            set -a yt_urls $url
-            set -a yt_types ""
-        else
-            set -a non_yt_urls $url
-        end
-    end
-
-    # Dedup non-YouTube URLs against existing _INDEX.md files
+    # Dedup plain URLs against existing _INDEX.md files
     set -l triage_urls
-    if test (count $non_yt_urls) -gt 0
+    if test (count $plain_urls) -gt 0
         set_color cyan
         echo "Checking for duplicates..."
         set_color normal
         set -l dupes 0
-        for result in (inbox-dedup $non_yt_urls)
+        for result in (inbox-dedup $plain_urls)
             set -l url (string split \t -- $result)[1]
             set -l dedup_result (string split \t -- $result)[2]
             set -l where (string split \t -- $result)[3]
@@ -122,52 +111,6 @@ function ai_inbox --description 'Triage web links into inbox system'
             set_color yellow
             echo "Skipped $dupes duplicate(s)."
             set_color normal
-        end
-    end
-
-    # Prompt for type on unannotated YouTube URLs
-    if test (count $yt_urls) -gt 0
-        set -l needs_prompt 0
-        for t in $yt_types
-            if test -z "$t"
-                set needs_prompt 1
-                break
-            end
-        end
-
-        if test $needs_prompt -eq 1
-            echo ""
-            set_color yellow
-            echo "YouTube URLs without a type:"
-            for i in (seq (count $yt_urls))
-                if test -z "$yt_types[$i]"
-                    echo "  $yt_urls[$i]"
-                end
-            end
-            set_color normal
-            set -l selected (printf '%s\n' $ytdl_types | fzf --prompt="ytdl type> " --height=10)
-            if test -z "$selected"
-                set_color red
-                echo "No type selected. Skipping untyped YouTube URLs."
-                set_color normal
-                # Keep only annotated YouTube URLs
-                set -l keep_urls
-                set -l keep_types
-                for i in (seq (count $yt_urls))
-                    if test -n "$yt_types[$i]"
-                        set -a keep_urls $yt_urls[$i]
-                        set -a keep_types $yt_types[$i]
-                    end
-                end
-                set yt_urls $keep_urls
-                set yt_types $keep_types
-            else
-                for i in (seq (count $yt_types))
-                    if test -z "$yt_types[$i]"
-                        set yt_types[$i] $selected
-                    end
-                end
-            end
         end
     end
 

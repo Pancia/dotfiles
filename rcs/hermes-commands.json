@@ -64,7 +64,7 @@
     "y": {
         "_desc": "+ytdl",
         "i": ["ytdl interactive", {"interactive": "ytdl"}],
-        "y": ["ytdl clipboard", "ytdl clipboard"]
+        "y": ["ytdl clipboard", {"shell": "ytdl clipboard"}]
     },
     "u": {
         "_desc": "+audio tools",

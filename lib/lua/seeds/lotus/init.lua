@@ -64,9 +64,18 @@ function isWithinTriggerWindow(currentMin, targetMin)
     return diff <= 1
 end
 
+function obj:speakTime()
+    local t = os.date("*t")
+    local hour = t.hour % 12
+    if hour == 0 then hour = 12 end
+    local msg = string.format("%d %02d", hour, t.min)
+    hs.task.new("/usr/bin/say", nil, {msg}):start()
+end
+
 -- Trigger functions for interval and clock modes
 function obj:triggerIntervalNotification()
     obj._state = "notif"
+    obj:speakTime()
     local sound = obj.sounds[obj._intervalSoundIdx]
     if sound.notif then
         local notification = sound.notif()
@@ -114,6 +123,7 @@ function obj:triggerClockNotification(soundIdx, triggerMinute)
     end
 
     obj._lastTriggeredMinute = triggerMinute
+    obj:speakTime()
     local sound = obj.sounds[soundIdx]
 
     local volume = sound.volume or 1

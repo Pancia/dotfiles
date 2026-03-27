@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Save current Claude Code session to .claude-sessions
+# Save current Claude Code session to .cc/sessions.json
 # Usage: ccsave [title]
 set -euo pipefail
 
@@ -11,17 +11,32 @@ fi
 id="$CLAUDE_SESSION_ID"
 title="${*}"
 timestamp=$(date '+%Y-%m-%d %H:%M')
-file="$(pwd)/.claude-sessions"
+dir="$(pwd)/.cc"
+file="$dir/sessions.json"
 
-# Dedup by id (JSONL format, one JSON object per line)
+mkdir -p "$dir"
+
+# Build new entry
+new_entry=$(jq -cn --arg id "$id" --arg ts "$timestamp" --arg title "$title" \
+    '{id: $id, ts: $ts, title: $title}')
+
+# Read existing array, remove dupe, append
 if [ -f "$file" ]; then
-    jq -c "select(.id != \"$id\")" "$file" > "$file.tmp" 2>/dev/null || true
+    jq -c --arg id "$id" --argjson entry "$new_entry" \
+        '[.[] | select(.id != $id)] + [$entry]' "$file" > "$file.tmp"
     mv "$file.tmp" "$file"
+else
+    printf '%s\n' "[$new_entry]" > "$file"
 fi
 
-# Append new entry as JSON
-jq -cn --arg id "$id" --arg ts "$timestamp" --arg title "$title" \
-    '{id: $id, ts: $ts, title: $title}' >> "$file"
+# Back up session JSONL
+project_dir=$(echo "$(pwd)" | tr '/' '-')
+jsonl="$HOME/.claude/projects/$project_dir/$id.jsonl"
+if [ -f "$jsonl" ]; then
+    backup_dir="$(pwd)/.cc/session-backups"
+    mkdir -p "$backup_dir"
+    zstd -qf "$jsonl" -o "$backup_dir/$id.jsonl.zst"
+fi
 
 if [ -n "$title" ]; then
     echo "Saved session: $id ($timestamp — $title)"
