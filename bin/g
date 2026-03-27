@@ -241,6 +241,7 @@ JJ_COMMANDS = {
         'c': ('Commit (describe + new)', chain('jj commit', 'jj status')),
         'd': ('Describe @', chain('jj describe', 'jj log --limit 5')),
         'p': ('Describe @-', chain('jj describe @-', 'jj log --limit 5')),
+        'i': ('Commit (AI message)', chain('ai_jj_commit', 'jj status')),
     },
     'd': {
         '_desc': 'Diff',

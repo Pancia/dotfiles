@@ -1,8 +1,8 @@
 # Completions for music command
 
-# Get available subcommands
+# Get available subcommands by parsing --help output
 function __music_subcommands
-    music --zsh-completions 2>/dev/null | string match -r '1:cmd:\(([^)]+)\)' | string replace '1:cmd:(' '' | string replace ')' '' | string split ' '
+    music --help 2>/dev/null | string match -r '^\t(\w+)\t' | string replace -r '^\t(\w+)\t.*' '$1'
 end
 
 # Complete subcommands
