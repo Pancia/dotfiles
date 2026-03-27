@@ -10,7 +10,7 @@ log = "all() ~ (description(exact:\"\") ~ @)"
 [templates]
 log = '''
 concat(
-  "commit " ++ commit_id.short() ++ " " ++ bookmarks ++ tags ++ if(git_head, " git_head()") ++ "\n",
+  "commit " ++ commit_id.short() ++ " " ++ bookmarks ++ tags ++ if(self.contained_in("first_parent(@)"), " HEAD") ++ "\n",
   "Author: " ++ author.name() ++ " <" ++ author.email() ++ ">\n",
   "Date:   " ++ author.timestamp().local().format("%a %b %d %H:%M:%S %Y %z") ++ "\n",
   "\n",
