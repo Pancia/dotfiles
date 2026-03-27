@@ -3,3 +3,18 @@
 [user]
 name = "Anthony D'Ambrosio"
 email = "anthony.dayzerostudio@gmail.com"
+
+[revsets]
+log = "all() ~ (description(exact:\"\") ~ @)"
+
+[templates]
+log = '''
+concat(
+  "commit " ++ commit_id.short() ++ " " ++ bookmarks ++ tags ++ if(git_head, " git_head()") ++ "\n",
+  "Author: " ++ author.name() ++ " <" ++ author.email() ++ ">\n",
+  "Date:   " ++ author.timestamp().local().format("%a %b %d %H:%M:%S %Y %z") ++ "\n",
+  "\n",
+  indent("    ", if(description, description, "(no description set)\n")),
+  "\n",
+)
+'''

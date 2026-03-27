@@ -279,10 +279,45 @@ JJ_COMMANDS = {
     'S': ('Split', chain('jj split', 'jj log --limit 5')),
     'u': ('Undo', chain('jj undo', 'jj status')),
     'x': ('Abandon @', chain('jj abandon @', 'jj status')),
+    '?': ('Quick reference', '_jj_help', True),
     '=': ('Edit this menu', ['nvim', __file__, '-c', '/^JJ_COMMANDS', '-c', 'normal zt'], False, True),
 }
 
 COMMANDS = JJ_COMMANDS if IS_JJ else GIT_COMMANDS
+
+JJ_HELP = f"""{BOLD_WHITE}Jujutsu Quick Reference{RESET}
+
+{BOLD_YELLOW}Key concepts:{RESET}
+  {BOLD_WHITE}No staging area{RESET} — every file save is automatically part of @ (current change)
+  {BOLD_WHITE}@{RESET}  = your current change (working copy)
+  {BOLD_WHITE}@-{RESET} = parent of current change
+
+{BOLD_YELLOW}Core workflow:{RESET}
+  {CYAN}edit{RESET}      Switch working copy to any mutable change
+  {CYAN}new{RESET}       Create empty change on top of @ (start fresh)
+  {CYAN}describe{RESET}  Set/edit the message on @ (keep working in it)
+  {CYAN}commit{RESET}    Describe @ + create new change on top (you're "done")
+
+{BOLD_YELLOW}Rewriting history:{RESET}
+  {CYAN}squash{RESET}    Fold @ into its parent (or pick hunks with --interactive)
+  {CYAN}split{RESET}     Break @ into two changes (interactive picker)
+  {CYAN}rebase{RESET}    Move @ onto a different parent
+  {CYAN}abandon{RESET}   Delete @ and discard its changes
+
+{BOLD_YELLOW}Safety net:{RESET}
+  {CYAN}undo{RESET}      Reverse the last jj operation (always safe to experiment)
+
+{BOLD_YELLOW}Git interop:{RESET}
+  {CYAN}jj git fetch{RESET}   = git fetch
+  {CYAN}jj git push{RESET}    = git push
+  {CYAN}bookmark{RESET}       = branches (just pointers to changes)
+
+{BOLD_YELLOW}Revsets (revision selection):{RESET}
+  {DIM}@{RESET}          current change       {DIM}@-{RESET}         parent
+  {DIM}main{RESET}       bookmark             {DIM}@--{RESET}        grandparent
+  {DIM}x | y{RESET}      union                {DIM}x & y{RESET}      intersection
+  {DIM}::x{RESET}        ancestors            {DIM}x::{RESET}        descendants
+"""
 
 
 def getch():
@@ -359,7 +394,10 @@ def print_menu(commands, path=''):
 
 
 def execute_command(command):
-    """Execute a git command."""
+    """Execute a git/jj command."""
+    if command == '_jj_help':
+        print(JJ_HELP)
+        return
     if isinstance(command, Chain):
         for i, cmd in enumerate(command):
             if i > 0:
