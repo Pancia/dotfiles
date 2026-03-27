@@ -243,13 +243,13 @@ GIT_COMMANDS = {
     'p': {
         '_desc': 'Push',
         'p': ('Push', chain('git push', 'git status')),
-        'f': ('Push force++', chain('git push --force-with-lease --force-if-includes', 'git status')),
+        'f': ('Push force++', chain('read -l -P "Force push? [y/N] " confirm; and test "$confirm" = y; and git push --force-with-lease --force-if-includes', 'git status')),
         },
     'u': ('Pull', chain('git pull', 'git status')),
     'r': {
         '_desc': 'Restore',
         's': ('Unstage (fzf)', chain('printf \'%s\\n\' (git diff --staged --name-only) (git diff --staged --name-only | xargs -n1 dirname 2>/dev/null) | sort -u | grep -v \'^\\.\\$\' | fzf -m --bind "space:toggle+down" --bind "enter:select+accept" --header "SPACE=toggle  ENTER=accept" | xargs git restore --staged', 'git status'), True),
-        'r': ('Restore file (fzf)', chain('printf \'%s\\n\' (git diff --name-only) (git diff --name-only | xargs -n1 dirname 2>/dev/null) | sort -u | grep -v \'^\\.\\$\' | fzf -m --bind "space:toggle+down" --bind "enter:select+accept" --header "SPACE=toggle  ENTER=accept" | xargs git restore', 'git status'), True),
+        'r': ('Restore file (fzf)', chain('set -l files (printf \'%s\\n\' (git diff --name-only) (git diff --name-only | xargs -n1 dirname 2>/dev/null) | sort -u | grep -v \'^\\.\\$\' | fzf -m --bind "space:toggle+down" --bind "enter:select+accept" --header "SPACE=toggle  ENTER=accept"); and read -l -P "Discard changes? [y/N] " confirm; and test "$confirm" = y; and printf \'%s\\n\' $files | xargs git restore', 'git status'), True),
     },
     's': ('Status', 'git status'),
     't': {
@@ -268,18 +268,18 @@ JJ_COMMANDS = {
     'b': {
         '_desc': 'Bookmark',
         'c': ('Create', 'read -l -P "Bookmark name: " name; and jj bookmark create -r @ $name'),
-        'd': ('Delete', 'jj bookmark list | fzf | awk \'{print $1}\' | xargs jj bookmark delete'),
+        'd': ('Delete', 'set -l bm (jj bookmark list | fzf | awk \'{print $1}\'); and read -l -P "Delete bookmark $bm? [y/N] " confirm; and test "$confirm" = y; and jj bookmark delete $bm'),
         'l': ('List', 'jj bookmark list', True),
         's': ('Set to @', 'jj bookmark list | fzf | awk \'{print $1}\' | xargs -I{} jj bookmark set {} -r @'),
     },
     'c': {
         '_desc': 'Commit',
         'c': ('Commit (describe + new)', chain('jj commit', 'jj status')),
-        'C': ('Commit + advance master + push', chain('jj commit', 'jj bookmark set master -r @-', 'jj git push', 'jj status')),
+        'C': ('Commit + advance master + push', chain('jj commit', 'jj bookmark set master --allow-backwards -r @-', 'jj git push', 'jj status')),
         'd': ('Describe @', chain('jj describe', 'jj status')),
         'p': ('Describe @-', chain('jj describe @-', 'jj status')),
         'i': ('Commit (AI message)', chain('ai_jj_commit', 'jj status')),
-        'I': ('AI commit + advance master + push', chain('ai_jj_commit', 'jj bookmark set master -r @-', 'jj git push', 'jj status')),
+        'I': ('AI commit + advance master + push', chain('ai_jj_commit', 'jj bookmark set master --allow-backwards -r @-', 'jj git push', 'jj status')),
     },
     'd': {
         '_desc': 'Diff',
@@ -301,7 +301,7 @@ JJ_COMMANDS = {
         '_desc': 'Push',
         'p': ('Push', chain('jj git push', 'jj status')),
         'a': ('Push all bookmarks', chain('jj git push --all', 'jj status')),
-        'c': ('Push + create tracking', chain('jj git push --allow-new', 'jj status')),
+        'm': ('Advance master to @- + push', chain('jj bookmark set master --allow-backwards -r @-', 'jj git push', 'jj status')),
     },
     'q': {
         '_desc': 'Squash',
@@ -315,8 +315,8 @@ JJ_COMMANDS = {
     },
     's': ('Status', 'jj status'),
     'S': ('Split', chain('jj split', 'jj status')),
-    'u': ('Undo', chain('jj undo', 'jj status')),
-    'x': ('Abandon @', chain('jj abandon @', 'jj status')),
+    'u': ('Undo', chain('read -l -P "Undo last jj operation? [y/N] " confirm; and test "$confirm" = y; and jj undo', 'jj status')),
+    'x': ('Abandon @', chain('read -l -P "Abandon current change? [y/N] " confirm; and test "$confirm" = y; and jj abandon @', 'jj status')),
     '?': ('Quick reference', '_jj_help', True),
     '=': ('Edit this menu', ['nvim', __file__, '-c', '/^JJ_COMMANDS', '-c', 'normal zt'], False, True),
 }

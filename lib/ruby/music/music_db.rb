@@ -81,7 +81,10 @@ class MusicDB
         puts meta_str if $options[:verbose]
         file = i["id"]+".m4a"
         tmp = i["id"]+".tmp.m4a"
-        system("ffmpeg -v warning -i $MUSIC_DIR/#{file} #{meta_str} $MUSIC_DIR/#{tmp} 2>&1 && mv $MUSIC_DIR/#{tmp} $MUSIC_DIR/#{file}")
+        log_dir = File.expand_path("~/.log/music")
+        FileUtils.mkdir_p(log_dir)
+        log = "#{log_dir}/#{i["id"]}.log"
+        system("ffmpeg -v warning -i $MUSIC_DIR/#{file} #{meta_str} $MUSIC_DIR/#{tmp} 2>&1 | tee -a #{log} && mv $MUSIC_DIR/#{tmp} $MUSIC_DIR/#{file}")
         return :tagged
       end
     end

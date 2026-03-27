@@ -219,5 +219,6 @@ if status is-interactive
     if isatty stdout
         echo "Remember to try out:"
         echo "scooter (find&replace), yazi(tui file manager), lazygit"
+        echo "music ai_import, ii(ai_inbox), ..."
     end
 end
