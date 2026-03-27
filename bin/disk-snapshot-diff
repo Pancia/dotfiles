@@ -144,7 +144,7 @@ while IFS= read -r section; do
         elif [[ "$abs_delta" -ge "$THRESHOLD_KB" ]]; then
             sign="+"
             [[ "$delta" -lt 0 ]] && sign=""
-            section_lines+=("$(printf '  %s%s  %s' "$sign" "$(human_size "$delta")" "$path")")
+            section_lines+=("$(printf '  %s%s  %s (%s)' "$sign" "$(human_size "$delta")" "$path" "$(human_size "$new_kb")")")
         fi
     done < <(printf '%s\n' "${!all_keys[@]}" | sort)
 

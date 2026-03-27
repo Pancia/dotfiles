@@ -15,43 +15,9 @@ function _brew_mark_updated --description 'Record brew update timestamp'
     date +%s > "$lock_file"
 end
 
-function _brew_claude_release_notes --description 'Summarize Claude Code release notes after upgrade' --argument-names old_ver new_ver
-    echo
-    echo (set_color brblack)"─── dotfiles/brew ───"(set_color normal)
-    echo "Claude Code upgraded: $old_ver → $new_ver"
-    echo "Fetching release notes..."
-
-    set -l notes
-    set -l max_attempts 3
-    for i in (seq $max_attempts)
-        set notes (gh release view "v$new_ver" -R anthropics/claude-code --json body -q .body 2>/dev/null)
-        if test -n "$notes"
-            break
-        end
-        if test $i -lt $max_attempts
-            echo "Release not published yet, retrying in 15s... ($i/$max_attempts)"
-            sleep 15
-        end
-    end
-
-    if test -z "$notes"
-        echo "Release notes for $new_ver not available yet. Run: gh release view v$new_ver -R anthropics/claude-code"
-        return 1
-    end
-
-    echo
-    echo "$notes" | claude -p "Summarize the changes in this release. Be concise — bullet points, grouped by theme. At the end, add a '## Highlights' section with a 1-2 paragraph high-level summary of the most important changes for someone who just wants the headlines."
-end
-
 function brew --description 'Homebrew with update prompts' --wraps brew
     # For upgrade commands, capture output to detect "already installed" message
     if test "$argv[1]" = "upgrade"; and test (count $argv) -gt 1; and isatty stdout
-        # Capture pre-upgrade claude version if upgrading claude-code
-        set -l old_claude_ver
-        if contains -- claude-code $argv
-            set old_claude_ver (claude --version 2>/dev/null | awk '{print $1}')
-        end
-
         set -l output (command brew $argv 2>&1)
         set -l brew_status $status
         echo -n "$output"
@@ -71,14 +37,6 @@ function brew --description 'Homebrew with update prompts' --wraps brew
                     set brew_status $status
                 end
                 _brew_mark_updated
-            end
-        end
-
-        # After successful claude-code upgrade, show release notes
-        if test $brew_status -eq 0; and test -n "$old_claude_ver"
-            set -l new_claude_ver (claude --version 2>/dev/null | awk '{print $1}')
-            if test -n "$new_claude_ver"; and test "$old_claude_ver" != "$new_claude_ver"
-                _brew_claude_release_notes "$old_claude_ver" "$new_claude_ver"
             end
         end
 

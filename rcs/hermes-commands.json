@@ -5,6 +5,7 @@
         "e": ["Edit dotfiles", {"shell": "cd ~/dotfiles && v"}]
     },
     "l": ["LOCK IT DOWN", "launch-lock-screen-dialog"],
+    "i": ["inbox", {"interactive": "ai_inbox"}],
     "j": ["Emoji Picker", {"shell": "emoji-pick"}],
     "f": {
         "_desc": "+finder",

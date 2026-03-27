@@ -1,5 +1,8 @@
 # AI inbox triage - file links and web content to the right place
 function ai_inbox --description 'Triage web links into inbox system'
+    # Get valid ytdl types from the ytdl script
+    set -l ytdl_types (grep '^set -g YTDL_VALID_TYPES' ~/dotfiles/bin/ytdl | string replace -r '.*YTDL_VALID_TYPES ' '' | string split ' ')
+
     # Create timestamped session directory
     set -l timestamp (date +%Y-%m-%d_%H-%M-%S)
     set -l session_dir "$HOME/Cloud/_inbox/_triage/$timestamp"
@@ -14,6 +17,12 @@ function ai_inbox --description 'Triage web links into inbox system'
     echo ""
     echo "Paste your links (one per line, or space-separated)."
     echo "Press Enter on an empty line when done."
+    echo ""
+    set_color brblue
+    echo "YouTube: prefix with a type to download via ytdl:"
+    printf '  %s\n' $ytdl_types
+    echo "  (YouTube URLs without a prefix will prompt for type)"
+    set_color normal
     echo ""
 
     # Read lines until empty line
@@ -34,10 +43,28 @@ function ai_inbox --description 'Triage web links into inbox system'
         return 1
     end
 
-    # Extract URLs from raw input (grep for http/https)
-    set -l urls (grep -oE 'https?://[^ ]+' $raw_file)
+    # Parse input: separate type-annotated lines from plain URLs
+    set -l yt_urls
+    set -l yt_types
+    set -l plain_urls
 
-    if test (count $urls) -eq 0
+    while read -l line
+        set -l first_word (string split ' ' -- $line)[1]
+        if contains -- $first_word $ytdl_types
+            # Type-annotated line: extract URLs after the keyword
+            set -l rest (string replace -r '^\S+\s+' '' -- $line)
+            for url in (printf '%s' "$rest" | grep -oE 'https?://[^ ]+')
+                set -a yt_urls $url
+                set -a yt_types $first_word
+            end
+        else
+            for url in (printf '%s' "$line" | grep -oE 'https?://[^ ]+')
+                set -a plain_urls $url
+            end
+        end
+    end < $raw_file
+
+    if test (count $yt_urls) -eq 0 -a (count $plain_urls) -eq 0
         set_color red
         echo "No URLs found in input. Aborting."
         set_color normal
@@ -47,52 +74,140 @@ function ai_inbox --description 'Triage web links into inbox system'
 
     echo ""
     set_color cyan
-    echo "Found "(count $urls)" URL(s). Cleaning..."
+    echo "Found "(math (count $yt_urls) + (count $plain_urls))" URL(s). Cleaning..."
     set_color normal
 
-    # Clean tracking params from URLs
-    set -l cleaned (python3 ~/dotfiles/bin/inbox-clean-urls $urls)
+    # Clean tracking params from all URLs
+    if test (count $yt_urls) -gt 0
+        set yt_urls (python3 ~/dotfiles/bin/inbox-clean-urls $yt_urls)
+    end
+    if test (count $plain_urls) -gt 0
+        set plain_urls (python3 ~/dotfiles/bin/inbox-clean-urls $plain_urls)
+    end
 
-    # Dedup against existing _INDEX.md files
-    set_color cyan
-    echo "Checking for duplicates..."
-    set_color normal
-    set -l new_urls
-    set -l dupes 0
-    for result in (inbox-dedup $cleaned)
-        set -l url (string split \t -- $result)[1]
-        set -l dedup_result (string split \t -- $result)[2]
-        set -l where (string split \t -- $result)[3]
-        if test "$dedup_result" = "FOUND"
-            set dupes (math $dupes + 1)
-            set_color yellow
-            echo "  SKIP (already in $where): $url"
-            set_color normal
+    # Move bare YouTube URLs from plain list to yt list (will prompt for type)
+    set -l non_yt_urls
+    for url in $plain_urls
+        if string match -qr 'youtube\.com|youtu\.be' -- $url
+            set -a yt_urls $url
+            set -a yt_types ""
         else
-            set -a new_urls $url
+            set -a non_yt_urls $url
         end
     end
 
-    if test $dupes -gt 0
-        echo ""
-        set_color yellow
-        echo "Skipped $dupes duplicate(s)."
+    # Dedup non-YouTube URLs against existing _INDEX.md files
+    set -l triage_urls
+    if test (count $non_yt_urls) -gt 0
+        set_color cyan
+        echo "Checking for duplicates..."
         set_color normal
+        set -l dupes 0
+        for result in (inbox-dedup $non_yt_urls)
+            set -l url (string split \t -- $result)[1]
+            set -l dedup_result (string split \t -- $result)[2]
+            set -l where (string split \t -- $result)[3]
+            if test "$dedup_result" = "FOUND"
+                set dupes (math $dupes + 1)
+                set_color yellow
+                echo "  SKIP (already in $where): $url"
+                set_color normal
+            else
+                set -a triage_urls $url
+            end
+        end
+
+        if test $dupes -gt 0
+            echo ""
+            set_color yellow
+            echo "Skipped $dupes duplicate(s)."
+            set_color normal
+        end
     end
 
-    if test (count $new_urls) -eq 0
-        set_color red
-        echo "All URLs already saved. Nothing to triage."
+    # Prompt for type on unannotated YouTube URLs
+    if test (count $yt_urls) -gt 0
+        set -l needs_prompt 0
+        for t in $yt_types
+            if test -z "$t"
+                set needs_prompt 1
+                break
+            end
+        end
+
+        if test $needs_prompt -eq 1
+            echo ""
+            set_color yellow
+            echo "YouTube URLs without a type:"
+            for i in (seq (count $yt_urls))
+                if test -z "$yt_types[$i]"
+                    echo "  $yt_urls[$i]"
+                end
+            end
+            set_color normal
+            set -l selected (printf '%s\n' $ytdl_types | fzf --prompt="ytdl type> " --height=10)
+            if test -z "$selected"
+                set_color red
+                echo "No type selected. Skipping untyped YouTube URLs."
+                set_color normal
+                # Keep only annotated YouTube URLs
+                set -l keep_urls
+                set -l keep_types
+                for i in (seq (count $yt_urls))
+                    if test -n "$yt_types[$i]"
+                        set -a keep_urls $yt_urls[$i]
+                        set -a keep_types $yt_types[$i]
+                    end
+                end
+                set yt_urls $keep_urls
+                set yt_types $keep_types
+            else
+                for i in (seq (count $yt_types))
+                    if test -z "$yt_types[$i]"
+                        set yt_types[$i] $selected
+                    end
+                end
+            end
+        end
+    end
+
+    # Download YouTube URLs via ytdl
+    if test (count $yt_urls) -gt 0
+        echo ""
+        set_color green
+        echo "Downloading "(count $yt_urls)" YouTube video(s)..."
         set_color normal
+        for i in (seq (count $yt_urls))
+            echo ""
+            set_color cyan
+            echo "[$i/"(count $yt_urls)"] ytdl $yt_types[$i] $yt_urls[$i]"
+            set_color normal
+            ytdl $yt_types[$i] $yt_urls[$i]
+        end
+    end
+
+    # Triage remaining non-YouTube URLs via Claude
+    if test (count $triage_urls) -eq 0
+        if test (count $yt_urls) -gt 0
+            echo ""
+            set_color green
+            echo "All done! No non-YouTube URLs to triage."
+            set_color normal
+        else
+            set_color red
+            echo "All URLs already saved. Nothing to triage."
+            set_color normal
+        end
+        rm -rf $session_dir
         return 0
     end
 
-    # Write cleaned, deduped URLs to links.txt
-    for url in $new_urls
+    # Write triage URLs to links.txt
+    for url in $triage_urls
         echo $url
     end > $session_dir/links.txt
 
-    set -l count (count $new_urls)
+    set -l count (count $triage_urls)
     echo ""
     set_color green
     echo "Triaging $count link(s)..."
