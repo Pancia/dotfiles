@@ -262,6 +262,8 @@ JJ_COMMANDS = {
     'p': {
         '_desc': 'Push',
         'p': ('Push', chain('jj git push', 'jj status')),
+        'P': ('Commit + advance main + push', chain('jj commit', 'jj bookmark set main -r @-', 'jj git push', 'jj log --limit 5')),
+        'i': ('AI commit + advance main + push', chain('ai_jj_commit', 'jj bookmark set main -r @-', 'jj git push', 'jj log --limit 5')),
         'a': ('Push all bookmarks', chain('jj git push --all', 'jj status')),
         'c': ('Push + create tracking', chain('jj git push --allow-new', 'jj status')),
     },
