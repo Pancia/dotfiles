@@ -47,6 +47,31 @@ class CLI
         .map {|m,i| "\t#{m.to_s}\t:\t#{i[:opts].info}" }
         .join "\n"
       opts.separator ""
+      opts.on("--fish-completions", "Print fish shell completions") do
+        # Subcommand names with descriptions
+        cmd_to_opts.each do |name, info|
+          desc = (info[:opts].info || "").gsub("'", "\\\\'")
+          puts "complete -c #{@program_name} -f -n '__fish_use_subcommand' -a '#{name}' -d '#{desc}'"
+        end
+        # Per-subcommand flags
+        cmd_to_opts.each do |name, info|
+          info[:opts].top.list.each do |sw|
+            next unless sw.is_a?(OptionParser::Switch)
+            desc = (sw.desc.join(" ") rescue "").gsub("'", "\\\\'")
+            short = sw.short&.first&.sub(/^-/, "")
+            long = sw.long&.first&.sub(/^--/, "")
+            needs_arg = sw.is_a?(OptionParser::Switch::RequiredArgument)
+            parts = ["complete -c #{@program_name} -n '__fish_seen_subcommand_from #{name}'"]
+            parts << "-s '#{short}'" if short
+            parts << "-l '#{long}'" if long
+            parts << "-r" if needs_arg
+            parts << "-d '#{desc}'" unless desc.empty?
+            puts parts.join(" ")
+          end
+        end
+        $options[:helped] = true
+      end
+      opts.separator ""
       yield opts if block_given?
     end
 

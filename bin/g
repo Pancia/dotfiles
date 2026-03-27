@@ -156,6 +156,42 @@ def git_status_line():
 
     print(f"{bg}{black} {' '.join(parts)} {RESET}")
 
+# VCS hooks support - runs ./vcs-hooks/<hook> from repo root if present
+_COMMIT_PATTERNS = ('jj commit', 'jj squash', 'ai_jj_commit', 'git commit', 'ai_git_commit')
+
+def _repo_root():
+    """Find the repo root (containing .jj or .git)."""
+    d = os.getcwd()
+    while True:
+        if os.path.isdir(os.path.join(d, '.jj')) or os.path.isdir(os.path.join(d, '.git')):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            return None
+        d = parent
+
+def _run_vcs_hook(hook_name):
+    """Run a vcs-hooks script if it exists."""
+    root = _repo_root()
+    if not root:
+        return
+    hook = os.path.join(root, 'vcs-hooks', hook_name)
+    if os.path.isfile(hook) and os.access(hook, os.X_OK):
+        print(f"{DIM}{'=' * 40}")
+        print(f" vcs-hooks/{hook_name}")
+        print(f"{'=' * 40}{RESET}")
+        print()
+        subprocess.run(hook, cwd=root)
+
+def _chain_has_commit(command):
+    """Check if a chain contains a commit-like command."""
+    if isinstance(command, Chain):
+        return any(any(p in cmd for p in _COMMIT_PATTERNS) for cmd in command)
+    if isinstance(command, str):
+        return any(p in command for p in _COMMIT_PATTERNS)
+    return False
+
+
 # Chain: run multiple commands sequentially with headers between them
 class Chain(tuple):
     """A sequence of shell commands to run with visual headers."""
@@ -400,6 +436,7 @@ def execute_command(command):
     if command == '_jj_help':
         print(JJ_HELP)
         return
+    run_post_commit = _chain_has_commit(command)
     if isinstance(command, Chain):
         for i, cmd in enumerate(command):
             if i > 0:
@@ -410,7 +447,10 @@ def execute_command(command):
             print()
             result = subprocess.run(cmd, shell=True, executable='/opt/homebrew/bin/fish')
             if result.returncode != 0:
+                run_post_commit = False
                 break
+        if run_post_commit:
+            _run_vcs_hook('post-commit')
         return
     if isinstance(command, list):
         # Direct execution without shell

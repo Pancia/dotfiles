@@ -190,19 +190,19 @@ alias 'q?' 'ruby ~/dotfiles/lib/ruby/q.rb show'
 # Cmds alias
 alias '@' 'cmds'
 
-# Git aliases - disabled, use `g` command instead
-function __git_use_g; echo "Use 'g' command instead (git which-key menu)"; false; end
+# Git/jj aliases - most redirect to `g` menu, a few work directly
+function __git_use_g; echo "Use 'g' command instead (git/jj which-key menu)"; false; end
 alias ga  __git_use_g
 alias gaa __git_use_g
 alias gc  __git_use_g
 alias gca __git_use_g
 alias gcai __git_use_g
 # gd -> fish/functions/gd.fish
-alias gds 'git diff --staged --color-words'
-alias gl  'git log --graph --all --decorate --abbrev-commit'
-alias gs  'git status'
+function gds; if test -d .jj; jj diff; else; git diff --staged --color-words; end; end
+function gl; if test -d .jj; jj log; else; git log --graph --all --decorate --abbrev-commit; end; end
+function gs; if test -d .jj; jj status; else; git status; end; end
 alias gsave __git_use_g
-alias gshow 'git show --patch-with-raw'
+function gshow; if test -d .jj; jj show $argv; else; git show --patch-with-raw $argv; end; end
 alias gstash __git_use_g
 alias gsw __git_use_g
 alias grs __git_use_g
