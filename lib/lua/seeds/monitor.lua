@@ -3,60 +3,23 @@ local perfmon = require("lib/perfmon")
 
 local HOME = os.getenv("HOME")
 local log_path = HOME .. "/.local/share/monitor/"
-local interval = 60
-local YABAI_PATH = "/opt/homebrew/bin/yabai"
+local interval = 20
 
 -- Activity tracking variables
 local keyboardEventTypes = {hs.eventtap.event.types.keyDown}
 local mouseEventTypes = {hs.eventtap.event.types.leftMouseDown, hs.eventtap.event.types.rightMouseDown, hs.eventtap.event.types.mouseMoved}
-
--- Window cache state (async refresh to avoid blocking eventtaps)
-obj._windowCache = {}
-obj._windowQueryTask = nil
-obj._useYabai = hs.fs.attributes(YABAI_PATH) ~= nil
-
--- Async query using yabai (follows calendar seed pattern)
-function obj:queryWindowsAsync()
-    if self._windowQueryTask then return end  -- Already in progress
-
-    self._windowQueryTask = hs.task.new(
-        YABAI_PATH,
-        function(exitCode, stdout, stderr)
-            self._windowQueryTask = nil
-            if exitCode == 0 then
-                local ok, windows = pcall(hs.json.decode, stdout)
-                if ok and windows then
-                    -- Transform yabai format to hs.window-like objects
-                    self._windowCache = hs.fnutils.map(windows, function(w)
-                        return {
-                            title = function() return w.title or "" end,
-                            application = function()
-                                return { title = function() return w.app or "" end }
-                            end,
-                            id = w.id
-                        }
-                    end)
-                end
-            end
-        end,
-        {"-m", "query", "--windows"}
-    )
-    self._windowQueryTask:start()
-end
 
 function writeToLog(entry)
     perfmon.track("monitor.writeToLog", function()
         local jsonEntry = {
             timestamp = os.date("%Y_%m_%d__%H:%M:%S"),
             focused = entry["focused"],
-            visible = entry["visible"],
             active = entry["active"]
         }
 
         -- Check if this is a "no change" entry
         if obj._prevLogEntry ~= nil and
-           obj._prevLogEntry["focused"] == entry["focused"] and
-           obj._prevLogEntry["visible"] == entry["visible"] then
+           obj._prevLogEntry["focused"] == entry["focused"] then
            jsonEntry.noChange = true
         else
             obj._prevLogEntry = entry
@@ -95,7 +58,7 @@ function writeToLog(entry)
     end)
 end
 
-function createEntry(window, visibleWindows)
+function createEntry(window)
     local app = window and window:application()
 
     if window == nil then
@@ -109,28 +72,11 @@ function createEntry(window, visibleWindows)
     if app:title() == "loginwindow" or app:title() == "ScreenSaverEngine" then
         return {["focused"] = "<SLEEPING>", ["active"] = obj._wasActive}
     end
-    realWindows = hs.fnutils.filter(visibleWindows, function (x)
-        return x:title() ~= "" and x ~= window
-    end)
-    local entry = {}
 
-    -- Handle case where app becomes nil between the check and here
-    if app == nil then
-        entry["focused"] = "<ERROR: app is nil>"
-        entry["error"] = "Application object became nil"
-    else
-        entry["focused"] = app:title() .. " => " .. window:title()
-    end
-
-    entry["visible"] = hs.fnutils.map(realWindows, function(w)
-        local wApp = w:application()
-        if wApp == nil then
-            return "<no app> => " .. w:title()
-        end
-        return wApp:title() .. " => " .. w:title()
-    end)
-    entry["active"] = obj._wasActive
-    return entry
+    return {
+        ["focused"] = app:title() .. " => " .. window:title(),
+        ["active"] = obj._wasActive
+    }
 end
 
 function executeWriteLogEntry()
@@ -140,18 +86,8 @@ function executeWriteLogEntry()
                 return hs.window.focusedWindow()
             end)
 
-            -- Use cached windows (non-blocking) and trigger async refresh
-            local visibleWindows
-            if obj._useYabai then
-                visibleWindows = obj._windowCache  -- Returns immediately
-                obj:queryWindowsAsync()            -- Refresh in background
-            else
-                -- Fallback: skip visible windows if yabai unavailable
-                visibleWindows = {}
-            end
-
             local entry = perfmon.track("monitor.createEntry", function()
-                return createEntry(focusedWindow, visibleWindows)
+                return createEntry(focusedWindow)
             end)
             writeToLog(entry)
         end)
@@ -179,12 +115,6 @@ function obj:start(config)
     -- Initialize activity flag
     obj._wasActive = false
 
-    -- Initialize window cache
-    obj._windowCache = {}
-    if obj._useYabai then
-        obj:queryWindowsAsync()  -- Prime the cache
-    end
-
     -- Create event taps for keyboard and mouse
     obj._keyboardWatcher = hs.eventtap.new(keyboardEventTypes, activityCallback)
     obj._mouseWatcher = hs.eventtap.new(mouseEventTypes, activityCallback)
@@ -211,12 +141,6 @@ function obj:stop()
 
     if obj._mouseWatcher then
         obj._mouseWatcher:stop()
-    end
-
-    -- Cancel any pending async window query
-    if obj._windowQueryTask then
-        obj._windowQueryTask:terminate()
-        obj._windowQueryTask = nil
     end
 
     return self

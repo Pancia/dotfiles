@@ -106,7 +106,7 @@ func startHealthCheck() {
 
     Timer.scheduledTimer(withTimeInterval: 150.0, repeats: true) { _ in
         log("HealthCheck: Checking Kitty status...")
-        checkKittyAndNotify()
+        // checkKittyAndNotify()
     }
 }
 
@@ -133,7 +133,7 @@ unlockCenter.addObserver(
 ) { notification in
     log("UnlockEvent: Screen unlocked, checking Kitty")
     DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-        checkKittyAndNotify()
+        // checkKittyAndNotify()
     }
 }
 

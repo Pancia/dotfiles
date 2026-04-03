@@ -317,13 +317,20 @@ class LiveTranscriber:
         if self.server_url:
             return  # Using external server
 
+        vad_model = Path.home() / ".local/share/whisper-cpp/models/silero-v6.2.0.ggml"
         cmd = [
             "whisper-server",
             "-m", str(self.model_path),
             "--port", str(self.server_port),
             "--convert",
             "-nt",
+            "-mc", "64",
+            "-et", "2.0",
+            "-lpt", "-0.3",
+            "--suppress-nst",
         ]
+        if vad_model.exists():
+            cmd.extend(["--vad", "--vad-model", str(vad_model)])
         print(f"Starting whisper-server...", file=sys.stderr)
         self.server_process = subprocess.Popen(
             cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL

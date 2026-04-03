@@ -23,6 +23,18 @@ function asmr-board
                     end tell
                 end tell
             "
+        case ghostty
+            osascript -e "
+                tell application \"Ghostty\"
+                    activate
+                    tell application \"System Events\" to keystroke \"t\" using command down
+                    delay 0.3
+                    tell application \"System Events\"
+                        keystroke \"$tab_cmd\"
+                        key code 36
+                    end tell
+                end tell
+            "
         case '*'
             echo "Unsupported terminal: $TERM_PROGRAM"
     end

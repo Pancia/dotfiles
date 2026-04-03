@@ -117,8 +117,8 @@ function _ytdl_download_text
     set -l out_dir "$YTDL_OUTPUT_DIR/$download_type"
     set -l out_file "$out_dir/%(channel)s__\$__%(title)s__#__%(id)s.%(ext)s"
 
-    # Download audio and transcribe
-    _ytdl_run $ytid -o $out_file -f $YTDL_AUDIO_CODE
+    # Download audio (prefer m4a to avoid opus conversion issues during transcription)
+    _ytdl_run $ytid -o $out_file -f 'bestaudio[ext=m4a]/bestaudio'
 
     # Find the audio file we just downloaded (matches this specific ytid)
     set -l audio_file $out_dir/*__#__$ytid.*
@@ -179,10 +179,15 @@ if string match -qr 'list=' -- $input
     end
 end
 
+set -l video_title (yt-dlp --get-title -- $video_id 2>/dev/null)
+
 echo "=== ytdl ==="
 echo "Type: $ytdl_type"
 echo "ID: $video_id"
 echo "Mode: $video_type"
+if test -n "$video_title"
+    echo "Title: $video_title"
+end
 echo "============"
 echo
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env fish
 
 set model_path "$HOME/.local/share/whisper-cpp/models/ggml-large-v3-turbo.bin"
+set vad_model_path "$HOME/.local/share/whisper-cpp/models/silero-v6.2.0.ggml"
 
 # Parse arguments
 set -l no_file false
@@ -47,7 +48,7 @@ set -l input_file "$audio_file"
 if not contains $ext wav mp3 ogg flac
     set -l tmp (mktemp -t transcribe.XXXXXX).wav
     echo "Converting to WAV..." >&2
-    ffmpeg -i "$audio_file" -ar 16000 -ac 1 -c:a pcm_s16le "$tmp" -y -loglevel error
+    ffmpeg -err_detect ignore_err -i "$audio_file" -ar 16000 -ac 1 -c:a pcm_s16le "$tmp" -y -loglevel error
     or begin
         echo "Error: ffmpeg conversion failed" >&2
         exit 1
@@ -56,7 +57,12 @@ if not contains $ext wav mp3 ogg flac
 end
 
 # Transcribe
-set -l output (whisper-cli -m "$model_path" -f "$input_file" --no-prints -nt 2>&1)
+set -l vad_args
+if test -f "$vad_model_path"
+    set vad_args --vad --vad-model "$vad_model_path"
+end
+
+set -l output (whisper-cli -m "$model_path" -f "$input_file" --no-prints -nt -mc 64 -et 2.0 -lpt -0.3 --suppress-nst $vad_args 2>&1)
 set -l status_code $status
 
 # Clean up temp file if we made one

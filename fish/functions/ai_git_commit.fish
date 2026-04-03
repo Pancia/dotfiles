@@ -18,7 +18,7 @@ function ai_git_commit --description 'Commit with AI-generated message'
         end
         set -l chunked_args
         set -q _flag_verbose; and set -a chunked_args --verbose
-        set json (_ai_git_commit_chunked $chunked_args | string collect)
+        set json (ai-git-commit-chunked $chunked_args | string collect)
     else
         # Normal: use full diff
         if set -q _flag_verbose

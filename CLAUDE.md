@@ -2,6 +2,10 @@
 
 Personal development environment for macOS. Focused on automation, productivity, and multi-tool integration.
 
+## VCS
+
+This is a **jj (Jujutsu) repository**. Use `jj` for all VCS operations — do not use `git` directly. See the global CLAUDE.md for jj workflow details.
+
 ## Repository Structure
 
 ```
@@ -40,6 +44,9 @@ Hammerspoon modules in `lib/lua/seeds/` follow a standard interface:
 - `stop()` - Clean up resources
 - `engage()` wrapper provides error handling via pcall
 - **Never call `hs.reload()` programmatically** - ask the user to reload with `Cmd+Ctrl+R`
+
+### Monitor Seed (Activity Logger)
+The `monitor` seed (`lib/lua/seeds/monitor.lua`) logs the focused window every 20 seconds to `~/.local/share/monitor/YYYY_MM_DD.log.json`. Each entry is a JSON object with `timestamp`, `focused` (app name + window title), and `active` (whether keyboard/mouse input occurred since last entry). Repeated same-window entries get a `noChange: true` flag. The file is append-only comma-separated JSON objects (not a JSON array).
 
 ### Auto-Loading (Fish)
 - `conf.d/*.fish` - Sourced on shell startup

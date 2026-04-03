@@ -22,7 +22,11 @@ class MusicDB
     if filter
       %x[ cat $MUSIC_DB | jq -r '.[] | #{filter}' ]
     else
-      JSON.parse %x[ cat $MUSIC_DB | jq '.' ]
+      raw = %x[ cat $MUSIC_DB | jq '.' ]
+      if raw.strip.empty?
+        abort "Error: Could not read $MUSIC_DB (#{ENV['MUSIC_DB']}). File may be inaccessible or empty."
+      end
+      JSON.parse raw
     end
   end
 

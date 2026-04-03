@@ -81,7 +81,7 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
             if test -f .cc/sessions.json
                 set -l is_saved (jq -r --arg id "$session_id" '[.[].id] | index($id) // empty' .cc/sessions.json 2>/dev/null)
                 if test -n "$is_saved"
-                    _ccs_backup_session "$session_id" &>/dev/null &
+                    fish -c "source ~/dotfiles/fish/functions/ccs.fish; _ccs_backup_session '$session_id'" &>/dev/null &
                     disown
                 end
             end
