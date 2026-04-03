@@ -1,4 +1,6 @@
 #<[.gitconfig]>
+[init]
+    defaultBranch = master
 [core]
     excludesfile = ~/dotfiles/git/gitignore_global
     hooksPath = ~/dotfiles/git/hooks
