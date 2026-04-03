@@ -14,12 +14,16 @@ function ai_jj_commit --description 'Commit jj change with AI-generated message 
         echo "Diff: $diff_len chars" >&2
     end
 
-    set -l message (printf '%s' "$diff" | ai_write_git_commit | string collect)
+    set -l json (printf '%s' "$diff" | ai_write_git_commit | string collect)
+    set -l msgfile (mktemp)
+    printf '%s' "$json" | jq -r .message > $msgfile
 
     if set -q _flag_dry_run
         echo "--- DRY RUN ---" >&2
-        echo "$message"
+        cat $msgfile
     else
-        jj commit -m "$message"
+        jj commit -m (cat $msgfile | string collect)
+        cat $msgfile
     end
+    rm -f $msgfile
 end
