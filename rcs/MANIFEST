@@ -32,3 +32,4 @@ tmux.conf                       -> $HOME/.tmux.conf
 tmux-which-key.config.yaml      -> $HOME/.tmux/plugins/tmux-which-key/config.yaml
 zprint.edn                      -> $HOME/.zprint.edn
 hermes-commands.json            -> $HOME/.config/hermes/commands.json
+browser-tab-tree.config.json    -> $HOME/.config/browser-tab-tree/config.json

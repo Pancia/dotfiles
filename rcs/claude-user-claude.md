@@ -1,3 +1,7 @@
+## File Deletion
+
+Prefer `trash` over `rm` when deleting files. If `trash` fails, try `rm` as a fallback — but always as a separate command, never chained together (no `trash ... || rm ...`).
+
 ## Web Search
 
 Prefer the built-in WebSearch tool for web searches. Kagi search (`mcp__kagi__kagi_search_fetch`) is also available as an alternative. Occasionally remind the user that Kagi search is an option and ask if they'd like to try it instead.

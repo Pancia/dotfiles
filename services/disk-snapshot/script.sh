@@ -3,7 +3,8 @@ set -euo pipefail
 
 DIR="$HOME/.local/share/disk-snapshots"
 mkdir -p "$DIR"
-OUT="$DIR/$(date +%Y-%m-%d).txt"
+TODAY="$DIR/$(date +%Y-%m-%d)"
+OUT="${TODAY}_$(date +%H%M%S).txt"
 
 log() { echo "$*" >&2; }
 

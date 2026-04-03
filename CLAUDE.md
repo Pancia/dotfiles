@@ -28,6 +28,20 @@ dotfiles/
 └── Brewfile        # Homebrew packages
 ```
 
+## LaunchAgent Services
+
+Use the `service` CLI (not `launchctl` directly) for managing LaunchAgents:
+```bash
+service list              # List all services
+service status            # Status of all services
+service start <name>      # Start a service
+service stop <name>       # Stop a service
+service restart <name>    # Restart a service
+service log <name>        # Show logs for a service
+service create            # Create a new service
+service edit <name>       # Edit a service's script and plist
+```
+
 ## Key Patterns
 
 ### RC Metadata System
@@ -90,7 +104,7 @@ After each interactive Claude Code session, a background Haiku process reviews t
 2. `fish/functions/cc-session-review.fish` — sends summary + current CLAUDE.md to Haiku, writes suggestions
 3. Triggered automatically by `fish/functions/my-claude-code-wrapper.fish` after `claude` exits (non-interactive invocations skipped)
 
-**Viewing suggestions:** Pending updates appear in `chpwd` output when you cd into a project with pending files (golden/orange highlight). Review the file, apply edits, then delete it.
+**Viewing suggestions:** Pending updates appear in `chpwd` output when you cd into a project with pending files (golden/orange highlight). Use `/cc:pending-updates` to automatically find, review, apply, and clean up pending update files in the current directory. Alternatively, manually review files and delete them after applying edits.
 
 ### Claude Code Project Artifacts
 
@@ -129,6 +143,7 @@ cd ~/dotfiles
 | `q` | Command registry |
 | `z` | Jump to directory |
 | `astro` | Astrological transit tracker |
+| `ccsave [title]` | Save current Claude Code session to `.cc/sessions.json` (autogenerates title if omitted) |
 | `service` | LaunchAgent manager (list/start/stop/restart/log/status) |
 
 ### Neovim Prefixes
