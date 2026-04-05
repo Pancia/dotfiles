@@ -38,7 +38,7 @@ end
 function viewScriptLogFile(script)
     local logFileLoc = obj.logDir.."/"..script.name
     hs.osascript.applescript("tell application \"iterm2\""
-    .."\ncreate window with default profile command \"fish -c 'viewLog "..logFileLoc.."'\""
+    .."\ncreate window with default profile command \"/opt/homebrew/bin/fish -c 'viewLog "..logFileLoc.."'\""
     .."\nend tell")
 end
 

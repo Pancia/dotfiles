@@ -217,22 +217,23 @@ function _ccs_autotitle --description 'Auto-generate a title for a session using
     end
 
     echo "Generating title..."
-    set -l raw (printf '%s\n' $messages | claude -p --model haiku --output-format json \
-        --system-prompt 'Output ONLY valid JSON: {"title":"<3-8 word title>"}. No markdown, no fences, no explanation, no extra text. Your entire response must be exactly one JSON object and nothing else.' \
-        "Generate a title for this conversation." 2>/dev/null)
-    # Extract .result from claude JSON envelope, then parse .title from Haiku's response
-    set -l title (echo "$raw" | jq -r '.result | fromjson | .title' 2>/dev/null)
-    # Fallback: try .result directly as plain text
-    if test -z "$title" -o "$title" = null
-        set title (echo "$raw" | jq -r '.result' 2>/dev/null | string replace -r '```json?\s*' '' | string replace -r '```\s*' '' | string replace -r '^["{]+' '' | string replace -r '["}]+$' '' | string trim)
-    end
-    # Final fallback: strip any remaining JSON fragments
-    if string match -q '*title*:*' "$title"
-        set title (echo "$title" | string replace -r '.*"title"\s*:\s*"' '' | string replace -r '".*' '')
-    end
+    set -l conversation (printf '<conversation>\n%s\n</conversation>' (string join -- \n $messages))
+    set -l raw (printf '%s' "$conversation" | claude -p --model haiku --output-format json \
+        --system-prompt 'You generate short titles for conversations. Output ONLY valid JSON: {"title":"<3-8 word title>"}. No markdown, no fences, no explanation.' \
+        "Generate a short 3-8 word title summarizing the above conversation." 2>/dev/null)
+    # Extract .result, strip markdown fences, parse .title
+    set -l result (echo "$raw" | jq -r '.result' 2>/dev/null)
+    # Strip markdown code fences if present
+    set result (echo "$result" | string replace -r '^\s*```json?\s*' '' | string replace -r '\s*```\s*$' '')
+    set -l title (echo "$result" | jq -r '.title' 2>/dev/null)
 
     if test -z "$title" -o "$title" = null
         echo "Failed to generate title"
+        return 1
+    end
+
+    if test (string length "$title") -gt 100
+        echo "Generated title too long, rejecting"
         return 1
     end
 

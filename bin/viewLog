@@ -1,2 +1,2 @@
 #!/usr/bin/env fish
-less +GF $argv
+command less +GF $argv
