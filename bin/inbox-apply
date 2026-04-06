@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Apply an inbox import.md file — appends entries to destination _INDEX.md files.
+#
+# Usage: inbox-apply [<import.md>]
+#
+# If no file given, looks for import.md in the current directory.
+#
+# The import file has ## headers (destination names) with markdown list entries:
+#
+#   ## BBQueue
+#   - [Title](https://url), tags: tag1, tag2
+#
+#   ## later
+#   - [Idea](https://url), tags: self-dev
+#
+# Destinations map to:
+#   FolderName  → ~/Cloud/_inbox/FolderName/_INDEX.md
+#   ToRead      → ~/Cloud/_inbox/ToRead.md
+#   later       → ~/TheAkashicRecords/later.md
+#   tasks       → ~/TheAkashicRecords/tasks.md
+#   bookmarks   → ~/Cloud/bookmarks/_INDEX.md
+
+set -euo pipefail
+
+INBOX="$HOME/Cloud/_inbox"
+
+import_file="${1:-import.md}"
+
+if [ ! -f "$import_file" ]; then
+    echo "Error: $import_file not found" >&2
+    exit 1
+fi
+
+# Resolve destination name to a file path
+resolve_dest() {
+    local dest="$1"
+    case "$dest" in
+        ToRead)     echo "$INBOX/ToRead.md" ;;
+        later)      echo "$HOME/TheAkashicRecords/later.md" ;;
+        tasks)      echo "$HOME/TheAkashicRecords/tasks.md" ;;
+        bookmarks)  echo "$HOME/Cloud/bookmarks/_INDEX.md" ;;
+        *)          echo "$INBOX/$dest/_INDEX.md" ;;
+    esac
+}
+
+current_dest=""
+count=0
+errors=0
+
+while IFS= read -r line; do
+    # Match ## Header lines
+    if [[ "$line" =~ ^##[[:space:]]+(.+)$ ]]; then
+        current_dest="${BASH_REMATCH[1]}"
+        # Strip trailing whitespace
+        current_dest="${current_dest%"${current_dest##*[![:space:]]}"}"
+        continue
+    fi
+
+    # Match list entries (- [...] lines)
+    if [[ "$line" =~ ^-[[:space:]] ]] && [ -n "$current_dest" ]; then
+        target=$(resolve_dest "$current_dest")
+
+        # Check target directory/file exists
+        target_dir=$(dirname "$target")
+        if [ ! -d "$target_dir" ]; then
+            echo "Error: directory $target_dir does not exist (dest: $current_dest)" >&2
+            errors=$((errors + 1))
+            continue
+        fi
+
+        # Append entry
+        echo "$line" >> "$target"
+        count=$((count + 1))
+        echo "  → $current_dest: $line"
+    fi
+done < "$import_file"
+
+echo ""
+if [ $count -gt 0 ]; then
+    echo "Applied $count entry/entries."
+fi
+if [ $errors -gt 0 ]; then
+    echo "$errors error(s) — see above." >&2
+    exit 1
+fi
+if [ $count -eq 0 ]; then
+    echo "No entries found in $import_file"
+    exit 1
+fi

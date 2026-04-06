@@ -157,11 +157,17 @@ function ai_inbox --description 'Triage web links into inbox system'
     set_color normal
     echo ""
 
+    # Prepopulate context for the AI agent
+    printf '# Inbox Folders\n\n' > $session_dir/context.txt
+    ls ~/Cloud/_inbox/ >> $session_dir/context.txt 2>/dev/null
+    printf '\n# Tags (inbox-tags --all)\n\n' >> $session_dir/context.txt
+    inbox-tags --all >> $session_dir/context.txt 2>/dev/null
+
     # cd into session dir so Claude operates from there
     cd $session_dir
 
     my-claude-code-wrapper --process-label ai_inbox.fish \
         --system-prompt (cat ~/private/ai/prompts/inbox.txt | string collect) \
-        "Triage these links: @./links.txt" \
+        "Triage these links: @./links.txt — Inbox context (folders + tags): @./context.txt" \
         $argv
 end

@@ -193,6 +193,7 @@ The wrapper auto-syncs on `claude` launch: if `.cc-config` exists, uses that; ot
 | **Karabiner** | Keyboard customization | `rcs/karabiner.json` |
 | **Yabai** | Window tiling | (via VPC workspaces) |
 | **Astro** | Astrological transits | `bin/astro`, `~/.local/share/astro/` |
+| **uv** | Python package manager & venv tool | `fish/conf.d/uv.fish` |
 
 ### Hours Calculation
 `lib/python/hours.py` - Parse time entries and calculate hours worked with optional multipliers.

@@ -43,6 +43,52 @@ function _ytdl_run
     set -l extra_args $argv[2..-1]
 
     echo "yt-dlp $extra_args -- \"$ytid\""
+
+    if test $YTDL_QUIET -eq 1
+        set -l last_milestone 0
+        set -l all_output
+        yt-dlp --newline $extra_args -- $ytid 2>&1 | while read -l line
+            set -a all_output $line
+            if string match -qr '^\[download\]\s+\d' -- $line
+                set -l pct_str (string match -r '(\d+)\.\d+%' -- $line)[2]
+                if test -n "$pct_str"
+                    set -l next_milestone (math "$last_milestone + 20")
+                    if test $pct_str -ge $next_milestone
+                        echo $line
+                        set last_milestone $next_milestone
+                    end
+                end
+            else
+                echo $line
+            end
+        end
+        set -l exit_code $pipestatus[1]
+
+        # Retry with cookies if age-restricted
+        if test $exit_code -ne 0
+            if string match -qri 'Sign in to confirm your age|age-restricted|login required' -- "$all_output"
+                echo "[Age-restricted detected, retrying with cookies...]"
+                set last_milestone 0
+                yt-dlp --newline $extra_args --cookies-from-browser brave -- $ytid 2>&1 | while read -l line
+                    if string match -qr '^\[download\]\s+\d' -- $line
+                        set -l pct_str (string match -r '(\d+)\.\d+%' -- $line)[2]
+                        if test -n "$pct_str"
+                            set -l next_milestone (math "$last_milestone + 20")
+                            if test $pct_str -ge $next_milestone
+                                echo $line
+                                set last_milestone $next_milestone
+                            end
+                        end
+                    else
+                        echo $line
+                    end
+                end
+                set exit_code $pipestatus[1]
+            end
+        end
+        return $exit_code
+    end
+
     set -l output (yt-dlp $extra_args -- $ytid 2>&1)
     set -l exit_code $status
     echo $output
@@ -69,7 +115,11 @@ function _ytdl_convert_to_m4a
             set -l m4a_file (string replace -r '\.[^.]+$' '.m4a' -- $src_file)
             if not test -f "$m4a_file"
                 echo "[Converting] $src_file -> $m4a_file"
-                ffmpeg -i $src_file $m4a_file
+                if test $YTDL_QUIET -eq 1
+                    ffmpeg -loglevel warning -stats -i $src_file $m4a_file
+                else
+                    ffmpeg -i $src_file $m4a_file
+                end
                 and trash $src_file
             end
         end
@@ -137,6 +187,18 @@ end
 
 set -l ytdl_type ""
 set -l input ""
+set -g YTDL_QUIET 0
+
+# Parse --quiet flag
+set -l args
+for arg in $argv
+    if test "$arg" = "--quiet"
+        set YTDL_QUIET 1
+    else
+        set -a args $arg
+    end
+end
+set argv $args
 
 if test (count $argv) -eq 0
     # No args: prompt for type and URL

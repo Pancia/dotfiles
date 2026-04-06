@@ -34,11 +34,24 @@ if git -C "$cwd" rev-parse --git-dir > /dev/null 2>&1; then
   [ -n "$git_parts" ] && git_info=" [git]: ${branch} ${git_parts}" || git_info=" [git]: ${branch}"
 fi
 
+# --- Colors ---
+RST=$'\033[0m'
+YEL=$'\033[33m'
+RED=$'\033[31m'
+
+colorize() {
+  local val="${1%.*}" hi="$2" lo="$3"
+  if [ "$val" -ge "$hi" ] 2>/dev/null; then echo "${RED}${1}%${RST}"
+  elif [ "$val" -ge "$lo" ] 2>/dev/null; then echo "${YEL}${1}%${RST}"
+  else echo "${1}%"
+  fi
+}
+
 # --- Context window % ---
 context_info=""
 usage=$(echo "$input" | jq '.context_window.used_percentage // empty' 2>/dev/null)
 if [ -n "$usage" ]; then
-  context_info="${usage}%"
+  context_info=$(colorize "$usage" 25 10)
 fi
 
 # --- Rate limits (cached API call) ---
@@ -83,7 +96,9 @@ if [ -f "$CACHE_FILE" ]; then
   five_h=$(jq -r '.five_hour.utilization // empty' "$CACHE_FILE" 2>/dev/null)
   seven_d=$(jq -r '.seven_day.utilization // empty' "$CACHE_FILE" 2>/dev/null)
   if [ -n "$five_h" ] && [ -n "$seven_d" ]; then
-    rate_info=" (5h:${five_h%.*}% 7d:${seven_d%.*}%)"
+    five_h_colored=$(colorize "${five_h%.*}" 50 20)
+    seven_d_colored=$(colorize "${seven_d%.*}" 50 20)
+    rate_info=" (5h:${five_h_colored} 7d:${seven_d_colored})"
   fi
 fi
 

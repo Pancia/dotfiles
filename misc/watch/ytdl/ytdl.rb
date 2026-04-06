@@ -4,9 +4,15 @@
 YTDL_BIN = File.expand_path("~/dotfiles/bin/ytdl")
 YTDL_DOWNLOADS_DIR = File.expand_path("~/Downloads")
 
+files = Dir["#{YTDL_DOWNLOADS_DIR}/*.ytdl"]
+if files.empty?
+  print "∙"
+  exit 0
+end
+
 system("echo;date")
 
-Dir["#{YTDL_DOWNLOADS_DIR}/*.ytdl"].each do |f|
+files.each do |f|
   ytid, video_type, download_type, _ = File.basename(f).split(".")
 
   # Build the URL/ID to pass to bin/ytdl
@@ -17,7 +23,7 @@ Dir["#{YTDL_DOWNLOADS_DIR}/*.ytdl"].each do |f|
   end
 
   puts "=== Processing: #{File.basename(f)} ==="
-  success = system(YTDL_BIN, download_type, url)
+  success = system(YTDL_BIN, "--quiet", download_type, url)
 
   if success
     system("trash", f)

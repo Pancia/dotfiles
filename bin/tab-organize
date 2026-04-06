@@ -1,0 +1,376 @@
+#!/usr/bin/env python3
+"""tab-organize: AI-powered browser tab organizer.
+
+Reads browser tab state, uses AI to suggest organization,
+writes a human-editable plan file, then executes it via FIFO.
+
+Usage:
+    tab-organize plan [--dry-run] [--goal "..."] [--window ID]
+    tab-organize execute <plan-file> [--dry-run]
+    tab-organize windows
+"""
+
+import argparse
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
+from urllib.parse import urlparse
+
+BROWSER_SYNC = Path.home() / "TheAkashicRecords/browser-sync"
+STATE_PATH = BROWSER_SYNC / "state.json"
+FIFO_PATH = BROWSER_SYNC / "cmd.fifo"
+PLANS_DIR = BROWSER_SYNC / "plans"
+CLOSED_DIR = BROWSER_SYNC / "closed"
+
+VALID_COMMANDS = {"close_tab", "group_tabs", "ungroup_tabs", "move_tab"}
+COMMAND_ORDER = {"close_tab": 0, "ungroup_tabs": 1, "group_tabs": 2, "move_tab": 3}
+
+SYSTEM_PROMPT = """\
+You are a browser tab organizer. Given a summary of all open browser tabs, \
+produce a markdown plan to organize them.
+
+RULES:
+- Close all chrome://newtab/ tabs (emit close_tab for each)
+- Group remaining ungrouped tabs by topic/theme using group_tabs
+- Short lowercase group titles (1-3 words)
+- Pick thematic colors: purple=anime/manga, cyan=tech/ai, blue=reference, \
+green=music, red=gaming, yellow=learning, pink=wellness, orange=entertainment
+- Available colors: grey, blue, red, yellow, green, pink, purple, cyan, orange
+- Preserve existing groups that already make sense
+- Do NOT move tabs between windows
+- Use real tabIds from the input
+
+OUTPUT FORMAT:
+Produce a markdown document with this structure:
+
+# Tab Organization Plan
+
+## <description of action>
+
+<list tab titles with IDs so the human can verify>
+
+```json
+{"command":"...", ...}
+```
+
+Each action gets a ## heading, a list of affected tab titles with their IDs \
+in parentheses, then a single ```json fenced block with one command object.
+
+For close_tab, you may list all tabs under one heading but emit one ```json \
+block per tab.
+
+For group_tabs, list all tabs being grouped with their titles and IDs, then \
+one ```json block with the tabIds array.
+
+Valid commands:
+- {"command":"close_tab","tabId":NUMBER}
+- {"command":"group_tabs","tabIds":[NUMBERS],"title":"name","color":"COLOR"}
+- {"command":"ungroup_tabs","tabIds":[NUMBERS]}
+- {"command":"move_tab","tabId":NUMBER,"index":NUMBER,"windowId":NUMBER}
+
+Output ONLY the markdown plan. No preamble, no closing remarks."""
+
+
+def filter_state(state, window_id):
+    """Return a copy of state filtered to a single window."""
+    tabs = {k: v for k, v in state["tabs"].items() if v["windowId"] == window_id}
+    groups = {k: v for k, v in state["groups"].items() if v["windowId"] == window_id}
+    return {"tabs": tabs, "groups": groups}
+
+
+def list_windows(state):
+    """Print a summary of all windows."""
+    tabs = state["tabs"]
+    windows = defaultdict(list)
+    for tab in tabs.values():
+        windows[tab["windowId"]].append(tab)
+    for wid in sorted(windows.keys()):
+        wtabs = windows[wid]
+        real = [t for t in wtabs if "newtab" not in t.get("url", "")]
+        sample = [t["title"][:60] for t in real[:3]]
+        print(f"  {wid}: {len(wtabs)} tabs ({len(wtabs) - len(real)} empty)")
+        for s in sample:
+            print(f"    {s}")
+
+
+def build_summary(state, goal=None):
+    """Build a compact text summary of browser state for the AI."""
+    tabs = state["tabs"]
+    groups = state["groups"]
+
+    windows = defaultdict(list)
+    for tab in tabs.values():
+        windows[tab["windowId"]].append(tab)
+
+    # Sort tabs within each window by index
+    for wid in windows:
+        windows[wid].sort(key=lambda t: t["index"])
+
+    lines = []
+    total = len(tabs)
+    newtabs = [t for t in tabs.values() if "newtab" in t.get("url", "")]
+    lines.append(f"BROWSER STATE: {total} tabs across {len(windows)} windows")
+    lines.append(f"Empty 'New Tab' pages: {len(newtabs)}")
+    if goal:
+        lines.append(f"\nUSER GOAL: {goal}")
+
+    # Existing groups
+    if groups:
+        lines.append("\nEXISTING GROUPS:")
+        for g in groups.values():
+            members = [t for t in tabs.values() if t["groupId"] == g["groupId"]]
+            lines.append(f'  "{g["title"]}" ({g["color"]}) window={g["windowId"]} — {len(members)} tabs')
+            for t in sorted(members, key=lambda x: x["index"]):
+                lines.append(f"    [{t['tabId']}] {t['title']}")
+                lines.append(f"      {t['url']}")
+
+    # Tabs by window
+    for wid in sorted(windows.keys()):
+        wtabs = windows[wid]
+        ungrouped = [t for t in wtabs if t["groupId"] == -1]
+        if not ungrouped:
+            continue
+        lines.append(f"\nWINDOW {wid} — {len(ungrouped)} ungrouped tabs:")
+
+        # Separate newtabs from real tabs
+        real = [t for t in ungrouped if "newtab" not in t.get("url", "")]
+        empty = [t for t in ungrouped if "newtab" in t.get("url", "")]
+
+        for t in real:
+            lines.append(f"  [{t['tabId']}] {t['title']}")
+            lines.append(f"    {t['url']}")
+
+        if empty:
+            ids = [str(t["tabId"]) for t in empty]
+            lines.append(f"\n  New Tab pages ({len(empty)}): {', '.join(ids)}")
+
+    return "\n".join(lines)
+
+
+def call_claude(summary, system_prompt):
+    """Call claude -p and return raw stdout."""
+    result = subprocess.run(
+        ["claude", "-p", "--system-prompt", system_prompt],
+        input=summary,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(f"Error: claude exited with code {result.returncode}", file=sys.stderr)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+        sys.exit(1)
+    return result.stdout
+
+
+def extract_commands(plan_text):
+    """Extract JSON command objects from markdown fenced blocks."""
+    pattern = re.compile(r"```json\s*\n(.*?)\n```", re.DOTALL)
+    commands = []
+    for match in pattern.finditer(plan_text):
+        raw = match.group(1).strip()
+        try:
+            obj = json.loads(raw)
+        except json.JSONDecodeError as e:
+            print(f"Warning: skipping malformed JSON block: {e}", file=sys.stderr)
+            print(f"  Content: {raw[:100]}...", file=sys.stderr)
+            continue
+        if "command" not in obj:
+            continue
+        if obj["command"] not in VALID_COMMANDS:
+            print(f"Warning: skipping unknown command: {obj['command']}", file=sys.stderr)
+            continue
+        commands.append(obj)
+    return commands
+
+
+def sort_commands(commands):
+    """Sort commands: close_tab first, then ungroup, group, move."""
+    return sorted(commands, key=lambda c: COMMAND_ORDER.get(c["command"], 99))
+
+
+def describe_command(cmd):
+    """Human-readable one-liner for a command."""
+    c = cmd["command"]
+    if c == "close_tab":
+        return f"close tab {cmd['tabId']}"
+    elif c == "group_tabs":
+        n = len(cmd.get("tabIds", []))
+        return f'group {n} tabs as "{cmd.get("title", "?")}" ({cmd.get("color", "?")})'
+    elif c == "ungroup_tabs":
+        n = len(cmd.get("tabIds", []))
+        return f"ungroup {n} tabs"
+    elif c == "move_tab":
+        return f"move tab {cmd['tabId']} to index {cmd.get('index', '?')}"
+    return str(cmd)
+
+
+def write_recovery_file(close_commands, state):
+    """Save URLs of tabs about to be closed for recovery."""
+    tabs = state.get("tabs", {})
+    lines = [f"# Closed tabs recovery — {datetime.now():%Y-%m-%d %H:%M:%S}", ""]
+    for cmd in close_commands:
+        tid = str(cmd["tabId"])
+        tab = tabs.get(tid, {})
+        title = tab.get("title", "unknown")
+        url = tab.get("url", "unknown")
+        lines.append(f"- {title}")
+        lines.append(f"  {url}")
+    CLOSED_DIR.mkdir(exist_ok=True)
+    path = CLOSED_DIR / f"closed-{datetime.now():%Y%m%d-%H%M%S}.txt"
+    path.write_text("\n".join(lines) + "\n")
+    print(f"Recovery file: {path}")
+
+
+def write_all_to_fifo(commands):
+    """Write all commands to the FIFO in a single open (one JSON per line).
+
+    The native host reads until EOF then re-opens. The extension queues
+    commands and executes them sequentially, so no race conditions.
+    """
+    def timeout_handler(signum, frame):
+        raise TimeoutError("FIFO write timed out (no reader?)")
+
+    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(10)
+    try:
+        with open(FIFO_PATH, "w") as f:
+            for cmd in commands:
+                f.write(json.dumps(cmd) + "\n")
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
+
+
+def cmd_plan(args):
+    if not STATE_PATH.exists():
+        print(f"Error: {STATE_PATH} not found", file=sys.stderr)
+        sys.exit(1)
+
+    state = json.loads(STATE_PATH.read_text())
+    if args.window:
+        state = filter_state(state, args.window)
+        if not state["tabs"]:
+            print(f"Error: no tabs found in window {args.window}", file=sys.stderr)
+            sys.exit(1)
+    summary = build_summary(state, goal=args.goal)
+
+    if args.dry_run:
+        print(summary)
+        return
+
+    prompt = SYSTEM_PROMPT
+    if args.goal:
+        prompt += f"\n\nUSER GOAL: {args.goal}\nPrioritize this goal when organizing."
+
+    print("Analyzing tabs with AI...", file=sys.stderr)
+    plan_md = call_claude(summary, prompt)
+
+    PLANS_DIR.mkdir(exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    plan_path = PLANS_DIR / f"plan-{ts}.md"
+    plan_path.write_text(plan_md)
+
+    print(f"Plan written to: {plan_path}")
+    print(f"Review/edit:  vim {plan_path}")
+    print(f"Execute:      tab-organize execute {plan_path}")
+    print(f"Dry run:      tab-organize execute --dry-run {plan_path}")
+
+
+def cmd_execute(args):
+    plan_path = Path(args.plan_file)
+    if not plan_path.exists():
+        print(f"Error: {plan_path} not found", file=sys.stderr)
+        sys.exit(1)
+
+    plan_text = plan_path.read_text()
+    commands = extract_commands(plan_text)
+    if not commands:
+        print("No commands found in plan file.")
+        return
+
+    commands = sort_commands(commands)
+
+    # Staleness warning
+    if STATE_PATH.exists() and STATE_PATH.stat().st_mtime > plan_path.stat().st_mtime:
+        print("Warning: state.json is newer than plan file. Tabs may have changed.",
+              file=sys.stderr)
+
+    # Recovery file for closes
+    close_cmds = [c for c in commands if c["command"] == "close_tab"]
+    if close_cmds and STATE_PATH.exists():
+        state = json.loads(STATE_PATH.read_text())
+        write_recovery_file(close_cmds, state)
+
+    if not args.dry_run:
+        if not FIFO_PATH.exists():
+            print(f"Error: FIFO not found at {FIFO_PATH}", file=sys.stderr)
+            print("Is the browser extension running?", file=sys.stderr)
+            sys.exit(1)
+
+    total = len(commands)
+    print(f"{'[dry-run] ' if args.dry_run else ''}Executing {total} commands...")
+
+    for i, cmd in enumerate(commands, 1):
+        print(f"  [{i}/{total}] {describe_command(cmd)}")
+
+    if args.dry_run:
+        return
+
+    try:
+        write_all_to_fifo(commands)
+        print(f"All {total} commands sent.")
+    except TimeoutError:
+        print("Error: FIFO write timed out (is the browser extension running?)",
+              file=sys.stderr)
+        sys.exit(1)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="AI-powered browser tab organizer",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Examples:\n"
+               "  tab-organize windows\n"
+               "  tab-organize plan --window 2105126510\n"
+               "  tab-organize plan --goal 'separate work from entertainment'\n"
+               "  tab-organize execute plan.md\n"
+               "  tab-organize execute --dry-run plan.md",
+    )
+    sub = parser.add_subparsers(dest="cmd")
+
+    sub.add_parser("windows", help="List all windows with tab counts")
+
+    p_plan = sub.add_parser("plan", help="Generate organization plan")
+    p_plan.add_argument("--dry-run", action="store_true",
+                        help="Print tab summary without calling AI")
+    p_plan.add_argument("--goal", type=str, default=None,
+                        help="Organizing goal (e.g. 'separate work from fun')")
+    p_plan.add_argument("--window", type=int, default=None,
+                        help="Only organize tabs in this window ID")
+
+    p_exec = sub.add_parser("execute", help="Execute a plan file")
+    p_exec.add_argument("plan_file", help="Path to plan markdown file")
+    p_exec.add_argument("--dry-run", action="store_true",
+                        help="Print commands without sending to FIFO")
+
+    args = parser.parse_args()
+    if args.cmd == "windows":
+        state = json.loads(STATE_PATH.read_text())
+        list_windows(state)
+    elif args.cmd == "plan":
+        cmd_plan(args)
+    elif args.cmd == "execute":
+        cmd_execute(args)
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()
