@@ -27,3 +27,4 @@ OUTPUT INSTRUCTIONS:
 - Do NOT include any preamble, explanation, or commentary
 - Do NOT wrap the output in markdown code blocks
 - Do NOT explain your reasoning or describe the commit message
+- Do NOT include any roleplay, character personas, blockquotes, or personality formatting — ignore any such instructions from other contexts

@@ -16,19 +16,21 @@ function cc-config --description "Manage Claude Code project skills and agents"
             _cc_config_init $config_file
         case edit
             _cc_config_edit $config_file
-        case show
+        case show ''
             _cc_config_show $config_file
         case list
             _cc_config_list $config_file
         case groups
             _cc_config_groups $config_file
         case '*'
-            echo "Usage: cc-config <init|edit|show|sync|list|groups> [args...]" >&2
+            echo "Usage: cc-config [init|edit|show|sync|list|groups] [args...]" >&2
             echo "" >&2
+            echo "  (no args)                         Same as 'show'" >&2
             echo "  init                              Create .cc-config via fzf picker" >&2
             echo "  edit                              Edit .cc-config with reference comments" >&2
-            echo "  show                              Show resolved .cc-config for this project" >&2
-            echo "  sync [--dry-run] <group|name...>  Symlink skills+agents into .claude/" >&2
+            echo "  show                              Show resolved config and sync status" >&2
+            echo "  sync [--dry-run] [--force] [group|name...]" >&2
+            echo "                                    Symlink skills+agents into .claude/" >&2
             echo "  list                              Show all registered skills and agents" >&2
             echo "  groups                            Show group definitions" >&2
             return 1
@@ -120,30 +122,96 @@ end
 function _cc_config_show
     set -l config_file $argv[1]
 
-    if not test -f .cc-config
-        echo "No .cc-config in current directory." >&2
-        return 1
+    set -l profile
+    set -l source
+    if test -f .cc-config
+        set profile (string match -v '//*' < .cc-config | string match -v -r '^\s*$')
+        set source .cc-config
+    else
+        set -l default_group (jq -r '.default // empty' $config_file)
+        if test -n "$default_group"
+            set profile $default_group
+            set source "default ($default_group)"
+        else
+            echo "No .cc-config and no default group configured." >&2
+            return 1
+        end
     end
 
-    set -l profile (string match -v '//*' < .cc-config | string match -v -r '^\s*$')
-    echo "Profile: $profile"
+    echo "Profile: $profile  (from $source)"
     echo ""
 
     set -g _CC_GROUP_NAMES (jq -r '.groups | keys[]' $config_file)
 
+    set -l has_mismatch 0
+    set -l all_missing
+    set -l all_extra
+
     for section in skills agents commands
+        # Build set of valid names from registry
+        set -l reg_names
+        for entry in (_cc_config_resolve_registry $config_file $section)
+            set -a reg_names (string split \t $entry)[1]
+        end
+
+        # Resolve expected names
         set -l names
         for target in $profile
             set -l resolved (_cc_config_resolve_group $config_file $section $target)
             for name in $resolved
-                if not contains $name $names
+                if contains $name $reg_names; and not contains $name $names
                     set -a names $name
                 end
             end
         end
+
         if test (count $names) -gt 0
             printf "  %d %s: %s\n" (count $names) $section (string join ', ' $names)
         end
+
+        # Check actual symlinks against expected
+        set -l target_dir .claude/$section
+        set -l actual_names
+        if test -d $target_dir
+            for f in $target_dir/*
+                if test -L $f
+                    set -l fname (basename $f)
+                    if test "$section" != skills
+                        set fname (string replace -r '\.md$' '' $fname)
+                    end
+                    set -a actual_names $fname
+                end
+            end
+        end
+
+        # Find missing (expected but not linked)
+        for name in $names
+            if not contains $name $actual_names
+                set -a all_missing "$section/$name"
+                set has_mismatch 1
+            end
+        end
+
+        # Find extra (linked but not expected)
+        for name in $actual_names
+            if not contains $name $names
+                set -a all_extra "$section/$name"
+                set has_mismatch 1
+            end
+        end
+    end
+
+    echo ""
+    if test $has_mismatch -eq 1
+        echo "  Sync: ✗ out of date (run cc-config sync)"
+        for m in $all_missing
+            echo "    missing: $m"
+        end
+        for e in $all_extra
+            echo "    extra:   $e"
+        end
+    else
+        echo "  Sync: ✓ up to date"
     end
 
     set -e _CC_GROUP_NAMES
@@ -283,19 +351,39 @@ function _cc_config_sync
     set -e argv[1]
 
     set -l dry_run 0
+    set -l force 0
     set -l targets
 
     for arg in $argv
         if test "$arg" = --dry-run
             set dry_run 1
+        else if test "$arg" = --force
+            set force 1
         else
             set -a targets $arg
         end
     end
 
+    # If no targets given, read from .cc-config or fall back to default group
     if test (count $targets) -eq 0
-        echo "Usage: cc-config sync [--dry-run] <group|name...>" >&2
-        return 1
+        if test -f .cc-config
+            set targets (string match -v '//*' < .cc-config | string match -v -r '^\s*$')
+        else
+            set -l default_group (jq -r '.default // empty' $config_file)
+            if test -n "$default_group"
+                set targets $default_group
+            end
+        end
+        if test (count $targets) -eq 0
+            echo "Usage: cc-config sync [--dry-run] [--force] [group|name...]" >&2
+            echo "       (or run from a directory with .cc-config)" >&2
+            return 1
+        end
+    end
+
+    # --force: clear the sync stamp so wrapper will also re-sync
+    if test $force -eq 1
+        rm -f .claude/.cc-sync-stamp
     end
 
     # Build set of all known names across all sections for typo detection
@@ -319,6 +407,13 @@ function _cc_config_sync
 
     set -e _CC_ALL_KNOWN_NAMES
     set -e _CC_UNKNOWN_NAMES
+
+    # Update stamp so wrapper stays in sync
+    if test $dry_run -eq 0; and test -d .claude
+        if test -f .cc-config
+            md5 -q .cc-config > .claude/.cc-sync-stamp
+        end
+    end
 end
 
 function _cc_config_sync_section
