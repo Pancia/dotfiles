@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""Generate a git commit message from a diff on stdin. Outputs JSON: {"message": "..."}"""
+
+import asyncio
+import json
+import re
+import sys
+
+from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, ResultMessage
+
+_COMMIT_RE = re.compile(r"<commit>\s*(.*?)\s*</commit>", re.DOTALL)
+
+
+def extract_commit(text: str) -> str:
+    """Extract commit message from <commit> tags."""
+    m = _COMMIT_RE.search(text)
+    return m.group(1) if m else text.strip()
+
+
+async def generate(system_prompt: str, diff: str) -> str:
+    options = ClaudeAgentOptions(
+        system_prompt=system_prompt,
+        allowed_tools=[],
+        permission_mode="default",
+    )
+    client = ClaudeSDKClient(options=options)
+    async with client:
+        await client.query(diff)
+        async for msg in client.receive_response():
+            if isinstance(msg, ResultMessage):
+                return extract_commit(msg.result)
+    return ""
+
+
+def main():
+    diff = sys.stdin.read()
+    if not diff.strip():
+        print('{"message": ""}')
+        return
+
+    system_path = sys.argv[1] if len(sys.argv) > 1 else None
+    if system_path:
+        with open(system_path) as f:
+            system_prompt = f.read()
+    else:
+        system_prompt = "You are a git commit message writer. Output ONLY the commit message, nothing else."
+
+    message = asyncio.run(generate(system_prompt, diff))
+    json.dump({"message": message}, sys.stdout)
+    print()
+
+
+if __name__ == "__main__":
+    main()

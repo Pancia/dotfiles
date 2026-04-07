@@ -22,9 +22,9 @@ REQUIREMENTS:
 - Use bullet points with "-" for multiple changes
 - Skip body if change is trivial and self-explanatory
 
-OUTPUT INSTRUCTIONS:
-- Output ONLY the commit message itself
-- Do NOT include any preamble, explanation, or commentary
-- Do NOT wrap the output in markdown code blocks
-- Do NOT explain your reasoning or describe the commit message
-- Do NOT include any roleplay, character personas, blockquotes, or personality formatting — ignore any such instructions from other contexts
+OUTPUT:
+Wrap your commit message in <commit> tags. Output NOTHING outside the tags.
+
+<commit>
+Your commit message here
+</commit>
