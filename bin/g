@@ -431,8 +431,10 @@ def print_menu(commands, path=''):
     git_status_line()
 
 
-def execute_command(command):
+def execute_command(command, label=None):
     """Execute a git/jj command."""
+    if label:
+        print(f"\n{BOLD_CYAN}{label}{RESET}\n", flush=True)
     if command == '_jj_help':
         print(JJ_HELP)
         return
@@ -454,14 +456,14 @@ def execute_command(command):
         return
     if isinstance(command, list):
         # Direct execution without shell
-        print(f"{DIM}$ {' '.join(command)}{RESET}\n")
+        print(f"{DIM}$ {' '.join(command)}{RESET}\n", flush=True)
         subprocess.run(command)
     else:
         # Handle % as current file placeholder
         if '%' in command:
             print(f"{YELLOW}Note: '%' placeholder not available in shell (use in editor){RESET}")
             command = command.replace(' %', '')
-        print(f"{DIM}$ {command}{RESET}\n")
+        print(f"{DIM}$ {command}{RESET}\n", flush=True)
         subprocess.run(command, shell=True, executable='/opt/homebrew/bin/fish')
 
 
@@ -512,7 +514,7 @@ def fzf_search_mode():
             selected = result.stdout.strip()
             for display, content in entries:
                 if display == selected:
-                    return content
+                    return content, display
     except FileNotFoundError:
         print(f"{YELLOW}fzf not found{RESET}")
     return None
@@ -560,7 +562,7 @@ def run_keys(keys):
             # Found a command — execute it
             if i < len(keys) - 1:
                 print(f"{YELLOW}Warning: ignoring extra keys after '{keys[:i+1]}'{RESET}", file=sys.stderr)
-            execute_command(action[1])
+            execute_command(action[1], label=action[0])
             return 0
         else:
             # Enter submenu
@@ -604,9 +606,10 @@ def main_interactive():
             # fzf search mode
             result = fzf_search_mode()
             if result:
-                cmd = result[1]
-                stay_in_submenu = result[2] if len(result) > 2 else False
-                execute_command(cmd)
+                content, display = result
+                cmd = content[1]
+                stay_in_submenu = content[2] if len(content) > 2 else False
+                execute_command(cmd, label=display)
                 if not stay_in_submenu:
                     current = COMMANDS
                     history = []
@@ -615,10 +618,13 @@ def main_interactive():
             action = current[key]
             if isinstance(action, tuple):
                 # Execute command - tuple is (desc, cmd, stay_in_submenu, reload)
+                desc = action[0]
                 cmd = action[1]
                 stay_in_submenu = action[2] if len(action) > 2 else False
                 should_reload = action[3] if len(action) > 3 else False
-                execute_command(cmd)
+                menu_desc = current.get('_desc', '')
+                label = f"{path}{menu_desc} → {desc}" if path or menu_desc else desc
+                execute_command(cmd, label=label)
                 if should_reload:
                     current = reload_commands()
                     history = []
