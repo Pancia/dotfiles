@@ -161,7 +161,7 @@ if test -e ~/dotfiles/fish/extra.fish
 end
 
 # Directory change tracking (converted from init.zsh)
-set -gx LAST_DIR $HOME/.last_dir
+set -gx LAST_DIR $HOME/.local/state/fish/last_dir
 echo "$PWD" > $LAST_DIR
 
 function record_dir_change --on-variable PWD
