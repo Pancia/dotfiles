@@ -316,7 +316,10 @@ JJ_COMMANDS = {
     's': ('Status', 'jj status'),
     'S': ('Split', chain('jj split', 'jj status')),
     'u': ('Undo', chain('read -l -P "Undo last jj operation? [y/N] " confirm; and test "$confirm" = y; and jj undo', 'jj status')),
-    'x': ('Abandon @', chain('read -l -P "Abandon current change? [y/N] " confirm; and test "$confirm" = y; and jj abandon @', 'jj status')),
+    'x': {
+        '_desc': 'Abandon "all hope ye who enter here"',
+        'x': ('Abandon @', chain('read -l -P "Abandon current change? [y/N] " confirm; and test "$confirm" = y; and jj abandon @', 'jj status'))
+    },
     '?': ('Quick reference', '_jj_help', True),
     '=': ('Edit this menu', ['nvim', __file__, '-c', '/^JJ_COMMANDS', '-c', 'normal zt'], False, True),
 }
