@@ -44,6 +44,8 @@ green=music, red=gaming, yellow=learning, pink=wellness, orange=entertainment
 - Available colors: grey, blue, red, yellow, green, pink, purple, cyan, orange
 - Preserve existing groups that already make sense
 - Do NOT move tabs between windows
+- ALWAYS include "windowId" in group_tabs commands to prevent Chrome from \
+moving tabs between windows
 - Use real tabIds from the input
 
 OUTPUT FORMAT:
@@ -70,7 +72,7 @@ one ```json block with the tabIds array.
 
 Valid commands:
 - {"command":"close_tab","tabId":NUMBER}
-- {"command":"group_tabs","tabIds":[NUMBERS],"title":"name","color":"COLOR"}
+- {"command":"group_tabs","tabIds":[NUMBERS],"title":"name","color":"COLOR","windowId":NUMBER}
 - {"command":"ungroup_tabs","tabIds":[NUMBERS]}
 - {"command":"move_tab","tabId":NUMBER,"index":NUMBER,"windowId":NUMBER}
 
@@ -190,6 +192,20 @@ def extract_commands(plan_text):
     return commands
 
 
+def inject_window_ids(commands, state):
+    """Ensure group_tabs commands have windowId to prevent cross-window moves."""
+    tabs = state.get("tabs", {})
+    for cmd in commands:
+        if cmd["command"] == "group_tabs" and "windowId" not in cmd:
+            tab_ids = cmd.get("tabIds", [])
+            for tid in tab_ids:
+                tab = tabs.get(str(tid))
+                if tab:
+                    cmd["windowId"] = tab["windowId"]
+                    break
+    return commands
+
+
 def sort_commands(commands):
     """Sort commands: close_tab first, then ungroup, group, move."""
     return sorted(commands, key=lambda c: COMMAND_ORDER.get(c["command"], 99))
@@ -297,6 +313,13 @@ def cmd_execute(args):
 
     commands = sort_commands(commands)
 
+    # Load state for windowId injection and recovery file
+    state = json.loads(STATE_PATH.read_text()) if STATE_PATH.exists() else {}
+
+    # Inject windowId into group_tabs commands missing it
+    if state:
+        commands = inject_window_ids(commands, state)
+
     # Staleness warning
     if STATE_PATH.exists() and STATE_PATH.stat().st_mtime > plan_path.stat().st_mtime:
         print("Warning: state.json is newer than plan file. Tabs may have changed.",
@@ -304,8 +327,7 @@ def cmd_execute(args):
 
     # Recovery file for closes
     close_cmds = [c for c in commands if c["command"] == "close_tab"]
-    if close_cmds and STATE_PATH.exists():
-        state = json.loads(STATE_PATH.read_text())
+    if close_cmds and state:
         write_recovery_file(close_cmds, state)
 
     if not args.dry_run:
