@@ -139,6 +139,16 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"[🎲 Character Roll: %d]\"}}' $((RANDOM % 13 + 1))"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
