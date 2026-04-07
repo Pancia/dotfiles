@@ -116,7 +116,24 @@ function _ytdl_convert_to_m4a
             if not test -f "$m4a_file"
                 echo "[Converting] $src_file -> $m4a_file"
                 if test $YTDL_QUIET -eq 1
-                    ffmpeg -loglevel warning -stats -i $src_file $m4a_file
+                    set -l duration_secs (ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 $src_file 2>/dev/null)
+                    if test -n "$duration_secs"
+                        set -l last_milestone 0
+                        ffmpeg -loglevel warning -stats -i $src_file $m4a_file 2>&1 | stdbuf -oL tr '\r' '\n' | while read -l line
+                            set -l time_str (string match -r 'time=(\d+):(\d+):(\d+)' -- $line)
+                            if test (count $time_str) -ge 4
+                                set -l cur_secs (math "$time_str[2] * 3600 + $time_str[3] * 60 + $time_str[4]")
+                                set -l pct (math "round($cur_secs / $duration_secs * 100)")
+                                set -l next_milestone (math "$last_milestone + 20")
+                                if test $pct -ge $next_milestone
+                                    echo "[ffmpeg] $pct% (time=$time_str[2]:$time_str[3]:$time_str[4])"
+                                    set last_milestone $next_milestone
+                                end
+                            end
+                        end
+                    else
+                        ffmpeg -loglevel warning -i $src_file $m4a_file
+                    end
                 else
                     ffmpeg -i $src_file $m4a_file
                 end

@@ -145,6 +145,9 @@ cd ~/dotfiles
 | `astro` | Astrological transit tracker |
 | `ccsave [title]` | Save current Claude Code session to `.cc/sessions.json` (autogenerates title if omitted) |
 | `service` | LaunchAgent manager (list/start/stop/restart/log/status) |
+| `tab-organize windows` | List open browser windows with tab counts |
+| `tab-organize plan [--window ID]` | Generate AI organization plan (editable before execute) |
+| `tab-organize execute <plan-file>` | Apply tab organization commands via browser extension |
 
 ### Neovim Prefixes
 | Prefix | Commands |
