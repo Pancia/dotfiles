@@ -18,10 +18,10 @@ Find and apply pending CLAUDE.md update suggestions from `.cc/pending-updates-*.
 
 4. After processing all files, report how many were applied and how many were skipped/rejected.
 
-5. If any updates were applied, commit the changes:
+5. If any updates were applied, commit the changes (only CLAUDE.md and deleted pending-update files — do not commit unrelated working copy changes):
    a. Detect the project's VCS: check for `.jj/` (Jujutsu) or `.git/` (Git). Refer to CLAUDE.md for project-specific VCS instructions if available.
-   b. For **jj** repos: `jj commit -m "<message>"`
-   c. For **git** repos: stage CLAUDE.md and commit with an appropriate message
+   b. For **jj** repos: `jj split -r @ CLAUDE.md .cc/ -m "<message>"` (splits only the relevant paths into a new commit, leaving other working copy changes untouched)
+   c. For **git** repos: stage only CLAUDE.md and any deleted `.cc/pending-updates-*` files, then commit
    d. Commit message format: subject line `Apply <N> pending CLAUDE.md update(s)`, followed by a body that briefly describes what was added or changed
 
 ## Important
