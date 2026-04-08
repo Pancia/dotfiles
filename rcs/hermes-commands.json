@@ -89,7 +89,10 @@
         "j": ["Volume Down", "cmus-remote --volume -5"],
         "k": ["Volume Up", "cmus-remote --volume +5"]
     },
-    "t": ["open my yt playlists (WIP tv-board)", "open -na 'Brave Browser Beta' --args $(cat ~/Cloud/_config/my-youtube.playlists)"],
+    "t": {
+        "_desc": "+macOS settings",
+        "a": ["Aerial (screen saver)", "open ~/Library/Screen\\ Savers/Aerial.saver"]
+    },
     "=": ["edit Hermes config", {"shell": "nvim ~/dotfiles/rcs/hermes-commands.json"}],
     "-": [{"shell:fish": "~/private/bin/superwhisper_status"}, "~/private/bin/superwhisper_reset"]
 }

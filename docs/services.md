@@ -100,9 +100,8 @@ VPC definitions are JSON files with the following structure:
 
 ### Launching VPC Workspaces
 
-VPC workspaces are launched via Hammerspoon Hermes system:
-- Prefix: `/` followed by VPC name
-- Example: `/test` launches `test.vpc`
+VPC workspaces are launched via Hermes (standalone Swift app):
+- `Cmd+Space` → `v` → pick workspace
 - VPC daemon handles workspace orchestration
 
 ## Key bin/ Utilities (bin/)
@@ -114,8 +113,7 @@ Command-line utilities for system automation and workflow management. Total: 47 
 | Script | Purpose |
 |--------|---------|
 | **app-launcher** | Application switching with fuzzy matching and multi-mode support |
-| **hermes** | UI modal system for macOS with keyboard-driven controls |
-| **hermes-centered** | Centered variant of hermes |
+| **hermes** | Standalone app launcher (see ~/projects/hermes/) |
 | **current-space** | Space/desktop management and querying |
 
 ### Terminal Management
@@ -213,9 +211,8 @@ dotfiles/
 ## Integration Points
 
 ### Hammerspoon Integration
-- VPC workspaces launched via Hermes modal system
-- App launcher triggered via keyboard shortcuts
-- Controls modal system for UI overlays
+- VPC workspaces launched via Hermes (standalone Swift app, `Cmd+Space` → `v`)
+- App launcher triggered via `Cmd+Space` (Carbon hotkey in Hermes)
 
 ### Window Management
 - Yabai tiling configuration in VPC workspaces

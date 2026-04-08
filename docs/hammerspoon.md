@@ -61,7 +61,6 @@ This ensures that if one seed fails to load, it doesn't crash the entire Hammers
 | Seed | Purpose | Key Features |
 |------|---------|--------------|
 | **Curfew** | 9pm wind-down reminder | - Full-screen overlay at 9pm<br>- Hold-to-dismiss mechanic (not click)<br>- Escalating hold durations (5s→60s)<br>- Wake/start detection |
-| **Hermes** | Application & workspace launcher | - App launcher with fuzzy matching<br>- VPC workspace launcher<br>- Multi-provider system (apps, slash commands, bang commands)<br>- Window switcher |
 | **Snippets** | Text expansion system | - File-based snippet definitions<br>- Trigger-based auto-expansion<br>- Manual snippet chooser<br>- Clipboard integration |
 | **Calendar** | Calendar event monitoring | - Tag-based event triggers<br>- Title-based event triggers<br>- Configurable lead time notifications<br>- Menubar countdown display |
 | **Lotus** | Meditation & awareness timer | - Interval timer mode<br>- Clock-based trigger mode<br>- Dual-mode operation<br>- Sound notifications |
@@ -83,25 +82,7 @@ This ensures that if one seed fails to load, it doesn't crash the entire Hammers
 
 | Hotkey | Action |
 |--------|--------|
-| `Cmd+Space` | App launcher (Hermes) with fuzzy search |
-| `Alt+Tab` | Window switcher (fzf picker, all spaces) |
-
-### Window Switcher
-
-The window switcher (`Alt+Tab`) uses yabai to query windows across all spaces. It:
-
-1. Queries `yabai -m query --windows` for all windows (instant, daemon-backed)
-2. Pipes window list to fzf for fuzzy selection
-3. Focuses the selected window via `yabai -m window --focus`
-
-**Implementation**: `bin/window-switcher` script (no Hammerspoon dependency)
-
-### Navigation (Active Modal)
-
-| Hotkey | Action |
-|--------|--------|
-| `Ctrl+J` | Navigate down in active chooser |
-| `Ctrl+K` | Navigate up in active chooser |
+Note: Hermes (app launcher, `Cmd+Space`) is now a standalone Swift app, not a Hammerspoon seed. See `~/projects/hermes/`.
 
 ### Media Controls - cmus
 
@@ -134,39 +115,6 @@ The window switcher (`Alt+Tab`) uses yabai to query windows across all spaces. I
 | Hotkey | Action |
 |--------|--------|
 | `Cmd+Ctrl+P` | Open clipboard tool |
-
-## Hermes: App Launcher & Provider System
-
-Hermes implements a multi-provider architecture for different launcher modes.
-
-### Provider System
-
-Providers are triggered by query prefixes:
-
-| Prefix | Provider | Purpose |
-|--------|----------|---------|
-| (none) | ApplicationProvider | Launch/focus applications |
-| `/` | SlashProvider | Execute slash commands (e.g., `/vpc`) |
-| `!` | BangProvider | Bang commands (not yet implemented) |
-
-### Application Provider
-
-- Scans running apps and `/Applications` directory
-- Fuzzy matching with intelligent scoring:
-  - Word boundary matches get bonus points
-  - Consecutive character matches get bonus points
-  - Earlier matches score higher
-- Displays app icons (32x32)
-- Launches or focuses apps on selection
-
-### VPC Provider (Slash Commands)
-
-Access via `/` prefix in launcher (e.g., `/vpc simplymeet`)
-
-- Scans `~/dotfiles/vpc/*.vpc` files
-- Parses JSON metadata for display
-- Opens `.vpc` files with system default handler
-- Fuzzy search across workspace names
 
 ## VPC Workspace System
 
@@ -519,7 +467,6 @@ install:andUse("FadeLogo", {
 | Path | Purpose |
 |------|---------|
 | `~/dotfiles/lib/lua/seeds/curfew.lua` | 9pm wind-down reminder |
-| `~/dotfiles/lib/lua/seeds/hermes.lua` | App launcher & VPC system |
 | `~/dotfiles/lib/lua/seeds/snippets.lua` | Text expansion |
 | `~/dotfiles/lib/lua/seeds/calendar/init.lua` | Calendar monitoring |
 | `~/dotfiles/lib/lua/seeds/lotus/init.lua` | Meditation timer |
@@ -627,7 +574,6 @@ end):start()
 
 ### Performance
 
-- Hermes caches application list for fast fuzzy search
 - Monitor uses 60-second polling to minimize overhead
 - Calendar polls every 60 seconds (configurable)
 - Text expansion buffer limited to max trigger length

@@ -115,25 +115,6 @@
                         ]
                     },
                     {
-                        "description": "alt-tab -> window switcher",
-                        "manipulators": [
-                            {
-                                "from": {
-                                    "key_code": "tab",
-                                    "modifiers": {
-                                        "mandatory": [
-                                            "left_alt"
-                                        ]
-                                    }
-                                },
-                                "to": {
-                                    "shell_command": "/Users/anthony/Developer/bin/hs -c 'seeds.hermes:showWindowMode()'"
-                                },
-                                "type": "basic"
-                            }
-                        ]
-                    },
-                    {
                         "description": "eject -> iterm (centered, ~/dotfiles)",
                         "manipulators": [
                             {
@@ -162,26 +143,6 @@
                                 },
                                 "to": {
                                     "shell_command": "~/dotfiles/bin/launch-lock-screen-dialog"
-                                },
-                                "type": "basic"
-                            }
-                        ]
-                    },
-                    {
-                        "description": "ctrl-cmd-space -> hermes app launcher",
-                        "manipulators": [
-                            {
-                                "from": {
-                                    "key_code": "spacebar",
-                                    "modifiers": {
-                                        "mandatory": [
-                                            "command",
-                                            "control"
-                                        ]
-                                    }
-                                },
-                                "to": {
-                                    "shell_command": "/Users/anthony/Developer/bin/hs -c 'seeds.hermes:showAppMode()'"
                                 },
                                 "type": "basic"
                             }

@@ -150,12 +150,12 @@ Symlinked items (data in `~/.local/`, but still accessible at `~/.`):
 ### Key Hotkeys (Hammerspoon)
 | Hotkey | Action |
 |--------|--------|
-| `Cmd+Space` | App launcher (Hermes) |
+| `Cmd+Space` | App launcher (Hermes, standalone Swift app) |
 | `Cmd+Ctrl+R` | Reload Hammerspoon |
 | `Cmd+Ctrl+C` | Hammerspoon console |
 | `Cmd+Ctrl+S` | Snippets chooser |
 | `Cmd+Ctrl+P` | Clipboard tool |
-| `Alt+Tab` | Window switcher (fzf, all spaces) |
+| `Alt+Tab` | Window switcher (fzf/yabai, all spaces) |
 | `F7/F8/F9` | Media controls (cmus) |
 
 ### Shell Commands (Fish)
@@ -240,7 +240,7 @@ Format: `DATE : HH:MM - HH:MM (ai-mult N.NN) - description`
 
 ### VPC Workspaces
 
-Virtual Private Context (VPC) workspaces are pre-configured desktop environments launched via Hammerspoon Hermes.
+Virtual Private Context (VPC) workspaces are pre-configured desktop environments launched via Hermes (`Cmd+Space` → `v`).
 
 **Launching:** `Cmd+Space` -> `v` -> pick workspace (e.g. `a` for altera, `f` for festivar)
 

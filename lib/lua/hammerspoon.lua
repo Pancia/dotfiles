@@ -163,10 +163,6 @@ local clipboard = engage("seeds.clipboard", {
   storage_path = HOME .. "/ProtonDrive/hammerspoon/clipboard_history.enc"
 })
 
--- Hermes disabled: now runs as native Swift app via LaunchAgent (services/hermes/)
--- local hermes = engage("seeds.hermes.init", {
---   hotkey = {{"cmd"}, "space"},
--- })
 
 local cursor = engage("seeds.cursor", {
   hotkey = {{"cmd", "ctrl"}, "m"},
@@ -202,7 +198,6 @@ if superwhisper then seeds.superwhisper = superwhisper end
 if emoji then seeds.emoji = emoji end
 if clipboard then seeds.clipboard = clipboard end
 if cmus then seeds.cmus = cmus end
--- if hermes then seeds.hermes = hermes end
 if cursor then seeds.cursor = cursor end
 
 local hs_global_modifier = {"cmd", "ctrl"}
@@ -252,8 +247,6 @@ local function softReload()
         "seeds.superwhisper",
         "seeds.emoji",
         "seeds.clipboard",
-        -- "seeds.hermes.init",
-        -- "seeds.hermes.commands",
         "seeds.cursor",
     }
 
