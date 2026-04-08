@@ -9,11 +9,16 @@
     a { display: inline-block; margin: 1em; padding: 0.8em 1.5em;
         background: #1a1a2e; color: #fff; border-radius: 8px;
         text-decoration: none; font-size: 1.1em; }
+    #browser-hint { color: #666; font-size: 0.9em; margin-top: 2em; }
   </style>
 </head>
 <body>
   <p id="status">Redirecting to ElevenReader...</p>
   <a id="link" style="display:none">Open in ElevenReader</a>
+  <p id="browser-hint" style="display:none">
+    If the button doesn't work, open this page in your browser:<br>
+    <a id="self-link" style="font-size:0.85em; background:#444;">Open in browser</a>
+  </p>
   <script>
     var id = location.hash.slice(1);
     if (id) {
@@ -22,18 +27,26 @@
       var webUrl = "https://elevenreader.io/reader/library/" + id;
 
       if (!isMobile) {
-        // Desktop: go straight to web player
         window.location = webUrl;
       } else {
-        // Mobile: try app deep link, show tap button as fallback
         var link = document.getElementById("link");
         link.href = appUrl;
         link.style.display = "inline-block";
-        window.location = appUrl;
+
+        // intent:// URI — Android's native way to open apps from webviews
+        var intentUrl = "intent://authorized/player/" + id +
+          "#Intent;scheme=elevenlabs;package=io.elevenlabs.readerapp;end";
+        link.href = intentUrl;
+
+        window.location = intentUrl;
         setTimeout(function() {
           document.getElementById("status").textContent =
-            "Tap the button below to open in the app:";
-        }, 1000);
+            "Tap the button to open in the app:";
+          // Show fallback to open in real browser
+          var selfLink = document.getElementById("self-link");
+          selfLink.href = window.location.href;
+          document.getElementById("browser-hint").style.display = "block";
+        }, 1500);
       }
     } else {
       document.getElementById("status").textContent = "No item ID provided.";
