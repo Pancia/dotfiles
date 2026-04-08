@@ -2,6 +2,7 @@
 .*
 !.gitignore
 !.nojekyll
+!.github/
 !.cc
 .cc/sessions.json
 .cc/session-backups/
