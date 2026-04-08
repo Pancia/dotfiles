@@ -3,6 +3,8 @@ local obj = {}
 local menubarRegistry = require("lib/menubarRegistry")
 local cmusRemotePath = nil
 local currentStatus = "stopped"  -- Track state from IPC messages
+local titleHidden = false  -- When true, menubar shows only 🎵 icon
+local lastTrackMsg = nil   -- Cache last IPC message for re-rendering on toggle
 
 -- Sync version: only used for initMenuTitle() at startup
 function cmusRemote(action)
@@ -156,9 +158,16 @@ function obj:onIPCMessage(_id, msg)
 
     -- Update cached state for isActive()/isPlaying()
     currentStatus = status
+    lastTrackMsg = msg
 
+    obj:renderMenuTitle(status, trackInfo)
+end
+
+function obj:renderMenuTitle(status, trackInfo)
     local title = ""
-    if status == "playing" then
+    if titleHidden then
+        title = "🎵"
+    elseif status == "playing" then
         title = string.format("🎵%23s ⏸", trackInfo)
     elseif string.len(trackInfo or "") == 0 then
         title = string.format("🎵nil▶️")
@@ -167,6 +176,29 @@ function obj:onIPCMessage(_id, msg)
     end
     local styledTitle = hs.styledtext.new(title, {["font"] = {["name"] = "Menlo-Regular"}})
     obj._controlsMenu:setTitle(styledTitle)
+end
+
+function obj:toggleTitleVisibility()
+    titleHidden = not titleHidden
+    -- Re-render menubar with current state
+    if lastTrackMsg then
+        obj:onIPCMessage(0, lastTrackMsg)
+    else
+        obj:onIPCMessage(0, currentStatus .. "::")
+    end
+    -- Update button label in canvas
+    obj:updateToggleTitleButton()
+end
+
+function obj:updateToggleTitleButton()
+    if not obj._canvas then return end
+    local label = titleHidden and "👁 Show Title" or "👁 Hide Title"
+    for i = 1, #obj._canvas do
+        if obj._canvas[i].id == "toggle_title_text" then
+            obj._canvas[i].text = label
+            break
+        end
+    end
 end
 
 function obj:initMenuTitle()
@@ -206,7 +238,7 @@ function obj:createControlsCanvas()
     local padding = 8
     local rowHeight = buttonHeight + padding
     local canvasWidth = (buttonWidth * 3) + (padding * 4)
-    local canvasHeight = (rowHeight * 5) + padding
+    local canvasHeight = (rowHeight * 6) + padding
 
     obj._canvas = hs.canvas.new({x = 0, y = 0, w = canvasWidth, h = canvasHeight})
     obj._canvas:level("popUpMenu")
@@ -244,6 +276,9 @@ function obj:createControlsCanvas()
         -- Row 5: Edit controls (2 buttons @ 155px)
         {id = "edit_track", label = "✏️ Edit", x = padding, y = padding + rowHeight * 4, w = 155},
         {id = "audacity", label = "🎧 Audacity", x = padding * 2 + 155, y = padding + rowHeight * 4, w = 155},
+
+        -- Row 6: Toggle title visibility (full width)
+        {id = "toggle_title", label = titleHidden and "👁 Show Title" or "👁 Hide Title", x = padding, y = padding + rowHeight * 5, w = canvasWidth - padding * 2},
     }
 
     for _, btn in ipairs(buttons) do
@@ -340,6 +375,8 @@ function obj:createControlsCanvas()
             elseif btnId == "audacity" then
                 openInITerm("cmaudacity")
                 obj:hideControlsCanvas()
+            elseif btnId == "toggle_title" then
+                obj:toggleTitleVisibility()
             elseif id == "_canvas_" then
                 -- Clicked outside buttons, close popup
                 obj:hideControlsCanvas()

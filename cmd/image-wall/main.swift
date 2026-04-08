@@ -378,6 +378,18 @@ func createWindows(entries: [ImageEntry]) -> [WallWindow] {
     return windows
 }
 
+// MARK: - JSON Formatting
+
+/// Collapse arrays containing only numbers onto single lines in pretty-printed JSON.
+/// Turns multi-line `"position" : [\n  0,\n  25\n]` into `"position" : [0, 25]`.
+func collapseNumericArrays(_ json: String) -> String {
+    // Match arrays that span multiple lines but contain only numbers
+    let pattern = #"\[\s*\n\s*(-?[\d.]+)\s*,\s*\n\s*(-?[\d.]+)\s*\n\s*\]"#
+    guard let regex = try? NSRegularExpression(pattern: pattern) else { return json }
+    let range = NSRange(json.startIndex..., in: json)
+    return regex.stringByReplacingMatches(in: json, range: range, withTemplate: "[$1, $2]")
+}
+
 // MARK: - Snapshot
 
 func buildSnapshotEntries(windows: [WallWindow]) -> [[String: Any]] {
@@ -875,13 +887,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let outData = try? JSONSerialization.data(
             withJSONObject: vpcDict,
             options: [.prettyPrinted, .sortedKeys]
-        ) else {
+        ),
+        var json = String(data: outData, encoding: .utf8) else {
             print("Error: Could not serialize VPC data")
             return
         }
 
+        // Collapse small numeric arrays (position, size, pan) onto single lines
+        json = collapseNumericArrays(json)
+
         do {
-            try outData.write(to: URL(fileURLWithPath: configPath))
+            try json.write(toFile: configPath, atomically: true, encoding: .utf8)
             print("Saved to \(configPath)")
         } catch {
             print("Error: Could not write to \(configPath): \(error)")
