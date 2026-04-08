@@ -1,6 +1,6 @@
 BIN = ../../bin/image-wall
 SRC = main.swift
-FRAMEWORKS = -framework AppKit -framework Foundation -framework UniformTypeIdentifiers
+FRAMEWORKS = -framework AppKit -framework Foundation -framework UniformTypeIdentifiers -framework AVFoundation -framework AVKit -framework CoreMedia
 
 $(BIN): $(SRC)
 	swiftc -o $(BIN) $(SRC) $(FRAMEWORKS)

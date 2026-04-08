@@ -49,6 +49,13 @@
                 "position": [582, 25],
                 "size": [779, 429],
                 "lock": true
+            },
+            {
+                "path": "$HOME\/Cloud\/celtic-loop.mp4",
+                "position": [1420, 0],
+                "size": [500, 1080],
+                "lock": true,
+                "zoom": 1
             }
         ]
     }

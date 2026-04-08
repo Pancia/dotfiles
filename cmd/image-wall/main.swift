@@ -1,4 +1,7 @@
 import AppKit
+import AVFoundation
+import AVKit
+import CoreMedia
 import Foundation
 import ObjectiveC
 import UniformTypeIdentifiers
@@ -101,6 +104,126 @@ class ImageCanvasView: NSView {
     }
 }
 
+// MARK: - Video file detection
+
+let videoExtensions: Set<String> = ["mp4", "mov", "m4v", "webm", "avi", "mkv"]
+
+func isVideoFile(_ path: String) -> Bool {
+    let ext = (path as NSString).pathExtension.lowercased()
+    return videoExtensions.contains(ext)
+}
+
+// MARK: - VideoCanvasView
+
+class VideoCanvasView: NSView {
+    let filePath: String
+    var zoom: Double
+    var panOffset: CGPoint = .zero
+
+    private var player: AVQueuePlayer!
+    private var playerLayer: AVPlayerLayer!
+    private var looper: AVPlayerLooper!
+    private var playerItem: AVPlayerItem!
+
+    init(url: URL, zoom: Double, filePath: String) {
+        self.filePath = filePath
+        self.zoom = zoom
+        super.init(frame: .zero)
+        wantsLayer = true
+
+        let asset = AVURLAsset(url: url)
+        playerItem = AVPlayerItem(asset: asset)
+        player = AVQueuePlayer(items: [playerItem])
+        player.isMuted = true
+        looper = AVPlayerLooper(player: player, templateItem: AVPlayerItem(asset: asset))
+
+        playerLayer = AVPlayerLayer(player: player)
+        playerLayer.videoGravity = .resizeAspectFill
+        playerLayer.backgroundColor = NSColor.black.cgColor
+        layer?.addSublayer(playerLayer)
+
+        player.play()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        updatePlayerLayerFrame()
+    }
+
+    private func updatePlayerLayerFrame() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+
+        let viewW = bounds.width
+        let viewH = bounds.height
+        let layerW = viewW * zoom
+        let layerH = viewH * zoom
+        let layerX = (viewW - layerW) / 2.0 + panOffset.x
+        let layerY = (viewH - layerH) / 2.0 + panOffset.y
+
+        playerLayer.frame = CGRect(x: layerX, y: layerY, width: layerW, height: layerH)
+        CATransaction.commit()
+    }
+
+    func applyZoomAndPan() {
+        updatePlayerLayerFrame()
+    }
+
+    override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
+        menu.removeAllItems()
+        if let delegate = NSApplication.shared.delegate as? AppDelegate {
+            delegate.addImageMenuItems(to: menu, canvas: self)
+        }
+    }
+
+    private var lastScrollSaveTime: Date = .distantPast
+
+    override func scrollWheel(with event: NSEvent) {
+        guard !((window as? WallWindow)?.isLocked ?? false) else { return }
+
+        if event.modifierFlags.contains(.option) {
+            if let w = window as? WallWindow, Date().timeIntervalSince(lastScrollSaveTime) > 0.5 {
+                (NSApplication.shared.delegate as? AppDelegate)?.imageUndoManager.saveState(for: w)
+                lastScrollSaveTime = Date()
+            }
+            panOffset.x += event.scrollingDeltaX * 2.0
+            panOffset.y -= event.scrollingDeltaY * 2.0
+            applyZoomAndPan()
+        } else if event.modifierFlags.contains(.control) {
+            if let w = window as? WallWindow, Date().timeIntervalSince(lastScrollSaveTime) > 0.5 {
+                (NSApplication.shared.delegate as? AppDelegate)?.imageUndoManager.saveState(for: w)
+                lastScrollSaveTime = Date()
+            }
+            let delta = event.scrollingDeltaY * 0.005
+            zoom = min(10.0, max(0.1, zoom + delta))
+            applyZoomAndPan()
+        }
+    }
+
+    var filename: String {
+        (filePath as NSString).lastPathComponent
+    }
+}
+
+// MARK: - Canvas Protocol helpers
+
+/// Shared interface for both image and video canvas views
+protocol WallCanvas: NSView {
+    var zoom: Double { get set }
+    var panOffset: CGPoint { get set }
+    var filePath: String { get }
+    var filename: String { get }
+}
+
+extension ImageCanvasView: WallCanvas {}
+extension VideoCanvasView: WallCanvas {}
+
+func wallCanvas(of window: WallWindow) -> WallCanvas? {
+    return window.contentView as? WallCanvas
+}
+
 // MARK: - WallWindow
 
 class WallWindow: NSWindow {
@@ -144,56 +267,112 @@ func createWindows(entries: [ImageEntry]) -> [WallWindow] {
 
     for entry in entries {
         let expanded = expandHome(entry.path)
-        guard let image = NSImage(contentsOfFile: expanded) else {
-            print("Warning: Could not load image: \(expanded)")
-            continue
-        }
-
         let zoom = entry.zoom ?? 1.0
 
-        // Determine window size
-        let winW: Double
-        let winH: Double
-        if let sz = entry.size, sz.count == 2 {
-            winW = sz[0]
-            winH = sz[1]
-        } else if let rep = image.representations.first {
-            winW = Double(rep.pixelsWide)
-            winH = Double(rep.pixelsHigh)
+        if isVideoFile(expanded) {
+            // Video file — use AVFoundation player
+            let url = URL(fileURLWithPath: expanded)
+            guard FileManager.default.fileExists(atPath: expanded) else {
+                print("Warning: Could not find video: \(expanded)")
+                continue
+            }
+
+            // Get video dimensions for default window size
+            let asset = AVURLAsset(url: url)
+            var videoSize = CGSize(width: 640, height: 480)
+            let semaphore = DispatchSemaphore(value: 0)
+            Task {
+                if let track = try? await asset.loadTracks(withMediaType: .video).first {
+                    let size = try? await track.load(.naturalSize)
+                    let transform = try? await track.load(.preferredTransform)
+                    if let size = size, let transform = transform {
+                        let natural = size.applying(transform)
+                        videoSize = CGSize(width: abs(natural.width), height: abs(natural.height))
+                    }
+                }
+                semaphore.signal()
+            }
+            semaphore.wait()
+
+            let winW: Double
+            let winH: Double
+            if let sz = entry.size, sz.count == 2 {
+                winW = sz[0]
+                winH = sz[1]
+            } else {
+                winW = min(Double(videoSize.width), 1280)
+                winH = min(Double(videoSize.height), 720)
+            }
+
+            let winX: Double
+            let winY: Double
+            if let pos = entry.position, pos.count == 2 {
+                winX = pos[0]
+                winY = screenH - pos[1] - winH
+            } else {
+                winX = screenFrame.origin.x + (screenFrame.width - winW) / 2.0
+                winY = screenFrame.origin.y + (screenFrame.height - winH) / 2.0
+            }
+
+            let rect = NSRect(x: winX, y: winY, width: winW, height: winH)
+            let window = WallWindow(rect: rect)
+            let canvas = VideoCanvasView(url: url, zoom: zoom, filePath: entry.path)
+
+            if let pan = entry.pan, pan.count == 2 {
+                canvas.panOffset = CGPoint(x: pan[0], y: pan[1])
+            }
+            if entry.lock == true {
+                window.isLocked = true
+            }
+
+            window.contentView = canvas
+            window.orderFront(nil)
+            windows.append(window)
         } else {
-            winW = image.size.width
-            winH = image.size.height
+            // Image file
+            guard let image = NSImage(contentsOfFile: expanded) else {
+                print("Warning: Could not load image: \(expanded)")
+                continue
+            }
+
+            let winW: Double
+            let winH: Double
+            if let sz = entry.size, sz.count == 2 {
+                winW = sz[0]
+                winH = sz[1]
+            } else if let rep = image.representations.first {
+                winW = Double(rep.pixelsWide)
+                winH = Double(rep.pixelsHigh)
+            } else {
+                winW = image.size.width
+                winH = image.size.height
+            }
+
+            let winX: Double
+            let winY: Double
+            if let pos = entry.position, pos.count == 2 {
+                winX = pos[0]
+                winY = screenH - pos[1] - winH
+            } else {
+                winX = screenFrame.origin.x + (screenFrame.width - winW) / 2.0
+                winY = screenFrame.origin.y + (screenFrame.height - winH) / 2.0
+            }
+
+            let rect = NSRect(x: winX, y: winY, width: winW, height: winH)
+            let window = WallWindow(rect: rect)
+            let canvas = ImageCanvasView(image: image, zoom: zoom, filePath: entry.path)
+
+            if let pan = entry.pan, pan.count == 2 {
+                canvas.panOffset = CGPoint(x: pan[0], y: pan[1])
+            }
+            if entry.lock == true {
+                window.isLocked = true
+            }
+
+            window.contentView = canvas
+            window.orderFront(nil)
+            windows.append(window)
         }
-
-        // Determine position (convert top-left to macOS bottom-left)
-        let winX: Double
-        let winY: Double
-        if let pos = entry.position, pos.count == 2 {
-            winX = pos[0]
-            winY = screenH - pos[1] - winH
-        } else {
-            // Center on main screen
-            winX = screenFrame.origin.x + (screenFrame.width - winW) / 2.0
-            winY = screenFrame.origin.y + (screenFrame.height - winH) / 2.0
-        }
-
-        let rect = NSRect(x: winX, y: winY, width: winW, height: winH)
-        let window = WallWindow(rect: rect)
-        let canvas = ImageCanvasView(image: image, zoom: zoom, filePath: entry.path)
-
-        // Apply pan offset if present
-        if let pan = entry.pan, pan.count == 2 {
-            canvas.panOffset = CGPoint(x: pan[0], y: pan[1])
-        }
-
-        // Apply lock if present
-        if entry.lock == true {
-            window.isLocked = true
-        }
-
-        window.contentView = canvas
-        window.orderFront(nil)
-        windows.append(window)
     }
 
     return windows
@@ -208,7 +387,7 @@ func buildSnapshotEntries(windows: [WallWindow]) -> [[String: Any]] {
 
     var entries: [[String: Any]] = []
     for window in windows {
-        guard let canvas = window.contentView as? ImageCanvasView else { continue }
+        guard let canvas = wallCanvas(of: window) else { continue }
         let frame = window.frame
 
         // Convert macOS bottom-left Y back to top-left
@@ -307,7 +486,7 @@ class ImageUndoManager {
     private let maxDepth = 50
 
     func saveState(for window: WallWindow) {
-        guard let canvas = window.contentView as? ImageCanvasView else { return }
+        guard let canvas = wallCanvas(of: window) else { return }
         let state = WindowState(zoom: canvas.zoom, panOffset: canvas.panOffset, windowFrame: window.frame)
         undoStack.append(UndoEntry(window: window, state: state))
         if undoStack.count > maxDepth { undoStack.removeFirst() }
@@ -316,28 +495,26 @@ class ImageUndoManager {
 
     func undo() {
         guard let entry = undoStack.popLast() else { return }
-        guard let canvas = entry.window.contentView as? ImageCanvasView else { return }
-        // Save current state to redo
+        guard let canvas = wallCanvas(of: entry.window) else { return }
         let current = WindowState(zoom: canvas.zoom, panOffset: canvas.panOffset, windowFrame: entry.window.frame)
         redoStack.append(UndoEntry(window: entry.window, state: current))
-        // Restore
         canvas.zoom = entry.state.zoom
         canvas.panOffset = entry.state.panOffset
         entry.window.setFrame(entry.state.windowFrame, display: true)
-        canvas.needsDisplay = true
+        if let video = canvas as? VideoCanvasView { video.applyZoomAndPan() }
+        (canvas as NSView).needsDisplay = true
     }
 
     func redo() {
         guard let entry = redoStack.popLast() else { return }
-        guard let canvas = entry.window.contentView as? ImageCanvasView else { return }
-        // Save current state to undo
+        guard let canvas = wallCanvas(of: entry.window) else { return }
         let current = WindowState(zoom: canvas.zoom, panOffset: canvas.panOffset, windowFrame: entry.window.frame)
         undoStack.append(UndoEntry(window: entry.window, state: current))
-        // Restore
         canvas.zoom = entry.state.zoom
         canvas.panOffset = entry.state.panOffset
         entry.window.setFrame(entry.state.windowFrame, display: true)
-        canvas.needsDisplay = true
+        if let video = canvas as? VideoCanvasView { video.applyZoomAndPan() }
+        (canvas as NSView).needsDisplay = true
     }
 
     func purge(window: WallWindow) {
@@ -366,7 +543,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Set up context menus on each window (willOpenMenu rebuilds dynamically)
         for window in windows {
-            if let canvas = window.contentView as? ImageCanvasView {
+            if let canvas = window.contentView, canvas is WallCanvas {
                 canvas.menu = NSMenu()
             }
         }
@@ -473,9 +650,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Per-image submenus
         for window in windows {
-            guard let canvas = window.contentView as? ImageCanvasView else { continue }
+            guard let canvas = wallCanvas(of: window) else { continue }
             let submenu = NSMenu()
-            addImageMenuItems(to: submenu, canvas: canvas)
+            addImageMenuItems(to: submenu, canvas: canvas as NSView)
             let item = NSMenuItem(title: canvas.filename, action: nil, keyEquivalent: "")
             item.submenu = submenu
             menu.addItem(item)
@@ -496,13 +673,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         rebuildMenu()
     }
 
-    func buildContextMenu(for canvas: ImageCanvasView) -> NSMenu {
+    func buildContextMenu(for canvas: NSView) -> NSMenu {
         let menu = NSMenu()
         addImageMenuItems(to: menu, canvas: canvas)
         return menu
     }
 
-    func addImageMenuItems(to menu: NSMenu, canvas: ImageCanvasView) {
+    func addImageMenuItems(to menu: NSMenu, canvas view: NSView) {
+        guard let canvas = view as? WallCanvas else { return }
+        let canvasView = canvas as NSView
+
         // Zoom submenu
         let zoomSubmenu = NSMenu()
         let currentZoom = NSMenuItem(title: String(format: "Zoom: %.2fx", canvas.zoom), action: nil, keyEquivalent: "")
@@ -513,7 +693,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for (label, value) in [("Reset (1.0x)", 1.0), ("50%", 0.5), ("75%", 0.75), ("100%", 1.0), ("150%", 1.5), ("200%", 2.0)] {
             let item = NSMenuItem(title: label, action: #selector(doSetZoom(_:)), keyEquivalent: "")
             item.target = self
-            item.representedObject = (canvas, value)
+            item.representedObject = (canvasView, value)
             zoomSubmenu.addItem(item)
         }
 
@@ -521,12 +701,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let zoomIn = NSMenuItem(title: "Zoom In (+0.25)", action: #selector(doZoomStep(_:)), keyEquivalent: "")
         zoomIn.target = self
-        zoomIn.representedObject = (canvas, 0.25)
+        zoomIn.representedObject = (canvasView, 0.25)
         zoomSubmenu.addItem(zoomIn)
 
         let zoomOut = NSMenuItem(title: "Zoom Out (-0.25)", action: #selector(doZoomStep(_:)), keyEquivalent: "")
         zoomOut.target = self
-        zoomOut.representedObject = (canvas, -0.25)
+        zoomOut.representedObject = (canvasView, -0.25)
         zoomSubmenu.addItem(zoomOut)
 
         zoomSubmenu.addItem(NSMenuItem.separator())
@@ -535,7 +715,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let slider = NSSlider(value: canvas.zoom, minValue: 0.1, maxValue: 5.0, target: self, action: #selector(doSliderZoom(_:)))
         slider.frame = NSRect(x: 20, y: 0, width: 160, height: 24)
         slider.isContinuous = true
-        objc_setAssociatedObject(slider, &kCanvasKey, canvas, .OBJC_ASSOCIATION_ASSIGN)
+        objc_setAssociatedObject(slider, &kCanvasKey, canvasView, .OBJC_ASSOCIATION_ASSIGN)
         let sliderContainer = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
         sliderContainer.addSubview(slider)
         sliderItem.view = sliderContainer
@@ -548,13 +728,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Reset Pan
         let resetPan = NSMenuItem(title: "Reset Pan", action: #selector(doResetPan(_:)), keyEquivalent: "")
         resetPan.target = self
-        resetPan.representedObject = canvas
+        resetPan.representedObject = canvasView
         menu.addItem(resetPan)
 
         // Lock Position
         let lockItem = NSMenuItem(title: "Lock Position", action: #selector(doToggleLock(_:)), keyEquivalent: "")
         lockItem.target = self
-        lockItem.representedObject = canvas
+        lockItem.representedObject = canvasView
         lockItem.state = (canvas.window as? WallWindow)?.isLocked == true ? .on : .off
         menu.addItem(lockItem)
 
@@ -563,7 +743,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for (label, tag) in [("Top-Left", 0), ("Top-Right", 1), ("Bottom-Left", 2), ("Bottom-Right", 3), ("Fill Screen", 4), ("Center", 5)] {
             let item = NSMenuItem(title: label, action: #selector(doSnapEdge(_:)), keyEquivalent: "")
             item.target = self
-            item.representedObject = canvas
+            item.representedObject = canvasView
             item.tag = tag
             snapSubmenu.addItem(item)
         }
@@ -576,7 +756,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for (label, w, h) in [("200 x 200", 200.0, 200.0), ("400 x 300", 400.0, 300.0), ("640 x 480", 640.0, 480.0), ("800 x 600", 800.0, 600.0), ("1024 x 768", 1024.0, 768.0), ("1920 x 1080", 1920.0, 1080.0)] {
             let item = NSMenuItem(title: label, action: #selector(doSetSize(_:)), keyEquivalent: "")
             item.target = self
-            item.representedObject = (canvas, w, h)
+            item.representedObject = (canvasView, w, h)
             sizeSubmenu.addItem(item)
         }
         let sizeItem = NSMenuItem(title: "Edit Size...", action: nil, keyEquivalent: "")
@@ -588,7 +768,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Remove Image
         let removeItem = NSMenuItem(title: "Remove Image", action: #selector(doRemoveImage(_:)), keyEquivalent: "")
         removeItem.target = self
-        removeItem.representedObject = canvas
+        removeItem.representedObject = canvasView
         menu.addItem(removeItem)
     }
 
@@ -618,7 +798,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Set up context menus (willOpenMenu rebuilds dynamically)
         for window in windows {
-            if let canvas = window.contentView as? ImageCanvasView {
+            if let canvas = window.contentView, canvas is WallCanvas {
                 canvas.menu = NSMenu()
             }
         }
@@ -714,45 +894,54 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Per-Image Actions
 
+    private func refreshCanvas(_ canvas: WallCanvas) {
+        if let video = canvas as? VideoCanvasView { video.applyZoomAndPan() }
+        (canvas as NSView).needsDisplay = true
+    }
+
     @objc func doSetZoom(_ sender: NSMenuItem) {
-        guard let (canvas, value) = sender.representedObject as? (ImageCanvasView, Double) else { return }
-        if let w = canvas.window as? WallWindow { imageUndoManager.saveState(for: w) }
+        guard let (view, value) = sender.representedObject as? (NSView, Double),
+              let canvas = view as? WallCanvas else { return }
+        if let w = view.window as? WallWindow { imageUndoManager.saveState(for: w) }
         canvas.zoom = value
-        canvas.needsDisplay = true
+        refreshCanvas(canvas)
         rebuildMenu()
     }
 
     @objc func doZoomStep(_ sender: NSMenuItem) {
-        guard let (canvas, delta) = sender.representedObject as? (ImageCanvasView, Double) else { return }
-        if let w = canvas.window as? WallWindow { imageUndoManager.saveState(for: w) }
+        guard let (view, delta) = sender.representedObject as? (NSView, Double),
+              let canvas = view as? WallCanvas else { return }
+        if let w = view.window as? WallWindow { imageUndoManager.saveState(for: w) }
         canvas.zoom = min(10.0, max(0.1, canvas.zoom + delta))
-        canvas.needsDisplay = true
+        refreshCanvas(canvas)
         rebuildMenu()
     }
 
     @objc func doSliderZoom(_ sender: NSSlider) {
-        guard let canvas = objc_getAssociatedObject(sender, &kCanvasKey) as? ImageCanvasView else { return }
+        guard let view = objc_getAssociatedObject(sender, &kCanvasKey) as? NSView,
+              let canvas = view as? WallCanvas else { return }
         canvas.zoom = sender.doubleValue
-        canvas.needsDisplay = true
+        refreshCanvas(canvas)
     }
 
     @objc func doResetPan(_ sender: NSMenuItem) {
-        guard let canvas = sender.representedObject as? ImageCanvasView else { return }
-        if let w = canvas.window as? WallWindow { imageUndoManager.saveState(for: w) }
+        guard let view = sender.representedObject as? NSView,
+              let canvas = view as? WallCanvas else { return }
+        if let w = view.window as? WallWindow { imageUndoManager.saveState(for: w) }
         canvas.panOffset = .zero
-        canvas.needsDisplay = true
+        refreshCanvas(canvas)
     }
 
     @objc func doToggleLock(_ sender: NSMenuItem) {
-        guard let canvas = sender.representedObject as? ImageCanvasView,
-              let wallWindow = canvas.window as? WallWindow else { return }
+        guard let view = sender.representedObject as? NSView,
+              let wallWindow = view.window as? WallWindow else { return }
         wallWindow.isLocked = !wallWindow.isLocked
         rebuildMenu()
     }
 
     @objc func doSnapEdge(_ sender: NSMenuItem) {
-        guard let canvas = sender.representedObject as? ImageCanvasView,
-              let window = canvas.window as? WallWindow,
+        guard let view = sender.representedObject as? NSView,
+              let window = view.window as? WallWindow,
               let screen = NSScreen.main else { return }
         imageUndoManager.saveState(for: window)
 
@@ -785,21 +974,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func doSetSize(_ sender: NSMenuItem) {
-        guard let (canvas, w, h) = sender.representedObject as? (ImageCanvasView, Double, Double),
-              let window = canvas.window as? WallWindow else { return }
+        guard let (view, w, h) = sender.representedObject as? (NSView, Double, Double),
+              let window = view.window as? WallWindow else { return }
         imageUndoManager.saveState(for: window)
 
         let oldFrame = window.frame
-        // Keep the top-left corner stable (adjust y since macOS uses bottom-left origin)
         let newY = oldFrame.origin.y + oldFrame.height - h
         let newFrame = NSRect(x: oldFrame.origin.x, y: newY, width: w, height: h)
         window.setFrame(newFrame, display: true)
     }
 
     @objc func doRemoveImage(_ sender: NSMenuItem) {
-        guard let canvas = sender.representedObject as? ImageCanvasView,
-              let window = canvas.window as? WallWindow else { return }
+        guard let view = sender.representedObject as? NSView,
+              let window = view.window as? WallWindow else { return }
 
+        if let video = view as? VideoCanvasView {
+            // Stop playback before removing
+            _ = video
+        }
         window.orderOut(nil)
         imageUndoManager.purge(window: window)
         windows.removeAll { $0 === window }
