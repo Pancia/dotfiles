@@ -19,6 +19,7 @@ def extract_commit(text: str) -> str:
 
 async def generate(system_prompt: str, diff: str) -> str:
     options = ClaudeAgentOptions(
+        model="claude-sonnet-4-6",
         system_prompt=system_prompt,
         allowed_tools=[],
         permission_mode="default",
