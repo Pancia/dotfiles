@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Opening ElevenReader...</title></head>
+<body>
+  <p>Opening ElevenReader...</p>
+  <script>
+    var id = location.hash.slice(1);
+    if (id) window.location = "elevenlabs://authorized/player/" + id;
+  </script>
+</body>
+</html>
