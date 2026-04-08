@@ -1,11 +1,43 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>Opening ElevenReader...</title></head>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>Opening ElevenReader...</title>
+  <style>
+    body { font-family: system-ui; text-align: center; padding: 2em; }
+    a { display: inline-block; margin: 1em; padding: 0.8em 1.5em;
+        background: #1a1a2e; color: #fff; border-radius: 8px;
+        text-decoration: none; font-size: 1.1em; }
+  </style>
+</head>
 <body>
-  <p>Redirecting to ElevenReader...</p>
+  <p id="status">Redirecting to ElevenReader...</p>
+  <a id="link" style="display:none">Open in ElevenReader</a>
   <script>
     var id = location.hash.slice(1);
-    if (id) window.location = "elevenlabs://authorized/player/" + id;
+    if (id) {
+      var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      var appUrl = "elevenlabs://authorized/player/" + id;
+      var webUrl = "https://elevenreader.io/reader/library/" + id;
+
+      if (!isMobile) {
+        // Desktop: go straight to web player
+        window.location = webUrl;
+      } else {
+        // Mobile: try app deep link, show tap button as fallback
+        var link = document.getElementById("link");
+        link.href = appUrl;
+        link.style.display = "inline-block";
+        window.location = appUrl;
+        setTimeout(function() {
+          document.getElementById("status").textContent =
+            "Tap the button below to open in the app:";
+        }, 1000);
+      }
+    } else {
+      document.getElementById("status").textContent = "No item ID provided.";
+    }
   </script>
 </body>
 </html>
