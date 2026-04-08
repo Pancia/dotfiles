@@ -20,19 +20,9 @@ async def main(connection):
     # Create the new window
     window = await iterm2.Window.async_create(connection)
 
-    # Get screen dimensions and center the window
-    screen = AppKit.NSScreen.mainScreen()
-    screen_frame = screen.frame()
-    screen_width = screen_frame.size.width
-    screen_height = screen_frame.size.height
-
-    frame = await window.async_get_frame()
-    new_x = (screen_width - frame.size.width) / 2
-    new_y = (screen_height - frame.size.height) / 2
-
     await window.async_set_frame(iterm2.Frame(
-        iterm2.Point(new_x, new_y),
-        iterm2.Size(frame.size.width, frame.size.height)
+        iterm2.Point(342, 25),
+        iterm2.Size(1214, 1055)
     ))
 
     # cd to directory if specified
