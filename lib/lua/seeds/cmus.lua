@@ -4,6 +4,7 @@ local menubarRegistry = require("lib/menubarRegistry")
 local cmusRemotePath = nil
 local currentStatus = "stopped"  -- Track state from IPC messages
 local titleHidden = false  -- When true, menubar shows only 🎵 icon
+local titleManualOverride = false  -- When true, skip auto-hide until next status transition
 local lastTrackMsg = nil   -- Cache last IPC message for re-rendering on toggle
 
 -- Sync version: only used for initMenuTitle() at startup
@@ -156,9 +157,23 @@ function obj:onIPCMessage(_id, msg)
         trackInfo = msg
     end
 
-    -- Update cached state for isActive()/isPlaying()
+    -- Reset manual override on status transitions (play→pause, pause→play)
+    local prevStatus = currentStatus
     currentStatus = status
     lastTrackMsg = msg
+
+    if status ~= prevStatus then
+        titleManualOverride = false
+    end
+
+    -- Auto-show title when playing, hide when paused/stopped
+    if not titleManualOverride then
+        local wasHidden = titleHidden
+        titleHidden = (status ~= "playing")
+        if titleHidden ~= wasHidden then
+            obj:updateToggleTitleButton()
+        end
+    end
 
     obj:renderMenuTitle(status, trackInfo)
 end
@@ -176,10 +191,25 @@ function obj:renderMenuTitle(status, trackInfo)
     end
     local styledTitle = hs.styledtext.new(title, {["font"] = {["name"] = "Menlo-Regular"}})
     obj._controlsMenu:setTitle(styledTitle)
+
+    -- Update track title in canvas if visible
+    obj:updateCanvasTrackTitle(trackInfo)
+end
+
+function obj:updateCanvasTrackTitle(trackInfo)
+    if not obj._canvas then return end
+    local label = (trackInfo and trackInfo ~= "") and trackInfo or "No track"
+    for i = 1, #obj._canvas do
+        if obj._canvas[i].id == "track_title" then
+            obj._canvas[i].text = label
+            break
+        end
+    end
 end
 
 function obj:toggleTitleVisibility()
     titleHidden = not titleHidden
+    titleManualOverride = true
     -- Re-render menubar with current state
     if lastTrackMsg then
         obj:onIPCMessage(0, lastTrackMsg)
@@ -237,8 +267,10 @@ function obj:createControlsCanvas()
     local buttonHeight = 40
     local padding = 8
     local rowHeight = buttonHeight + padding
+    local titleHeight = 24
     local canvasWidth = (buttonWidth * 3) + (padding * 4)
-    local canvasHeight = (rowHeight * 6) + padding
+    local canvasHeight = titleHeight + padding + (rowHeight * 6) + padding
+    local rowStart = titleHeight + padding  -- buttons start after title row
 
     obj._canvas = hs.canvas.new({x = 0, y = 0, w = canvasWidth, h = canvasHeight})
     obj._canvas:level("popUpMenu")
@@ -252,33 +284,50 @@ function obj:createControlsCanvas()
         roundedRectRadii = {xRadius = 8, yRadius = 8},
     })
 
+    -- Track title display
+    local trackTitle = ""
+    if lastTrackMsg then
+        local _, info = string.match(lastTrackMsg, "^(.-)::(.*)$")
+        trackTitle = info or lastTrackMsg
+    end
+    obj._canvas:appendElements({
+        id = "track_title",
+        type = "text",
+        action = "fill",
+        text = trackTitle ~= "" and trackTitle or "No track",
+        textColor = {hex = "#aaaaaa", alpha = 1},
+        textSize = 12,
+        textAlignment = "center",
+        frame = {x = padding, y = padding, w = canvasWidth - padding * 2, h = titleHeight},
+    })
+
     -- Button configurations
     local buttons = {
         -- Row 1: Media controls (3 buttons @ 100px)
-        {id = "prev", label = "⏮ Previous", x = padding, y = padding, w = buttonWidth},
-        {id = "playpause", label = "⏯ Play/Pause", x = padding * 2 + buttonWidth, y = padding, w = buttonWidth},
-        {id = "next", label = "⏭ Next", x = padding * 3 + buttonWidth * 2, y = padding, w = buttonWidth},
+        {id = "prev", label = "⏮ Previous", x = padding, y = rowStart, w = buttonWidth},
+        {id = "playpause", label = "⏯ Play/Pause", x = padding * 2 + buttonWidth, y = rowStart, w = buttonWidth},
+        {id = "next", label = "⏭ Next", x = padding * 3 + buttonWidth * 2, y = rowStart, w = buttonWidth},
 
         -- Row 2: Seek controls (4 buttons @ 75px)
-        {id = "seek_back_30", label = "⏪ 30s", x = padding, y = padding + rowHeight, w = 75},
-        {id = "seek_back_10", label = "⏪ 10s", x = padding * 2 + 75, y = padding + rowHeight, w = 75},
-        {id = "seek_fwd_10", label = "⏩ 10s", x = padding * 3 + 75 * 2, y = padding + rowHeight, w = 75},
-        {id = "seek_fwd_30", label = "⏩ 30s", x = padding * 4 + 75 * 3, y = padding + rowHeight, w = 75},
+        {id = "seek_back_30", label = "⏪ 30s", x = padding, y = rowStart + rowHeight, w = 75},
+        {id = "seek_back_10", label = "⏪ 10s", x = padding * 2 + 75, y = rowStart + rowHeight, w = 75},
+        {id = "seek_fwd_10", label = "⏩ 10s", x = padding * 3 + 75 * 2, y = rowStart + rowHeight, w = 75},
+        {id = "seek_fwd_30", label = "⏩ 30s", x = padding * 4 + 75 * 3, y = rowStart + rowHeight, w = 75},
 
         -- Row 3: Volume controls (2 buttons @ 155px, centered)
-        {id = "vol_down", label = "🔉 Vol -", x = padding, y = padding + rowHeight * 2, w = 155},
-        {id = "vol_up", label = "🔊 Vol +", x = padding * 2 + 155, y = padding + rowHeight * 2, w = 155},
+        {id = "vol_down", label = "🔉 Vol -", x = padding, y = rowStart + rowHeight * 2, w = 155},
+        {id = "vol_up", label = "🔊 Vol +", x = padding * 2 + 155, y = rowStart + rowHeight * 2, w = 155},
 
         -- Row 4: Select controls (2 buttons @ 155px)
-        {id = "select_playlist", label = "📋 Playlist", x = padding, y = padding + rowHeight * 3, w = 155},
-        {id = "select_tags", label = "🏷 Tags", x = padding * 2 + 155, y = padding + rowHeight * 3, w = 155},
+        {id = "select_playlist", label = "📋 Playlist", x = padding, y = rowStart + rowHeight * 3, w = 155},
+        {id = "select_tags", label = "🏷 Tags", x = padding * 2 + 155, y = rowStart + rowHeight * 3, w = 155},
 
         -- Row 5: Edit controls (2 buttons @ 155px)
-        {id = "edit_track", label = "✏️ Edit", x = padding, y = padding + rowHeight * 4, w = 155},
-        {id = "audacity", label = "🎧 Audacity", x = padding * 2 + 155, y = padding + rowHeight * 4, w = 155},
+        {id = "edit_track", label = "✏️ Edit", x = padding, y = rowStart + rowHeight * 4, w = 155},
+        {id = "audacity", label = "🎧 Audacity", x = padding * 2 + 155, y = rowStart + rowHeight * 4, w = 155},
 
         -- Row 6: Toggle title visibility (full width)
-        {id = "toggle_title", label = titleHidden and "👁 Show Title" or "👁 Hide Title", x = padding, y = padding + rowHeight * 5, w = canvasWidth - padding * 2},
+        {id = "toggle_title", label = titleHidden and "👁 Show Title" or "👁 Hide Title", x = padding, y = rowStart + rowHeight * 5, w = canvasWidth - padding * 2},
     }
 
     for _, btn in ipairs(buttons) do
