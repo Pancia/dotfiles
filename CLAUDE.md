@@ -124,6 +124,29 @@ cd ~/dotfiles
 ./install nvim   # Just Neovim setup
 ```
 
+### XDG Base Directories
+
+The project uses XDG Base Directory Specification for tool configuration and caches. Environment variables are set in `fish/conf.d/00_xdg.fish` (loaded first, alphabetically):
+
+| Variable | Value | Used By |
+|----------|-------|---------|
+| `XDG_CONFIG_HOME` | `~/.config` | git, tmux, docker, aws, etc. |
+| `XDG_DATA_HOME` | `~/.local/share` | cargo, bundle, gem, hex, etc. |
+| `XDG_STATE_HOME` | `~/.local/state` | history files, cache, logs |
+| `XDG_CACHE_HOME` | `~/.cache` | npm, maven, gradle, gitlibs, deps.clj |
+
+Relocated tool configs:
+- **Git**: `~/.config/git/` (replaces `~/.gitconfig`)
+- **Tmux**: `~/.config/tmux/` (replaces `~/.tmux.conf`)
+- **Cargo**: `~/.local/share/cargo` (replaces `~/.cargo`)
+- **Docker**: `~/.config/docker`
+- **AWS**: `~/.config/aws`
+- **Gradle**: `~/.local/share/gradle` (replaces `~/.gradle`)
+
+Symlinked items (data in `~/.local/`, but still accessible at `~/.`):
+- `.flet`, `.dartServer`, `.dart-tool`, `.flutter-devtools` → `~/.local/state/` and `~/.local/share/`
+- `.log` → `~/.local/state/log`
+
 ### Key Hotkeys (Hammerspoon)
 | Hotkey | Action |
 |--------|--------|
@@ -177,14 +200,16 @@ Project-level skill/agent/command configuration via `.cc-config` and `cc-config.
 
 **Workflow:**
 ```bash
-cc-config init    # Create .cc-config via fzf picker
-cc-config edit    # Edit .cc-config with reference comments
-cc-config show    # Show what's enabled for current project
-cc-config sync    # Manually sync (auto-runs on claude launch)
-cc-config list    # Show all registered skills/agents/commands
+cc-config              # Show profile and sync status (no args defaults to show)
+cc-config init        # Create .cc-config via fzf picker
+cc-config edit        # Edit .cc-config with reference comments
+cc-config show        # Show what's enabled for current project (+ sync status)
+cc-config sync        # Sync based on .cc-config (no args required)
+cc-config sync --force # Clear stamp and force re-sync (fixes stale symlinks)
+cc-config list        # Show all registered skills/agents/commands
 ```
 
-The wrapper auto-syncs on `claude` launch: if `.cc-config` exists, uses that; otherwise syncs the `"default"` group from `cc-config.json`.
+The wrapper auto-syncs on `claude` launch: if `.cc-config` exists, uses that; otherwise syncs the `"default"` group from `cc-config.json`. Running `cc-config sync` manually now updates the stamp, keeping it in sync with the wrapper's cache.
 
 ## Primary Tools
 
