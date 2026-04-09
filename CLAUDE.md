@@ -24,6 +24,7 @@ dotfiles/
 ├── ai/             # AI prompts and templates
 ├── vendor/         # Vendored dependencies (MANIFEST.json tracked, clones gitignored)
 ├── cmd/vendor/     # Vendor CLI source (Go)
+├── public/         # Static HTML pages and redirect utilities
 ├── install         # Installation script
 └── Brewfile        # Homebrew packages
 ```
@@ -41,6 +42,18 @@ service log <name>        # Show logs for a service
 service create            # Create a new service
 service edit <name>       # Edit a service's script and plist
 ```
+
+### Available Services
+
+| Service | Schedule | Purpose |
+|---------|----------|---------|
+| `ziplog` | Thursday 12:00 | Compress monitor logs >6 days old, archive by month, backup to `~/Cloud/_inbox/monitor/minimac/` |
+| `disk-snapshot` | Daily 12:30 | Create disk usage snapshot to `~/.local/share/disk-snapshots/` |
+| `bookmark-manager` | Daily 2:00 | Sync browser bookmarks |
+| `sanctuary` | On demand | Rotate encrypted backup directories |
+| `copyparty` | Startup | Media server for file sharing |
+
+See `service list` for all installed services. `bin/ziplog` can also be run manually with `ziplog --yes` (skips confirmation prompt).
 
 ## Key Patterns
 
