@@ -1,9 +1,13 @@
 #!/bin/bash
 
-pushd ~/.local/share/monitor/
-ls -lh
-echo "GO AHEAD? OR CTRL-C"
-read empty
+cd ~/.local/share/monitor/ || exit 1
+
+# Interactive confirmation unless --yes is passed
+if [ "$1" != "--yes" ]; then
+    ls -lh
+    echo "GO AHEAD? OR CTRL-C"
+    read empty
+fi
 find . -name "*.log.json" -type f -mtime +6d | while read -r file; do
     if [ ! -f "${file}.zip" ]; then
         echo "Zipping $file..."
@@ -31,7 +35,12 @@ for month in $(ls -1 | grep -oE '^[0-9]{4}_[0-9]{2}' | sort -u); do
     fi
 done
 
+# Backup to cloud
+BACKUP_DIR="$HOME/Cloud/_inbox/monitor/minimac/"
+mkdir -p "$BACKUP_DIR"
+echo "Syncing to $BACKUP_DIR..."
+rsync -av ~/.local/share/monitor/ "$BACKUP_DIR"
+
 ls -lh
 echo "log size"
 du -ha ~/.local/share/monitor/ | sort -h
-popd
