@@ -22,7 +22,7 @@ if __name__ == "__main__":
     width = len(str(total))
 
     for count, filepath in counts:
-        print(f"{count:>{width}} {filepath}")
+        print(f"{count:>{width},} {filepath}")
 
     if len(files) > 1:
-        print(f"{total:>{width}} total")
+        print(f"{total:>{width},} total")

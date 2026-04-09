@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# tokentree - display a file tree annotated with token counts
+# Usage: tokentree [tree-options] [directory]
+#
+# Generates temporary .info files for tree's --info flag,
+# runs tree, then cleans up. Passes all arguments through to tree.
+# Requires: tokencount, tree
+
+set -euo pipefail
+
+# Separate our concerns from tree's args: find the target directory
+# (last arg that's a directory) and pass everything else to tree.
+args=()
+dir="."
+for arg in "$@"; do
+  if [[ -d "$arg" ]]; then
+    dir="$arg"
+  else
+    args+=("$arg")
+  fi
+done
+
+# Bail if any .info files already exist
+existing_info=$(find "$dir" -name '.info' -not -path '*/.git/*' -not -path '*/.jj/*' 2>/dev/null)
+if [[ -n "$existing_info" ]]; then
+  echo "error: existing .info files found in $dir:" >&2
+  echo "$existing_info" >&2
+  exit 1
+fi
+
+created_info=()
+
+cleanup() {
+  for f in "${created_info[@]}"; do
+    rm -f "$f"
+  done
+}
+trap cleanup EXIT
+
+# Build .info files with token counts
+while IFS= read -r -d '' filepath; do
+  d=$(dirname "$filepath")
+  base=$(basename "$filepath")
+  info_file="$d/.info"
+
+  count=$(tokencount "$filepath" | awk '{print $1}')
+  printf "%s\n\t%s tokens\n" "$base" "$count" >> "$info_file"
+
+  if ! printf '%s\n' "${created_info[@]}" | grep -qxF "$info_file" 2>/dev/null; then
+    created_info+=("$info_file")
+  fi
+done < <(find "$dir" -type f -not -name '.info' -not -path '*/.git/*' -not -path '*/.jj/*' -print0)
+
+tree --info "${args[@]}" "$dir" | awk '/\{ .+/ { sub(/.*\{ /, ""); prev = prev " [$> " $0 "]"; print prev; prev=""; next } { if (prev) print prev; prev=$0 } END { if (prev) print prev }'

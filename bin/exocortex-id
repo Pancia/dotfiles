@@ -6,24 +6,22 @@
 Generate compact timestamp-based IDs for an exocortex/zettelkasten.
 
 Encodes the current UTC date and time into a short, chronologically sortable
-string using base-36. Typical output: "2649-1oeb" (~8-9 chars).
+string using base-36. Typical output: "2649-e1n" (~8 chars).
 
-Format:  [prefix] YY M D [separator] H TTT [suffix]
+Format:  [prefix] YY M D [separator] H SSS [suffix]
 
   YY  — 2-digit year (or years-since-1970 in base-36 with --unix-time)
   M   — month in base-36 (1-9, a=Oct, b=Nov, c=Dec)
   D   — day in base-36 (1-9, a=10, ..., v=31)
   H   — UTC hour in base-36 (0-n)
-  TTT — fractional hour in base-36, using full 36^n range (-t controls digits)
+  SSS — deciseconds within the hour in base-36, zero-padded to 3 digits
 
 Usage:
-  exocortex-id                        # default: "2649-1oeb" (3 time digits)
-  exocortex-id -t 4                   # "2649-1oeb0" (4 time digits, ~2ms)
-  exocortex-id -t 5                   # "2649-1oeb00" (5 time digits, ~60µs)
-  exocortex-id --prefix "."           # ".2649-1oeb"
-  exocortex-id --decimal-date         # "260409-1oeb"
-  exocortex-id --unix-time            # "1k49-1oeb"
-  exocortex-id --parse 2649-1oeb      # parse back to datetime
+  exocortex-id                        # default: "2649-e1n"
+  exocortex-id --prefix "."           # ".2649-e1n"
+  exocortex-id --decimal-date         # "260409-e1n"
+  exocortex-id --unix-time            # "1k49-e1n"
+  exocortex-id --parse 2649-e1n       # parse back to datetime
 """
 
 import argparse
@@ -31,9 +29,6 @@ from datetime import datetime, timezone
 
 
 BASE36_CHARS = "0123456789abcdefghijklmnopqrstuvwxyz"
-DEFAULT_TIME_DIGITS = 3
-
-
 def to_base36(n: int) -> str:
     """Convert a non-negative integer to a base-36 string."""
     if n < 0:
@@ -59,7 +54,6 @@ def generate_id(
     separator: str = "-",
     prefix: str = "",
     suffix: str = "",
-    time_digits: int = DEFAULT_TIME_DIGITS,
     now: datetime | None = None,
 ) -> str:
     """Generate an exocortex ID from the given or current UTC time."""
@@ -84,14 +78,11 @@ def generate_id(
             d = to_base36(day)
 
     h = to_base36(now.hour)
+    deciseconds = (now.minute * 600 + now.second * 10
+                    + now.microsecond // 100_000)
+    sss = to_base36(deciseconds).zfill(3)
 
-    # Approach B: use full 36^n range for maximum precision per digit
-    total_seconds = now.minute * 60 + now.second + now.microsecond / 1_000_000
-    fraction_of_hour = total_seconds / 3600
-    time_value = int(fraction_of_hour * (36 ** time_digits))
-    ttt = to_base36(time_value).zfill(time_digits)
-
-    return f"{prefix}{yy}{m}{d}{separator}{h}{ttt}{suffix}"
+    return f"{prefix}{yy}{m}{d}{separator}{h}{sss}{suffix}"
 
 
 def parse_id(
@@ -102,14 +93,8 @@ def parse_id(
     separator: str = "-",
     prefix: str = "",
     suffix: str = "",
-    time_digits: int | None = None,
 ) -> datetime:
-    """Parse an exocortex ID back into a UTC datetime.
-
-    time_digits is auto-detected from the length of the time portion
-    (everything after the separator minus 1 for the hour char).
-    Pass explicitly only if you need to override.
-    """
+    """Parse an exocortex ID back into a UTC datetime."""
     # Strip prefix and suffix
     s = id_str
     if prefix and s.startswith(prefix):
@@ -139,20 +124,12 @@ def parse_id(
         month = from_base36(date_part[2])
         day = from_base36(date_part[3:])
 
-    # Parse time: H (1 char) + time digits (auto-detected from length)
+    # Parse time: H (1 char) + SSS (3 chars, deciseconds in hour)
     hour = from_base36(time_part[0])
-    ttt_str = time_part[1:]
-    if time_digits is None:
-        time_digits = len(ttt_str)
-    ttt = from_base36(ttt_str)
-
-    # Reverse the fractional hour encoding
-    fraction_of_hour = ttt / (36 ** time_digits)
-    total_seconds = fraction_of_hour * 3600
-    minute = int(total_seconds // 60)
-    second_frac = total_seconds - minute * 60
-    second = int(second_frac)
-    microsecond = int((second_frac - second) * 1_000_000)
+    deciseconds = from_base36(time_part[1:])
+    minute = deciseconds // 600
+    second = (deciseconds % 600) // 10
+    microsecond = (deciseconds % 10) * 100_000
 
     return datetime(year, month, day, hour, minute, second, microsecond,
                     tzinfo=timezone.utc)
@@ -172,10 +149,6 @@ def main(argv: list[str] | None = None) -> None:
                         help="String to prepend to the ID")
     parser.add_argument("--suffix", default="",
                         help="String to append to the ID")
-    parser.add_argument("-t", "--time-digits", type=int,
-                        default=DEFAULT_TIME_DIGITS,
-                        help="Number of base-36 time digits (default: 3, "
-                             "precision: 3=~77ms, 4=~2ms, 5=~60µs)")
     parser.add_argument("--parse", metavar="ID",
                         help="Parse an ID back to a UTC datetime")
     parser.add_argument("--local", action="store_true",
@@ -203,7 +176,6 @@ def main(argv: list[str] | None = None) -> None:
             separator=args.separator,
             prefix=args.prefix,
             suffix=args.suffix,
-            time_digits=args.time_digits,
         ))
 
 
