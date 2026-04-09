@@ -1,5 +1,5 @@
 function _ccs_file
-    echo (pwd)"/.cc/sessions.json"
+    echo "$HOME/Cloud/cc-sessions"(pwd)"/sessions.json"
 end
 
 # All session data goes through jq. File is a JSON array of {id, ts, title} objects.
@@ -278,7 +278,7 @@ function _ccs_backup_session --description 'Back up a single session JSONL as zs
         return 1
     end
 
-    set -l backup_dir (pwd)"/.cc/session-backups"
+    set -l backup_dir "$HOME/Cloud/cc-sessions"(pwd)"/session-backups"
     set -l backup "$backup_dir/$id.jsonl.zst"
     mkdir -p "$backup_dir"
 
@@ -323,42 +323,67 @@ function _ccs_backup --description 'Back up all saved session JSONLs'
     echo "Backup: $backed OK, $missing not found"
 end
 
-function _ccs_migrate --description 'Migrate .claude-sessions JSONL to .cc/sessions.json'
-    set -l old_file (pwd)"/.claude-sessions"
+function _ccs_migrate --description 'Migrate old session files to ~/Cloud/cc-sessions/'
     set -l new_file (_ccs_file)
+    set -l migrated_any 0
 
-    if not test -f "$old_file"
-        echo "No .claude-sessions file to migrate"
-        return 1
+    # Try both old locations
+    for old_file in (pwd)"/.claude-sessions" (pwd)"/.cc/sessions.json"
+        if not test -f "$old_file"
+            continue
+        end
+
+        if not test -s "$old_file"
+            echo "Empty $old_file, removing"
+            rm "$old_file"
+            continue
+        end
+
+        mkdir -p (dirname "$new_file")
+
+        # Detect format: JSONL (.claude-sessions) vs JSON array (.cc/sessions.json)
+        set -l old_data
+        if string match -q '*.claude-sessions' "$old_file"
+            set old_data (jq -sc '[.[] | select(. != null)]' "$old_file")
+        else
+            set old_data (cat "$old_file")
+        end
+
+        if test -f "$new_file"
+            jq -c --argjson old "$old_data" \
+                '($old + .) | group_by(.id) | map(last)' "$new_file" > "$new_file.tmp"
+            mv "$new_file.tmp" "$new_file"
+        else
+            echo "$old_data" > "$new_file"
+        end
+
+        if jq empty "$new_file" 2>/dev/null
+            set -l count (jq 'length' "$new_file")
+            echo "Migrated $old_file ($count sessions)"
+            rm "$old_file"
+            set migrated_any 1
+        else
+            echo "Migration may have failed — keeping $old_file"
+        end
     end
 
-    if not test -s "$old_file"
-        echo "Empty .claude-sessions file"
-        rm "$old_file"
-        return 0
+    # Migrate session backups
+    set -l old_backups (pwd)"/.cc/session-backups"
+    if test -d "$old_backups"
+        set -l new_backups (dirname "$new_file")"/session-backups"
+        mkdir -p "$new_backups"
+        for f in "$old_backups"/*.jsonl.zst
+            if test -f "$f"
+                mv "$f" "$new_backups/"
+                set migrated_any 1
+            end
+        end
+        rmdir "$old_backups" 2>/dev/null
+        and echo "Migrated session backups"
     end
 
-    mkdir -p (dirname "$new_file")
-
-    # Convert JSONL to JSON array
-    set -l migrated (jq -sc '[.[] | select(. != null)]' "$old_file")
-
-    if test -f "$new_file"
-        # Merge: existing entries take precedence on id conflict
-        jq -c --argjson old "$migrated" \
-            '($old + .) | group_by(.id) | map(last)' "$new_file" > "$new_file.tmp"
-        mv "$new_file.tmp" "$new_file"
-    else
-        echo "$migrated" > "$new_file"
-    end
-
-    # Only delete old file if new file is valid JSON
-    if jq empty "$new_file" 2>/dev/null
-        echo "Migrated "(jq 'length' "$new_file")" sessions to .cc/sessions.json"
-        rm "$old_file"
-        echo "Removed .claude-sessions"
-    else
-        echo "Migration may have failed — keeping .claude-sessions"
+    if test $migrated_any -eq 0
+        echo "Nothing to migrate"
         return 1
     end
 end
@@ -372,7 +397,7 @@ function _ccs_help
     echo "  remove <id>         Remove a session"
     echo "  resume              Pick and resume a session (fzf)"
     echo "  backup              Back up saved session transcripts (zstd)"
-    echo "  migrate             Migrate .claude-sessions to .cc/sessions.json"
+    echo "  migrate             Migrate old .claude-sessions/.cc/ to ~/Cloud/cc-sessions/"
     echo "  help                Show this help"
 end
 

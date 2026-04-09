@@ -4,8 +4,6 @@
 !.nojekyll
 !.github/
 !.cc
-.cc/sessions.json
-.cc/session-backups/
 .DS_Store
 .lein-repl-history
 .nrepl-history

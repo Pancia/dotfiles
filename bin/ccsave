@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Save current Claude Code session to .cc/sessions.json
+# Save current Claude Code session to ~/Cloud/cc-sessions/
 # Usage: ccsave [title]
 set -euo pipefail
 
@@ -11,7 +11,7 @@ fi
 id="$CLAUDE_SESSION_ID"
 title="${*}"
 timestamp=$(date '+%Y-%m-%d %H:%M')
-dir="$(pwd)/.cc"
+dir="$HOME/Cloud/cc-sessions$(pwd)"
 file="$dir/sessions.json"
 
 mkdir -p "$dir"
@@ -33,7 +33,7 @@ fi
 project_dir=$(echo "$(pwd)" | tr '/' '-')
 jsonl="$HOME/.claude/projects/$project_dir/$id.jsonl"
 if [ -f "$jsonl" ]; then
-    backup_dir="$(pwd)/.cc/session-backups"
+    backup_dir="$HOME/Cloud/cc-sessions$(pwd)/session-backups"
     mkdir -p "$backup_dir"
     zstd -qf "$jsonl" -o "$backup_dir/$id.jsonl.zst"
 fi

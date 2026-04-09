@@ -2,12 +2,12 @@
 # Launch the lock-screen-dialog in a centered Ghostty window
 
 # Launch Ghostty with the lock-screen-dialog command (80 cols x 24 rows)
-open -na Ghostty.app --args --window-width=80 --window-height=24 -e ~/dotfiles/bin/lock-screen-dialog
+open -na Ghostty.app --args --window-width=80 --window-height=24 --title="Lock Screen Dialog" -e ~/dotfiles/bin/lock-screen-dialog
 
 # Wait a moment for the window to appear
 sleep 0.3
 
-# Position the window in the center and activate it
+# Position the new window in the center and activate it (without disturbing other Ghostty windows)
 osascript <<EOF
 tell application "Finder"
     set screenBounds to bounds of window of desktop
@@ -16,18 +16,23 @@ tell application "Finder"
 end tell
 tell application "System Events"
     tell process "Ghostty"
-        set frontmost to true
-        tell front window
-            set windowSize to size
+        set targetWindow to missing value
+        repeat with w in windows
+            if name of w contains "Lock Screen Dialog" then
+                set targetWindow to w
+                exit repeat
+            end if
+        end repeat
+        if targetWindow is not missing value then
+            set windowSize to size of targetWindow
             set windowWidth to item 1 of windowSize
             set windowHeight to item 2 of windowSize
             set x1 to (screenWidth - windowWidth) / 2
             set y1 to ((screenHeight - windowHeight) / 4)
-            set position to {x1, y1}
-        end tell
+            set position of targetWindow to {x1, y1}
+            perform action "AXRaise" of targetWindow
+        end if
+        set frontmost to true
     end tell
-end tell
-tell application "Ghostty"
-    activate
 end tell
 EOF
