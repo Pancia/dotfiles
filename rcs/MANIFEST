@@ -14,6 +14,8 @@ cmus.rc                         -> $HOME/.config/cmus/rc
 config.fish                     -> $HOME/.config/fish/config.fish
 datomic.dev-local.edn           -> $HOME/.datomic/dev-local.edn
 ghostty.config                  -> $HOME/.config/ghostty/config
+ghostty-theme-MyColors-Light    -> $HOME/.config/ghostty/themes/MyColors-Light
+ghostty-theme-MyColors-Dark     -> $HOME/.config/ghostty/themes/MyColors-Dark
 gitconfig                       -> $HOME/.config/git/config
 jj-config.toml                  -> $HOME/.config/jj/config.toml
 gradle.properties               -> $HOME/.local/share/gradle/gradle.properties
