@@ -1,38 +1,50 @@
 #!/bin/bash
 # Launch the lock-screen-dialog in a centered Ghostty window
 
-# Launch Ghostty with the lock-screen-dialog command (80 cols x 24 rows)
-open -na Ghostty.app --args --window-width=80 --window-height=24 --title="Lock Screen Dialog" -e ~/dotfiles/bin/lock-screen-dialog
+# Snapshot current window IDs so we can find the new one
+BEFORE=$(osascript -e 'tell application "System Events" to tell process "Ghostty" to return id of every window' 2>/dev/null)
 
-# Wait a moment for the window to appear
-sleep 0.3
+# Launch a new Ghostty window with the lock-screen-dialog command (80 cols x 24 rows)
+# Must use open -na on macOS; ghostty CLI cannot launch the GUI directly
+open -na Ghostty.app --args --window-width=80 --window-height=24 -e ~/dotfiles/bin/lock-screen-dialog
 
-# Position the new window in the center and activate it (without disturbing other Ghostty windows)
+# Wait for the new window to appear
+sleep 0.5
+
+# Position the new window in the center and raise it (without disturbing other Ghostty windows)
 osascript <<EOF
 tell application "Finder"
     set screenBounds to bounds of window of desktop
     set screenWidth to item 3 of screenBounds
     set screenHeight to item 4 of screenBounds
 end tell
+
+set beforeIDs to {$BEFORE}
+
 tell application "System Events"
-    tell process "Ghostty"
-        set targetWindow to missing value
-        repeat with w in windows
-            if name of w contains "Lock Screen Dialog" then
+    -- Find the Ghostty process that owns the new window
+    -- open -na may create a second process, so check all of them
+    set targetWindow to missing value
+    repeat with p in (every process whose name is "Ghostty")
+        repeat with w in windows of p
+            set wID to id of w
+            if wID is not in beforeIDs then
                 set targetWindow to w
+                set targetProc to p
                 exit repeat
             end if
         end repeat
-        if targetWindow is not missing value then
-            set windowSize to size of targetWindow
-            set windowWidth to item 1 of windowSize
-            set windowHeight to item 2 of windowSize
-            set x1 to (screenWidth - windowWidth) / 2
-            set y1 to ((screenHeight - windowHeight) / 4)
-            set position of targetWindow to {x1, y1}
-            perform action "AXRaise" of targetWindow
-        end if
-        set frontmost to true
-    end tell
+        if targetWindow is not missing value then exit repeat
+    end repeat
+    if targetWindow is not missing value then
+        set windowSize to size of targetWindow
+        set windowWidth to item 1 of windowSize
+        set windowHeight to item 2 of windowSize
+        set x1 to (screenWidth - windowWidth) / 2
+        set y1 to ((screenHeight - windowHeight) / 4)
+        set position of targetWindow to {x1, y1}
+        perform action "AXRaise" of targetWindow
+        set frontmost of targetProc to true
+    end if
 end tell
 EOF
