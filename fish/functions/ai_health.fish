@@ -2,9 +2,11 @@
 function ai_health --description 'Health Chat with AI using claude'
     echo ""
     set_color yellow
-    echo "======================================================================="
-    echo "~ ephemeral session ~ not persisted ~ not part of the akashic records ~"
-    echo "======================================================================="
+    set -l line "~ ephemeral session ~ not persisted ~ not part of "(pwd)" ~"
+    set -l bar (string repeat -n (string length -- $line) =)
+    echo $bar
+    echo $line
+    echo $bar
     set_color normal
     echo ""
 
