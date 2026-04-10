@@ -52,6 +52,81 @@ class TestEncoding:
 
 
 # =============================================================================
+# Safe name truncation
+# =============================================================================
+
+
+class TestSafeName:
+    def test_short_name_passthrough(self):
+        """Names under 255 bytes pass through unchanged."""
+        r = fish_eval('echo (_trash_safe_name "short-name.txt")')
+        assert r.returncode == 0
+        assert r.stdout.strip() == "short-name.txt"
+
+    def test_exactly_255_bytes_passthrough(self):
+        """A name exactly 255 bytes passes through unchanged."""
+        name = "x" * 255
+        r = fish_eval(f'echo (_trash_safe_name "{name}")')
+        assert r.returncode == 0
+        assert r.stdout.strip() == name
+
+    def test_long_name_truncated(self):
+        """Names over 255 bytes are truncated with an exocortex-id suffix."""
+        name = "a" * 300
+        r = fish_eval(f'echo (_trash_safe_name "{name}")')
+        assert r.returncode == 0
+        result = r.stdout.strip()
+        assert len(result.encode()) <= 255
+        assert result.startswith("a")
+        # Should end with -<exocortex-id>
+        assert "-" in result
+        # The truncated part should be shorter than original
+        assert len(result) < 300
+
+    def test_long_unicode_name_truncated(self):
+        """Unicode names that exceed 255 bytes are truncated correctly."""
+        # Korean chars are 3 bytes each in UTF-8
+        name = "한" * 100  # 300 bytes
+        r = fish_eval(f"echo (_trash_safe_name '{name}')")
+        assert r.returncode == 0
+        result = r.stdout.strip()
+        assert len(result.encode()) <= 255
+
+    def test_truncated_name_is_unique(self):
+        """Two different long names produce different truncated results (via prefix difference)."""
+        name_a = "a" * 300
+        name_b = "b" * 300
+        r_a = fish_eval(f'echo (_trash_safe_name "{name_a}")')
+        r_b = fish_eval(f'echo (_trash_safe_name "{name_b}")')
+        # They differ in the truncated prefix portion
+        assert r_a.stdout.strip() != r_b.stdout.strip()
+
+    def test_realistic_trash_name_truncation(self):
+        """Simulate a realistic long encoded trash filename."""
+        # This mimics the pattern: encoded_cwd>>>encoded_file<<<timestamp
+        # The cwd prefix is the full encoded path (as seen in the original error)
+        prefix = (
+            "%2FUsers%2Fanthony%2FLibrary%2FCloudStorage"
+            "%2FProtonDrive-adambrosio%40pm.me-folder%2Fmusic"
+        )
+        filename = (
+            "Stray%20Kids__%24__HAN%20%EF%BC%82%EC%99%B8%EA%B3%84%EC%9D%B8"
+            "%20%28Alien%29%EF%BC%82%20%EF%BD%9C%20%5BStray%20Kids%20%EF%BC"
+            "%9A%20SKZ-RECORD%5D__%23__meQvDHBSxbQ.m4a"
+        )
+        timestamp = "2026-04-10_13:29:17"
+        long_name = f"{prefix}>>>{filename}<<<{timestamp}"
+        assert len(long_name.encode()) > 255, "Test input should exceed 255 bytes"
+
+        r = fish_eval(f"echo (_trash_safe_name '{long_name}')")
+        assert r.returncode == 0
+        result = r.stdout.strip()
+        assert len(result.encode()) <= 255
+        # Should still start with the original prefix for readability
+        assert result.startswith("%2FUsers")
+
+
+# =============================================================================
 # Trash — basic file operations
 # =============================================================================
 
@@ -125,6 +200,27 @@ class TestTrash:
         )
         assert r.returncode == 1
         assert "file not found" in r.stderr.lower()
+
+    def test_trash_long_filename(self, tmp_path):
+        """Trashing a file whose encoded name exceeds 255 bytes should succeed."""
+        # Korean chars expand significantly when URL-encoded
+        long_name = "한글테스트" * 10 + ".m4a"
+        src = tmp_path / long_name
+        src.write_text("music")
+        home = tmp_path / "home"
+        home.mkdir()
+        (home / ".Trash").mkdir()
+
+        r = fish_eval(
+            f"cd {tmp_path} && trash '{long_name}'",
+            env={"HOME": str(home)},
+        )
+        assert r.returncode == 0
+        assert not src.exists(), "Original file should be gone"
+        trash_contents = list((home / ".Trash").iterdir())
+        assert len(trash_contents) == 1
+        trash_name = trash_contents[0].name
+        assert len(trash_name.encode()) <= 255
 
     def test_trash_mixed_existing_and_missing(self, tmp_path):
         """If some files exist and some don't, trash the ones that exist and fail."""
@@ -239,6 +335,29 @@ class TestRestore:
         lines = history.read_text().strip().split("\n")
         assert len(lines) == 1
         assert "second.txt" in lines[0]
+
+    def test_restore_long_filename(self, tmp_path):
+        """Restore works correctly for files whose trash name was truncated."""
+        long_name = "한글테스트" * 10 + ".m4a"
+        src = tmp_path / long_name
+        src.write_text("music data")
+        home = tmp_path / "home"
+        home.mkdir()
+        (home / ".Trash").mkdir()
+
+        fish_eval(
+            f"cd {tmp_path} && trash '{long_name}'",
+            env={"HOME": str(home)},
+        )
+        assert not src.exists()
+
+        r = fish_eval(
+            f"cd {tmp_path} && restore 1",
+            env={"HOME": str(home)},
+        )
+        assert r.returncode == 0
+        assert src.exists()
+        assert src.read_text() == "music data"
 
     def test_restore_invalid_line_number(self, tmp_path):
         """Restoring a nonexistent line should fail."""

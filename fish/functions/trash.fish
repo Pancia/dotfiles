@@ -11,6 +11,24 @@ function _trash_decode_path --description 'Decode a URL-encoded trash path'
     string replace -a '%2F' '/' "$argv[1]" | string unescape --style=url
 end
 
+function _trash_safe_name --description 'Truncate trash filename to fit macOS 255-byte limit'
+    set -l name "$argv[1]"
+    set -l byte_len (printf '%s' "$name" | wc -c | string trim)
+    if test $byte_len -le 255
+        echo "$name"
+        return
+    end
+    # Generate a compact unique ID, truncate name to fit
+    set -l uid (exocortex-id)
+    set -l uid_len (math (string length "$uid") + 1)
+    set -l max_bytes (math 255 - $uid_len)
+    set -l truncated "$name"
+    while test (printf '%s' "$truncated" | wc -c | string trim) -gt $max_bytes
+        set truncated (string sub -l (math (string length "$truncated") - 1) "$truncated")
+    end
+    echo "$truncated-$uid"
+end
+
 function _record_trash --description 'Record trashed file'
     set -l history_file (_trash_history_path)
     set -l max_history 500
@@ -58,7 +76,8 @@ function trash --description 'Move files to trash with history'
         if test -e "$f"
             set -l trash_dir (_trash_dir_for_path "$f")
             set -l f_encoded (_trash_encode_path "$f")
-            set -l dest "$trash_dir/$prefix>>>$f_encoded<<<$suffix"
+            set -l raw_name "$prefix>>>$f_encoded<<<$suffix"
+            set -l dest "$trash_dir/"(_trash_safe_name "$raw_name")
             echo "[dotfiles/trash] INFO: moving '$f' to '$dest'"
             mv "$f" "$dest"
             or begin

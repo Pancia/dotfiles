@@ -1,5 +1,6 @@
 require 'music/music_db.rb'
 require 'json'
+require 'tempfile'
 require 'set'
 require 'net/http'
 require 'uri'
@@ -201,7 +202,7 @@ module MusicCMD
 
   def _interactive_edit(table)
     loop do
-      print "\e[36m[a]ccept | [e]dit N | [p]laylist N | [s]kip N | [r]eshow | [q]uit\e[0m > "
+      print "\e[36m[a]ccept | [e]dit N | [v]im | [p]laylist N | [s]kip N | [r]eshow | [q]uit\e[0m > "
       input = $stdin.gets&.strip
       return if input.nil?
 
@@ -213,6 +214,9 @@ module MusicCMD
         table.each { |r| r[:skip] = true }
         puts "Aborted — all skipped."
         return
+      when "v"
+        _vim_edit(table)
+        _display_table(table)
       when "r"
         _display_table(table)
       when /^s\s+(\d+)$/
@@ -262,6 +266,60 @@ module MusicCMD
       else
         puts "  Unknown command. Try: a, e N, p N, s N, r, q"
       end
+    end
+  end
+
+  def _vim_edit(table)
+    tmpfile = Tempfile.new(["ai_import_edit", ".txt"])
+    begin
+      tmpfile.puts "# Edit fields. Comment out a line (#) to skip it."
+      tmpfile.puts "# ROW -$- ARTIST -@- TITLE -#- PLAYLIST"
+      table.each do |row|
+        line = "#{row[:idx] + 1} -$- #{row[:artist]} -@- #{row[:title]} -#- #{row[:playlist]}"
+        line = "# #{line}" if row[:skip]
+        tmpfile.puts line
+      end
+      tmpfile.close
+
+      unless system(ENV.fetch("EDITOR", "vim"), tmpfile.path)
+        puts "  \e[33mEditor exited with error — no changes applied.\e[0m"
+        return
+      end
+
+      seen = Set.new
+      File.readlines(tmpfile.path).each do |line|
+        line = line.strip
+        next if line.empty?
+        next if line.start_with?("# ROW -$-") || line == "# Edit fields. Comment out a line (#) to skip it."
+
+        skipped = false
+        if line.start_with?("#")
+          skipped = true
+          line = line.sub(/^#\s*/, "")
+        end
+
+        parts = line.split(/\s*-\$-\s*|\s*-@-\s*|\s*-#-\s*/)
+        unless parts.size == 4
+          puts "  \e[33mSkipping malformed line: #{line[0..60]}\e[0m"
+          next
+        end
+
+        n = parts[0].to_i - 1
+        unless n >= 0 && n < table.size
+          puts "  \e[33mSkipping invalid row number: #{parts[0]}\e[0m"
+          next
+        end
+
+        seen << n
+        table[n][:artist] = parts[1]
+        table[n][:title] = parts[2]
+        table[n][:playlist] = parts[3]
+        table[n][:skip] = skipped
+      end
+
+      puts "  \e[32mUpdated #{seen.size} row(s) from editor.\e[0m"
+    ensure
+      tmpfile.unlink
     end
   end
 
