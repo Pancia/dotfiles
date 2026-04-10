@@ -3,6 +3,14 @@ function _trash_history_path
     echo "$HOME/.cache/dotfiles/trash/history"
 end
 
+function _trash_encode_path --description 'URL-encode a path for use in trash filenames'
+    string escape --style=url "$argv[1]" | string replace -a '/' '%2F'
+end
+
+function _trash_decode_path --description 'Decode a URL-encoded trash path'
+    string replace -a '%2F' '/' "$argv[1]" | string unescape --style=url
+end
+
 function _record_trash --description 'Record trashed file'
     set -l history_file (_trash_history_path)
     set -l max_history 500
@@ -18,19 +26,46 @@ function _record_trash --description 'Record trashed file'
     end
 end
 
+function _trash_dir_for_path --description 'Return the trash directory for a file path'
+    # Resolve only the directory to avoid following a final symlink component
+    set -l resolved_dir (realpath (dirname "$argv[1]"))
+    set -l file_path "$resolved_dir/"(basename "$argv[1]")
+    if string match -q '/Volumes/*' "$file_path"
+        set -l volume (string replace -r '^(/Volumes/[^/]+).*' '$1' "$file_path")
+        set -l trash_dir "$volume/.Trashes/"(id -u)
+        if not test -d "$trash_dir"
+            mkdir -p "$trash_dir" 2>/dev/null
+            or begin
+                echo "[dotfiles/trash] WARN: can't create $trash_dir, using ~/.Trash" >&2
+                echo "$HOME/.Trash"
+                return
+            end
+        end
+        echo "$trash_dir"
+    else
+        echo "$HOME/.Trash"
+    end
+end
+
 function trash --description 'Move files to trash with history'
     set -l dir (pwd)
     set -l timestamp (date '+%Y-%m-%d_%X')
-    set -l prefix (string replace -a '/' '%' "$dir")
+    set -l prefix (_trash_encode_path "$dir")
     set -l suffix "$timestamp"
     set -l failed false
 
     for f in $argv
         if test -e "$f"
-            set -l f_encoded (string replace -a '/' '%' "$f")
-            set -l dest "$HOME/.Trash/$prefix>>>$f_encoded<<<$suffix"
+            set -l trash_dir (_trash_dir_for_path "$f")
+            set -l f_encoded (_trash_encode_path "$f")
+            set -l dest "$trash_dir/$prefix>>>$f_encoded<<<$suffix"
             echo "[dotfiles/trash] INFO: moving '$f' to '$dest'"
             mv "$f" "$dest"
+            or begin
+                echo "[dotfiles/trash] ERROR: failed to move '$f'" >&2
+                set failed true
+                continue
+            end
             _record_trash "$f" "$prefix" "$suffix" "$dest"
         else
             set failed true
@@ -46,50 +81,55 @@ end
 function restore --description 'Restore files from trash'
     set -l history_file (_trash_history_path)
 
+    set -l line_num
     if test (count $argv) -eq 0
         set -l selected (mktemp)
         cat -n $history_file | tail -r | peco --on-cancel error > $selected
-        and restore $selected
-    else
-        set -l line_num (cat $argv[1] | cut -f1)
-        if test -z "$line_num"
-            echo "[ERROR][restore]: Must select a line" >&2
+        set -l peco_status $status
+        set line_num (cat "$selected" | string trim | cut -f1)
+        command rm -f "$selected"
+
+        if test $peco_status -ne 0; or test -z "$line_num"
             return 1
         end
-
-        set -l line (awk "{ if (NR == $line_num) { print \$0 } }" $history_file)
-        set -l src (echo "$line" | cut -f4)
-
-        # Extract the filename from the trash path
-        set -l trash_basename (basename "$src")
-
-        # Parse the encoded filename: prefix>>>filename<<<timestamp
-        set -l prefix_encoded (echo "$trash_basename" | sed 's/>>>.*//')
-        set -l fname_encoded (echo "$trash_basename" | sed 's/.*>>>//; s/<<<.*//')
-
-        # Decode the prefix (folder) and filename
-        set -l folder (string replace -a '%' '/' "$prefix_encoded")
-        set -l fname (string replace -a '%' '/' "$fname_encoded")
-
-        # Construct destination path
-        if string match -q '/*' "$fname"
-            set -l dest "$fname"
-        else
-            set -l dest "$folder/$fname"
-        end
-
-        echo "[dotfiles/restore] INFO: moving $src -> $dest"
-
-        # Create destination directory if it doesn't exist
-        mkdir -p (dirname "$dest")
-
-        mv "$src" "$dest"
-        and sed -i '' "$line_num"d $history_file
+    else
+        set line_num $argv[1]
     end
+
+    set -l line (awk "{ if (NR == $line_num) { print \$0 } }" $history_file)
+    if test -z "$line"
+        echo "[ERROR][restore]: Line $line_num not found in history" >&2
+        return 1
+    end
+
+    # Read fields directly from history: fname, encoded_dir, timestamp, trash_path
+    set -l fname (echo "$line" | cut -f1)
+    set -l folder (_trash_decode_path (echo "$line" | cut -f2))
+    set -l src (echo "$line" | cut -f4)
+
+    # Construct destination path
+    set -l dest
+    if string match -q '/*' "$fname"
+        set dest "$fname"
+    else
+        set dest "$folder/$fname"
+    end
+
+    if not test -e "$src"
+        echo "[ERROR][restore]: file not found in trash: $src" >&2
+        echo "  (volume may be unmounted)" >&2
+        return 1
+    end
+
+    echo "[dotfiles/restore] INFO: moving $src -> $dest"
+    mkdir -p (dirname "$dest")
+
+    command mv "$src" "$dest"
+    and sed -i '' "$line_num"d $history_file
 end
 
 function rm --description 'rm with warning to use trash' --wraps rm
-    if isatty stdout
+    if isatty stdin
         echo "[rm] WARNING: prefer \`trash\`" >&2
     end
     command rm $argv
