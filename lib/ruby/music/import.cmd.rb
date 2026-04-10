@@ -24,7 +24,7 @@ module MusicCMD
 
   def import(opts)
     opts.banner = "Usage: import [OPTS] FILES..."
-    opts.info = "Import files into $MUSIC_DB & $MUSIC_DIR (interactive, prompts per file)"
+    opts.info = "Import files into $MUSIC_CATALOG & $MUSIC_LIBRARY (interactive, prompts per file)"
     opts.on("-p", "--playlist PLAYLIST_NAME", "String to use as FILES's PLAYLIST metadata") { |pl|
       $options[:playlist] = pl
     }
@@ -38,9 +38,9 @@ module MusicCMD
 
   def import_single(opts)
     opts.banner = "Usage: import_single -a ARTIST -t TITLE -p PLAYLIST FILE"
-    opts.info = "Import one file into $MUSIC_DB & $MUSIC_DIR (non-interactive, scriptable)"
+    opts.info = "Import one file into $MUSIC_CATALOG & $MUSIC_LIBRARY (non-interactive, scriptable)"
     opts.separator "    All metadata is specified via flags — no prompts. Ideal for scripting/AI."
-    opts.separator "    Generates a UUID, moves the file to $MUSIC_DIR/<uuid>.m4a, and tags it."
+    opts.separator "    Generates a UUID, moves the file to $MUSIC_LIBRARY/<uuid>.m4a, and tags it."
     opts.separator ""
     opts.separator "    Example: music import_single -a 'Artist' -t 'Title' -p 'Playlist' song.m4a"
     opts.separator ""
@@ -87,7 +87,7 @@ module MusicCMD
         p song if options[:verbose]
         if not options[:dry_run] then
           MusicDB.append song
-          execute("cp #{Shellwords.escape f} $MUSIC_DIR/#{uuid}.m4a && trash #{Shellwords.escape f}")
+          execute("cp #{Shellwords.escape f} $MUSIC_LIBRARY/#{uuid}.m4a && trash #{Shellwords.escape f}")
           MusicDB.tag([{"id" => uuid,
                         "artist" => artist,
                         "name" => name,
@@ -116,7 +116,7 @@ module MusicCMD
 
     if not options[:dry_run] then
       MusicDB.append song
-      execute("cp #{Shellwords.escape file} $MUSIC_DIR/#{uuid}.m4a && trash #{Shellwords.escape file}")
+      execute("cp #{Shellwords.escape file} $MUSIC_LIBRARY/#{uuid}.m4a && trash #{Shellwords.escape file}")
       MusicDB.tag([{"id" => uuid,
                     "artist" => artist,
                     "name" => name,

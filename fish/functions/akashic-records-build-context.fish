@@ -1,5 +1,5 @@
 function sanctuary-build-context --description "Aggregate context from TheAkashicRecords for Claude"
-    set -l akashic "$HOME/TheAkashicRecords"
+    set -l akashic "$HOME/Vaults/the-akashic-records"
 
     # Vision (full content)
     if test -f "$akashic/vision.md"

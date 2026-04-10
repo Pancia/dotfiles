@@ -4,10 +4,11 @@ set lib_sort=album
 set softvol=true
 set start_view=sorted
 set scroll_offset=7
+set tree_width_percent=15
+set tree_width_max=20
 
-# %{genre} is used because %{comment} is not recognized
-set format_playlist= %-15{album} | %-15%{artist} > %{title}%= %{?genre?%g} %{duration} #%{play_count} .
-set format_current= %{album} | %{artist} > %{title}%=%{?genre?%g}
+set format_playlist= %-15{album} | %-15%{artist} > %{title}%= %{duration} #%{play_count} .
+set format_current= %{album} | %{artist} > %{title}
 set status_display_program=cmus-status-display
 
 unbind -f common t

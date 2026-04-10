@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
 
 set -g script_dir (dirname (status filename))
-set -g akashic "$HOME/TheAkashicRecords"
+set -g akashic "$HOME/Vaults/the-akashic-records"
 set -g state_dir "$HOME/.local/state/sanctuary"
 set -g main_md "$akashic/_main.md"
 

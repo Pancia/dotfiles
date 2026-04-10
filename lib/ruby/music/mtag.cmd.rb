@@ -47,7 +47,7 @@ module MusicCMD
   def mtag(opts)
     opts.banner = "Usage: mtag [OPTS] ITEM"
     opts.info = "Write DB metadata into .m4a file tags via ffmpeg (DB -> file sync)"
-    opts.separator "    Reads song data from $MUSIC_DB and writes artist/title/album/genre"
+    opts.separator "    Reads song data from $MUSIC_CATALOG and writes artist/title/album/genre"
     opts.separator "    into the file's embedded metadata. Only updates fields that differ."
     opts.separator "    ITEM is matched against --filter field (default: .id) to find songs."
     opts.separator ""

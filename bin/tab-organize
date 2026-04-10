@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-BROWSER_SYNC = Path.home() / "TheAkashicRecords/browser-sync"
+BROWSER_SYNC = Path.home() / "Vaults/the-akashic-records/browser-sync"
 STATE_PATH = BROWSER_SYNC / "state.json"
 FIFO_PATH = BROWSER_SYNC / "cmd.fifo"
 PLANS_DIR = BROWSER_SYNC / "plans"

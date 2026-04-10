@@ -4,7 +4,7 @@ module MusicCMD
 
   def import_tags(opts)
     opts.banner = "Usage: import_tags [OPTIONS] FILE"
-    opts.info = "Import tags from a file into $MUSIC_DB & music files"
+    opts.info = "Import tags from a file into $MUSIC_CATALOG & music files"
     opts.separator "    FILE is a text file, one song per line, format:"
     opts.separator "      UUID -$- Artist -@- Title -#- tag1, tag2"
     opts.separator "    Tags are merged with existing tags (not replaced). Blank lines are skipped."

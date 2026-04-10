@@ -8,7 +8,7 @@ require 'shellwords'
 
 module MusicCMD
 
-  YTDL_MUSIC_DIR = File.expand_path("~/Cloud/ytdl/music")
+  YTDL_MUSIC_DIR = ENV['MUSIC_INBOX'] || File.expand_path("~/Cloud/ytdl/music")
   SYNCTHING_CONFIG = File.expand_path("~/Library/Application Support/Syncthing/config.xml")
   SYNCTHING_PORT = 8384
 

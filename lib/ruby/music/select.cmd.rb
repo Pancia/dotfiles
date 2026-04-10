@@ -26,7 +26,7 @@ module MusicCMD
         items.each do |item|
           files = MusicDB.find item, $options[:filter]
           files.split("\n").each do |f|
-            system("cmus-remote $MUSIC_DIR/#{f}")
+            system("cmus-remote $MUSIC_LIBRARY/#{f}")
           end
         end
         system("cmus-remote --raw 'view playlist'")

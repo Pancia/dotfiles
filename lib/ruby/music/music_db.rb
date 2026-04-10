@@ -8,7 +8,7 @@ class MusicDB
     tmp = Tempfile.new temp_name
     p tmp.path if $options[:verbose]
     IO.write tmp, JSON.generate(music)
-    %x[ cat #{tmp.path} | jq '.' > $MUSIC_DB ]
+    %x[ cat #{tmp.path} | jq '.' > $MUSIC_CATALOG ]
   end
 
   def self.append(song)
@@ -20,32 +20,32 @@ class MusicDB
 
   def self.read(filter = nil)
     if filter
-      %x[ cat $MUSIC_DB | jq -r '.[] | #{filter}' ]
+      %x[ cat $MUSIC_CATALOG | jq -r '.[] | #{filter}' ]
     else
-      raw = %x[ cat $MUSIC_DB | jq '.' ]
+      raw = %x[ cat $MUSIC_CATALOG | jq '.' ]
       if raw.strip.empty?
-        abort "Error: Could not read $MUSIC_DB (#{ENV['MUSIC_DB']}). File may be inaccessible or empty."
+        abort "Error: Could not read $MUSIC_CATALOG (#{ENV['MUSIC_CATALOG']}). File may be inaccessible or empty."
       end
       JSON.parse raw
     end
   end
 
   def self.find(item, filter)
-    %x< cat $MUSIC_DB | jq -r '.[] | select(#{filter} == $item) | "\\(.id).m4a"' --arg item "#{item}" >
+    %x< cat $MUSIC_CATALOG | jq -r '.[] | select(#{filter} == $item) | "\\(.id).m4a"' --arg item "#{item}" >
   end
 
   def self.select(item, filter)
-    JSON.parse %x[ cat $MUSIC_DB | jq '[.[] | select(#{filter} == $item)]' --arg item "#{item}" ]
+    JSON.parse %x[ cat $MUSIC_CATALOG | jq '[.[] | select(#{filter} == $item)]' --arg item "#{item}" ]
   end
 
   def self.select_raw(select)
-    JSON.parse %x[ cat $MUSIC_DB | jq '[.[] | #{select}]' ]
+    JSON.parse %x[ cat $MUSIC_CATALOG | jq '[.[] | #{select}]' ]
   end
 
   @meta_to_db = {"artist"=>"artist", "title"=>"name", "album"=>"playlist", "genre" => "tags"}
 
   def self.metadata(item)
-    metadata = JSON.parse(%x[ ffprobe -v quiet -print_format json -show_format "$MUSIC_DIR/#{item["id"]}.m4a"])
+    metadata = JSON.parse(%x[ ffprobe -v quiet -print_format json -show_format "$MUSIC_LIBRARY/#{item["id"]}.m4a"])
     fmt = metadata.fetch("format", nil)
     return {} if not fmt
     return fmt["tags"]
@@ -88,7 +88,7 @@ class MusicDB
         log_dir = File.expand_path("~/.log/music")
         FileUtils.mkdir_p(log_dir)
         log = "#{log_dir}/#{i["id"]}.log"
-        system("ffmpeg -v warning -i $MUSIC_DIR/#{file} #{meta_str} $MUSIC_DIR/#{tmp} 2>&1 | tee -a #{log} && mv $MUSIC_DIR/#{tmp} $MUSIC_DIR/#{file}")
+        system("ffmpeg -v warning -i $MUSIC_LIBRARY/#{file} #{meta_str} $MUSIC_LIBRARY/#{tmp} 2>&1 | tee -a #{log} && mv $MUSIC_LIBRARY/#{tmp} $MUSIC_LIBRARY/#{file}")
         return :tagged
       end
     end
@@ -174,13 +174,13 @@ class MusicDB
         puts meta_str if $options[:verbose]
         file = i["id"]+".m4a"
         tmp = i["id"]+".tmp.m4a"
-        output = `ffmpeg -v warning -i "$MUSIC_DIR/#{file}" #{meta_str} "$MUSIC_DIR/#{tmp}" 2>&1`
-        if $?.success? && File.exist?("#{ENV['MUSIC_DIR']}/#{tmp}")
-          system("mv \"$MUSIC_DIR/#{tmp}\" \"$MUSIC_DIR/#{file}\"")
+        output = `ffmpeg -v warning -i "$MUSIC_LIBRARY/#{file}" #{meta_str} "$MUSIC_LIBRARY/#{tmp}" 2>&1`
+        if $?.success? && File.exist?("#{ENV['MUSIC_LIBRARY']}/#{tmp}")
+          system("mv \"$MUSIC_LIBRARY/#{tmp}\" \"$MUSIC_LIBRARY/#{file}\"")
           return [:tagged, nil]
         else
           # Cleanup tmp file if it exists
-          system("rm -f \"$MUSIC_DIR/#{tmp}\"")
+          system("rm -f \"$MUSIC_LIBRARY/#{tmp}\"")
           return [:failed, output.strip]
         end
       end

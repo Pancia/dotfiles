@@ -30,7 +30,7 @@ for url in "$@"; do
 
     # Also check ToRead.md and the special files
     if [ -z "$found" ]; then
-        for special in "$INBOX/ToRead.md" "$HOME/TheAkashicRecords/later.md" "$HOME/TheAkashicRecords/tasks.md"; do
+        for special in "$INBOX/ToRead.md" "$HOME/Vaults/the-akashic-records/later.md" "$HOME/Vaults/the-akashic-records/tasks.md"; do
             if [ -f "$special" ] && grep -qF "$url" "$special" 2>/dev/null; then
                 found=$(basename "$special")
                 break

@@ -1,5 +1,5 @@
 function sanctuary-build-context --description "Aggregate context from TheAkashicRecords for sanctuary's claude intention setter"
-    set -l akashic "$HOME/TheAkashicRecords"
+    set -l akashic "$HOME/Vaults/the-akashic-records"
     set -l sanctuary_dir (dirname (status dirname))"/sanctuary"
 
     # Vision

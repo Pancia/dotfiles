@@ -1,7 +1,7 @@
 function sanctuary-list-focuses --description "List areas and projects for fzf selection"
     # Output format: path|display_name|description
     # For use with fzf --delimiter='|' --with-nth=2,3
-    set -l akashic "$HOME/TheAkashicRecords"
+    set -l akashic "$HOME/Vaults/the-akashic-records"
 
     # Areas
     if test -d "$akashic/areas"

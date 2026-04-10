@@ -23,7 +23,7 @@ set -gx fzfm_list_cmd_jump_frecent_aux "cat \
 # Git project jumping - searches for .git directories in FZFM_PROJECT_ROOTS
 set -gx FZFM_PROJECT_ROOTS $HOME/projects $HOME/AndroidStudioProjects $HOME/private/ $HOME/ProtonDrive/
 
-set -gx FZFM_EXTRA_PROJECTS $HOME/TheAkashicRecords $HOME/TheAkashicRecords/tools/inari/
+set -gx FZFM_EXTRA_PROJECTS $HOME/Vaults/the-akashic-records $HOME/Vaults/the-akashic-records/tools/inari/
 
 set -gx fzfm_list_cmd_jump_projects "cat \
     (fd --type d --hidden --no-ignore --prune --glob '.git' --max-depth 4 \

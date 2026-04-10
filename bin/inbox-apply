@@ -16,8 +16,8 @@
 # Destinations map to:
 #   FolderName  → ~/Cloud/_inbox/FolderName/_INDEX.md
 #   ToRead      → ~/Cloud/_inbox/ToRead.md
-#   later       → ~/TheAkashicRecords/later.md
-#   tasks       → ~/TheAkashicRecords/tasks.md
+#   later       → ~/Vaults/the-akashic-records/later.md
+#   tasks       → ~/Vaults/the-akashic-records/tasks.md
 #   bookmarks   → ~/Cloud/bookmarks/_INDEX.md
 
 set -euo pipefail
@@ -36,8 +36,8 @@ resolve_dest() {
     local dest="$1"
     case "$dest" in
         ToRead)     echo "$INBOX/ToRead.md" ;;
-        later)      echo "$HOME/TheAkashicRecords/later.md" ;;
-        tasks)      echo "$HOME/TheAkashicRecords/tasks.md" ;;
+        later)      echo "$HOME/Vaults/the-akashic-records/later.md" ;;
+        tasks)      echo "$HOME/Vaults/the-akashic-records/tasks.md" ;;
         bookmarks)  echo "$HOME/Cloud/bookmarks/_INDEX.md" ;;
         *)          echo "$INBOX/$dest/_INDEX.md" ;;
     esac

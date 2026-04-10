@@ -33,7 +33,7 @@
         },
         {
             "area": "board",
-            "dir": "$HOME/TheAkashicRecords/",
+            "dir": "$HOME/Vaults/the-akashic-records/",
             "tabs": [
                 "vim work-festivar.md"
             ]

@@ -1,5 +1,5 @@
 {
-    "b": ["browser sync state", {"interactive": "nvim ~/TheAkashicRecords/browser-sync/current.md"}],
+    "b": ["browser sync state", {"interactive": "nvim ~/Vaults/the-akashic-records/browser-sync/current.md"}],
     "c": ["calendar", {"interactive": "agenda 24"}],
     "d": {
         "_desc": "+dotfiles",

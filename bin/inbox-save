@@ -6,8 +6,8 @@
 # destination: folder name under ~/Cloud/_inbox/ (e.g. BBQueue, Reference, TODO)
 #              OR a special value:
 #              - "ToRead" → append to ~/Cloud/_inbox/ToRead.md
-#              - "later"  → append to ~/TheAkashicRecords/later.md
-#              - "tasks"  → append to ~/TheAkashicRecords/tasks.md
+#              - "later"  → append to ~/Vaults/the-akashic-records/later.md
+#              - "tasks"  → append to ~/Vaults/the-akashic-records/tasks.md
 # url:         the source URL
 # title:       optional page title (used for filename and heading)
 #
@@ -37,11 +37,11 @@ case "$dest" in
         echo "Appended to ToRead.md: $title"
         ;;
     later)
-        echo "- [$title]($url)" >> "$HOME/TheAkashicRecords/later.md"
+        echo "- [$title]($url)" >> "$HOME/Vaults/the-akashic-records/later.md"
         echo "Appended to later.md: $title"
         ;;
     tasks)
-        echo "- [ ] [$title]($url)" >> "$HOME/TheAkashicRecords/tasks.md"
+        echo "- [ ] [$title]($url)" >> "$HOME/Vaults/the-akashic-records/tasks.md"
         echo "Appended to tasks.md: $title"
         ;;
     *)

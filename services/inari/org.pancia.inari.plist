@@ -6,7 +6,7 @@
         <string>org.pancia.inari</string>
         <key>ProgramArguments</key>
         <array>
-            <string>/Users/anthony/TheAkashicRecords/tools/inari/bin/inari-attend</string>
+            <string>/Users/anthony/Vaults/the-akashic-records/tools/inari/bin/inari-attend</string>
         </array>
         <key>KeepAlive</key>
         <true/>
