@@ -24,9 +24,11 @@ scan "/" du -d 1 -k / > "$OUT"
 scan "~" du -d 1 -k "$HOME" >> "$OUT"
 scan "~/Library" du -d 1 -k "$HOME/Library" >> "$OUT"
 scan "~/Library/Caches" du -d 1 -k "$HOME/Library/Caches" >> "$OUT"
+scan "~/Library/CloudStorage" du -d 1 -k "$HOME/Library/CloudStorage" >> "$OUT"
 scan "~/.cache" du -d 1 -k "$HOME/.cache" >> "$OUT"
 scan "~/.local" du -d 2 -k "$HOME/.local" >> "$OUT"
 scan "~/AndroidStudioProjects" du -d 1 -k "$HOME/AndroidStudioProjects" >> "$OUT"
+[ -d /Volumes/vansuny128 ] && scan "/Volumes/vansuny128" du -d 1 -k /Volumes/vansuny128 >> "$OUT"
 
 log "Scanning ~/projects (git repos) ..."
 {

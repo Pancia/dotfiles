@@ -68,6 +68,12 @@ while IFS= read -r line; do
             continue
         fi
 
+        # Ensure target ends with a newline before appending (avoids
+        # concatenating onto a trailing partial line).
+        if [ -s "$target" ] && [ "$(tail -c1 "$target" | wc -l)" -eq 0 ]; then
+            echo "" >> "$target"
+        fi
+
         # Append entry
         echo "$line" >> "$target"
         count=$((count + 1))

@@ -11,14 +11,24 @@
         <key>RunAtLoad</key>
         <true/>
         <key>StartCalendarInterval</key>
-        <dict>
-            <key>Weekday</key>
-            <integer>0</integer>
-            <key>Hour</key>
-            <integer>3</integer>
-            <key>Minute</key>
-            <integer>0</integer>
-        </dict>
+        <array>
+            <dict>
+                <key>Weekday</key>
+                <integer>0</integer>
+                <key>Hour</key>
+                <integer>3</integer>
+                <key>Minute</key>
+                <integer>0</integer>
+            </dict>
+            <dict>
+                <key>Weekday</key>
+                <integer>3</integer>
+                <key>Hour</key>
+                <integer>3</integer>
+                <key>Minute</key>
+                <integer>0</integer>
+            </dict>
+        </array>
         <key>StandardOutPath</key>
         <string>/Users/anthony/.log/services/disk-snapshot.log</string>
         <key>StandardErrorPath</key>

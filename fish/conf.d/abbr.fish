@@ -1,7 +1,7 @@
 # Abbreviations
 abbr -a cc my-claude-code-wrapper
 abbr -a ccc cc-config
-abbr -a oo my-opencode-wrapper
+abbr -a oo 'cd ~/Cloud/'
 abbr -a dd 'cd ~/dotfiles/'
 abbr -a kk 'cd ~/Vaults/the-akashic-records/'
 abbr -a mm 'cd $MUSIC_VAULT'
