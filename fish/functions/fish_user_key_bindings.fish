@@ -13,6 +13,8 @@ function fish_user_key_bindings
     # Unbind ctrl-j so it acts as normal newline
     bind \cj execute
 
-    # Tab - fzf completion for p and d commands, normal completion otherwise
-    bind \t __fzf_complete_cmd
+    # Tab - fzf completion
+    bind \t _fzf_complete
+    bind -k nul _fzf_complete
+    bind -k btab complete-and-search
 end

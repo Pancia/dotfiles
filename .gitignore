@@ -13,6 +13,13 @@ misc/monitor-analysis/*.json
 misc/yt-organize/*.json
 fish/functions/_*
 !fish/functions/_tide_item_dashboard.fish
+!fish/functions/_fzf_complete.fish
+!fish/functions/__fzf_complete_reload.fish
+!fish/functions/__fzf_complete_gather_raw.fish
+!fish/functions/__fzf_complete_navigate.fish
+!fish/functions/__fzf_complete_log.fish
+!fish/functions/__fzf_complete_state_read.fish
+!fish/functions/__fzf_complete_state_write.fish
 fish/functions/tide.fish
 fish/functions/tide/
 fish/functions/fisher.fish
