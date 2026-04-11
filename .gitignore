@@ -17,6 +17,7 @@ fish/functions/_*
 !fish/functions/__fzf_complete_reload.fish
 !fish/functions/__fzf_complete_gather_raw.fish
 !fish/functions/__fzf_complete_navigate.fish
+!fish/functions/__fzf_complete_tab.fish
 !fish/functions/__fzf_complete_log.fish
 !fish/functions/__fzf_complete_state_read.fish
 !fish/functions/__fzf_complete_state_write.fish

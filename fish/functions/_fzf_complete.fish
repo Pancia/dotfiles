@@ -24,7 +24,7 @@ function _fzf_complete
   set --local min_prompt_size 40
   set --local max_prompt_offset (math "$COLUMNS - $min_prompt_size")
 
-  set --local fzf_offset (math "min($token_pos_on_screen - 3, $max_prompt_offset)")
+  set --local fzf_offset (math "max(0, min($token_pos_on_screen - 3, $max_prompt_offset))")
 
   if test (math $token_pos_on_screen + (string length -- $current_token)) -gt $COLUMNS
     set fzf_offset 0
@@ -99,9 +99,9 @@ function _fzf_complete
       # --no-config + -C avoids the ~1.2s config.fish/plugin startup cost per keystroke.
       set --local fish_fast 'fish --no-config -C \'set fish_function_path ~/.config/fish/functions $fish_function_path\''
       set --append fzf_args --bind "change:reload($fish_fast -c \"__fzf_complete_reload {q}\")"
-      # Tab dives into a directory: navigate updates state+prefix, then we set the
-      # query to the new prefix, which triggers change:reload to refetch the list.
-      set --append fzf_args --bind "tab:transform-query($fish_fast -c \"__fzf_complete_navigate {} > /dev/null; echo -n \\\$_fzf_complete_fd_prefix\")"
+      # Tab on a directory dives in (navigate + change-query triggers reload).
+      # Tab on a file accepts the completion.
+      set --append fzf_args --bind "tab:transform($fish_fast -c \"__fzf_complete_tab {}\")"
     end
   end
 

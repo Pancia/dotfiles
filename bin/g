@@ -309,6 +309,7 @@ JJ_COMMANDS = {
         'p': ('Push', chain('jj git push', JJ_STATUS)),
         'a': ('Push all bookmarks', chain('jj git push --all', JJ_STATUS)),
         'm': ('Advance master to @- + push', chain('jj bookmark set master --allow-backwards -r @-', 'jj git push', JJ_STATUS)),
+        'M': ('Advance master to @- (no push)', chain('jj bookmark set master --allow-backwards -r @-', JJ_STATUS)),
     },
     'q': {
         '_desc': 'Squash',
