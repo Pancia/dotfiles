@@ -192,6 +192,12 @@ def _chain_has_commit(command):
     return False
 
 
+# Enhanced status: mirrors the `gs` fish function (diff --stat + separator + status)
+_STATUS_SEP = '(set_color brblack)(string repeat -n 60 -)(set_color normal)'
+GIT_STATUS = f'git diff --stat; and echo {_STATUS_SEP}; and git status'
+JJ_STATUS = f'jj diff --stat; and echo {_STATUS_SEP}; and jj status'
+
+
 # Chain: run multiple commands sequentially with headers between them
 class Chain(tuple):
     """A sequence of shell commands to run with visual headers."""
@@ -208,20 +214,20 @@ GIT_COMMANDS = {
     '_desc': 'Git',
     'a': {
         '_desc': 'Add',
-        'f': ('Add file (fzf)', chain('printf \'%s\\n\' (git ls-files -m -o --exclude-standard) (git ls-files -m -o --exclude-standard | xargs -n1 dirname 2>/dev/null) | sort -u | grep -v \'^\\.\\$\' | fzf -m --bind "space:toggle+down" --bind "enter:select+accept" --header "SPACE=toggle  ENTER=accept" | xargs git add', 'git status'), True),
-        '.': ('Add this directory', chain('git add .', 'git status'), True),
-        'a': ('Add all', chain('git add --all', 'git status')),
-        'p': ('Add interactively', chain('git add --patch', 'git status')),
+        'f': ('Add file (fzf)', chain('printf \'%s\\n\' (git ls-files -m -o --exclude-standard) (git ls-files -m -o --exclude-standard | xargs -n1 dirname 2>/dev/null) | sort -u | grep -v \'^\\.\\$\' | fzf -m --bind "space:toggle+down" --bind "enter:select+accept" --header "SPACE=toggle  ENTER=accept" | xargs git add', GIT_STATUS), True),
+        '.': ('Add this directory', chain('git add .', GIT_STATUS), True),
+        'a': ('Add all', chain('git add --all', GIT_STATUS)),
+        'p': ('Add interactively', chain('git add --patch', GIT_STATUS)),
     },
     'b': ('Blame (fzf)', 'git ls-files | fzf | xargs git blame'),
     'c': {
         '_desc': 'Commit',
-        'c': ('Commit', chain('git commit --verbose', 'git status')),
-        'a': ('Commit all', chain('git commit --verbose --all', 'git status')),
-        'm': ('Amend', chain('git commit --amend --verbose', 'git status')),
-        'p': ('Commit interactively', chain('git commit --patch', 'git status')),
-        'i': ('Commit (AI message)', chain('ai_git_commit', 'git status')),
-        'I': ('Add all + AI commit', chain('git add --all', 'ai_git_commit', 'git status')),
+        'c': ('Commit', chain('git commit --verbose', GIT_STATUS)),
+        'a': ('Commit all', chain('git commit --verbose --all', GIT_STATUS)),
+        'm': ('Amend', chain('git commit --amend --verbose', GIT_STATUS)),
+        'p': ('Commit interactively', chain('git commit --patch', GIT_STATUS)),
+        'i': ('Commit (AI message)', chain('ai_git_commit', GIT_STATUS)),
+        'I': ('Add all + AI commit', chain('git add --all', 'ai_git_commit', GIT_STATUS)),
     },
     'd': {
         '_desc': 'Diff',
@@ -231,8 +237,8 @@ GIT_COMMANDS = {
     },
     'f': {
         '_desc': 'Fetch/Pull',
-        'f': ('Fetch all', chain('git fetch --all --prune', 'git status')),
-        'l': ('Pull', chain('git pull', 'git status')),
+        'f': ('Fetch all', chain('git fetch --all --prune', GIT_STATUS)),
+        'l': ('Pull', chain('git pull', GIT_STATUS)),
     },
     'h': {
         '_desc': 'Show',
@@ -242,24 +248,24 @@ GIT_COMMANDS = {
     'l': ('Log graph', 'git log --graph --all --decorate --abbrev-commit'),
     'p': {
         '_desc': 'Push',
-        'p': ('Push', chain('git push', 'git status')),
-        'f': ('Push force++', chain('read -l -P "Force push? [y/N] " confirm; and test "$confirm" = y; and git push --force-with-lease --force-if-includes', 'git status')),
+        'p': ('Push', chain('git push', GIT_STATUS)),
+        'f': ('Push force++', chain('read -l -P "Force push? [y/N] " confirm; and test "$confirm" = y; and git push --force-with-lease --force-if-includes', GIT_STATUS)),
         },
-    'u': ('Pull', chain('git pull', 'git status')),
+    'u': ('Pull', chain('git pull', GIT_STATUS)),
     'r': {
         '_desc': 'Restore',
-        's': ('Unstage (fzf)', chain('printf \'%s\\n\' (git diff --staged --name-only) (git diff --staged --name-only | xargs -n1 dirname 2>/dev/null) | sort -u | grep -v \'^\\.\\$\' | fzf -m --bind "space:toggle+down" --bind "enter:select+accept" --header "SPACE=toggle  ENTER=accept" | xargs git restore --staged', 'git status'), True),
-        'r': ('Restore file (fzf)', chain('set -l files (printf \'%s\\n\' (git diff --name-only) (git diff --name-only | xargs -n1 dirname 2>/dev/null) | sort -u | grep -v \'^\\.\\$\' | fzf -m --bind "space:toggle+down" --bind "enter:select+accept" --header "SPACE=toggle  ENTER=accept"); and read -l -P "Discard changes? [y/N] " confirm; and test "$confirm" = y; and printf \'%s\\n\' $files | xargs git restore', 'git status'), True),
+        's': ('Unstage (fzf)', chain('printf \'%s\\n\' (git diff --staged --name-only) (git diff --staged --name-only | xargs -n1 dirname 2>/dev/null) | sort -u | grep -v \'^\\.\\$\' | fzf -m --bind "space:toggle+down" --bind "enter:select+accept" --header "SPACE=toggle  ENTER=accept" | xargs git restore --staged', GIT_STATUS), True),
+        'r': ('Restore file (fzf)', chain('set -l files (printf \'%s\\n\' (git diff --name-only) (git diff --name-only | xargs -n1 dirname 2>/dev/null) | sort -u | grep -v \'^\\.\\$\' | fzf -m --bind "space:toggle+down" --bind "enter:select+accept" --header "SPACE=toggle  ENTER=accept"); and read -l -P "Discard changes? [y/N] " confirm; and test "$confirm" = y; and printf \'%s\\n\' $files | xargs git restore', GIT_STATUS), True),
     },
-    's': ('Status', 'git status'),
+    's': ('Status', GIT_STATUS),
     't': {
         '_desc': 'Stash',
-        't': ('Stash', chain('git stash', 'git status')),
-        's': ('Stash save (named)', chain('git stash save', 'git status')),
-        'p': ('Stash pop', chain('git stash pop', 'git status')),
+        't': ('Stash', chain('git stash', GIT_STATUS)),
+        's': ('Stash save (named)', chain('git stash save', GIT_STATUS)),
+        'p': ('Stash pop', chain('git stash pop', GIT_STATUS)),
         'l': ('Stash list', 'git stash list', True),
     },
-    'w': ('Switch branch (fzf)', chain('git branch -a | fzf | xargs git checkout', 'git status')),
+    'w': ('Switch branch (fzf)', chain('git branch -a | fzf | xargs git checkout', GIT_STATUS)),
     '=': ('Edit this menu', ['nvim', __file__, '-c', '/^GIT_COMMANDS', '-c', 'normal zt'], False, True),  # go to root, reload
 }
 
@@ -274,13 +280,13 @@ JJ_COMMANDS = {
     },
     'c': {
         '_desc': 'Commit',
-        'c': ('Commit (describe + new)', chain('jj commit', 'jj status')),
-        'C': ('Commit + advance master + push', chain('jj commit', 'jj bookmark set master --allow-backwards -r @-', 'jj git push', 'jj status')),
-        'h': ('Commit interactive (pick hunks)', chain('jj commit --interactive', 'jj status')),
-        'd': ('Describe @', chain('jj describe', 'jj status')),
-        'p': ('Describe @-', chain('jj describe @-', 'jj status')),
-        'i': ('Commit (AI message)', chain('ai_jj_commit', 'jj status')),
-        'I': ('AI commit + advance master + push', chain('ai_jj_commit', 'jj bookmark set master --allow-backwards -r @-', 'jj git push', 'jj status')),
+        'c': ('Commit (describe + new)', chain('jj commit', JJ_STATUS)),
+        'C': ('Commit + advance master + push', chain('jj commit', 'jj bookmark set master --allow-backwards -r @-', 'jj git push', JJ_STATUS)),
+        'h': ('Commit interactive (pick hunks)', chain('jj commit --interactive', JJ_STATUS)),
+        'd': ('Describe @', chain('jj describe', JJ_STATUS)),
+        'p': ('Describe @-', chain('jj describe @-', JJ_STATUS)),
+        'i': ('Commit (AI message)', chain('ai_jj_commit', JJ_STATUS)),
+        'I': ('AI commit + advance master + push', chain('ai_jj_commit', 'jj bookmark set master --allow-backwards -r @-', 'jj git push', JJ_STATUS)),
     },
     'd': {
         '_desc': 'Diff',
@@ -288,8 +294,8 @@ JJ_COMMANDS = {
         'r': ('Diff revision', 'jj log --no-graph -T \'change_id.short(8) ++ " " ++ description.first_line() ++ "\\n"\' | fzf | awk \'{print $1}\' | xargs jj diff -r', True),
         'f': ('Diff from parent', 'jj diff --from @-', True),
     },
-    'e': ('Edit revision (fzf)', chain('jj log --no-graph -T \'change_id.short(8) ++ " " ++ description.first_line() ++ "\\n"\' | fzf | awk \'{print $1}\' | xargs jj edit', 'jj status')),
-    'f': ('Fetch', chain('jj git fetch', 'jj status')),
+    'e': ('Edit revision (fzf)', chain('jj log --no-graph -T \'change_id.short(8) ++ " " ++ description.first_line() ++ "\\n"\' | fzf | awk \'{print $1}\' | xargs jj edit', JJ_STATUS)),
+    'f': ('Fetch', chain('jj git fetch', JJ_STATUS)),
     'h': {
         '_desc': 'Show',
         'h': ('Show @', 'jj show', True),
@@ -297,34 +303,34 @@ JJ_COMMANDS = {
         'f': ('Show revision (fzf)', 'jj log --no-graph -T \'change_id.short(8) ++ " " ++ description.first_line() ++ "\\n"\' | fzf | awk \'{print $1}\' | xargs jj show', True),
     },
     'l': ('Log', 'jj log'),
-    'n': ('New (empty change)', chain('jj new', 'jj status')),
+    'n': ('New (empty change)', chain('jj new', JJ_STATUS)),
     'p': {
         '_desc': 'Push',
-        'p': ('Push', chain('jj git push', 'jj status')),
-        'a': ('Push all bookmarks', chain('jj git push --all', 'jj status')),
-        'm': ('Advance master to @- + push', chain('jj bookmark set master --allow-backwards -r @-', 'jj git push', 'jj status')),
+        'p': ('Push', chain('jj git push', JJ_STATUS)),
+        'a': ('Push all bookmarks', chain('jj git push --all', JJ_STATUS)),
+        'm': ('Advance master to @- + push', chain('jj bookmark set master --allow-backwards -r @-', 'jj git push', JJ_STATUS)),
     },
     'q': {
         '_desc': 'Squash',
-        'q': ('Squash into parent', chain('jj squash', 'jj status')),
-        'i': ('Squash interactive', chain('jj squash --interactive', 'jj status')),
+        'q': ('Squash into parent', chain('jj squash', JJ_STATUS)),
+        'i': ('Squash interactive', chain('jj squash --interactive', JJ_STATUS)),
     },
     'r': {
         '_desc': 'Rebase/Restore',
-        'r': ('Restore file (fzf)', chain('jj diff --name-only | fzf -m --bind "space:toggle+down" --bind "enter:select+accept" --header "SPACE=toggle  ENTER=accept" | xargs -I{} jj restore --from @- {}', 'jj status'), True),
+        'r': ('Restore file (fzf)', chain('jj diff --name-only | fzf -m --bind "space:toggle+down" --bind "enter:select+accept" --header "SPACE=toggle  ENTER=accept" | xargs -I{} jj restore --from @- {}', JJ_STATUS), True),
         'b': ('Rebase onto (fzf)', 'jj log --no-graph -T \'change_id.short(8) ++ " " ++ description.first_line() ++ "\\n"\' | fzf | awk \'{print $1}\' | xargs -I{} jj rebase -r @ -d {}'),
     },
-    's': ('Status', 'jj status'),
+    's': ('Status', JJ_STATUS),
     'S': {
         '_desc': 'Split',
-        'S': ('Split @ (interactive)', chain('jj split', 'jj status')),
-        'p': ('Split @ parallel (siblings)', chain('jj split -p', 'jj status')),
-        'r': ('Split revision (fzf)', chain('jj log --no-graph -T \'change_id.short(8) ++ " " ++ description.first_line() ++ "\\n"\' | fzf | awk \'{print $1}\' | xargs -I{} jj split -r {}', 'jj status')),
+        'S': ('Split @ (interactive)', chain('jj split', JJ_STATUS)),
+        'p': ('Split @ parallel (siblings)', chain('jj split -p', JJ_STATUS)),
+        'r': ('Split revision (fzf)', chain('jj log --no-graph -T \'change_id.short(8) ++ " " ++ description.first_line() ++ "\\n"\' | fzf | awk \'{print $1}\' | xargs -I{} jj split -r {}', JJ_STATUS)),
     },
-    'u': ('Undo', chain('read -l -P "Undo last jj operation? [y/N] " confirm; and test "$confirm" = y; and jj undo', 'jj status')),
+    'u': ('Undo', chain('read -l -P "Undo last jj operation? [y/N] " confirm; and test "$confirm" = y; and jj undo', JJ_STATUS)),
     'x': {
         '_desc': 'Abandon "all hope ye..."',
-        'x': ('Abandon @ "who enter here"', chain('read -l -P "Abandon current change? [y/N] " confirm; and test "$confirm" = y; and jj abandon @', 'jj status'))
+        'x': ('Abandon @ "who enter here"', chain('read -l -P "Abandon current change? [y/N] " confirm; and test "$confirm" = y; and jj abandon @', JJ_STATUS))
     },
     '?': ('Quick reference', '_jj_help', True),
     '=': ('Edit this menu', ['nvim', __file__, '-c', '/^JJ_COMMANDS', '-c', 'normal zt'], False, True),
@@ -594,10 +600,8 @@ def main_interactive():
     path = ''
 
     # Show status on startup
-    if IS_JJ:
-        subprocess.run(['jj', 'status'])
-    else:
-        subprocess.run(['git', 'status'])
+    subprocess.run(JJ_STATUS if IS_JJ else GIT_STATUS,
+                   shell=True, executable='/opt/homebrew/bin/fish')
     print()
 
     while True:
