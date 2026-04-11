@@ -32,5 +32,6 @@ concat(
   "\n",
   indent("    ", if(description, description, "(no description set)\n")),
   "\n",
+  if(current_working_copy, indent("    ", self.diff().stat(72)) ++ "\n"),
 )
 '''

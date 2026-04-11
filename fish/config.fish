@@ -200,7 +200,7 @@ alias gcai __git_use_g
 # gd -> fish/functions/gd.fish
 function gds; if test -d .jj; jj diff; else; git diff --staged --color-words; end; end
 function gl; if test -d .jj; jj log; else; git log --graph --all --decorate --abbrev-commit; end; end
-function gs; if test -d .jj; jj status; else; git status; end; end
+function gs; set -l sep (set_color brblack)(string repeat -n 60 -)(set_color normal); if test -d .jj; jj diff --stat; and echo $sep; and jj status; else; git diff --stat; and echo $sep; and git status; end; end
 alias gsave __git_use_g
 function gshow; if test -d .jj; jj show $argv; else; git show --patch-with-raw $argv; end; end
 alias gstash __git_use_g
