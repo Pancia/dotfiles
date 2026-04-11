@@ -8,6 +8,22 @@ email = "anthony.dayzerostudio@gmail.com"
 log = "all() ~ (description(exact:\"\") ~ @)"
 
 [templates]
+draft_commit_description = '''
+concat(
+  coalesce(description, default_commit_description, "\n"),
+  surround(
+    "\nJJ: This commit contains the following changes:\n", "",
+    indent("JJ:     ", diff.stat(72)),
+  ),
+  "\nJJ: Lines starting with \"JJ: \" (like this one) will be removed.\n",
+  "JJ:\n",
+  "JJ: ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
+  "JJ: 🛑  To ABORT:  exit with nonzero status  →  :cq  (in vim)\n",
+  "JJ: ⚠️   Empty description is VALID in jj — it will NOT abort!\n",
+  "JJ: ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
+)
+'''
+
 log = '''
 concat(
   "commit " ++ commit_id.short() ++ " " ++ bookmarks ++ " " ++ remote_bookmarks ++ tags ++ if(self.contained_in("first_parent(@)"), " HEAD") ++ "\n",

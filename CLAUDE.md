@@ -6,6 +6,14 @@ Personal development environment for macOS. Focused on automation, productivity,
 
 This is a **jj (Jujutsu) repository**. Use `jj` for all VCS operations — do not use `git` directly. See the global CLAUDE.md for jj workflow details.
 
+## External Sources
+
+Some configuration here glues into external projects. When debugging, check the source repo, not just the dotfiles copy:
+
+| Concern | Source |
+|---------|--------|
+| `fzfm` (fuzzy leader menu — `j`, `d`, `q`, `z`, `Ctrl+S`, `__fzfm_*` functions) | `~/projects/tooling/fzfm/` |
+
 ## Repository Structure
 
 ```
@@ -196,13 +204,15 @@ Symlinked items (data in `~/.local/`, but still accessible at `~/.`):
 | `;;` | Show all commands |
 
 ### Testing
-**Always use `cmds test` to run tests** - never run pytest directly with python. The `cmds` script handles virtual environments and dependencies.
+**Always use `cmds test $argv` from the dotfiles root** — never run `pytest` (or `python -m pytest`) directly. The `cmds` script handles virtual environments and dependencies.
 
 ```bash
-cmds test yt            # Run youtube-transcribe tests
-cmds test yt -v         # Verbose output
-cmds test yt --cov      # With coverage report
-cmds test yt -k "cache" # Run tests matching pattern
+cmds test                      # Run the full suite
+cmds test yt                   # Run youtube-transcribe tests
+cmds test yt -v                # Verbose output
+cmds test yt --cov             # With coverage report
+cmds test yt -k "cache"        # Run tests matching pattern
+cmds test bin/ytdl/test_ytdl.py  # Target a specific file
 ```
 
 ### Claude Code Config (cc-config)

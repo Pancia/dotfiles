@@ -8,9 +8,11 @@
 # ============================================================================
 
 set -g YTDL_VALID_TYPES music audio video text notes
+set -g YTDL_VALID_QUALITIES regular best
 set -g YTDL_OUTPUT_DIR ~/Cloud/ytdl
 set -g YTDL_AUDIO_CODE "bestaudio"
 set -g YTDL_VIDEO_CODE "bestvideo[ext=mp4][height<=480][vcodec^=avc]+bestaudio"
+set -g YTDL_VIDEO_CODE_BEST "bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
 set -g YTDL_PLAYLIST_FMT "%(playlist_title)s"
 
 # ============================================================================
@@ -162,7 +164,11 @@ function _ytdl_download_media
     set -l format_code $YTDL_AUDIO_CODE
     set -l merge_args
     if test "$download_type" = "video"
-        set format_code $YTDL_VIDEO_CODE
+        if test "$YTDL_QUALITY" = "best"
+            set format_code $YTDL_VIDEO_CODE_BEST
+        else
+            set format_code $YTDL_VIDEO_CODE
+        end
         set merge_args --merge-output-format mp4
     end
 
@@ -205,15 +211,31 @@ end
 set -l ytdl_type ""
 set -l input ""
 set -g YTDL_QUIET 0
+set -g YTDL_QUALITY regular
 
-# Parse --quiet flag
+# Parse flags: --quiet, --quality <value>
 set -l args
+set -l expect_quality 0
 for arg in $argv
-    if test "$arg" = "--quiet"
+    if test $expect_quality -eq 1
+        set YTDL_QUALITY $arg
+        set expect_quality 0
+    else if test "$arg" = "--quiet"
         set YTDL_QUIET 1
+    else if test "$arg" = "--quality"
+        set expect_quality 1
     else
         set -a args $arg
     end
+end
+if test $expect_quality -eq 1
+    echo "ERROR: --quality requires a value ($YTDL_VALID_QUALITIES)"
+    exit 1
+end
+if not contains -- $YTDL_QUALITY $YTDL_VALID_QUALITIES
+    echo "ERROR: Invalid quality '$YTDL_QUALITY'"
+    echo "Valid qualities: $YTDL_VALID_QUALITIES"
+    exit 1
 end
 set argv $args
 

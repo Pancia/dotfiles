@@ -22,7 +22,8 @@ function ai_jj_commit --description 'Commit jj change with AI-generated message 
         echo "--- DRY RUN ---" >&2
         cat $msgfile
     else
-        jj commit -m (cat $msgfile | string collect)
+        jj describe -m (cat $msgfile | string collect)
+        jj commit
         cat $msgfile
     end
     rm -f $msgfile

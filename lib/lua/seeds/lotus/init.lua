@@ -66,9 +66,34 @@ end
 
 function obj:speakTime()
     local t = os.date("*t")
-    local hour = t.hour % 12
-    if hour == 0 then hour = 12 end
-    local msg = string.format("%d %02d", hour, t.min)
+    local hour24 = t.hour
+    local min = t.min
+    -- Round to nearest :00 or :30 so drift around the trigger window
+    -- (see isWithinTriggerWindow, ±1 min) still speaks a clean phrase.
+    if min >= 45 then
+        hour24 = (hour24 + 1) % 24
+        min = 0
+    elseif min >= 15 then
+        min = 30
+    else
+        min = 0
+    end
+
+    local msg
+    if min == 0 and hour24 == 0 then
+        msg = "midnight"
+    elseif min == 0 and hour24 == 12 then
+        msg = "noon"
+    else
+        local hour12 = hour24 % 12
+        if hour12 == 0 then hour12 = 12 end
+        if min == 0 then
+            msg = string.format("%d o'clock", hour12)
+        else
+            msg = string.format("%d thirty", hour12)
+        end
+    end
+
     local speaker = hs.speech.new()
     speaker:volume(obj.speakVolume or 0.5)
     speaker:speak(msg)
