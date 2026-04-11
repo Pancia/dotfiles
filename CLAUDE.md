@@ -50,6 +50,7 @@ service edit <name>       # Edit a service's script and plist
 | `ziplog` | Thursday 12:00 | Compress monitor logs >6 days old, archive by month, backup to `~/Cloud/_inbox/monitor/minimac/` |
 | `disk-snapshot` | Sun & Wed 3:00 | Create disk usage snapshot to `~/.local/share/disk-snapshots/` |
 | `bookmark-manager` | Daily 2:00 | Sync browser bookmarks |
+| `music-backup` | Daily 3:00 | Backup music library via `music backup` |
 | `sanctuary` | On demand | Rotate encrypted backup directories |
 | `copyparty` | Startup | Media server for file sharing |
 
