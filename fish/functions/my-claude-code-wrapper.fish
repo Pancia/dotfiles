@@ -14,25 +14,29 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
         end
     end
 
-    # Sync project skills/agents/commands from .cc-config (or default group)
-    if test -f .cc-config
-        set -l cc_hash (md5 -q .cc-config)
-        set -l stamp .claude/.cc-sync-stamp
-        if not test -f $stamp; or test "$cc_hash" != (cat $stamp)
-            set -l cc_profile (string match -v '//*' < .cc-config | string trim)
-            if test -n "$cc_profile"
-                cc-config sync $cc_profile
-                echo $cc_hash > $stamp
-            end
-        end
-    else if test -d .claude
+    # Sync project skills/agents/commands from .cc-config (or default group).
+    # Stamp hashes BOTH .cc-config and the global registry, so adding
+    # a command/skill to a group in cc-config.json invalidates stale stamps.
+    if test -f .cc-config; or test -d .claude
         set -l config_file ~/dotfiles/ai/cc-config.json
-        set -l default_group (jq -r '.default // empty' $config_file)
-        if test -n "$default_group"
-            set -l stamp .claude/.cc-sync-stamp
-            if not test -f $stamp; or test "default:$default_group" != (cat $stamp)
-                cc-config sync $default_group
-                echo "default:$default_group" > $stamp
+        set -l stamp .claude/.cc-sync-stamp
+        set -l cc_hash
+        if test -f .cc-config
+            set cc_hash (cat .cc-config $config_file | md5 -q)
+        else
+            set cc_hash (md5 -q $config_file)
+        end
+        if not test -f $stamp; or test "$cc_hash" != (cat $stamp)
+            if test -f .cc-config
+                set -l cc_profile (string match -v '//*' < .cc-config | string trim)
+                if test -n "$cc_profile"
+                    cc-config sync $cc_profile
+                end
+            else
+                set -l default_group (jq -r '.default // empty' $config_file)
+                if test -n "$default_group"
+                    cc-config sync $default_group
+                end
             end
         end
     end

@@ -412,10 +412,13 @@ function _cc_config_sync
     set -e _CC_ALL_KNOWN_NAMES
     set -e _CC_UNKNOWN_NAMES
 
-    # Update stamp so wrapper stays in sync
+    # Update stamp so wrapper stays in sync. Hash both .cc-config and the
+    # global registry, so changes to either invalidate the stamp.
     if test $dry_run -eq 0; and test -d .claude
         if test -f .cc-config
-            md5 -q .cc-config > .claude/.cc-sync-stamp
+            cat .cc-config $config_file | md5 -q > .claude/.cc-sync-stamp
+        else
+            md5 -q $config_file > .claude/.cc-sync-stamp
         end
     end
 end
