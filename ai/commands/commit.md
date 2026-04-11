@@ -84,6 +84,9 @@ Honor those instructions over the defaults below when they conflict.
 
 5. **Create the commit**:
    - **jj**: `jj commit -m "<message>"` using a heredoc for multi-line messages.
+     To scope the commit to a subset of the working copy, pass filesets as
+     positional args: `jj commit <paths...> -m "<message>"`. See the "jj common
+     cases" section below for split/squash/partial-commit patterns.
      If the repo uses a `master`/`main` bookmark that tracks `@-`, advance it:
      `jj bookmark set master -r @-` (check the project's CLAUDE.md for the
      bookmark workflow — some repos advance manually, some don't)
@@ -105,6 +108,49 @@ the specific files or behaviors changed when it adds clarity.
 EOF
 )"
 ```
+
+## jj common cases
+
+> ⚠️ **Always pass `-m "<message>"`.** `jj commit`, `jj split`, `jj describe`,
+> and friends will drop into `$EDITOR` interactively when no message is given,
+> which **hangs the agent session** (no TTY to close the editor). Same goes for
+> `-i` / `--interactive` — those launch a TUI diff picker and will hang. Stick
+> to non-interactive invocations with explicit `-m` and explicit filesets.
+
+`jj commit` without filesets acts on the entire working copy (`@`). To scope a
+commit to specific files, pass filesets as positional arguments — the selected
+paths stay in `@` and get committed, while the rest of the diff is moved to a
+new working-copy change on top.
+
+```
+# Commit only the listed files; other changes stay in the new @
+jj commit path/to/a.fish path/to/b.md -m "<message>"
+
+# Same thing with a heredoc message
+jj commit path/to/a.fish -m "$(cat <<'EOF'
+Subject line
+
+Body paragraph.
+EOF
+)"
+```
+
+Other useful patterns:
+
+- **Drop a change out of an existing commit** (e.g. you committed too much, or
+  a file belongs in a separate commit): `jj split -r <rev> <paths>` — moves
+  `<paths>` into a new child and leaves the rest in `<rev>`. Use `-p` for
+  parallel siblings instead of parent/child.
+- **Move a file into the parent commit** (e.g. you noticed a fixup that belongs
+  in `@-`): `jj squash <paths>` — default `--from @ --into @-`. Add
+  `--into <rev>` to target a different ancestor.
+- **Describe without creating a new change**: `jj describe -m "<message>"`
+  updates the message on `@` in place. Prefer `jj commit` when you want to
+  start a fresh empty change afterward.
+- **Fileset syntax**: paths are fileset expressions, so globs and
+  `~exclusions` work — e.g. `jj commit 'glob:bin/*.py' -m "..."` or
+  `jj commit . ~'glob:**/*.lock' -m "..."`. Quote globs to keep the shell from
+  expanding them.
 
 ## Notes
 

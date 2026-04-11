@@ -1,19 +1,7 @@
 #!/usr/bin/env -S fish --no-config
 # Emit a VCS status snapshot formatted for AI consumption (e.g. /commit).
 # Auto-detects jj vs git by walking up to find .jj/ or .git/.
-#
-# Output sections (delimited by labeled headers):
-#   ### VCS
-#   ### STATUS
-#   ### DIFF_STAT
-#   ### UNTRACKED       (git only, if any — jj already tracks @ wholesale)
-#   ### DIFF            (only with --diff)
-#   ### CURRENT_COMMIT
-#   ### RECENT_COMMITS
-#
-# Usage:
-#   vcs-status-for-ai          # stat-only snapshot (default)
-#   vcs-status-for-ai --diff   # include full diff body
+# Run with --help for sections and usage.
 #
 # Implementation note: the shebang passes `--no-config` so fish doesn't source
 # the user's conf.d on every invocation — that keeps chpwd handlers and other

@@ -7,6 +7,7 @@
   },
   "permissions": {
     "allow": [
+      "Bash(vcs-status-for-ai:*)",
       "Bash(inbox-fetch-title:*)",
       "Bash(inbox-tags:*)",
       "Bash(cmds path:*)",
