@@ -7,13 +7,15 @@ function __fzf_complete_gather_raw
     test -z "$anchor_clean"; and set anchor_clean /
 
     __fzf_complete_log "gather: fd start anchor=$anchor_clean depth=$depth"
-    fd --type d --type f --type l --hidden --follow --max-depth $depth . "$anchor_clean" 2>/dev/null | while read -l p
-        set -l rel (string replace -- "$anchor_clean/" '' $p)
-        if string match -q '*/' -- $p
-            printf '%s\tdirectory\n' "$prefix$rel"
-        else
-            printf '%s\tfile\n' "$prefix$rel"
-        end
-    end
+    set -l strip "$anchor_clean/"
+    test "$anchor_clean" = /; and set strip /
+    fd --type d --type f --type l --hidden --follow --max-depth $depth . "$anchor_clean" 2>/dev/null \
+        | awk -v p="$prefix" -v s="$strip" '
+            BEGIN { slen = length(s) }
+            {
+                if (substr($0, 1, slen) == s) $0 = substr($0, slen + 1)
+                if (substr($0, length($0), 1) == "/") print p $0 "\tdirectory"
+                else print p $0 "\tfile"
+            }'
     __fzf_complete_log "gather: fd done"
 end

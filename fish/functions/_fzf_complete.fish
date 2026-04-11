@@ -95,11 +95,13 @@ function _fzf_complete
       set --global --export _fzf_complete_state_file (mktemp /tmp/fzf_complete_state.XXXXXX)
       __fzf_complete_state_write
       __fzf_complete_log "state_file=$_fzf_complete_state_file"
-      # Live reload as query changes, so edits that shift the anchor refresh results
-      set --append fzf_args --bind 'change:reload(fish -c "__fzf_complete_reload {q}")'
+      # Live reload as query changes, so edits that shift the anchor refresh results.
+      # --no-config + -C avoids the ~1.2s config.fish/plugin startup cost per keystroke.
+      set --local fish_fast 'fish --no-config -C \'set fish_function_path ~/.config/fish/functions $fish_function_path\''
+      set --append fzf_args --bind "change:reload($fish_fast -c \"__fzf_complete_reload {q}\")"
       # Tab dives into a directory: navigate updates state+prefix, then we set the
       # query to the new prefix, which triggers change:reload to refetch the list.
-      set --append fzf_args --bind 'tab:transform-query(fish -c "__fzf_complete_navigate {} > /dev/null; echo -n \$_fzf_complete_fd_prefix")'
+      set --append fzf_args --bind "tab:transform-query($fish_fast -c \"__fzf_complete_navigate {} > /dev/null; echo -n \\\$_fzf_complete_fd_prefix\")"
     end
   end
 
