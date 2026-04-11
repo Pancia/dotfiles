@@ -31,6 +31,9 @@ command! BD b#|bd#
 " terminal helpers
 tnoremap <expr> <Esc> (&filetype == "fzf") ? "<Esc>" : "<C-\><C-n>"
 nnoremap ! :!
+" X disabled; XX quits with error code (useful when nvim is $EDITOR to abort)
+nnoremap X <Nop>
+nnoremap XX <Cmd>cq<CR>
 
 " Session management
 let g:session_file = expand('~/.local/share/nvim/session.vim')

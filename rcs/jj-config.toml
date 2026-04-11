@@ -18,7 +18,7 @@ concat(
   "\nJJ: Lines starting with \"JJ: \" (like this one) will be removed.\n",
   "JJ:\n",
   "JJ: ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
-  "JJ: 🛑  To ABORT:  exit with nonzero status  →  :cq  (in vim)\n",
+  "JJ: 🛑  To ABORT:  exit with nonzero status  →  :cq  (or XX, my nvim only)\n",
   "JJ: ⚠️   Empty description is VALID in jj — it will NOT abort!\n",
   "JJ: ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
 )
