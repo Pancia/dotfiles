@@ -14,13 +14,22 @@ module MusicCMD
       abort "MUSIC_LIBRARY not set" unless lib
       abort "MUSIC_CLOUD not set" unless cloud
 
+      section = ->(title) { puts "", "── #{title} " + "─" * [60 - title.length, 2].max }
+      run = ->(env, cmd) {
+        puts "$ #{cmd}"
+        return if $options[:dry_run]
+        ok = env ? system(env, cmd) : system(cmd)
+        puts "  ✗ exit #{$?.exitstatus}" unless ok
+        ok
+      }
+
       # 1. rsync MUSIC_LIBRARY/ -> MUSIC_CLOUD (trailing slash = contents)
-      rsync_flags = %w[-a --progress --exclude .DS_Store --exclude .Spotlight-V100]
+      section.call("rsync  library → cloud")
+      rsync_flags = %w[-a --info=stats1,progress2 --no-inc-recursive
+                       --exclude .DS_Store --exclude .Spotlight-V100]
       rsync_flags << "--delete" if $options[:delete]
       src = lib.chomp("/") + "/"
-      cmd = ["rsync", *rsync_flags, src, cloud].shelljoin
-      puts cmd if $options[:verbose]
-      system(cmd) unless $options[:dry_run]
+      run.call(nil, ["rsync", *rsync_flags, src, cloud].shelljoin)
 
       # 2. restic snapshots
       pw_cmd = "security find-generic-password -a restic -s music-backup -w"
@@ -30,14 +39,26 @@ module MusicCMD
       ]
       restic_repos.each do |label, repo|
         next unless repo
-        if label == "USB" && !File.directory?(File.dirname(repo))
-          puts "Skipping #{label} restic — volume not mounted" if $options[:verbose]
+        section.call("restic  #{label}  (#{repo})")
+
+        # Skip USB if volume not mounted
+        if label == "USB" && !File.directory?("/Volumes/vansuny128")
+          puts "  ⊘ volume not mounted, skipping"
           next
         end
+
         env = { "RESTIC_PASSWORD_COMMAND" => pw_cmd, "RESTIC_REPOSITORY" => repo }
-        restic_cmd = "restic backup #{lib.shellescape}"
-        puts "[#{label}] #{restic_cmd}" if $options[:verbose]
-        system(env, restic_cmd) unless $options[:dry_run]
+
+        # Auto-init repo if missing (config file is the reliable marker)
+        unless File.exist?(File.join(repo, "config"))
+          puts "  ⚠ repo not initialized, running `restic init`"
+          unless run.call(env, "restic init")
+            puts "  ✗ init failed, skipping #{label}"
+            next
+          end
+        end
+
+        run.call(env, "restic backup #{lib.shellescape}")
       end
     }
   end

@@ -246,7 +246,11 @@ function _cc_config_init
         set -a choices (printf "%-24s (command)" $name)
     end
 
-    set -l selected (printf '%s\n' $choices | fzf --multi --header "Select groups, skills, and/or agents (TAB to multi-select)")
+    set -l preview_fn (dirname (functions --details cc-config))/_cc_config_preview.fish
+    set -l selected (printf '%s\n' $choices | fzf --multi \
+        --header "Select groups, skills, and/or agents (TAB to multi-select)" \
+        --preview "fish --no-config -c 'source $preview_fn; _cc_config_preview \$argv[1] \$argv[2]' $config_file {}" \
+        --preview-window 'right:55%:wrap')
     if test -z "$selected"
         echo "No selection made." >&2
         return 1

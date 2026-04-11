@@ -20,7 +20,7 @@
 
     "groups": {
         "#GLOBAL": {
-            "skills": ["cmds"],
+            "skills": ["cmds", "fish"],
             "agents": ["critique", "doc-writer", "optimizer"],
             "commands": ["cc:pending-updates"]
         },

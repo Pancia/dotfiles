@@ -58,6 +58,13 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
     if contains -- -p $pass_argv; or contains -- --print $pass_argv
         set skip_review 1
     end
+    # Skip review if this invocation is itself processing pending updates
+    for arg in $pass_argv
+        if string match -q '*/cc:pending-updates*' -- $arg
+            set skip_review 1
+            break
+        end
+    end
 
     # Snapshot the most recent session JSONL before running
     set -l sessions_dir "$HOME/.claude/projects/"(string replace -a '/' '-' (pwd))
