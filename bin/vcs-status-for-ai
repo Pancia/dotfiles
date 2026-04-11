@@ -1,0 +1,157 @@
+#!/usr/bin/env -S fish --no-config
+# Emit a VCS status snapshot formatted for AI consumption (e.g. /commit).
+# Auto-detects jj vs git by walking up to find .jj/ or .git/.
+#
+# Output sections (delimited by labeled headers):
+#   ### VCS
+#   ### STATUS
+#   ### DIFF_STAT
+#   ### UNTRACKED       (git only, if any — jj already tracks @ wholesale)
+#   ### DIFF            (only with --diff)
+#   ### CURRENT_COMMIT
+#   ### RECENT_COMMITS
+#
+# Usage:
+#   vcs-status-for-ai          # stat-only snapshot (default)
+#   vcs-status-for-ai --diff   # include full diff body
+#
+# Implementation note: the shebang passes `--no-config` so fish doesn't source
+# the user's conf.d on every invocation — that keeps chpwd handlers and other
+# event hooks from leaking into stdout when we `cd` to the repo root. The
+# tradeoff is that only binaries on the base PATH are reachable. This script
+# currently only shells out to `jj` and `git`, so that's fine; if you add a
+# call to a user-installed tool, either resolve it with an absolute path or
+# prepend its directory to PATH explicitly.
+
+function __vcs_status_help
+    echo "Emit a VCS status snapshot formatted for AI consumption (e.g. /commit)."
+    echo "Auto-detects jj vs git by walking up to find .jj/ or .git/."
+    echo
+    echo "Output sections (delimited by labeled headers):"
+    echo "  ### VCS"
+    echo "  ### STATUS"
+    echo "  ### DIFF_STAT"
+    echo "  ### UNTRACKED       (git only, if any)"
+    echo "  ### DIFF            (only with --diff)"
+    echo "  ### CURRENT_COMMIT"
+    echo "  ### RECENT_COMMITS"
+    echo
+    echo "Usage:"
+    echo "  vcs-status-for-ai          # stat-only snapshot (default)"
+    echo "  vcs-status-for-ai --diff   # include full diff body"
+end
+
+set -l include_diff 0
+for arg in $argv
+    switch $arg
+        case --diff
+            set include_diff 1
+        case --no-diff
+            # kept for backwards compat; stat-only is now the default
+            set include_diff 0
+        case -h --help
+            __vcs_status_help
+            exit 0
+        case '*'
+            echo "vcs-status-for-ai: unknown arg: $arg" >&2
+            exit 2
+    end
+end
+
+function __vcs_status_find_root
+    set -l dir $PWD
+    while test "$dir" != /
+        if test -d "$dir/.jj"
+            echo "jj $dir"
+            return 0
+        end
+        if test -d "$dir/.git"; or test -f "$dir/.git"
+            echo "git $dir"
+            return 0
+        end
+        set dir (path dirname "$dir")
+    end
+    return 1
+end
+
+set -l vcs_info (__vcs_status_find_root)
+if test -z "$vcs_info"
+    echo "vcs-status-for-ai: not inside a jj or git repo" >&2
+    exit 1
+end
+
+set -l parts (string split -m 1 ' ' -- $vcs_info)
+set -l vcs $parts[1]
+set -l root $parts[2]
+
+cd $root
+or exit 1
+
+# Force no color so AI consumers get clean output regardless of user config.
+set -gx NO_COLOR 1
+set -gx GIT_PAGER cat
+set -l git_nc git --no-pager -c color.ui=never
+set -l jj_nc jj --color=never --no-pager
+
+printf '### VCS\n%s\nroot: %s\n\n' $vcs $root
+
+printf '### STATUS\n'
+switch $vcs
+    case jj
+        $jj_nc st
+    case git
+        $git_nc status
+end
+printf '\n'
+
+printf '### DIFF_STAT\n'
+switch $vcs
+    case jj
+        $jj_nc diff --stat
+    case git
+        $git_nc diff --stat HEAD
+end
+if test $include_diff -eq 0
+    printf '\n(stat-only — to inspect the full diff, run: vcs-status-for-ai --diff)\n'
+end
+printf '\n'
+
+# Untracked files never show up in `git diff HEAD` — list them so the AI
+# at least knows they exist, even though their contents are not in DIFF.
+# jj doesn't need this: everything in the working copy is already part of @.
+if test "$vcs" = git
+    set -l untracked ($git_nc ls-files --others --exclude-standard)
+    if test (count $untracked) -gt 0
+        printf '### UNTRACKED\n'
+        printf '%s\n' $untracked
+        printf '\n(file contents not shown — these files are not in the DIFF section)\n\n'
+    end
+end
+
+if test $include_diff -eq 1
+    printf '### DIFF\n'
+    switch $vcs
+        case jj
+            $jj_nc diff
+        case git
+            $git_nc diff HEAD
+    end
+    printf '\n'
+end
+
+printf '### CURRENT_COMMIT\n'
+switch $vcs
+    case jj
+        $jj_nc log -r @ --no-graph
+    case git
+        $git_nc log -1
+end
+printf '\n'
+
+printf '### RECENT_COMMITS\n'
+switch $vcs
+    case jj
+        $jj_nc log -r '::@- & ~empty()' --limit 5 --no-graph
+    case git
+        $git_nc log -5
+end

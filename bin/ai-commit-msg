@@ -3,12 +3,40 @@
 
 import asyncio
 import json
+import os
 import re
 import sys
 
 from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, ResultMessage
 
 _COMMIT_RE = re.compile(r"<commit>\s*(.*?)\s*</commit>", re.DOTALL)
+_INCLUDE_RE = re.compile(r"^@(\S+)\s*$", re.MULTILINE)
+
+
+def load_template(path: str, _seen: set[str] | None = None) -> str:
+    """Read a prompt template, expanding `@<path>` lines as includes.
+
+    An `@<path>` line (alone on its line) is replaced by the contents of the
+    referenced file, which is itself expanded recursively. Paths may start
+    with `~` and are resolved relative to the including file's directory.
+    Cycles raise RuntimeError.
+    """
+    abs_path = os.path.abspath(os.path.expanduser(path))
+    seen = _seen if _seen is not None else set()
+    if abs_path in seen:
+        raise RuntimeError(f"include cycle detected at {abs_path}")
+    seen = seen | {abs_path}
+    base = os.path.dirname(abs_path)
+    with open(abs_path) as f:
+        text = f.read()
+
+    def _replace(match: re.Match) -> str:
+        ref = os.path.expanduser(match.group(1))
+        if not os.path.isabs(ref):
+            ref = os.path.join(base, ref)
+        return load_template(ref, seen)
+
+    return _INCLUDE_RE.sub(_replace, text)
 
 
 def extract_commit(text: str) -> str:
@@ -41,8 +69,7 @@ def main():
 
     system_path = sys.argv[1] if len(sys.argv) > 1 else None
     if system_path:
-        with open(system_path) as f:
-            system_prompt = f.read()
+        system_prompt = load_template(system_path)
     else:
         system_prompt = "You are a git commit message writer. Output ONLY the commit message, nothing else."
 

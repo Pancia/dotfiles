@@ -15,14 +15,15 @@
 
     "commands": {
         "clj-start":        "~/dotfiles/ai/commands/clj-start.md",
-        "cc:pending-updates":  "~/dotfiles/ai/commands/pending-updates.md"
+        "cc:pending-updates":  "~/dotfiles/ai/commands/pending-updates.md",
+        "cc:commit":        "~/dotfiles/ai/commands/commit.md"
     },
 
     "groups": {
         "#GLOBAL": {
             "skills": ["cmds", "fish"],
             "agents": ["critique", "doc-writer", "optimizer"],
-            "commands": ["cc:pending-updates"]
+            "commands": ["cc:pending-updates", "cc:commit"]
         },
 
         "#clojure": {
