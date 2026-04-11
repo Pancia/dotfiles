@@ -6,6 +6,8 @@ complete -c tab-organize -f
 complete -c tab-organize -n '__fish_use_subcommand' -a windows -d 'List all windows with tab counts'
 complete -c tab-organize -n '__fish_use_subcommand' -a plan -d 'Generate organization plan'
 complete -c tab-organize -n '__fish_use_subcommand' -a execute -d 'Execute a plan file'
+complete -c tab-organize -n '__fish_use_subcommand' -a edit -d 'Open a plan file in $EDITOR'
+complete -c tab-organize -n '__fish_use_subcommand' -a archive -d 'Move a plan file to the archive'
 
 # Shared
 complete -c tab-organize -s h -l help -d 'Show help'
@@ -36,6 +38,7 @@ for w, n in counts.most_common():
 end
 
 complete -c tab-organize -n '__fish_seen_subcommand_from plan' -l window -x -a '(__tab_organize_windows)' -d 'Only organize tabs in this window ID'
+complete -c tab-organize -n '__fish_seen_subcommand_from plan' -l no-consolidate -d "Don't move tabs across windows"
 
 function __tab_organize_plans
     set -l dir "$HOME/Vaults/the-akashic-records/browser-sync/plans"
@@ -51,3 +54,7 @@ end
 # execute options
 complete -c tab-organize -n '__fish_seen_subcommand_from execute' -l dry-run -d 'Print commands without sending to FIFO'
 complete -c tab-organize -n '__fish_seen_subcommand_from execute' -f -a '(__tab_organize_plans)'
+
+# edit / archive — same plan-file completion
+complete -c tab-organize -n '__fish_seen_subcommand_from edit' -f -a '(__tab_organize_plans)'
+complete -c tab-organize -n '__fish_seen_subcommand_from archive' -f -a '(__tab_organize_plans)'

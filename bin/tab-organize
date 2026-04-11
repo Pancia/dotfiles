@@ -30,23 +30,40 @@ PLANS_ARCHIVE_DIR = PLANS_DIR / "archive"
 CLOSED_DIR = BROWSER_SYNC / "closed"
 
 VALID_COMMANDS = {"close_tab", "group_tabs", "ungroup_tabs", "move_tab"}
-COMMAND_ORDER = {"close_tab": 0, "ungroup_tabs": 1, "group_tabs": 2, "move_tab": 3}
+COMMAND_ORDER = {"close_tab": 0, "ungroup_tabs": 1, "move_tab": 2, "group_tabs": 3}
 
-SYSTEM_PROMPT = """\
+CONSOLIDATE_RULES = """\
+- Consolidate related tabs ACROSS windows into a single window when it \
+improves organization. To consolidate, emit one group_tabs command per theme \
+whose tabIds span multiple windows and whose "windowId" is the destination \
+window. Chrome will move the tabs into that window as part of grouping.
+- When picking a destination window, prefer the window that already holds \
+the majority of the theme's tabs, or an existing group with the same theme.
+- ALWAYS include "windowId" in group_tabs commands — it is the destination."""
+
+STRICT_RULES = """\
+- Do NOT move tabs between windows
+- ALWAYS include "windowId" in group_tabs commands to prevent Chrome from \
+moving tabs between windows
+- Group each theme locally per window, even if the same theme appears in \
+multiple windows."""
+
+SYSTEM_PROMPT_TMPL = """\
 You are a browser tab organizer. Given a summary of all open browser tabs, \
 produce a markdown plan to organize them.
 
 RULES:
-- Close all chrome://newtab/ tabs (emit close_tab for each)
+- Close chrome://newtab/ tabs, but KEEP exactly one per window — the one \
+with the highest index (rightmost in the tab strip). Do NOT emit close_tab \
+for the kept tab. If a window has only one newtab, keep it. If a window has \
+zero newtabs, do nothing special.
 - Group remaining ungrouped tabs by topic/theme using group_tabs
 - Short lowercase group titles (1-3 words)
 - Pick thematic colors: purple=anime/manga, cyan=tech/ai, blue=reference, \
 green=music, red=gaming, yellow=learning, pink=wellness, orange=entertainment
 - Available colors: grey, blue, red, yellow, green, pink, purple, cyan, orange
 - Preserve existing groups that already make sense
-- Do NOT move tabs between windows
-- ALWAYS include "windowId" in group_tabs commands to prevent Chrome from \
-moving tabs between windows
+{window_rules}
 - Use real tabIds from the input
 
 OUTPUT FORMAT:
@@ -78,6 +95,11 @@ Valid commands:
 - {"command":"move_tab","tabId":NUMBER,"index":NUMBER,"windowId":NUMBER}
 
 Output ONLY the markdown plan. No preamble, no closing remarks."""
+
+
+def build_system_prompt(consolidate=True):
+    rules = CONSOLIDATE_RULES if consolidate else STRICT_RULES
+    return SYSTEM_PROMPT_TMPL.replace("{window_rules}", rules)
 
 
 def filter_state(state, window_id):
@@ -150,8 +172,11 @@ def build_summary(state, goal=None):
             lines.append(f"    {t['url']}")
 
         if empty:
-            ids = [str(t["tabId"]) for t in empty]
-            lines.append(f"\n  New Tab pages ({len(empty)}): {', '.join(ids)}")
+            empty_sorted = sorted(empty, key=lambda t: t["index"])
+            parts = [f"{t['tabId']}(idx={t['index']})" for t in empty_sorted]
+            keep = max(empty, key=lambda t: t["index"])
+            lines.append(f"\n  New Tab pages ({len(empty)}): {', '.join(parts)}")
+            lines.append(f"  KEEP newtab {keep['tabId']} (highest index {keep['index']}); close the rest")
 
     return "\n".join(lines)
 
@@ -282,7 +307,10 @@ def cmd_plan(args):
         print(summary)
         return
 
-    prompt = SYSTEM_PROMPT
+    consolidate = not getattr(args, "no_consolidate", False)
+    if args.window:
+        consolidate = False  # single-window scope can't consolidate
+    prompt = build_system_prompt(consolidate=consolidate)
     if args.goal:
         prompt += f"\n\nUSER GOAL: {args.goal}\nPrioritize this goal when organizing."
 
@@ -300,15 +328,45 @@ def cmd_plan(args):
     print(f"Dry run:      tab-organize execute --dry-run {plan_path}")
 
 
-def cmd_execute(args):
-    plan_path = Path(args.plan_file)
-    if not plan_path.exists():
-        candidate = PLANS_DIR / args.plan_file
-        if candidate.exists():
-            plan_path = candidate
-        else:
-            print(f"Error: {plan_path} not found", file=sys.stderr)
+def resolve_plan(arg):
+    """Resolve a plan file argument. If None, use the latest plan in PLANS_DIR.
+    Accepts a bare filename (looked up in PLANS_DIR) or an absolute/relative path.
+    """
+    if arg is None:
+        plans = sorted(PLANS_DIR.glob("plan-*.md"))
+        if not plans:
+            print(f"Error: no plans found in {PLANS_DIR}", file=sys.stderr)
             sys.exit(1)
+        return plans[-1]
+    p = Path(arg)
+    if p.exists():
+        return p
+    candidate = PLANS_DIR / arg
+    if candidate.exists():
+        return candidate
+    print(f"Error: {p} not found", file=sys.stderr)
+    sys.exit(1)
+
+
+def cmd_edit(args):
+    plan_path = resolve_plan(args.plan_file)
+    editor = os.environ.get("EDITOR", "vim")
+    os.execvp(editor, [editor, str(plan_path)])
+
+
+def cmd_archive(args):
+    plan_path = resolve_plan(args.plan_file)
+    if PLANS_ARCHIVE_DIR in plan_path.parents:
+        print(f"Already archived: {plan_path}")
+        return
+    PLANS_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+    dest = PLANS_ARCHIVE_DIR / plan_path.name
+    plan_path.rename(dest)
+    print(f"Archived: {dest}")
+
+
+def cmd_execute(args):
+    plan_path = resolve_plan(args.plan_file)
 
     plan_text = plan_path.read_text()
     commands = extract_commands(plan_text)
@@ -389,11 +447,22 @@ def main():
                         help="Organizing goal (e.g. 'separate work from fun')")
     p_plan.add_argument("--window", type=int, default=None,
                         help="Only organize tabs in this window ID")
+    p_plan.add_argument("--no-consolidate", action="store_true",
+                        help="Don't move tabs across windows; group each theme locally")
 
     p_exec = sub.add_parser("execute", help="Execute a plan file")
-    p_exec.add_argument("plan_file", help="Path to plan markdown file")
+    p_exec.add_argument("plan_file", nargs="?", default=None,
+                        help="Path to plan markdown file (defaults to latest)")
     p_exec.add_argument("--dry-run", action="store_true",
                         help="Print commands without sending to FIFO")
+
+    p_edit = sub.add_parser("edit", help="Open a plan file in $EDITOR")
+    p_edit.add_argument("plan_file", nargs="?", default=None,
+                        help="Path to plan markdown file (defaults to latest)")
+
+    p_arch = sub.add_parser("archive", help="Move a plan file to the archive")
+    p_arch.add_argument("plan_file", nargs="?", default=None,
+                        help="Path to plan markdown file (defaults to latest)")
 
     args = parser.parse_args()
     if args.cmd == "windows":
@@ -403,6 +472,10 @@ def main():
         cmd_plan(args)
     elif args.cmd == "execute":
         cmd_execute(args)
+    elif args.cmd == "edit":
+        cmd_edit(args)
+    elif args.cmd == "archive":
+        cmd_archive(args)
     else:
         parser.print_help()
 

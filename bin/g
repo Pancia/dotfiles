@@ -276,6 +276,7 @@ JJ_COMMANDS = {
         '_desc': 'Commit',
         'c': ('Commit (describe + new)', chain('jj commit', 'jj status')),
         'C': ('Commit + advance master + push', chain('jj commit', 'jj bookmark set master --allow-backwards -r @-', 'jj git push', 'jj status')),
+        'h': ('Commit interactive (pick hunks)', chain('jj commit --interactive', 'jj status')),
         'd': ('Describe @', chain('jj describe', 'jj status')),
         'p': ('Describe @-', chain('jj describe @-', 'jj status')),
         'i': ('Commit (AI message)', chain('ai_jj_commit', 'jj status')),
@@ -314,7 +315,12 @@ JJ_COMMANDS = {
         'b': ('Rebase onto (fzf)', 'jj log --no-graph -T \'change_id.short(8) ++ " " ++ description.first_line() ++ "\\n"\' | fzf | awk \'{print $1}\' | xargs -I{} jj rebase -r @ -d {}'),
     },
     's': ('Status', 'jj status'),
-    'S': ('Split', chain('jj split', 'jj status')),
+    'S': {
+        '_desc': 'Split',
+        'S': ('Split @ (interactive)', chain('jj split', 'jj status')),
+        'p': ('Split @ parallel (siblings)', chain('jj split -p', 'jj status')),
+        'r': ('Split revision (fzf)', chain('jj log --no-graph -T \'change_id.short(8) ++ " " ++ description.first_line() ++ "\\n"\' | fzf | awk \'{print $1}\' | xargs -I{} jj split -r {}', 'jj status')),
+    },
     'u': ('Undo', chain('read -l -P "Undo last jj operation? [y/N] " confirm; and test "$confirm" = y; and jj undo', 'jj status')),
     'x': {
         '_desc': 'Abandon "all hope ye..."',
