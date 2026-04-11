@@ -663,9 +663,13 @@ def main():
 
     elif subcmd == 'run':
         if len(sys.argv) < 3:
-            print(f"{RED}Usage: g run <keys>{RESET}", file=sys.stderr)
-            print(f"{DIM}Example: g run cc  (Commit → Commit){RESET}", file=sys.stderr)
-            sys.exit(1)
+            result = fzf_search_mode()
+            if not result:
+                sys.exit(1)
+            content, display = result
+            cmd = content[1]
+            execute_command(cmd, label=display)
+            sys.exit(0)
         keys = sys.argv[2]
         sys.exit(run_keys(keys))
 
