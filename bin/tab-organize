@@ -26,6 +26,7 @@ BROWSER_SYNC = Path.home() / "Vaults/the-akashic-records/browser-sync"
 STATE_PATH = BROWSER_SYNC / "state.json"
 FIFO_PATH = BROWSER_SYNC / "cmd.fifo"
 PLANS_DIR = BROWSER_SYNC / "plans"
+PLANS_ARCHIVE_DIR = PLANS_DIR / "archive"
 CLOSED_DIR = BROWSER_SYNC / "closed"
 
 VALID_COMMANDS = {"close_tab", "group_tabs", "ungroup_tabs", "move_tab"}
@@ -302,8 +303,12 @@ def cmd_plan(args):
 def cmd_execute(args):
     plan_path = Path(args.plan_file)
     if not plan_path.exists():
-        print(f"Error: {plan_path} not found", file=sys.stderr)
-        sys.exit(1)
+        candidate = PLANS_DIR / args.plan_file
+        if candidate.exists():
+            plan_path = candidate
+        else:
+            print(f"Error: {plan_path} not found", file=sys.stderr)
+            sys.exit(1)
 
     plan_text = plan_path.read_text()
     commands = extract_commands(plan_text)
@@ -352,6 +357,14 @@ def cmd_execute(args):
         print("Error: FIFO write timed out (is the browser extension running?)",
               file=sys.stderr)
         sys.exit(1)
+
+    try:
+        PLANS_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+        archived = PLANS_ARCHIVE_DIR / plan_path.name
+        plan_path.rename(archived)
+        print(f"Archived plan to: {archived}")
+    except OSError as e:
+        print(f"Warning: failed to archive plan: {e}", file=sys.stderr)
 
 
 def main():

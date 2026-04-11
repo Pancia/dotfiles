@@ -9,3 +9,4 @@ abbr -a aih 'ai_health \''
 abbr -a /q exit
 abbr -a :q exit
 abbr -a ii ai_inbox
+abbr -a tt tab-organize
