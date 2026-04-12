@@ -202,6 +202,9 @@ class VideoCanvasView: NSView {
         }
     }
 
+    func pause() { player?.pause() }
+    func resume() { player?.play() }
+
     var filename: String {
         (filePath as NSString).lastPathComponent
     }
@@ -549,6 +552,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var signalSource: DispatchSourceSignal?
     var statusItem: NSStatusItem?
     let imageUndoManager = ImageUndoManager()
+    private var isScreenAsleep = false
+    private var occlusionObservers: [WallWindow: NSObjectProtocol] = [:]
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         windows = createWindows(entries: entries)
@@ -576,6 +581,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         rebuildMenu()
+
+        // Pause video playback when screen sleeps/locks
+        let ws = NSWorkspace.shared.notificationCenter
+        ws.addObserver(self, selector: #selector(screenDidSleep),
+                       name: NSWorkspace.screensDidSleepNotification, object: nil)
+        ws.addObserver(self, selector: #selector(screenDidWake),
+                       name: NSWorkspace.screensDidWakeNotification, object: nil)
+
+        // Pause video playback when window is fully occluded
+        for window in windows {
+            observeOcclusion(for: window)
+        }
 
         // Register SIGUSR1 handler for snapshot
         signal(SIGUSR1, SIG_IGN) // Let dispatch source handle it
@@ -628,6 +645,54 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         mainMenu.addItem(editMenuItem)
 
         NSApp.mainMenu = mainMenu
+    }
+
+    // MARK: - Video Playback Optimization
+
+    @objc func screenDidSleep() {
+        isScreenAsleep = true
+        for window in windows {
+            (window.contentView as? VideoCanvasView)?.pause()
+        }
+    }
+
+    @objc func screenDidWake() {
+        isScreenAsleep = false
+        for window in windows {
+            guard window.occlusionState.contains(.visible) else { continue }
+            (window.contentView as? VideoCanvasView)?.resume()
+        }
+    }
+
+    func observeOcclusion(for window: WallWindow) {
+        guard window.contentView is VideoCanvasView else { return }
+        let token = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification,
+            object: window, queue: .main
+        ) { [weak self] note in
+            guard let self = self, !self.isScreenAsleep,
+                  let w = note.object as? WallWindow,
+                  let video = w.contentView as? VideoCanvasView else { return }
+            if w.occlusionState.contains(.visible) {
+                video.resume()
+            } else {
+                video.pause()
+            }
+        }
+        occlusionObservers[window] = token
+    }
+
+    func removeOcclusionObserver(for window: WallWindow) {
+        if let token = occlusionObservers.removeValue(forKey: window) {
+            NotificationCenter.default.removeObserver(token)
+        }
+    }
+
+    func removeAllOcclusionObservers() {
+        for (_, token) in occlusionObservers {
+            NotificationCenter.default.removeObserver(token)
+        }
+        occlusionObservers.removeAll()
     }
 
     @objc func doUndo() {
@@ -799,6 +864,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
+        // Clean up occlusion observers before destroying windows
+        removeAllOcclusionObservers()
+
         // Close all existing windows
         for window in windows {
             window.orderOut(nil)
@@ -813,6 +881,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if let canvas = window.contentView, canvas is WallCanvas {
                 canvas.menu = NSMenu()
             }
+        }
+
+        // Re-observe occlusion for video windows
+        for window in windows {
+            observeOcclusion(for: window)
         }
 
         rebuildMenu()
@@ -1005,9 +1078,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
               let window = view.window as? WallWindow else { return }
 
         if let video = view as? VideoCanvasView {
-            // Stop playback before removing
-            _ = video
+            video.pause()
         }
+        removeOcclusionObserver(for: window)
         window.orderOut(nil)
         imageUndoManager.purge(window: window)
         windows.removeAll { $0 === window }
