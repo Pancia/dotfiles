@@ -13,6 +13,7 @@ misc/monitor-analysis/*.json
 misc/yt-organize/*.json
 fish/functions/_*
 !fish/functions/_tide_item_dashboard.fish
+!fish/functions/_tide_pwd.fish
 !fish/functions/_fzf_complete.fish
 !fish/functions/__fzf_complete_reload.fish
 !fish/functions/__fzf_complete_gather_raw.fish
@@ -28,6 +29,7 @@ fish/functions/fzf_configure_bindings.fish
 fish/functions/fzfm.fish
 fish/functions/nvm.fish
 fish/functions/fish_prompt.fish
+fish/functions/fish_mode_prompt.fish
 fish/functions/fzfm_fre_prune.clj
 tmp/
 cache/
