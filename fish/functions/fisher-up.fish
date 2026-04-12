@@ -14,11 +14,12 @@ function fisher-up --description 'fisher update + restore locally-patched plugin
         echo "fisher-up: patches must be committed to $baseline for restore to work" >&2
     end
 
-    if functions -q _fisher_orig
-        _fisher_orig update $argv
-    else
-        command fish -c "fisher update $argv"
+    if not functions -q _fisher_orig
+        echo "fisher-up: _fisher_orig not found — was conf.d/fisher-wrap.fish sourced?" >&2
+        return 1
     end
+
+    _fisher_orig update $argv
     or return $status
 
     set -l to_restore
