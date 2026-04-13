@@ -73,8 +73,16 @@ function createEntry(window)
         return {["focused"] = "<SLEEPING>", ["active"] = obj._wasActive}
     end
 
+    local title = window:title()
+    local privatePatterns = {"%(Private%)", "%(Incognito%)", "%(InPrivate%)", "Private Browsing"}
+    for _, pattern in ipairs(privatePatterns) do
+        if title:find(pattern) then
+            return {["focused"] = "<PRIVATE>", ["active"] = obj._wasActive}
+        end
+    end
+
     return {
-        ["focused"] = app:title() .. " => " .. window:title(),
+        ["focused"] = app:title() .. " => " .. title,
         ["active"] = obj._wasActive
     }
 end
