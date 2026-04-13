@@ -6,6 +6,8 @@ Personal development environment for macOS. Focused on automation, productivity,
 
 This is a **jj (Jujutsu) repository**. Use `jj` for all VCS operations — do not use `git` directly. See the global CLAUDE.md for jj workflow details.
 
+**jj config**: `rcs/jj-config.toml` → `~/.config/jj/config.toml` (managed via MANIFEST).
+
 ## External Sources
 
 Some configuration here glues into external projects. When debugging, check the source repo, not just the dotfiles copy:

@@ -130,7 +130,7 @@ end
 printf '### CURRENT_COMMIT\n'
 switch $vcs
     case jj
-        $jj_nc log -r @ --no-graph
+        $jj_nc log -r @ --no-graph --stat
     case git
         $git_nc log -1
 end
