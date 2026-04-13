@@ -180,6 +180,20 @@ Symlinked items (data in `~/.local/`, but still accessible at `~/.`):
 | `Alt+Tab` | Window switcher (fzf/yabai, all spaces) |
 | `F7/F8/F9` | Media controls (cmus) |
 
+### Hermes Commands (`Cmd+Space`)
+
+Hermes is a which-key app launcher. Commands are defined in `rcs/hermes-commands.json`.
+
+**Command types:**
+- `"shell command"` — runs and closes
+- `{"shell": "command"}` — opens in terminal, closes on exit
+- `{"interactive": "command"}` — opens in terminal, stays open when done
+- `{"shell:fish": "command"}` — runs via fish shell
+
+**Submenu keys:** Objects with `"_desc": "+name"` create submenus. `"_stay": true` keeps the menu open after running a command (used for music controls).
+
+**Generators:** `"generator:name"` dynamically builds a submenu (snippets, services, vpc).
+
 ### Shell Commands (Fish)
 | Command | Action |
 |---------|--------|

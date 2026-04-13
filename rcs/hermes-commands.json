@@ -5,6 +5,10 @@
         "_desc": "+dotfiles",
         "e": ["Edit dotfiles", {"shell": "cd ~/dotfiles && v"}]
     },
+    "e": {
+        "_desc": "+exo",
+        "e": ["Fetch (home)", {"interactive": "exo fetch --home"}]
+    },
     "l": ["LOCK IT DOWN", "launch-lock-screen-dialog"],
     "i": ["inbox", {"interactive": "ai_inbox"}],
     "j": ["Emoji Picker", {"shell": "emoji-pick"}],
