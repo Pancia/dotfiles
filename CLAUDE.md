@@ -89,6 +89,12 @@ The `monitor` seed (`lib/lua/seeds/monitor.lua`) logs the focused window every 2
 - `functions/*.fish` - Lazy-loaded on first call
 - Fisher plugins auto-installed on missing
 
+### Fisher Plugin Manager
+`conf.d/fisher-wrap.fish` shadows the `fisher` command at shell startup to preserve local patches:
+- `fisher update` is transparently intercepted and routed through `fisher-up`, which runs the real update then restores any tracked files in `fish/functions/` (e.g. `_tide_pwd.fish`) from the `master` baseline
+- All other `fisher` subcommands pass through unchanged
+- This preserves bug fixes and customizations to plugin files without manual re-patching after updates
+
 ### Fish Shell Gotchas
 **REQUIRED: Run `/fish` before writing or modifying ANY `.fish` file.** Fish syntax differs from bash/zsh in subtle ways that cause bugs. Do not skip this step.
 
