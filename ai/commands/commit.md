@@ -53,12 +53,13 @@ Honor those instructions over the defaults below when they conflict.
      **stop and use the `AskUserQuestion` tool** to ask the user how to
      proceed. Offer these options:
 
-     1. **Commit everything together** — one commit, one message covering
-        all the changes
-     2. **Commit only a subset** — user names which files/concerns to
-        include; you'll use `jj split` (jj) or path-specific `git add`
-        (git) to scope the commit
-     3. **Abort** — do nothing, let the user sort it out manually
+     1. **Session only** — commit only the changes from this session,
+        leaving unrelated changes in the working copy
+     2. **Everything** — one commit covering all changes, one message
+     3. **Pick** — user specifies which files/concerns to include;
+        you'll use `jj split` (jj) or path-specific `git add` (git)
+        to scope the commit
+     4. **Abort** — do nothing, let the user sort it out manually
 
      In the question text, list the distinct concerns you detected so the
      user can see what triggered the prompt. Do not proceed to step 3 until
