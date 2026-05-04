@@ -29,15 +29,24 @@ astro forecast -d 30         # 30-day forecast
 |------|-------------|
 | `-d, --days N` | Days to forecast (default: 30) |
 | `--date YYYY-MM-DD` | Start date (default: today) |
-| `-a, --all` | Include all objects (nodes, chiron, etc.) |
-| `-o, --orb N` | Max orb in degrees (default: 0.5) |
+| `-a, --all` | Include all transit-side objects (asteroids, transit nodes/Chiron/Lilith, angles) |
+| `-o, --orb N` | Max orb in degrees for the per-day feed (default: 0.5) |
+| `--sustained-orb N` | Max orb for the Sustained Aspects section (default: 2.0; `0` disables) |
 
 ```bash
-astro forecast -d 7              # 7-day highlights (major planets, orb < 0.5°)
+astro forecast -d 7              # 7-day highlights
 astro forecast --date 2025-06-01 -d 30  # 30-day forecast from June 1st
-astro forecast -d 30 --all       # All objects, exact transits
-astro forecast -d 30 --orb 2     # Major planets, wider orb
+astro forecast -d 30 --all       # Include transit-side asteroids, angles, transit Chiron/Lilith
+astro forecast -d 30 --orb 2     # Wider orb on the per-day feed
+astro forecast -d 30 --sustained-orb 0   # Hide the Sustained Aspects section
 ```
+
+The default forecast already includes transits to natal Nodes / Chiron / Lilith on the **natal side** — `--all` only widens the **transit side** (asteroids, transit Chiron, etc.).
+
+Forecast output has two parts:
+
+1. **Per-day feed**: aspects at exact orb (default `--orb 0.5°`), plus ingresses, stations, and lunar phases.
+2. **Sustained Aspects**: slow-moving aspects that hold inside `--sustained-orb` (default `2.0°`) for at least 5 days (or any duration for outer planets, Jupiter+). Surfaces transits whose peak orb stays > 0.5° but which sit inside ~2° for weeks (Pluto-Venus, Neptune-NN). Each entry shows `in-orb FROM → TO (peak DATE, ±N°)`.
 
 ## Architecture
 

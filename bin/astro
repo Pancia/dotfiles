@@ -110,6 +110,23 @@ class PlanetTrackingEvent:
 
 
 @dataclass
+class SustainedAspect:
+    """An aspect that holds within a wider orb across a date range.
+
+    Used by `forecast` to surface slow-moving aspects (Pluto-Venus, Neptune-NN)
+    whose peak orb stays > 0.5° but which sit inside ~2° for weeks.
+    """
+    transit_planet: str
+    natal_planet: str
+    aspect: str
+    first_date: str       # ISO YYYY-MM-DD: first day in the forecast window with |orb| <= sustained_orb
+    last_date: str        # ISO YYYY-MM-DD: last day in this pass
+    peak_date: str        # ISO YYYY-MM-DD: day with the smallest |orb|
+    peak_orb: float       # signed orb on peak_date
+    ongoing: bool = False  # True if the pass is still in-orb at the end of the window
+
+
+@dataclass
 class AsteroidObject:
     """Wrapper for Swiss Ephemeris asteroid calculations."""
     name: str
@@ -509,6 +526,18 @@ class TransitCalculator:
     MAJOR_PLANETS = {'Sun', 'Moon', 'Mercury', 'Venus', 'Mars',
                      'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'}
 
+    # Sensitive natal points that are worth showing as transit targets even
+    # when major_only is on (transits TO these matter; transits FROM them
+    # rarely do, so the transit-side filter still uses MAJOR_PLANETS).
+    IMPORTANT_NATAL_POINTS = MAJOR_PLANETS | {
+        'True_North_Lunar_Node', 'True_South_Lunar_Node',
+        'Chiron', 'Mean_Lilith',
+    }
+
+    # Slow-moving transit planets — sustained section emits even short passes
+    # from these (they're rarely in-orb, so each pass is noteworthy).
+    SLOW_PLANETS = {'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'}
+
     # Swiss Ephemeris asteroid body numbers
     ASTEROIDS = {
         'ceres': 17,   # swe.CERES
@@ -605,7 +634,7 @@ class TransitCalculator:
                 if major_only:
                     if e.transit_planet not in self.MAJOR_PLANETS:
                         continue
-                    if e.natal_planet not in self.MAJOR_PLANETS:
+                    if e.natal_planet not in self.IMPORTANT_NATAL_POINTS:
                         continue
                 highlights.append(e)
 
@@ -629,6 +658,104 @@ class TransitCalculator:
             if highlights:
                 results.append((date_str, highlights))
 
+        return results
+
+    def sustained_aspects(self, natal_chart: NatalChart, days: int,
+                          sustained_orb: float = 2.0,
+                          start_date: Optional[datetime] = None,
+                          major_only: bool = True
+                          ) -> list[SustainedAspect]:
+        """Find slow-moving aspects that hold within `sustained_orb` for a stretch.
+
+        Scans every day in the forecast window, finds all aspects within the
+        wider orb, then groups by (transit_planet, natal_planet, aspect) and
+        splits each group into continuous passes (gap > 2 days = new pass).
+        Each pass becomes one SustainedAspect entry.
+
+        Reuses the per-day cache populated by `forecast_transits`.
+        """
+        today = start_date.date() if start_date else datetime.now().date()
+        end = today + timedelta(days=days - 1)
+
+        # day_str -> list[TransitEvent] (already-cached or freshly-computed)
+        per_day: dict[str, list[TransitEvent]] = {}
+        for day_offset in range(days):
+            date = today + timedelta(days=day_offset)
+            date_str = date.isoformat()
+            cached = self.storage.get_cached_transit(date_str, natal_chart.name)
+            if cached:
+                events = [TransitEvent(**e) for e in cached['aspects']]
+            else:
+                events = self.compute_day_transits(natal_chart, date)
+                self.storage.cache_transit(date_str, natal_chart.name, events)
+            per_day[date_str] = events
+
+        # Flatten into (date, event) pairs that pass the wider-orb + filters.
+        flat: list[tuple[str, TransitEvent]] = []
+        for date_str, events in per_day.items():
+            for e in events:
+                if abs(e.orb) > sustained_orb:
+                    continue
+                if major_only:
+                    if e.transit_planet not in self.MAJOR_PLANETS:
+                        continue
+                    if e.natal_planet not in self.IMPORTANT_NATAL_POINTS:
+                        continue
+                flat.append((date_str, e))
+
+        # Group by (transit_planet, natal_planet, aspect).
+        from collections import defaultdict
+        groups: dict[tuple, list[tuple[str, TransitEvent]]] = defaultdict(list)
+        for date_str, e in flat:
+            key = (e.transit_planet, e.natal_planet, e.aspect)
+            groups[key].append((date_str, e))
+
+        results: list[SustainedAspect] = []
+        for key, items in groups.items():
+            items.sort(key=lambda x: x[0])
+            # Split into passes (gap > 2 days = new pass).
+            passes: list[list[tuple[str, TransitEvent]]] = [[items[0]]]
+            for i in range(1, len(items)):
+                prev_d = datetime.fromisoformat(items[i-1][0]).date()
+                curr_d = datetime.fromisoformat(items[i][0]).date()
+                if (curr_d - prev_d).days <= 2:
+                    passes[-1].append(items[i])
+                else:
+                    passes.append([items[i]])
+
+            for p in passes:
+                duration = len(p)
+                # Section is meant to surface slow-moving aspects that the
+                # per-day feed misses. Skip short passes from fast planets;
+                # they're either in the per-day feed already or just brief
+                # near-misses.
+                t_planet = key[0]
+                if duration < 5 and t_planet not in self.SLOW_PLANETS:
+                    continue
+                first_date = p[0][0]
+                last_date = p[-1][0]
+                peak = min(p, key=lambda x: abs(x[1].orb))
+                peak_date = peak[0]
+                peak_orb = peak[1].orb
+                ongoing = datetime.fromisoformat(last_date).date() >= end
+                results.append(SustainedAspect(
+                    transit_planet=t_planet,
+                    natal_planet=key[1],
+                    aspect=key[2],
+                    first_date=first_date,
+                    last_date=last_date,
+                    peak_date=peak_date,
+                    peak_orb=peak_orb,
+                    ongoing=ongoing,
+                ))
+
+        # Sort by duration descending so the longest-held aspects come first;
+        # break ties by first_date.
+        results.sort(key=lambda s: (
+            -((datetime.fromisoformat(s.last_date).date()
+               - datetime.fromisoformat(s.first_date).date()).days),
+            s.first_date,
+        ))
         return results
 
     def track_planet(self, natal_chart: NatalChart, planet_name: str,
@@ -674,7 +801,7 @@ class TransitCalculator:
                 if event := self._detect_house_change(planet_name, current, prev_subject, curr_subject, natal_cusps):
                     events.append(event)
 
-                if event := self._detect_station(planet_name, current, prev_subject, curr_subject):
+                if event := self._detect_station(planet_name, current, prev_subject, curr_subject, natal_cusps):
                     events.append(event)
 
             # Check for tight aspects to natal planets
@@ -692,6 +819,42 @@ class TransitCalculator:
             events = self._filter_aspect_transitions(events)
 
         return sorted(events, key=lambda e: e.date)
+
+    def current_position(self, natal_chart: NatalChart, planet_name: str,
+                         at_date: Optional[datetime] = None) -> Optional[PlanetTrackingEvent]:
+        """Snapshot a planet's actual position at `at_date` (defaults to today).
+
+        Returned event uses event_type='current_position' and is populated with
+        sign / natal house (via natal cusps) / degree / speed.
+        """
+        bd = natal_chart.birth_data
+        natal = self._make_subject(
+            bd.full_name, bd.year, bd.month, bd.day, bd.hour, bd.minute, bd
+        )
+        self._cache_coords(natal_chart, natal)
+        natal_cusps = self._calculate_natal_houses(natal)
+
+        if at_date is None:
+            d = datetime.now().date()
+        else:
+            d = at_date.date() if hasattr(at_date, 'date') else at_date
+
+        subj = self._make_subject(
+            "Transit", d.year, d.month, d.day, 12, 0, bd
+        )
+        obj = self._get_planet_obj(subj, planet_name)
+        if not obj:
+            return None
+
+        return PlanetTrackingEvent(
+            date=d.isoformat(),
+            planet=planet_name,
+            event_type='current_position',
+            sign=getattr(obj, 'sign', ''),
+            house=self._planet_in_natal_house(getattr(obj, 'abs_pos', 0.0), natal_cusps),
+            degree=getattr(obj, 'abs_pos', 0.0),
+            speed=getattr(obj, 'speed', 0.0),
+        )
 
     def _filter_aspect_transitions(self, events: list[PlanetTrackingEvent]) -> list[PlanetTrackingEvent]:
         """
@@ -824,7 +987,8 @@ class TransitCalculator:
             )
         return None
 
-    def _detect_station(self, planet_name: str, date, prev_subj, curr_subj) -> Optional[PlanetTrackingEvent]:
+    def _detect_station(self, planet_name: str, date, prev_subj, curr_subj,
+                        natal_cusps: dict[int, float]) -> Optional[PlanetTrackingEvent]:
         """Detect retrograde/direct stations (when speed crosses zero)."""
         prev_planet = self._get_planet_obj(prev_subj, planet_name)
         curr_planet = self._get_planet_obj(curr_subj, planet_name)
@@ -838,7 +1002,7 @@ class TransitCalculator:
         # Check if speed changed sign (crossed zero)
         if prev_speed * curr_speed < 0:
             station_type = 'station_direct' if curr_speed > 0 else 'station_retrograde'
-            house = self._clean_house(curr_planet.house)
+            house = self._planet_in_natal_house(curr_planet.abs_pos, natal_cusps)
 
             return PlanetTrackingEvent(
                 date=date.isoformat(),
@@ -945,6 +1109,8 @@ class TransitCalculator:
             display = pname.replace('_', ' ')
             if display == 'True Node':
                 display = 'North Node'
+            elif display == 'Mean Lilith':
+                display = 'Lilith'
             out.append({
                 'planet': display,
                 'sign': sign,
@@ -975,8 +1141,8 @@ class TransitCalculator:
             if abs(asp['orbit']) > orb_limit:
                 continue
 
-            # Filter to major planets on natal side
-            if asp['p2_name'] not in self.MAJOR_PLANETS:
+            # Filter natal side to important points (planets + nodes + Chiron + Lilith)
+            if asp['p2_name'] not in self.IMPORTANT_NATAL_POINTS:
                 continue
 
             # Get position data - calculate transit house using natal cusps
@@ -1249,7 +1415,7 @@ class TransitFormatter:
         'semisextile': '⚺',
     }
 
-    # Planet symbols
+    # Planet symbols (keys cover both kerykeion's raw names and short display names)
     PLANET_SYMBOLS = {
         'Sun': '☉',
         'Moon': '☽',
@@ -1266,7 +1432,25 @@ class TransitFormatter:
         'Pallas': '⚴',
         'Juno': '⚵',
         'Vesta': '⚶',
+        'North Node': '☊',
+        'South Node': '☋',
+        'Lilith': '⚸',
+        # Aliases for kerykeion's raw names
+        'True_North_Lunar_Node': '☊',
+        'True_South_Lunar_Node': '☋',
+        'Mean_Lilith': '⚸',
     }
+
+    # kerykeion-name → short display name
+    DISPLAY_NAMES = {
+        'True_North_Lunar_Node': 'North Node',
+        'True_South_Lunar_Node': 'South Node',
+        'Mean_Lilith': 'Lilith',
+    }
+
+    @classmethod
+    def _display_name(cls, name: str) -> str:
+        return cls.DISPLAY_NAMES.get(name, name)
 
     # Sign symbols
     SIGN_SYMBOLS = {
@@ -1331,8 +1515,10 @@ class TransitFormatter:
 
         for t in sorted_transits:
             # Get symbols
-            t_sym = self.PLANET_SYMBOLS.get(t.transit_planet, '')
-            n_sym = self.PLANET_SYMBOLS.get(t.natal_planet, '')
+            t_name = self._display_name(t.transit_planet)
+            n_name = self._display_name(t.natal_planet)
+            t_sym = self.PLANET_SYMBOLS.get(t_name, '')
+            n_sym = self.PLANET_SYMBOLS.get(n_name, '')
             a_sym = self.ASPECT_SYMBOLS.get(t.aspect.lower(), '')
 
             orb_str = f"{t.orb:+.2f}°" if t.orb >= 0 else f"{t.orb:.2f}°"
@@ -1340,8 +1526,8 @@ class TransitFormatter:
             n_pos = self._sign_str(t.natal_sign, t.natal_house)
 
             lines.append(
-                f"  {t_sym} {t.transit_planet:8s} {t_pos:4s}  {a_sym} {t.aspect:10s}  "
-                f"{n_sym} natal {t.natal_planet:8s} {n_pos:4s}  ({orb_str})"
+                f"  {t_sym} {t_name:11s} {t_pos:4s}  {a_sym} {t.aspect:10s}  "
+                f"{n_sym} natal {n_name:11s} {n_pos:4s}  ({orb_str})"
             )
 
         return "\n".join(lines)
@@ -1374,17 +1560,40 @@ class TransitFormatter:
                 lines.append(self._format_position_event(t))
 
             for t in sorted(aspect_events, key=lambda x: abs(x.orb)):
-                t_sym = self.PLANET_SYMBOLS.get(t.transit_planet, '')
-                n_sym = self.PLANET_SYMBOLS.get(t.natal_planet, '')
+                t_name = self._display_name(t.transit_planet)
+                n_name = self._display_name(t.natal_planet)
+                t_sym = self.PLANET_SYMBOLS.get(t_name, '')
+                n_sym = self.PLANET_SYMBOLS.get(n_name, '')
                 a_sym = self.ASPECT_SYMBOLS.get(t.aspect.lower(), '')
                 t_pos = self._sign_str(t.transit_sign, t.transit_house)
                 n_pos = self._sign_str(t.natal_sign, t.natal_house)
 
                 lines.append(
-                    f"  {t_sym} {t.transit_planet:8s} {t_pos:4s} {a_sym} {t.aspect:10s} "
-                    f"{n_sym} natal {t.natal_planet:8s} {n_pos:4s} ({t.orb:+.2f}°)"
+                    f"  {t_sym} {t_name:11s} {t_pos:4s} {a_sym} {t.aspect:10s} "
+                    f"{n_sym} natal {n_name:11s} {n_pos:4s} ({t.orb:+.2f}°)"
                 )
 
+        return "\n".join(lines)
+
+    def format_sustained(self, sustained: list['SustainedAspect'], orb_limit: float) -> str:
+        """Render the Sustained Aspects section of `forecast` output."""
+        if not sustained:
+            return ""
+
+        lines = [f"\nSustained Aspects (in-orb < {orb_limit:.1f}°):"]
+        for s in sustained:
+            t_name = self._display_name(s.transit_planet)
+            n_name = self._display_name(s.natal_planet)
+            t_sym = self.PLANET_SYMBOLS.get(t_name, '')
+            n_sym = self.PLANET_SYMBOLS.get(n_name, '')
+            a_sym = self.ASPECT_SYMBOLS.get(s.aspect.lower(), '')
+            last = "ongoing" if s.ongoing else s.last_date
+            lines.append(
+                f"  {t_sym} {t_name:11s} {a_sym} {s.aspect:10s} "
+                f"{n_sym} natal {n_name:11s}  "
+                f"in-orb {s.first_date} → {last}  "
+                f"(peak {s.peak_date}, {s.peak_orb:+.2f}°)"
+            )
         return "\n".join(lines)
 
     def format_mundane(self, forecast: list[tuple[str, list[TransitEvent]]]) -> str:
@@ -1432,9 +1641,15 @@ class TransitFormatter:
 
     def format_planet_summary(self, planet_name: str, events: list[PlanetTrackingEvent],
                              start_date: datetime, end_date: datetime,
-                             natal_chart: NatalChart) -> str:
-        """Format summary statistics for planet tracking."""
-        if not events:
+                             natal_chart: NatalChart,
+                             current_state: Optional[PlanetTrackingEvent] = None) -> str:
+        """Format summary statistics for planet tracking.
+
+        `current_state` is the planet's actual snapshot at the chosen "now"
+        moment (typically end_date or today). When omitted, falls back to the
+        most recent state-change event, which can be stale.
+        """
+        if not events and current_state is None:
             return f"No events found for {planet_name} in date range."
 
         # Group events by type
@@ -1445,8 +1660,8 @@ class TransitFormatter:
         aspects = [e for e in events if e.event_type == 'aspect']
 
         # Current vs starting position
-        starting = events[0]
-        current = events[-1]
+        starting = events[0] if events else current_state
+        current = current_state if current_state is not None else events[-1]
 
         # Format retrograde periods
         retro_periods = []
@@ -1570,7 +1785,8 @@ Retrograde Periods:
             return f"  {date}: {planet_sym} stations DIRECT at {deg_in_sign(event.degree):.1f}° {sign_sym} {event.sign}"
 
         elif event.event_type == 'aspect':
-            natal_sym = self.PLANET_SYMBOLS.get(event.natal_planet, event.natal_planet)
+            natal_name = self._display_name(event.natal_planet)
+            natal_sym = self.PLANET_SYMBOLS.get(natal_name, natal_name)
 
             # Extract base aspect type and transition marker
             aspect_parts = event.aspect.split(' (')
@@ -1582,7 +1798,7 @@ Retrograde Periods:
             deg_info = f" at {deg_in_sign(event.degree):.1f}°" if event.degree else ""
 
             return (f"  {date}: {planet_sym}{deg_info} {aspect_sym} {base_aspect}{transition} "
-                    f"{natal_sym} natal {event.natal_planet} ({event.orb:+.2f}°)")
+                    f"{natal_sym} natal {natal_name} ({event.orb:+.2f}°)")
 
         return f"  {date}: {event.event_type}"
 
@@ -1662,8 +1878,13 @@ Examples:
     fc_p.add_argument('chart', nargs='?', help='Chart name (uses config default)')
     fc_p.add_argument('--days', '-d', type=int, default=30, help='Days to forecast (default: 30)')
     fc_p.add_argument('--date', type=str, help='Start date (YYYY-MM-DD, default: today)')
-    fc_p.add_argument('--all', '-a', action='store_true', help='Include all objects (nodes, chiron, etc.)')
+    fc_p.add_argument('--all', '-a', action='store_true',
+                      help='Include all objects on transit side (asteroids, transit nodes/Chiron/Lilith, angles). '
+                           'Default forecast already includes natal nodes/Chiron/Lilith on the natal side.')
     fc_p.add_argument('--orb', '-o', type=float, default=0.5, help='Max orb in degrees (default: 0.5)')
+    fc_p.add_argument('--sustained-orb', type=float, default=2.0,
+                      help='Max orb for the Sustained Aspects section (default: 2.0; '
+                           'set to 0 to disable the section)')
 
     # --- Mundane transits ---
     mundane_p = subparsers.add_parser('mundane', help='Mundane transits (transit-to-transit aspects)')
@@ -1829,6 +2050,16 @@ Examples:
                 start_date=start_date, include_moon_ingress=args.all
             )
             print(formatter.format_forecast(forecast))
+
+            # Sustained aspects section (slow movers that hold within wider orb).
+            if args.sustained_orb > 0:
+                sustained = transit_calc.sustained_aspects(
+                    chart, args.days, sustained_orb=args.sustained_orb,
+                    start_date=start_date, major_only=major_only,
+                )
+                section = formatter.format_sustained(sustained, args.sustained_orb)
+                if section:
+                    print(section)
         except FileNotFoundError as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
@@ -1927,9 +2158,17 @@ Examples:
                 aspect_orb=args.aspect_orb
             )
 
+            # Snapshot the planet's actual position at "now" (clamped to the
+            # tracking window). Used for the "Current" line in the summary so
+            # it doesn't reflect a stale event date.
+            now = datetime.now()
+            snapshot_at = now if start_date <= now <= end_date else end_date
+            current_state = transit_calc.current_position(chart, planet_name, snapshot_at)
+
             # Display results
             print(formatter.format_planet_summary(
-                planet_name, events, start_date, end_date, chart
+                planet_name, events, start_date, end_date, chart,
+                current_state=current_state,
             ))
 
             if not args.summary_only:
@@ -1971,6 +2210,8 @@ Examples:
                     display_name = pname.replace('_', ' ')
                     if display_name == 'True Node':
                         display_name = 'North Node'
+                    elif display_name == 'Mean Lilith':
+                        display_name = 'Lilith'
                     planets_data[display_name] = {
                         'sign': sign, 'house': house,
                         'degree': round(degree, 2), 'speed': round(speed, 2),
