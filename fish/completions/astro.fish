@@ -14,7 +14,7 @@ end
 function __astro_needs_chart
     set -l cmd (commandline -opc)
     set -l subcmd $cmd[2]
-    if contains -- $subcmd show-chart remove-chart now forecast
+    if contains -- $subcmd show-chart remove-chart now forecast progressions zr
         if test (count $cmd) -eq 2
             return 0
         end
@@ -29,6 +29,8 @@ complete -c astro -f -n '__fish_use_subcommand' -a 'show-chart' -d 'Show chart d
 complete -c astro -f -n '__fish_use_subcommand' -a 'remove-chart' -d 'Remove a chart'
 complete -c astro -f -n '__fish_use_subcommand' -a 'now' -d 'Show current transits'
 complete -c astro -f -n '__fish_use_subcommand' -a 'forecast' -d 'Forecast upcoming transits'
+complete -c astro -f -n '__fish_use_subcommand' -a 'progressions' -d 'Secondary progressions (immanuel)'
+complete -c astro -f -n '__fish_use_subcommand' -a 'zr' -d 'Zodiacal Releasing (stellium)'
 complete -c astro -f -n '__fish_use_subcommand' -a 'clear-cache' -d 'Clear transit cache'
 complete -c astro -f -n '__fish_use_subcommand' -a 'config' -d 'Show configuration'
 
@@ -41,3 +43,17 @@ complete -c astro -f -n '__fish_seen_subcommand_from forecast' -l date -d 'Start
 complete -c astro -f -n '__fish_seen_subcommand_from forecast' -s a -l all -d 'Include all objects'
 complete -c astro -f -n '__fish_seen_subcommand_from forecast' -s o -l orb -d 'Max orb in degrees'
 complete -c astro -f -n '__fish_seen_subcommand_from forecast' -l sustained-orb -d 'Sustained Aspects orb (default 2.0; 0 disables)'
+
+# Progressions options
+complete -c astro -f -n '__fish_seen_subcommand_from progressions' -l date -d 'Target date YYYY-MM-DD (default: today)'
+complete -c astro -f -n '__fish_seen_subcommand_from progressions' -l aspects -d 'Show progressed → natal aspects'
+complete -c astro -f -n '__fish_seen_subcommand_from progressions' -l dignities -d 'Show natal dignity scores'
+complete -c astro -f -n '__fish_seen_subcommand_from progressions' -l json -d 'JSON output'
+
+# ZR options
+complete -c astro -f -n '__fish_seen_subcommand_from zr' -l lot -xa 'fortune spirit eros necessity courage victory nemesis' -d 'Lot to release'
+complete -c astro -f -n '__fish_seen_subcommand_from zr' -l level -xa '1 2 3 4' -d 'ZR level (default 1)'
+complete -c astro -f -n '__fish_seen_subcommand_from zr' -l max-level -xa '1 2 3 4' -d 'Max nesting level computed'
+complete -c astro -f -n '__fish_seen_subcommand_from zr' -l age -d 'Snapshot at this age (years)'
+complete -c astro -f -n '__fish_seen_subcommand_from zr' -l lifespan -d 'Years of ZR (default 100)'
+complete -c astro -f -n '__fish_seen_subcommand_from zr' -l json -d 'JSON output'

@@ -1,0 +1,177 @@
+#!/usr/bin/env -S uv run --with immanuel python3
+"""
+Internal helper for `astro progressions`.
+
+Runs in its own uv env (immanuel pins timezonefinder<6, conflicts with kerykeion's
+ecosystem), so the main astro script shells out to this helper.
+
+Reads JSON request from stdin:
+  {
+    "command": "progressed" | "dignities",
+    "birth": {"year": Y, "month": M, "day": D, "hour": H, "minute": Mi,
+              "lat": F, "lng": F},
+    "target": "YYYY-MM-DD HH:MM"          # progressed only
+    "include_aspects": bool                # progressed only
+  }
+
+Writes JSON response to stdout.
+"""
+import json
+import sys
+
+
+SIGN_FULL_TO_ABBR = {
+    'Aries': 'Ari', 'Taurus': 'Tau', 'Gemini': 'Gem', 'Cancer': 'Can',
+    'Leo': 'Leo', 'Virgo': 'Vir', 'Libra': 'Lib', 'Scorpio': 'Sco',
+    'Sagittarius': 'Sag', 'Capricorn': 'Cap', 'Aquarius': 'Aqu', 'Pisces': 'Pis',
+}
+
+SKIP_NAMES = {'Asc', 'Desc', 'IC', 'Vertex'}
+
+ASPECT_NAME_BY_ANGLE = {
+    0: 'conjunction', 30: 'semisextile', 45: 'semisquare',
+    60: 'sextile', 72: 'quintile', 90: 'square',
+    120: 'trine', 135: 'sesquisquare', 144: 'biquintile',
+    150: 'quincunx', 180: 'opposition',
+}
+
+
+def _to_float(v, default=0.0):
+    """Coerce immanuel Angle/Speed/Coordinate or anything float-ish."""
+    if v is None:
+        return default
+    # Immanuel wraps numeric values in classes with .raw (or sometimes .degrees)
+    for attr in ('raw', 'degrees', 'value'):
+        if hasattr(v, attr):
+            try:
+                return float(getattr(v, attr))
+            except (TypeError, ValueError):
+                continue
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _birth_str(b):
+    return f"{b['year']:04d}-{b['month']:02d}-{b['day']:02d} {b['hour']:02d}:{b['minute']:02d}"
+
+
+def cmd_progressed(req):
+    from immanuel import charts
+    from immanuel.const import calc
+    from immanuel.setup import settings
+
+    settings.mc_progression_method = calc.NAIBOD
+
+    b = req['birth']
+    native = charts.Subject(
+        date_time=_birth_str(b),
+        latitude=float(b['lat']),
+        longitude=float(b['lng']),
+    )
+    natal = charts.Natal(native)
+    progressed = charts.Progressed(native, req['target'], aspects_to=natal)
+
+    planets = []
+    for obj in progressed.objects.values():
+        if obj.name in SKIP_NAMES:
+            continue
+        sign_full = obj.sign.name
+        sign_abbr = SIGN_FULL_TO_ABBR.get(sign_full, sign_full[:3])
+        house_num = getattr(getattr(obj, 'house', None), 'number', 0) or 0
+        lon = _to_float(getattr(obj, 'longitude', None))
+        speed = _to_float(getattr(obj, 'speed', None))
+        planets.append({
+            'name': obj.name,
+            'sign': sign_abbr,
+            'sign_full': sign_full,
+            'house': int(house_num),
+            'longitude': lon,
+            'degree_in_sign': lon % 30,
+            'speed': speed,
+        })
+
+    out = {'planets': planets}
+
+    if req.get('include_aspects'):
+        natal_objs = dict(natal.objects)
+        prog_objs = dict(progressed.objects)
+        aspects = []
+        for active_idx, target_map in (progressed.aspects or {}).items():
+            if not isinstance(target_map, dict):
+                continue
+            for passive_idx, asp in target_map.items():
+                p_obj = prog_objs.get(active_idx)
+                n_obj = natal_objs.get(passive_idx)
+                if p_obj is None or n_obj is None or p_obj.name in SKIP_NAMES:
+                    continue
+                # `.type` is the human-readable name ('Conjunction', 'Trine');
+                # `.aspect` is the raw angle (0.0, 120.0). `.orb` is the configured
+                # max — the actual orb-from-exact lives in `.distance` (signed).
+                aspect_str = str(getattr(asp, 'type', '') or '').lower()
+                if not aspect_str:
+                    raw_aspect = getattr(asp, 'aspect', None)
+                    aspect_str = ASPECT_NAME_BY_ANGLE.get(int(raw_aspect or -1), str(raw_aspect))
+                # `.difference` is signed orb-from-exact (degrees);
+                # `.distance` is total angular separation; `.orb` is max-orb cutoff.
+                orb_val = _to_float(getattr(asp, 'difference', None))
+                aspects.append({
+                    'progressed_planet': p_obj.name,
+                    'natal_planet': n_obj.name,
+                    'aspect': aspect_str,
+                    'orb': orb_val,
+                })
+        out['aspects'] = aspects
+
+    return out
+
+
+def cmd_dignities(req):
+    from immanuel import charts
+
+    b = req['birth']
+    native = charts.Subject(
+        date_time=_birth_str(b),
+        latitude=float(b['lat']),
+        longitude=float(b['lng']),
+    )
+    natal = charts.Natal(native)
+
+    dignities = []
+    for obj in natal.objects.values():
+        score = getattr(obj, 'score', None)
+        digs = getattr(obj, 'dignities', None)
+        if score is None and digs is None:
+            continue
+        dignities.append({
+            'name': obj.name,
+            'score': int(score) if score is not None else None,
+            'dignities': str(digs) if digs is not None else '',
+        })
+    return {'dignities': dignities}
+
+
+def main():
+    req = json.load(sys.stdin)
+    cmd = req.get('command')
+    if cmd == 'progressed':
+        out = cmd_progressed(req)
+    elif cmd == 'dignities':
+        out = cmd_dignities(req)
+    else:
+        print(json.dumps({'error': f"Unknown command: {cmd}"}), file=sys.stdout)
+        sys.exit(2)
+    json.dump(out, sys.stdout)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception as e:
+        import traceback
+        json.dump({
+            'error': str(e),
+            'traceback': traceback.format_exc(),
+        }, sys.stdout)
+        sys.exit(1)

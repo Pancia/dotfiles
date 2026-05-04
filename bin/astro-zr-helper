@@ -1,0 +1,286 @@
+#!/usr/bin/env -S uv run --with git+https://github.com/katelouie/stellium python3
+"""
+Internal helper for `astro zr`.
+
+Runs in its own uv env (stellium needs timezonefinder>=6.5, conflicts with
+immanuel/kerykeion versions), so the main astro script shells out to this helper.
+
+Reads JSON request from stdin:
+  {
+    "command": "timeline" | "snapshot",
+    "birth": {"year": Y, "month": M, "day": D, "hour": H, "minute": Mi,
+              "city": "...", "nation": "..."},
+    "lot": "Part of Fortune",
+    "max_level": 4,
+    "lifespan": 100,                   # timeline only
+    "level": 1,                        # timeline only (1..4)
+    "age": 32                          # snapshot only
+  }
+
+Writes JSON response to stdout.
+"""
+import json
+import sys
+
+
+def _build_canonical_engine_class():
+    """Subclass stellium's engine to fix 3 deviations from Valens-canon ZR.
+
+    Stellium 0.18.1:
+      (a) Uses 365.25-day solar years at L1 instead of 360-day schematic years.
+      (b) Derives sign minor-years from the ruler, giving Aqu=27 — but the
+          canonical Valens table assigns Cap=27 and Aqu=30 even though both
+          are Saturn-ruled (a sign-specific historical quirk).
+      (c) Breaks the L2+ sub-period loop at exactly 12 signs, instead of
+          continuing through loosing-of-bond cycles until the parent's
+          duration is exhausted.
+
+    Verified against astro-seek's ZR calculator on a 1993 birth chart.
+    """
+    import datetime as dt
+    from stellium.engines.releasing import (
+        ZodiacalReleasingEngine, ZRPeriod, DIGNITIES,
+    )
+
+    # Canonical Valens minor-years per sign (sum = 211).
+    SIGN_MINOR_YEARS = {
+        'Aries': 15, 'Taurus': 8, 'Gemini': 20, 'Cancer': 25,
+        'Leo': 19, 'Virgo': 20, 'Libra': 8, 'Scorpio': 15,
+        'Sagittarius': 12, 'Capricorn': 27, 'Aquarius': 30, 'Pisces': 12,
+    }
+
+    class CanonicalZREngine(ZodiacalReleasingEngine):
+        LEVEL_MULTIPLIERS = {1: 360.0, 2: 30.0, 3: 1.0, 4: 1.0 / 12.0}
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.sign_periods = dict(SIGN_MINOR_YEARS)
+            self.total_cycle_period = sum(self.sign_periods.values())  # 211
+
+        def calculate_all_periods(self):
+            all_periods = {}
+            calc_fn = (
+                self._calculate_periods
+                if self.method == "fractal"
+                else self._calculate_periods_valens
+            )
+            base_duration = self.total_cycle_period * self.LEVEL_MULTIPLIERS[1]
+            all_periods[1] = calc_fn(
+                level=1,
+                start_sign=self.lot_sign,
+                start_date=self.chart.datetime.utc_datetime,
+                total_duration=base_duration,
+            )
+            for level in range(2, self.max_level + 1):
+                all_periods[level] = []
+                for parent in all_periods[level - 1]:
+                    subperiods = calc_fn(
+                        level=level,
+                        start_sign=parent.sign,
+                        start_date=parent.start,
+                        total_duration=parent.length_days,
+                    )
+                    all_periods[level].extend(subperiods)
+            return all_periods
+
+        def _calculate_periods_valens(self, level, start_sign, start_date,
+                                      total_duration):
+            level_multipliers = self.LEVEL_MULTIPLIERS
+
+            periods = []
+            current_sign = start_sign
+            current_date = start_date
+            signs_processed = 0
+            time_passed = 0.0
+
+            while True:
+                sign_period = self.sign_periods[current_sign]
+                ideal_period_days = sign_period * level_multipliers[level]
+
+                final_duration = ideal_period_days
+                is_truncated = False
+
+                if level > 1:
+                    remaining_time = total_duration - time_passed
+                    if remaining_time <= 0.01:
+                        break
+                    if ideal_period_days > remaining_time:
+                        final_duration = remaining_time
+                        is_truncated = True
+
+                end_date = current_date + dt.timedelta(days=final_duration)
+                angle = self.angular_signs.get(current_sign)
+
+                period_score = 0
+                period_ruler_name = DIGNITIES[current_sign]["traditional"]["ruler"]
+                ruler_info = self.ruler_roles.get(period_ruler_name)
+                ruler_role_name = None
+                if ruler_info:
+                    ruler_role_name, r_score = ruler_info
+                    period_score += r_score
+
+                present_roles_list = []
+                if current_sign in self.sign_contents:
+                    for role, p_score in self.sign_contents[current_sign]:
+                        present_roles_list.append(role)
+                        period_score += p_score
+
+                if angle == 10:
+                    if period_score < 0:
+                        period_score -= 1
+                    if period_score > 0:
+                        period_score += 1
+
+                periods.append(
+                    ZRPeriod(
+                        level=level,
+                        sign=current_sign,
+                        ruler=period_ruler_name,
+                        start=current_date,
+                        end=end_date,
+                        length_days=final_duration,
+                        angle_from_lot=angle,
+                        is_angular=angle is not None,
+                        is_peak=angle == 10,
+                        is_loosing_bond=signs_processed == 12,
+                        ruler_role=ruler_role_name,
+                        tenant_roles=present_roles_list,
+                        score=period_score,
+                    )
+                )
+
+                if is_truncated:
+                    break
+
+                time_passed += final_duration
+                current_date = end_date
+                current_sign = self._next_sign(
+                    current_sign, jump=signs_processed == 11
+                )
+                signs_processed += 1
+
+                # L1 termination: real-age comparison stays at 365.25 (the user's
+                # `lifespan` is in actual years, not schematic years).
+                # L2+: don't break at 12 signs — the LB cycle continues until the
+                # parent's total_duration is exhausted (truncation handles cutoff).
+                if level == 1:
+                    age_years = (
+                        current_date - self.chart.datetime.utc_datetime
+                    ).days / 365.25
+                    if age_years > self.lifespan:
+                        break
+
+            return periods
+
+    return CanonicalZREngine
+
+
+def _build_chart(req):
+    from stellium import ChartBuilder
+    from stellium.engines.releasing import ZodiacalReleasingAnalyzer
+
+    b = req['birth']
+    birth_str = (f"{b['year']:04d}-{b['month']:02d}-{b['day']:02d} "
+                 f"{b['hour']:02d}:{b['minute']:02d}")
+    location = b.get('city', '')
+    if b.get('nation'):
+        location = f"{location}, {b['nation']}"
+
+    canonical_engine = _build_canonical_engine_class()
+
+    return (
+        ChartBuilder.from_details(birth_str, location)
+        .add_analyzer(ZodiacalReleasingAnalyzer(
+            [req['lot']],
+            engine=canonical_engine,
+            max_level=int(req.get('max_level', 4)),
+            lifespan=int(req.get('lifespan', 100)),
+        ))
+        .calculate()
+    )
+
+
+def _sentiment_from_score(score):
+    if score is None:
+        return 'neutral'
+    if score >= 3:
+        return 'positive'
+    if score <= -3:
+        return 'challenging'
+    return 'neutral'
+
+
+def _serialize(period, level):
+    score = int(getattr(period, 'score', 0) or 0)
+    return {
+        'level': level,
+        'sign': str(getattr(period, 'sign', '')),
+        'ruler': str(getattr(period, 'ruler', '')),
+        'start': period.start.date().isoformat(),
+        'end': period.end.date().isoformat(),
+        'score': score,
+        'sentiment': str(getattr(period, 'sentiment', None) or _sentiment_from_score(score)),
+        'is_peak': bool(getattr(period, 'is_peak', False)),
+        'is_lb': bool(getattr(period, 'is_loosing_bond',
+                              getattr(period, 'is_lb', False))),
+    }
+
+
+def cmd_timeline(req):
+    chart = _build_chart(req)
+    timeline = chart.zodiacal_releasing(req['lot'])
+    level = int(req.get('level', 1))
+    # Stellium exposes level→periods as `timeline.periods` (dict keyed 1..max_level).
+    # Older versions may also have `l1_periods()`.
+    periods_by_level = getattr(timeline, 'periods', None)
+    if isinstance(periods_by_level, dict) and level in periods_by_level:
+        periods = periods_by_level[level]
+    elif level == 1 and hasattr(timeline, 'l1_periods'):
+        periods = timeline.l1_periods()
+    else:
+        raise ValueError(f"Stellium timeline has no level {level}")
+    return {'periods': [_serialize(p, level) for p in periods]}
+
+
+def cmd_snapshot(req):
+    chart = _build_chart(req)
+    snap = chart.zr_at_age(float(req['age']), req['lot'])
+    out = {'levels': {}}
+    # New stellium snapshots may expose `levels` dict; fallback to attrs.
+    levels_attr = getattr(snap, 'levels', None)
+    if isinstance(levels_attr, dict):
+        for level_num in (1, 2, 3, 4):
+            entry = levels_attr.get(level_num)
+            if entry is not None:
+                out['levels'][f'l{level_num}'] = _serialize(entry, level_num)
+    else:
+        for level_num in (1, 2, 3, 4):
+            entry = getattr(snap, f'l{level_num}', None)
+            if entry is not None:
+                out['levels'][f'l{level_num}'] = _serialize(entry, level_num)
+    return out
+
+
+def main():
+    req = json.load(sys.stdin)
+    cmd = req.get('command')
+    if cmd == 'timeline':
+        out = cmd_timeline(req)
+    elif cmd == 'snapshot':
+        out = cmd_snapshot(req)
+    else:
+        print(json.dumps({'error': f"Unknown command: {cmd}"}), file=sys.stdout)
+        sys.exit(2)
+    json.dump(out, sys.stdout)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception as e:
+        import traceback
+        json.dump({
+            'error': str(e),
+            'traceback': traceback.format_exc(),
+        }, sys.stdout)
+        sys.exit(1)

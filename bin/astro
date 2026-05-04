@@ -15,6 +15,8 @@ Usage:
     astro forecast --date YYYY-MM-DD # Forecast from specific date
     astro mundane --days N       # Mundane transits (transit-to-transit)
     astro natal [NAME]           # Full birth chart (planets, houses, aspects)
+    astro progressions [NAME]    # Secondary progressions (immanuel)
+    astro zr [NAME] --lot LOT    # Zodiacal Releasing (stellium)
 
 Run with: uv run --with kerykeion ~/dotfiles/bin/astro <command>
 """
@@ -173,6 +175,52 @@ class AsteroidObject:
 
 
 @dataclass
+class ProgressedPlanet:
+    """A single planet's secondary-progressed position."""
+    name: str
+    sign: str           # Short ('Ari', 'Tau', ...)
+    sign_full: str      # Full ('Aries', 'Taurus', ...)
+    house: int          # 1-12
+    longitude: float    # 0-360
+    degree_in_sign: float  # 0-30
+    speed: float = 0.0
+
+
+@dataclass
+class ProgressedAspect:
+    """An aspect between a progressed planet and a natal planet."""
+    progressed_planet: str
+    natal_planet: str
+    aspect: str
+    orb: float
+
+
+@dataclass
+class ZRPeriod:
+    """A single Zodiacal Releasing period (any level L1-L4)."""
+    level: int
+    sign: str           # Full sign name as returned by stellium
+    ruler: str
+    start: str          # ISO date YYYY-MM-DD
+    end: str            # ISO date YYYY-MM-DD
+    score: int = 0
+    sentiment: str = "neutral"
+    is_peak: bool = False
+    is_lb: bool = False  # loosing of the bond
+
+
+@dataclass
+class ZRSnapshot:
+    """ZR levels active at a single moment."""
+    age: float
+    date: str
+    l1: Optional[ZRPeriod] = None
+    l2: Optional[ZRPeriod] = None
+    l3: Optional[ZRPeriod] = None
+    l4: Optional[ZRPeriod] = None
+
+
+@dataclass
 class Config:
     """User configuration."""
     default_chart: str = "default"
@@ -187,6 +235,21 @@ class Config:
     display_format: str = "compact"
 
 
+@dataclass
+class Location:
+    """A reusable geographic location preset (Prague, Lisbon, etc.).
+
+    `tz_str` is stored for completeness but is NOT used during chart relocation —
+    relocated charts must keep the natal chart's original tz_str so the UTC
+    birth moment is unchanged. tz_str on Location is informational only.
+    """
+    name: str
+    lat: float
+    lng: float
+    tz_str: str
+    label: str = ""  # Optional human-friendly label, e.g. "Prague, CZ"
+
+
 # =============================================================================
 # Storage Layer
 # =============================================================================
@@ -199,6 +262,7 @@ class AstroStorage:
         self.charts_dir = self.base_path / "charts"
         self.transits_dir = self.base_path / "transits"
         self.ephemeris_dir = self.base_path / "ephemeris_cache"
+        self.locations_dir = self.base_path / "locations"
         self.config_file = self.base_path / "config.json"
         self._ensure_dirs()
 
@@ -207,6 +271,7 @@ class AstroStorage:
         self.charts_dir.mkdir(parents=True, exist_ok=True)
         self.transits_dir.mkdir(parents=True, exist_ok=True)
         self.ephemeris_dir.mkdir(parents=True, exist_ok=True)
+        self.locations_dir.mkdir(parents=True, exist_ok=True)
 
     # --- Config ---
 
@@ -253,6 +318,36 @@ class AstroStorage:
     def delete_chart(self, name: str) -> bool:
         """Delete a chart. Returns True if deleted."""
         filepath = self.charts_dir / f"{name}.json"
+        if filepath.exists():
+            filepath.unlink()
+            return True
+        return False
+
+    # --- Locations ---
+
+    def save_location(self, location: Location) -> None:
+        """Save location preset to JSON."""
+        filepath = self.locations_dir / f"{location.name}.json"
+        with open(filepath, 'w') as f:
+            json.dump(asdict(location), f, indent=2)
+
+    def load_location(self, name: str) -> Location:
+        """Load location preset from JSON."""
+        filepath = self.locations_dir / f"{name}.json"
+        if not filepath.exists():
+            raise FileNotFoundError(f"Location '{name}' not found. "
+                                    f"Run 'astro locations add {name} ...' to create it.")
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        return Location(**data)
+
+    def list_locations(self) -> list[str]:
+        """Return list of location preset names."""
+        return sorted([f.stem for f in self.locations_dir.glob("*.json")])
+
+    def delete_location(self, name: str) -> bool:
+        """Delete a location preset. Returns True if deleted."""
+        filepath = self.locations_dir / f"{name}.json"
         if filepath.exists():
             filepath.unlink()
             return True
@@ -376,6 +471,42 @@ class ChartManager:
                 print(f"  Please enter a value between {min_val} and {max_val}")
             except ValueError:
                 print("  Please enter a valid number")
+
+
+# =============================================================================
+# Location Manager
+# =============================================================================
+
+class LocationManager:
+    """Manages reusable location presets for relocation analysis."""
+
+    def __init__(self, storage: AstroStorage):
+        self.storage = storage
+
+    def add(self, name: str, lat: float, lng: float, tz: str, label: str = "") -> Location:
+        """Create or overwrite a location preset."""
+        location = Location(name=name, lat=lat, lng=lng, tz_str=tz, label=label)
+        self.storage.save_location(location)
+        return location
+
+    def resolve(self, args) -> tuple[float, float]:
+        """Resolve geographic coordinates from CLI args.
+
+        Precedence: --lat/--lng explicit pair > --location preset.
+        Returns (lat, lng) only — destination tz is intentionally NOT
+        returned because relocation must keep the natal chart's original
+        tz_str (UTC moment unchanged); destination tz is irrelevant to the
+        relocated chart math.
+        """
+        if args.lat is not None and args.lng is not None:
+            return (args.lat, args.lng)
+        if args.lat is not None or args.lng is not None:
+            raise ValueError("--lat and --lng must be provided together")
+        if not args.location:
+            raise ValueError("Provide either --lat/--lng or --location PRESET. "
+                             "List presets with `astro locations list`.")
+        loc = self.storage.load_location(args.location)
+        return (loc.lat, loc.lng)
 
 
 # =============================================================================
@@ -1398,6 +1529,476 @@ class TransitCalculator:
 
 
 # =============================================================================
+# Relocation Calculator (astrocartography depth analysis)
+# =============================================================================
+
+# Aspect targets for angle hits (orb checked separately)
+_ANGLE_ASPECTS = (
+    ('conjunction', 0),
+    ('sextile', 60),
+    ('square', 90),
+    ('trine', 120),
+    ('opposition', 180),
+)
+
+
+def _angle_aspect_distance(planet_lon: float, angle_lon: float, max_orb: float = 1.0
+                           ) -> Optional[tuple[str, float]]:
+    """Return (aspect_name, orb) if planet aspects angle within max_orb, else None.
+
+    Pure longitude math — usable for both transit-to-relocated-angle and synastry
+    angle contacts.
+    """
+    diff = abs(((planet_lon - angle_lon + 180) % 360) - 180)
+    for aspect_name, target in _ANGLE_ASPECTS:
+        orb = abs(diff - target)
+        if orb <= max_orb:
+            return (aspect_name, orb)
+    return None
+
+
+class RelocationCalculator:
+    """Builds relocated charts and computes transits to relocated angles.
+
+    A 'relocated chart' uses the natal birth UTC moment (unchanged) but recomputes
+    angles and house cusps for new geographic coordinates. This shifts which house
+    each natal planet falls into, and produces new ASC/MC/IC/DC longitudes that
+    transits can aspect.
+    """
+
+    # Natal subject angle attribute names → display short codes
+    ANGLE_NAMES = (
+        ('first_house',   'ASC'),
+        ('tenth_house',   'MC'),
+        ('seventh_house', 'DC'),
+        ('fourth_house',  'IC'),
+    )
+
+    # Transit planets to track for angle aspects (no Moon — moves too fast for sustained signal)
+    TRANSIT_PLANETS = ('Sun', 'Mercury', 'Venus', 'Mars',
+                       'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto')
+
+    def __init__(self, storage: AstroStorage, transit_calc: 'TransitCalculator'):
+        self.storage = storage
+        self.tc = transit_calc
+
+    def relocate_subject(self, natal_chart: NatalChart, lat: float, lng: float):
+        """Build an AstrologicalSubject for the relocated chart.
+
+        CRITICAL: keeps natal `tz_str` so the UTC moment is unchanged. Only lat/lng
+        are overridden. If we passed the destination tz, kerykeion would
+        misinterpret the local birth time as being in the new timezone — wrong
+        UTC moment, wrong relocated angles.
+        """
+        from kerykeion import AstrologicalSubject
+        bd = natal_chart.birth_data
+        if not bd.tz_str:
+            # tz_str is required — force a geocode of natal first to populate cache
+            natal = self.tc._make_subject(
+                bd.full_name, bd.year, bd.month, bd.day, bd.hour, bd.minute, bd
+            )
+            self.tc._cache_coords(natal_chart, natal)
+            bd = natal_chart.birth_data
+        return AstrologicalSubject(
+            f"{bd.full_name}@reloc",
+            bd.year, bd.month, bd.day, bd.hour, bd.minute,
+            bd.city, bd.nation,
+            lat=lat, lng=lng, tz_str=bd.tz_str,
+            houses_system_identifier="A",
+        )
+
+    def angle_longitudes(self, relocated_subject) -> dict[str, float]:
+        """Extract ASC/MC/DC/IC longitudes (0-360) from a relocated subject."""
+        out = {}
+        for attr_name, code in self.ANGLE_NAMES:
+            if hasattr(relocated_subject, attr_name):
+                out[code] = getattr(relocated_subject, attr_name).abs_pos
+        return out
+
+    def diff_houses(self, natal_subject, relocated_subject) -> list[dict]:
+        """Compare planet house positions between natal and relocated charts.
+
+        Returns list of dicts: {planet, longitude, sign, natal_house, reloc_house, shifted}.
+        """
+        natal_cusps = self.tc._calculate_natal_houses(natal_subject)
+        reloc_cusps = self.tc._calculate_natal_houses(relocated_subject)
+
+        # Planets to compare (kerykeion attribute names → display names)
+        planets = [
+            ('sun', 'Sun'), ('moon', 'Moon'), ('mercury', 'Mercury'),
+            ('venus', 'Venus'), ('mars', 'Mars'), ('jupiter', 'Jupiter'),
+            ('saturn', 'Saturn'), ('uranus', 'Uranus'),
+            ('neptune', 'Neptune'), ('pluto', 'Pluto'),
+            ('chiron', 'Chiron'),
+            ('true_node', 'North Node'), ('true_south_node', 'South Node'),
+            ('mean_lilith', 'Lilith'),
+        ]
+
+        rows = []
+        for attr, display in planets:
+            if not hasattr(natal_subject, attr):
+                continue
+            nplanet = getattr(natal_subject, attr)
+            if nplanet is None:
+                continue
+            lon = nplanet.abs_pos
+            sign = getattr(nplanet, 'sign', '')
+            natal_house = self.tc._planet_in_natal_house(lon, natal_cusps)
+            reloc_house = self.tc._planet_in_natal_house(lon, reloc_cusps)
+            rows.append({
+                'planet': display,
+                'longitude': lon,
+                'sign': sign,
+                'degree_in_sign': lon % 30,
+                'natal_house': natal_house,
+                'reloc_house': reloc_house,
+                'shifted': natal_house != reloc_house,
+            })
+        return rows
+
+    def transits_to_reloc_angles(
+        self, natal_chart: NatalChart, lat: float, lng: float,
+        days: int, start_date: Optional[datetime] = None, orb: float = 1.0,
+    ) -> list[dict]:
+        """Compute transits aspecting the four relocated angles over a date window.
+
+        Custom loop — does NOT reuse forecast_transits (which bakes the natal
+        subject from chart.birth_data and would corrupt the cache key).
+
+        Algorithm:
+          1. Build relocated subject once → 4 angle longitudes.
+          2. For each day in window: build a daily transit subject (noon UT for
+             that date, geographic position irrelevant for planet longitudes).
+          3. For each (transit planet, relocated angle) pair: longitude math → if
+             within orb of any major aspect, record a hit.
+          4. Sort by date.
+
+        Returns list of {date, transit_planet, transit_sign, transit_lon,
+                         angle, angle_lon, aspect, orb}.
+        """
+        bd = natal_chart.birth_data
+        # Ensure tz cached
+        if not bd.tz_str:
+            natal = self.tc._make_subject(
+                bd.full_name, bd.year, bd.month, bd.day, bd.hour, bd.minute, bd
+            )
+            self.tc._cache_coords(natal_chart, natal)
+            bd = natal_chart.birth_data
+
+        reloc = self.relocate_subject(natal_chart, lat, lng)
+        angles = self.angle_longitudes(reloc)
+
+        start = (start_date.date() if start_date else datetime.now().date())
+        results = []
+
+        for day_offset in range(days):
+            date = start + timedelta(days=day_offset)
+            # Build transit subject at noon for that date — uses natal's location
+            # (transit planet ECLIPTIC longitudes are location-independent; angles
+            # we care about are the RELOCATED angles, which are fixed).
+            transit_subj = self.tc._make_subject(
+                "Transit", date.year, date.month, date.day, 12, 0, bd
+            )
+            for planet_name in self.TRANSIT_PLANETS:
+                pobj = self.tc._get_planet_obj(transit_subj, planet_name)
+                if pobj is None:
+                    continue
+                planet_lon = pobj.abs_pos
+                sign = getattr(pobj, 'sign', '')
+                for angle_code, angle_lon in angles.items():
+                    aspect = _angle_aspect_distance(planet_lon, angle_lon, max_orb=orb)
+                    if aspect:
+                        aspect_name, orb_value = aspect
+                        results.append({
+                            'date': date.isoformat(),
+                            'transit_planet': planet_name,
+                            'transit_sign': sign,
+                            'transit_lon': planet_lon,
+                            'angle': angle_code,
+                            'angle_lon': angle_lon,
+                            'aspect': aspect_name,
+                            'orb': orb_value,
+                        })
+        results.sort(key=lambda r: (r['date'], r['orb']))
+        return results
+
+
+# =============================================================================
+# Synastry Calculator (chart-to-chart relationship)
+# =============================================================================
+
+class SynastryCalculator:
+    """Computes inter-aspects, angle contacts, and house overlays between two charts."""
+
+    # Same planet list used for relocation diff
+    PLANETS_FOR_OVERLAY = [
+        ('sun', 'Sun'), ('moon', 'Moon'), ('mercury', 'Mercury'),
+        ('venus', 'Venus'), ('mars', 'Mars'), ('jupiter', 'Jupiter'),
+        ('saturn', 'Saturn'), ('uranus', 'Uranus'),
+        ('neptune', 'Neptune'), ('pluto', 'Pluto'), ('chiron', 'Chiron'),
+    ]
+
+    ANGLE_NAMES = (
+        ('first_house',   'ASC'),
+        ('tenth_house',   'MC'),
+        ('seventh_house', 'DC'),
+        ('fourth_house',  'IC'),
+    )
+
+    def __init__(self, transit_calc: 'TransitCalculator'):
+        self.tc = transit_calc
+
+    def _angle_lons(self, subj) -> dict[str, float]:
+        out = {}
+        for attr, code in self.ANGLE_NAMES:
+            if hasattr(subj, attr):
+                out[code] = getattr(subj, attr).abs_pos
+        return out
+
+    def _house_overlay(self, src_subj, dst_cusps: dict[int, float]) -> dict[str, str]:
+        """For each major planet in src_subj, return which dst_cusps house it falls in."""
+        result = {}
+        for attr, display in self.PLANETS_FOR_OVERLAY:
+            if not hasattr(src_subj, attr):
+                continue
+            p = getattr(src_subj, attr)
+            if p is None:
+                continue
+            result[display] = self.tc._planet_in_natal_house(p.abs_pos, dst_cusps)
+        return result
+
+    def _angle_contacts(self, src_subj, dst_angles: dict[str, float],
+                        src_label: str, dst_label: str,
+                        max_orb: float = 2.0) -> list[dict]:
+        """Find aspects from src_subj's planets to dst_subj's angles within max_orb."""
+        out = []
+        for attr, display in self.PLANETS_FOR_OVERLAY:
+            if not hasattr(src_subj, attr):
+                continue
+            p = getattr(src_subj, attr)
+            if p is None:
+                continue
+            for angle_code, angle_lon in dst_angles.items():
+                aspect = _angle_aspect_distance(p.abs_pos, angle_lon, max_orb=max_orb)
+                if aspect:
+                    aspect_name, orb = aspect
+                    out.append({
+                        'side': src_label,
+                        'planet': display,
+                        'aspect': aspect_name,
+                        'target_side': dst_label,
+                        'angle': angle_code,
+                        'orb': orb,
+                    })
+        return out
+
+    def compute(self, chart_a: NatalChart, chart_b: NatalChart) -> dict:
+        """Compute full synastry between two saved charts."""
+        from kerykeion import SynastryAspects
+
+        bd_a, bd_b = chart_a.birth_data, chart_b.birth_data
+
+        subj_a = self.tc._make_subject(
+            bd_a.full_name, bd_a.year, bd_a.month, bd_a.day, bd_a.hour, bd_a.minute, bd_a
+        )
+        self.tc._cache_coords(chart_a, subj_a)
+        subj_b = self.tc._make_subject(
+            bd_b.full_name, bd_b.year, bd_b.month, bd_b.day, bd_b.hour, bd_b.minute, bd_b
+        )
+        self.tc._cache_coords(chart_b, subj_b)
+
+        # Planet ↔ planet aspects via kerykeion
+        synastry = SynastryAspects(subj_a, subj_b)
+        raw = synastry.relevant_aspects
+        inter_aspects = sorted(
+            [{
+                'p1_name': a.get('p1_name'),
+                'p2_name': a.get('p2_name'),
+                'aspect': a.get('aspect'),
+                'orbit': a.get('orbit', 0.0),
+            } for a in raw if a.get('p1_name') and a.get('p2_name')],
+            key=lambda a: abs(a['orbit']),
+        )
+
+        # Angle contacts (manual longitude math — kerykeion may not expose angles)
+        angles_a = self._angle_lons(subj_a)
+        angles_b = self._angle_lons(subj_b)
+        angle_contacts = []
+        angle_contacts.extend(
+            self._angle_contacts(subj_a, angles_b, chart_a.name, chart_b.name)
+        )
+        angle_contacts.extend(
+            self._angle_contacts(subj_b, angles_a, chart_b.name, chart_a.name)
+        )
+        angle_contacts.sort(key=lambda c: c['orb'])
+
+        # House overlays
+        cusps_a = self.tc._calculate_natal_houses(subj_a)
+        cusps_b = self.tc._calculate_natal_houses(subj_b)
+        a_in_b_houses = self._house_overlay(subj_a, cusps_b)
+        b_in_a_houses = self._house_overlay(subj_b, cusps_a)
+
+        return {
+            'inter_aspects': inter_aspects,
+            'angle_contacts': angle_contacts,
+            'a_in_b_houses': a_in_b_houses,
+            'b_in_a_houses': b_in_a_houses,
+        }
+
+
+# =============================================================================
+# Secondary Progressions (immanuel)
+# =============================================================================
+
+# Full sign name → 3-letter abbrev used elsewhere in this file
+_SIGN_FULL_TO_ABBR = {
+    'Aries': 'Ari', 'Taurus': 'Tau', 'Gemini': 'Gem', 'Cancer': 'Can',
+    'Leo': 'Leo', 'Virgo': 'Vir', 'Libra': 'Lib', 'Scorpio': 'Sco',
+    'Sagittarius': 'Sag', 'Capricorn': 'Cap', 'Aquarius': 'Aqu', 'Pisces': 'Pis',
+}
+
+
+def _run_helper(helper_name: str, payload: dict) -> dict:
+    """Shell out to a sibling helper script, returning parsed JSON.
+
+    Helpers live in the same directory as this script and run in their own
+    uv envs (immanuel and stellium have conflicting timezonefinder pins).
+    """
+    import subprocess
+    helper_path = Path(__file__).parent / helper_name
+    if not helper_path.exists():
+        raise FileNotFoundError(f"Helper not found: {helper_path}")
+    proc = subprocess.run(
+        [str(helper_path)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        # Try to extract structured error from stdout, else raw stderr.
+        try:
+            err = json.loads(proc.stdout)
+        except (json.JSONDecodeError, ValueError):
+            err = {'error': proc.stderr or 'helper failed', 'traceback': ''}
+        raise RuntimeError(
+            f"{helper_name} failed: {err.get('error', '?')}\n{err.get('traceback', '')}"
+        )
+    try:
+        return json.loads(proc.stdout)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"{helper_name} returned non-JSON: {proc.stdout[:200]!r}") from e
+
+
+class ProgressionCalculator:
+    """Computes secondary progressions and dignities via the immanuel helper."""
+
+    HELPER = "astro-progressions-helper"
+
+    def __init__(self, storage: 'AstroStorage'):
+        self.storage = storage
+
+    def _birth_payload(self, bd: BirthData) -> dict:
+        return {
+            'year': bd.year, 'month': bd.month, 'day': bd.day,
+            'hour': bd.hour, 'minute': bd.minute,
+            'lat': bd.lat, 'lng': bd.lng,
+        }
+
+    def progressed_planets(self, chart: NatalChart,
+                           target_dt: datetime,
+                           include_aspects: bool = False
+                           ) -> tuple[list[ProgressedPlanet], list[ProgressedAspect]]:
+        payload = {
+            'command': 'progressed',
+            'birth': self._birth_payload(chart.birth_data),
+            'target': target_dt.strftime("%Y-%m-%d %H:%M"),
+            'include_aspects': include_aspects,
+        }
+        resp = _run_helper(self.HELPER, payload)
+        planets = [ProgressedPlanet(**p) for p in resp.get('planets', [])]
+        aspects = [ProgressedAspect(**a) for a in resp.get('aspects', [])]
+        return planets, aspects
+
+    def natal_dignities(self, chart: NatalChart) -> list[dict]:
+        payload = {
+            'command': 'dignities',
+            'birth': self._birth_payload(chart.birth_data),
+        }
+        resp = _run_helper(self.HELPER, payload)
+        return resp.get('dignities', [])
+
+
+# =============================================================================
+# Zodiacal Releasing (stellium)
+# =============================================================================
+
+# Map user-friendly lot names → stellium's canonical lot names.
+ZR_LOT_ALIASES = {
+    'fortune': 'Part of Fortune',
+    'spirit': 'Part of Spirit',
+    'eros': 'Part of Eros',
+    'necessity': 'Part of Necessity',
+    'courage': 'Part of Courage',
+    'victory': 'Part of Victory',
+    'nemesis': 'Part of Nemesis',
+}
+
+
+class ZRCalculator:
+    """Computes Zodiacal Releasing via the stellium helper."""
+
+    HELPER = "astro-zr-helper"
+
+    def __init__(self, storage: 'AstroStorage'):
+        self.storage = storage
+
+    def _resolve_lot(self, lot: str) -> str:
+        return ZR_LOT_ALIASES.get(lot.lower(), lot)
+
+    def _birth_payload(self, bd: BirthData) -> dict:
+        return {
+            'year': bd.year, 'month': bd.month, 'day': bd.day,
+            'hour': bd.hour, 'minute': bd.minute,
+            'city': bd.city, 'nation': bd.nation,
+        }
+
+    def timeline(self, chart: NatalChart, lot: str, level: int = 1,
+                 max_level: int = 4, lifespan: int = 100) -> list[ZRPeriod]:
+        payload = {
+            'command': 'timeline',
+            'birth': self._birth_payload(chart.birth_data),
+            'lot': self._resolve_lot(lot),
+            'level': level,
+            'max_level': max_level,
+            'lifespan': lifespan,
+        }
+        resp = _run_helper(self.HELPER, payload)
+        return [ZRPeriod(**p) for p in resp.get('periods', [])]
+
+    def snapshot_at_age(self, chart: NatalChart, lot: str,
+                        age: float, max_level: int = 4) -> ZRSnapshot:
+        payload = {
+            'command': 'snapshot',
+            'birth': self._birth_payload(chart.birth_data),
+            'lot': self._resolve_lot(lot),
+            'age': age,
+            'max_level': max_level,
+        }
+        resp = _run_helper(self.HELPER, payload)
+
+        bd = chart.birth_data
+        birth = datetime(bd.year, bd.month, bd.day, bd.hour, bd.minute)
+        target = birth + timedelta(days=age * 365.25)
+
+        out = ZRSnapshot(age=age, date=target.date().isoformat())
+        for level_num in (1, 2, 3, 4):
+            data = resp.get('levels', {}).get(f'l{level_num}')
+            if data is not None:
+                setattr(out, f'l{level_num}', ZRPeriod(**data))
+        return out
+
+
+# =============================================================================
 # Transit Formatter
 # =============================================================================
 
@@ -1802,6 +2403,161 @@ Retrograde Periods:
 
         return f"  {date}: {event.event_type}"
 
+    # ------------------------------------------------------------------
+    # Relocation / synastry formatters
+    # ------------------------------------------------------------------
+
+    SIGN_FULL_TO_SHORT = {
+        'Aries': 'Ari', 'Taurus': 'Tau', 'Gemini': 'Gem', 'Cancer': 'Can',
+        'Leo': 'Leo', 'Virgo': 'Vir', 'Libra': 'Lib', 'Scorpio': 'Sco',
+        'Sagittarius': 'Sag', 'Capricorn': 'Cap', 'Aquarius': 'Aqu', 'Pisces': 'Pis',
+    }
+
+    def _short_sign(self, sign: str) -> str:
+        return self.SIGN_FULL_TO_SHORT.get(sign, sign[:3] if sign else '')
+
+    def _fmt_lon(self, lon: float) -> str:
+        """Format an absolute longitude as 'DD°MM' Sgn'."""
+        sign_idx = int(lon // 30)
+        signs = ['Ari','Tau','Gem','Can','Leo','Vir','Lib','Sco','Sag','Cap','Aqu','Pis']
+        deg_in_sign = lon % 30
+        d = int(deg_in_sign)
+        m = int((deg_in_sign - d) * 60)
+        s_sym = self.SIGN_SYMBOLS.get(signs[sign_idx], signs[sign_idx])
+        return f"{d:>2}°{m:02d}' {s_sym} {signs[sign_idx]}"
+
+    def format_relocated_chart(self, natal_chart_name: str,
+                               natal_subject, relocated_subject,
+                               diff_rows: list[dict],
+                               lat: float, lng: float) -> str:
+        """Render the relocated chart: angles + house diff table."""
+        lines = []
+        lines.append(f"Relocated chart: {natal_chart_name} → {lat:.4f}, {lng:.4f}")
+        lines.append("=" * 70)
+        lines.append("")
+
+        # Natal angles (for comparison)
+        lines.append("Natal angles:")
+        for attr_name, code in [('first_house', 'ASC'), ('tenth_house', 'MC'),
+                                 ('seventh_house', 'DC'), ('fourth_house', 'IC')]:
+            if hasattr(natal_subject, attr_name):
+                lon = getattr(natal_subject, attr_name).abs_pos
+                lines.append(f"  {code}  {self._fmt_lon(lon)}")
+        lines.append("")
+
+        # Relocated angles (the headline)
+        lines.append("Relocated angles:")
+        for attr_name, code in [('first_house', 'ASC'), ('tenth_house', 'MC'),
+                                 ('seventh_house', 'DC'), ('fourth_house', 'IC')]:
+            if hasattr(relocated_subject, attr_name):
+                lon = getattr(relocated_subject, attr_name).abs_pos
+                lines.append(f"  {code}  {self._fmt_lon(lon)}")
+        lines.append("")
+        lines.append("(Whole-Sign houses: each house = a full sign starting at 0°. "
+                     "ASC degree may sit mid-1st-house, not on its cusp.)")
+        lines.append("")
+
+        # House diff table
+        lines.append(f"{'Planet':<12}{'Position':<22}{'Natal H':>9}{'Reloc H':>10}   ")
+        lines.append("─" * 60)
+        shifted_count = 0
+        for row in diff_rows:
+            mark = " ★" if row['shifted'] else "  "
+            if row['shifted']:
+                shifted_count += 1
+            sign_sym = self.SIGN_SYMBOLS.get(row['sign'], row['sign'])
+            psym = self.PLANET_SYMBOLS.get(row['planet'], '')
+            pos_str = f"{row['degree_in_sign']:>5.2f}° {sign_sym} {row['sign']}"
+            lines.append(
+                f"{psym} {row['planet']:<10}{pos_str:<22}"
+                f"{row['natal_house']:>9}{row['reloc_house']:>10}{mark}"
+            )
+        lines.append("─" * 60)
+        lines.append(f"  {shifted_count} of {len(diff_rows)} planets shift houses in the relocation.")
+        return "\n".join(lines)
+
+    def format_transit_to_angles(self, hits: list[dict], days: int,
+                                  start: datetime, lat: float, lng: float,
+                                  orb: float) -> str:
+        """Render transits-to-relocated-angles table."""
+        lines = []
+        end = start + timedelta(days=days)
+        lines.append(f"Transits to relocated angles  ({lat:.4f}, {lng:.4f})")
+        lines.append(f"  {start.date()} → {end.date()}  ({days} days, orb ≤ {orb}°)")
+        lines.append("=" * 70)
+        if not hits:
+            lines.append("(no aspects to relocated angles within orb)")
+            return "\n".join(lines)
+
+        # Group by date for readability
+        from itertools import groupby
+        for date, group in groupby(hits, key=lambda r: r['date']):
+            lines.append("")
+            lines.append(f"{date}")
+            for r in group:
+                psym = self.PLANET_SYMBOLS.get(r['transit_planet'], '')
+                ssym = self.SIGN_SYMBOLS.get(r['transit_sign'], r['transit_sign'])
+                asym = self.ASPECT_SYMBOLS.get(r['aspect'], r['aspect'])
+                lines.append(
+                    f"  {psym} {r['transit_planet']:<8} "
+                    f"{ssym} {r['transit_sign']:<3}  {asym} {r['aspect']:<11} "
+                    f"reloc {r['angle']:<3}  ({r['orb']:+.2f}°)"
+                )
+        return "\n".join(lines)
+
+    def format_synastry(self, result: dict, chart_a_name: str, chart_b_name: str) -> str:
+        """Render synastry: planet aspects, angle contacts, house overlays."""
+        lines = []
+        lines.append(f"Synastry: {chart_a_name} ↔ {chart_b_name}")
+        lines.append("=" * 70)
+
+        # Planet aspects
+        lines.append("")
+        lines.append("Planet aspects (sorted by orb):")
+        if not result.get('inter_aspects'):
+            lines.append("  (none within standard orbs)")
+        else:
+            for asp in result['inter_aspects'][:30]:
+                p1 = self.PLANET_SYMBOLS.get(asp['p1_name'], '')
+                p2 = self.PLANET_SYMBOLS.get(asp['p2_name'], '')
+                a = self.ASPECT_SYMBOLS.get(asp['aspect'], asp['aspect'])
+                lines.append(
+                    f"  {p1} {chart_a_name[:8]:<8} {asp['p1_name']:<10} "
+                    f"{a} {asp['aspect']:<12} "
+                    f"{p2} {chart_b_name[:8]:<8} {asp['p2_name']:<10} "
+                    f"({asp['orbit']:+.2f}°)"
+                )
+
+        # Angle contacts (the strongest signals)
+        lines.append("")
+        lines.append("Angle contacts (planet ↔ angle, ≤2° orb — strongest signals):")
+        if not result.get('angle_contacts'):
+            lines.append("  (none within 2° orb)")
+        else:
+            for c in result['angle_contacts']:
+                psym = self.PLANET_SYMBOLS.get(c['planet'], '')
+                a = self.ASPECT_SYMBOLS.get(c['aspect'], c['aspect'])
+                lines.append(
+                    f"  {c['side']:<10} {psym} {c['planet']:<10} "
+                    f"{a} {c['aspect']:<12} "
+                    f"{c['target_side']:<10} {c['angle']}  ({c['orb']:+.2f}°)"
+                )
+
+        # House overlays
+        lines.append("")
+        lines.append(f"{chart_b_name}'s planets in {chart_a_name}'s houses:")
+        for pname, hnum in result.get('b_in_a_houses', {}).items():
+            psym = self.PLANET_SYMBOLS.get(pname, '')
+            lines.append(f"  {psym} {pname:<10} → House {hnum}")
+
+        lines.append("")
+        lines.append(f"{chart_a_name}'s planets in {chart_b_name}'s houses:")
+        for pname, hnum in result.get('a_in_b_houses', {}).items():
+            psym = self.PLANET_SYMBOLS.get(pname, '')
+            lines.append(f"  {psym} {pname:<10} → House {hnum}")
+
+        return "\n".join(lines)
+
 
 # =============================================================================
 # CLI
@@ -1937,6 +2693,87 @@ Examples:
     natal_p.add_argument('--json', dest='json_output', action='store_true',
                          help='Output as JSON')
 
+    # --- Secondary Progressions (immanuel) ---
+    prog_p = subparsers.add_parser('progressions', help='Secondary progressions (immanuel)')
+    prog_p.add_argument('chart', nargs='?', help='Chart name (uses default)')
+    prog_p.add_argument('--date', type=str,
+                        help='Progression target date YYYY-MM-DD (default: today)')
+    prog_p.add_argument('--aspects', action='store_true',
+                        help='Also show aspects from progressed → natal')
+    prog_p.add_argument('--dignities', action='store_true',
+                        help='Show natal dignity scores instead of progressions')
+    prog_p.add_argument('--json', dest='json_output', action='store_true',
+                        help='Output as JSON')
+
+    # --- Zodiacal Releasing (stellium) ---
+    zr_p = subparsers.add_parser('zr', help='Zodiacal Releasing (stellium)')
+    zr_p.add_argument('chart', nargs='?', help='Chart name (uses default)')
+    zr_p.add_argument('--lot', type=str, default='fortune',
+                      help='Lot to release: fortune, spirit, eros, etc. (default: fortune)')
+    zr_p.add_argument('--level', type=int, default=1, choices=[1, 2, 3, 4],
+                      help='ZR level to list periods for (default: 1)')
+    zr_p.add_argument('--max-level', type=int, default=4, choices=[1, 2, 3, 4],
+                      help='Max nesting level to compute (default: 4)')
+    zr_p.add_argument('--age', type=float,
+                      help='Show ZR snapshot at this age instead of timeline')
+    zr_p.add_argument('--lifespan', type=int, default=100,
+                      help='Years to compute ZR periods over (default: 100)')
+    zr_p.add_argument('--json', dest='json_output', action='store_true',
+                      help='Output as JSON')
+
+    # --- Relocate (subcommand group: chart, transits) ---
+    reloc_p = subparsers.add_parser(
+        'relocate',
+        help='Relocated chart analysis (astrocartography)',
+    )
+    reloc_sub = reloc_p.add_subparsers(dest='relocate_cmd')
+
+    def _add_loc_args(p):
+        """Shared --location/--lat/--lng args for relocate subcommands."""
+        p.add_argument('chart', nargs='?', help='Chart name (uses config default)')
+        p.add_argument('--location', help='Location preset name (from `astro locations list`)')
+        p.add_argument('--lat', type=float, help='Latitude (decimal degrees)')
+        p.add_argument('--lng', type=float, help='Longitude (decimal degrees)')
+        p.add_argument('--json', dest='json_output', action='store_true',
+                       help='Output as JSON')
+
+    rc = reloc_sub.add_parser('chart', help='Show relocated chart with house diff')
+    _add_loc_args(rc)
+
+    rt = reloc_sub.add_parser('transits',
+                              help='Transits to relocated angles (ASC/MC/IC/DC)')
+    _add_loc_args(rt)
+    rt.add_argument('--days', type=int, default=730,
+                    help='Days to forecast (default: 730 = 24 months)')
+    rt.add_argument('--date', type=str, help='Start date YYYY-MM-DD (default: today)')
+    rt.add_argument('--orb', type=float, default=1.0,
+                    help='Aspect orb in degrees (default 1.0 — wider than natal '
+                         'because exact angle transits are rare)')
+
+    # --- Synastry (top-level, two charts) ---
+    syn_p = subparsers.add_parser('synastry',
+                                   help='Inter-chart aspects, angle contacts, house overlays')
+    syn_p.add_argument('chart_a', help='First chart name')
+    syn_p.add_argument('chart_b', help='Second chart name')
+    syn_p.add_argument('--json', dest='json_output', action='store_true',
+                       help='Output as JSON')
+
+    # --- Locations (presets for relocation) ---
+    loc_p = subparsers.add_parser('locations', help='Manage location presets for relocation')
+    loc_sub = loc_p.add_subparsers(dest='loc_cmd')
+
+    la = loc_sub.add_parser('add', help='Add or overwrite a location preset')
+    la.add_argument('name', help='Preset name (e.g. "prague", "lisbon")')
+    la.add_argument('--lat', type=float, required=True, help='Latitude (decimal degrees, north positive)')
+    la.add_argument('--lng', type=float, required=True, help='Longitude (decimal degrees, east positive)')
+    la.add_argument('--tz', required=True, help='IANA timezone name (e.g. "Europe/Prague"). Stored for completeness; NOT used in relocated chart math.')
+    la.add_argument('--label', default='', help='Optional human-friendly label, e.g. "Prague, CZ"')
+
+    loc_sub.add_parser('list', help='List all saved location presets')
+
+    lr = loc_sub.add_parser('remove', help='Remove a location preset')
+    lr.add_argument('name', help='Preset name to remove')
+
     # --- Utility ---
     subparsers.add_parser('clear-cache', help='Clear transit cache')
     subparsers.add_parser('config', help='Show configuration')
@@ -1947,6 +2784,7 @@ Examples:
     storage = AstroStorage()
     config = storage.load_config()
     chart_mgr = ChartManager(storage)
+    location_mgr = LocationManager(storage)
     transit_calc = TransitCalculator(storage)
     formatter = TransitFormatter()
 
@@ -2304,6 +3142,268 @@ Examples:
         except FileNotFoundError as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
+
+    elif args.command == 'progressions':
+        try:
+            chart = storage.load_chart(get_chart_name(args.chart))
+            bd = chart.birth_data
+
+            # Need cached coords for immanuel; geocode once via kerykeion if missing.
+            if not (bd.lat and bd.lng):
+                natal_subj = transit_calc._make_subject(
+                    bd.full_name, bd.year, bd.month, bd.day, bd.hour, bd.minute, bd
+                )
+                transit_calc._cache_coords(chart, natal_subj)
+                bd = chart.birth_data  # reload after caching
+
+            prog_calc = ProgressionCalculator(storage)
+
+            if args.dignities:
+                dignities = prog_calc.natal_dignities(chart)
+                if args.json_output:
+                    print(json.dumps({'dignities': dignities}, indent=2))
+                else:
+                    print(f"Natal dignities: {bd.full_name}")
+                    print()
+                    for d in dignities:
+                        score = d['score']
+                        score_str = f"{score:+d}" if score is not None else "?"
+                        sym = formatter.PLANET_SYMBOLS.get(d['name'], '')
+                        prefix = f"{sym} " if sym else ""
+                        print(f"  {prefix}{d['name']:14s} score={score_str:>4s}  {d['dignities']}")
+            else:
+                # Target date
+                target_dt = datetime.now()
+                if args.date:
+                    try:
+                        target_dt = datetime.strptime(args.date, "%Y-%m-%d")
+                    except ValueError:
+                        print(f"Error: Invalid date '{args.date}'. Use YYYY-MM-DD.",
+                              file=sys.stderr)
+                        sys.exit(1)
+
+                planets, aspects = prog_calc.progressed_planets(
+                    chart, target_dt, include_aspects=args.aspects
+                )
+
+                if args.json_output:
+                    out = {
+                        'chart': chart.name,
+                        'target_date': target_dt.strftime("%Y-%m-%d"),
+                        'method': 'NAIBOD',
+                        'planets': [asdict(p) for p in planets],
+                    }
+                    if args.aspects:
+                        out['aspects'] = [asdict(a) for a in aspects]
+                    print(json.dumps(out, indent=2))
+                else:
+                    print(f"Secondary Progressions: {bd.full_name}")
+                    print(f"Target: {target_dt.strftime('%Y-%m-%d')}  (NAIBOD MC method)")
+                    print()
+                    for p in planets:
+                        sym = formatter.PLANET_SYMBOLS.get(p.name, '')
+                        sign_sym = formatter.SIGN_SYMBOLS.get(p.sign, p.sign)
+                        prefix = f"{sym} " if sym else ""
+                        print(f"  {prefix}{p.name:14s} {sign_sym} {p.sign:<3} "
+                              f"{p.degree_in_sign:6.2f}°  House {p.house:<2}  "
+                              f"spd {p.speed:+.3f}")
+                    if args.aspects and aspects:
+                        print()
+                        print("Progressed → Natal aspects:")
+                        for a in aspects:
+                            asp_sym = formatter.ASPECT_SYMBOLS.get(a.aspect, a.aspect)
+                            p_sym = formatter.PLANET_SYMBOLS.get(a.progressed_planet, '')
+                            n_sym = formatter.PLANET_SYMBOLS.get(a.natal_planet, '')
+                            p_lbl = f"{p_sym} {a.progressed_planet}" if p_sym else a.progressed_planet
+                            n_lbl = f"{n_sym} natal {a.natal_planet}" if n_sym else f"natal {a.natal_planet}"
+                            print(f"  {p_lbl:18s} {asp_sym} {a.aspect:<12s} "
+                                  f"{n_lbl:22s} ({a.orb:+.2f}°)")
+        except FileNotFoundError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == 'zr':
+        try:
+            chart = storage.load_chart(get_chart_name(args.chart))
+            bd = chart.birth_data
+            zr_calc = ZRCalculator(storage)
+            lot_name = zr_calc._resolve_lot(args.lot)
+
+            if args.age is not None:
+                snap = zr_calc.snapshot_at_age(chart, args.lot, args.age,
+                                               max_level=args.max_level)
+                if args.json_output:
+                    out = {
+                        'chart': chart.name,
+                        'lot': lot_name,
+                        'age': args.age,
+                        'date': snap.date,
+                        'levels': {
+                            f'l{i}': asdict(getattr(snap, f'l{i}'))
+                            for i in (1, 2, 3, 4)
+                            if getattr(snap, f'l{i}') is not None
+                        },
+                    }
+                    print(json.dumps(out, indent=2))
+                else:
+                    print(f"Zodiacal Releasing: {bd.full_name}")
+                    print(f"Lot: {lot_name}  •  Age: {args.age}  •  Date: {snap.date}")
+                    print()
+                    for level_num in (1, 2, 3, 4):
+                        entry = getattr(snap, f'l{level_num}', None)
+                        if entry is None:
+                            continue
+                        sign_abbr = _SIGN_FULL_TO_ABBR.get(entry.sign, entry.sign[:3])
+                        sign_sym = formatter.SIGN_SYMBOLS.get(sign_abbr, sign_abbr)
+                        ruler_sym = formatter.PLANET_SYMBOLS.get(entry.ruler, '')
+                        ruler_lbl = f"{ruler_sym} {entry.ruler}" if ruler_sym else entry.ruler
+                        peak = " ★PEAK" if entry.is_peak else ""
+                        lb = " ↻LB" if entry.is_lb else ""
+                        print(f"  L{level_num}: {sign_sym} {entry.sign:11s} "
+                              f"ruled by {ruler_lbl:14s}  "
+                              f"{entry.start} → {entry.end}  "
+                              f"({entry.sentiment:11s} {entry.score:+d}){peak}{lb}")
+            else:
+                periods = zr_calc.timeline(chart, args.lot, level=args.level,
+                                           max_level=args.max_level)
+                if args.json_output:
+                    out = {
+                        'chart': chart.name,
+                        'lot': lot_name,
+                        'level': args.level,
+                        'periods': [asdict(p) for p in periods],
+                    }
+                    print(json.dumps(out, indent=2))
+                else:
+                    print(f"Zodiacal Releasing: {bd.full_name}")
+                    print(f"Lot: {lot_name}  •  Level: L{args.level}  "
+                          f"•  Periods: {len(periods)}")
+                    print()
+                    today = datetime.now().date().isoformat()
+                    for p in periods:
+                        sign_abbr = _SIGN_FULL_TO_ABBR.get(p.sign, p.sign[:3])
+                        sign_sym = formatter.SIGN_SYMBOLS.get(sign_abbr, sign_abbr)
+                        ruler_sym = formatter.PLANET_SYMBOLS.get(p.ruler, '')
+                        ruler_lbl = f"{ruler_sym} {p.ruler}" if ruler_sym else p.ruler
+                        cur = " ←" if p.start <= today <= p.end else "  "
+                        peak = " ★" if p.is_peak else ""
+                        lb = " ↻LB" if p.is_lb else ""
+                        print(f"  {sign_sym} {p.sign:12s} ruled by {ruler_lbl:14s}  "
+                              f"{p.start} → {p.end}  "
+                              f"({p.sentiment:11s} {p.score:+d}){peak}{lb}{cur}")
+        except FileNotFoundError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == 'relocate':
+        if not args.relocate_cmd:
+            parser.parse_args(['relocate', '--help'])
+            return
+
+        try:
+            lat, lng = location_mgr.resolve(args)
+        except (ValueError, FileNotFoundError) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        chart_name = get_chart_name(args.chart)
+        try:
+            chart = storage.load_chart(chart_name)
+        except FileNotFoundError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        rcalc = RelocationCalculator(storage, transit_calc)
+
+        if args.relocate_cmd == 'chart':
+            bd = chart.birth_data
+            natal = transit_calc._make_subject(
+                bd.full_name, bd.year, bd.month, bd.day, bd.hour, bd.minute, bd
+            )
+            transit_calc._cache_coords(chart, natal)
+            reloc = rcalc.relocate_subject(chart, lat, lng)
+            diff_rows = rcalc.diff_houses(natal, reloc)
+
+            if args.json_output:
+                output = {
+                    'chart': chart_name,
+                    'lat': lat,
+                    'lng': lng,
+                    'natal_angles': {
+                        code: getattr(natal, attr).abs_pos
+                        for attr, code in [('first_house','ASC'),('tenth_house','MC'),
+                                           ('seventh_house','DC'),('fourth_house','IC')]
+                        if hasattr(natal, attr)
+                    },
+                    'relocated_angles': rcalc.angle_longitudes(reloc),
+                    'planets': diff_rows,
+                }
+                print(json.dumps(output, indent=2))
+            else:
+                print(formatter.format_relocated_chart(
+                    chart_name, natal, reloc, diff_rows, lat, lng
+                ))
+
+        elif args.relocate_cmd == 'transits':
+            start = (datetime.strptime(args.date, "%Y-%m-%d")
+                     if args.date else datetime.now())
+            hits = rcalc.transits_to_reloc_angles(
+                chart, lat, lng, args.days, start, orb=args.orb
+            )
+            if args.json_output:
+                print(json.dumps({
+                    'chart': chart_name, 'lat': lat, 'lng': lng,
+                    'days': args.days, 'orb': args.orb,
+                    'hits': hits,
+                }, indent=2))
+            else:
+                print(formatter.format_transit_to_angles(
+                    hits, args.days, start, lat, lng, args.orb
+                ))
+
+    elif args.command == 'synastry':
+        try:
+            chart_a = storage.load_chart(args.chart_a)
+            chart_b = storage.load_chart(args.chart_b)
+        except FileNotFoundError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        result = SynastryCalculator(transit_calc).compute(chart_a, chart_b)
+        if args.json_output:
+            print(json.dumps({
+                'chart_a': chart_a.name,
+                'chart_b': chart_b.name,
+                **result,
+            }, indent=2))
+        else:
+            print(formatter.format_synastry(result, chart_a.name, chart_b.name))
+
+    elif args.command == 'locations':
+        if args.loc_cmd == 'add':
+            loc = location_mgr.add(args.name, args.lat, args.lng, args.tz, args.label)
+            label_str = f" ({loc.label})" if loc.label else ""
+            print(f"Saved location '{loc.name}'{label_str}: "
+                  f"{loc.lat:.4f}, {loc.lng:.4f} [{loc.tz_str}]")
+        elif args.loc_cmd == 'list':
+            names = storage.list_locations()
+            if not names:
+                print("No location presets saved.")
+                print("Run 'astro locations add NAME --lat X --lng Y --tz TZ' to create one.")
+            else:
+                print("Saved locations:")
+                for name in names:
+                    loc = storage.load_location(name)
+                    label_str = f"  ({loc.label})" if loc.label else ""
+                    print(f"  - {loc.name:<16} {loc.lat:>9.4f}, {loc.lng:>10.4f}  "
+                          f"[{loc.tz_str}]{label_str}")
+        elif args.loc_cmd == 'remove':
+            if storage.delete_location(args.name):
+                print(f"Removed location: {args.name}")
+            else:
+                print(f"Error: Location '{args.name}' not found", file=sys.stderr)
+                sys.exit(1)
+        else:
+            parser.parse_args(['locations', '--help'])
 
     elif args.command == 'clear-cache':
         count = storage.clear_cache()
