@@ -24,7 +24,7 @@ import sys
 
 
 def _build_canonical_engine_class():
-    """Subclass stellium's engine to fix 3 deviations from Valens-canon ZR.
+    """Subclass stellium's engine to fix 4 deviations from Valens-canon ZR.
 
     Stellium 0.18.1:
       (a) Uses 365.25-day solar years at L1 instead of 360-day schematic years.
@@ -34,6 +34,9 @@ def _build_canonical_engine_class():
       (c) Breaks the L2+ sub-period loop at exactly 12 signs, instead of
           continuing through loosing-of-bond cycles until the parent's
           duration is exhausted.
+      (d) L3/L4 multipliers don't follow the 12th-part pattern. Canonical
+          ratios are L1=360, L2=30 (L1/12), L3=2.5 (L2/12), L4=5/24 (L3/12 —
+          5 hours per minor year). Stellium ships L3=1.0 and L4=1/12.
 
     Verified against astro-seek's ZR calculator on a 1993 birth chart.
     """
@@ -50,7 +53,7 @@ def _build_canonical_engine_class():
     }
 
     class CanonicalZREngine(ZodiacalReleasingEngine):
-        LEVEL_MULTIPLIERS = {1: 360.0, 2: 30.0, 3: 1.0, 4: 1.0 / 12.0}
+        LEVEL_MULTIPLIERS = {1: 360.0, 2: 30.0, 3: 2.5, 4: 5.0 / 24.0}
 
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
