@@ -3787,8 +3787,20 @@ Examples:
                     'sign': sign, 'degree': round(cusp_deg % 30, 2),
                 }
 
-            asc = houses_data.get('1', {})
-            mc = houses_data.get('10', {})
+            # Real angles from kerykeion (ASC/MC/DC/IC). Under Equal House the
+            # 10th-house cusp is ASC+270°, NOT the real MC; we read MC from
+            # subject.model().medium_coeli via the real_angles() helper.
+            real_ang = real_angles(natal)
+            angles_data = {}
+            for code in ('ASC', 'MC', 'DC', 'IC'):
+                lon = real_ang[code]
+                sign = signs_list[int(lon / 30) % 12]
+                angles_data[code] = {
+                    'sign': sign, 'degree': round(lon % 30, 2),
+                    'abs_pos': round(lon, 4),
+                }
+            asc = angles_data['ASC']
+            mc = angles_data['MC']
 
             # Calculate natal aspects
             from kerykeion import NatalAspects
@@ -3809,6 +3821,7 @@ Examples:
             if args.json_output:
                 output = {
                     'planets': planets_data,
+                    'angles': angles_data,
                     'houses': houses_data,
                     'ascendant': asc,
                     'midheaven': mc,
@@ -3826,16 +3839,17 @@ Examples:
                     print(f"  {name:<14} {sym} {data['sign']:<3} {data['degree']:6.2f}°  "
                           f"House {data['house']:<2}  spd {data['speed']:+.2f}")
                 print()
+                print("Angles:")
+                for code in ('ASC', 'MC', 'DC', 'IC'):
+                    a = angles_data[code]
+                    sym = formatter.SIGN_SYMBOLS.get(a['sign'], a['sign'])
+                    print(f"  {code:<3}  {sym} {a['sign']:<3} {a['degree']:6.2f}°")
+                print()
                 print("House Cusps:")
                 for hnum in range(1, 13):
                     data = houses_data[str(hnum)]
                     sym = formatter.SIGN_SYMBOLS.get(data['sign'], data['sign'])
-                    label = ""
-                    if hnum == 1:
-                        label = " (ASC)"
-                    elif hnum == 10:
-                        label = " (MC)"
-                    print(f"  House {hnum:<3} {sym} {data['sign']:<3} {data['degree']:6.2f}°{label}")
+                    print(f"  House {hnum:<3} {sym} {data['sign']:<3} {data['degree']:6.2f}°")
                 print()
                 print("Natal Aspects:")
                 for a in aspects_data:
