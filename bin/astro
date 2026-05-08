@@ -26,11 +26,19 @@ import json
 import math
 import os
 import sys
+import warnings
 import swisseph as swe
 from dataclasses import dataclass, asdict, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
+
+# Silence kerykeion v5 deprecation warnings for the legacy AstrologicalSubject /
+# NatalAspects / SynastryAspects APIs. Migration to the v5 Factory pattern
+# (AstrologicalSubjectFactory.from_birth_data, AspectsFactory.{single,dual}_chart_aspects)
+# is a separate task — those classes also expose new attribute names like
+# `true_north_lunar_node`. Tactical filter until that migration lands.
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='kerykeion.*')
 
 os.environ['KERYKEION_GEONAMES_CACHE_NAME'] = str(
     Path.home() / ".local" / "share" / "astro" / "geonames_cache"

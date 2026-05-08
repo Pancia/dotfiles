@@ -3,9 +3,15 @@
 import importlib.machinery
 import importlib.util
 import sys
+import warnings
 from pathlib import Path
 
 import pytest
+
+# Silence kerykeion v5 deprecation warnings (legacy AstrologicalSubject /
+# NatalAspects / SynastryAspects). Migration to the v5 Factory pattern is
+# a separate task; bin/astro installs the same filter at module load.
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='kerykeion.*')
 
 
 @pytest.fixture(scope="session")
