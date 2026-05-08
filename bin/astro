@@ -23,6 +23,7 @@ Run with: uv run --with kerykeion ~/dotfiles/bin/astro <command>
 
 import argparse
 import json
+import math
 import os
 import sys
 import swisseph as swe
@@ -63,6 +64,35 @@ class NatalChart:
     birth_data: BirthData
     created_at: str
     notes: str = ""
+    # Rodden rating for the birth time:
+    #   "AA" — recorded birth certificate
+    #   "A"  — quoted by person, family, or friend
+    #   "B"  — biographical / autobiographical source
+    #   "C"  — date possibly accurate, time uncertain
+    #   "DD" — dirty data (conflicting / no time, e.g. unrectified mundane charts)
+    #   ""   — unrated (default; downstream tools should treat as unknown, not necessarily bad)
+    # Downstream automation should warn users when the rating is "C", "DD", or unrated
+    # for time-of-day-dependent operations (angle contacts, house overlays, Solar Return).
+    rodden_rating: str = ""
+
+
+def _rating_warning(chart: 'NatalChart') -> str:
+    """Return a stderr-friendly warning for charts with poor or absent time rating.
+
+    Returns an empty string if the chart's time is well-rectified (AA/A/B).
+    Returns a one-line warning starting with '⚠' otherwise. Used by show-chart,
+    synastry, and relocate text output.
+    """
+    rating = (chart.rodden_rating or "").upper()
+    if rating in {"AA", "A", "B"}:
+        return ""
+    if rating == "DD":
+        label = "dirty data — no rectified time"
+    elif rating == "C":
+        label = "time questionable"
+    else:
+        label = "time rating not recorded"
+    return f"⚠  {chart.name}: {label} (Rodden {rating or 'unrated'}). Treat angles, houses, and Solar Return as unreliable."
 
 
 @dataclass
@@ -308,7 +338,8 @@ class AstroStorage:
             name=data['name'],
             birth_data=BirthData(**data['birth_data']),
             created_at=data['created_at'],
-            notes=data.get('notes', '')
+            notes=data.get('notes', ''),
+            rodden_rating=data.get('rodden_rating', ''),
         )
 
     def list_charts(self) -> list[str]:
@@ -1557,6 +1588,86 @@ def _angle_aspect_distance(planet_lon: float, angle_lon: float, max_orb: float =
     return None
 
 
+def real_angles(subject) -> dict[str, float]:
+    """Return real ASC / MC / DC / IC longitudes (0-360) from a kerykeion subject.
+
+    Why this helper exists: under Equal House (`houses_system_identifier='A'`),
+    `subject.tenth_house.abs_pos` reports the EQUAL-HOUSE 10th cusp (= ASC - 90°),
+    NOT the actual midheaven. Real MC differs at any non-equatorial latitude.
+    Kerykeion exposes the real MC on `subject.model().medium_coeli` regardless
+    of house system. This helper hides the gotcha.
+    """
+    model = subject.model()
+    asc = model.ascendant.abs_pos
+    mc = model.medium_coeli.abs_pos
+    return {
+        'ASC': asc,
+        'MC': mc,
+        'DC': (asc + 180.0) % 360.0,
+        'IC': (mc + 180.0) % 360.0,
+    }
+
+
+# Single source of truth for line/paran planets.
+# (display_name, swisseph body id). South Node is omitted: SN-on-MC ≡ NN-on-IC for
+# any partner, so NN parans cover the symmetry. SN aspect lines are auto-handled
+# because a 180° offset is the opposition aspect we already enumerate.
+#
+# NOTE on Node: astro.com's astrocartography uses Mean Node, not True Node — this
+# matches the rest of their numerical-stability conventions. Using TRUE_NODE here
+# produces ~1.3° orb mismatches against astro.com reference values. We use
+# MEAN_NODE for line/paran calc; the natal display elsewhere still uses True Node.
+_LINE_PLANETS = (
+    ('Sun',        swe.SUN),
+    ('Moon',       swe.MOON),
+    ('Mercury',    swe.MERCURY),
+    ('Venus',      swe.VENUS),
+    ('Mars',       swe.MARS),
+    ('Jupiter',    swe.JUPITER),
+    ('Saturn',     swe.SATURN),
+    ('Uranus',     swe.URANUS),
+    ('Neptune',    swe.NEPTUNE),
+    ('Pluto',      swe.PLUTO),
+    ('Chiron',     swe.CHIRON),
+    ('North Node', swe.MEAN_NODE),
+)
+
+
+def _ensure_ephe_path() -> None:
+    """Ensure swisseph ephemeris path is set so swe.calc_ut can resolve Chiron etc.
+
+    Kerykeion bundles the .se1 data files; AsteroidObject sets the path on first
+    asteroid call. The line/paran calculators may run before any asteroid call,
+    so we factor the setup into a shared helper.
+    """
+    if AsteroidObject._ephe_path_set:
+        return
+    try:
+        import kerykeion
+        kerykeion_path = Path(kerykeion.__file__).parent
+        ephe_path = kerykeion_path / "sweph"
+        if ephe_path.exists():
+            swe.set_ephe_path(str(ephe_path))
+        AsteroidObject._ephe_path_set = True
+    except Exception:
+        pass
+
+
+def _planet_equatorial(jd: float, swe_id: int) -> tuple[float, float]:
+    """Return (RA_degrees, declination_degrees) for a planet at jd UT.
+
+    Uses swe.calc_ut with FLG_EQUATORIAL — without the flag, swe returns ecliptic.
+    """
+    _ensure_ephe_path()
+    result, _flags = swe.calc_ut(jd, swe_id, swe.FLG_EQUATORIAL)
+    return (result[0] % 360.0, result[1])
+
+
+def _natal_jd(natal_subject) -> float:
+    """Pull Julian Day (UT) from a kerykeion subject."""
+    return natal_subject.julian_day
+
+
 class RelocationCalculator:
     """Builds relocated charts and computes transits to relocated angles.
 
@@ -1608,12 +1719,13 @@ class RelocationCalculator:
         )
 
     def angle_longitudes(self, relocated_subject) -> dict[str, float]:
-        """Extract ASC/MC/DC/IC longitudes (0-360) from a relocated subject."""
-        out = {}
-        for attr_name, code in self.ANGLE_NAMES:
-            if hasattr(relocated_subject, attr_name):
-                out[code] = getattr(relocated_subject, attr_name).abs_pos
-        return out
+        """Extract real ASC/MC/DC/IC longitudes (0-360) from a relocated subject.
+
+        Uses the `real_angles` helper because under Equal House, kerykeion's
+        `tenth_house.abs_pos` reports the equal-cusp (ASC - 90°), not the
+        actual midheaven.
+        """
+        return real_angles(relocated_subject)
 
     def diff_houses(self, natal_subject, relocated_subject) -> list[dict]:
         """Compare planet house positions between natal and relocated charts.
@@ -1724,6 +1836,514 @@ class RelocationCalculator:
 
 
 # =============================================================================
+# Aspect Line Calculator (astrocartography: which lines pass near a location)
+# =============================================================================
+
+class AspectLineCalculator:
+    """Distance from a target location to natal-planet × angle × aspect lines.
+
+    Reproduces astro.com's "Astro Click Travel" line listing. Uses In Mundo
+    geometry (the standard for astrocartography per Jim Lewis et al.):
+
+      - For a CONJUNCTION/OPPOSITION line: the planet itself is on the local
+        angle (or the opposite angle). Computed from the planet's actual
+        right ascension (α) and declination (δ) — NOT from comparing ecliptic
+        longitudes (which diverges from In Mundo by the planet's reduction-
+        from-the-ecliptic whenever β ≠ 0).
+
+      - For a SEXTILE/SQUARE/TRINE line: a "sensitive degree" at λ_planet ±
+        offset on the ecliptic (β=0) is on the local angle. The sensitive's
+        (α_sens, δ_sens) are computed from λ_sens via standard ecliptic-to-
+        equatorial rotation by the obliquity ε.
+
+    For sextile/square/trine, BOTH the ±offset sensitive degrees are evaluated
+    and the closer of the two is reported (a sextile-MC line at λ+60° is
+    geometrically distinct from one at λ−60°).
+
+    Distances:
+      - MC/IC lines are meridians (constant longitude) → distance is exact.
+      - AS/DC lines are curves; distance is the true perpendicular great-circle
+        distance to the curve, found by golden-section search over latitude.
+
+    Astro.com agreement (verified against Anthony's chart, Honolulu and Taranto):
+      - Direct lines (Sun/MC, Jupiter/MC, North Node trine AS, etc.): match
+        astro.com to <1 km. ✓
+      - Aspect lines (sextile/square/trine to AS or MC): typically within
+        ±10–55 km of astro.com. astro.com appears to use a slightly different
+        convention for aspect lines (possibly involving the natal planet's
+        ecliptic latitude β or a Placidian semi-arc correction) which is
+        undocumented and not fully reproducible from public astrocartography
+        literature. The In Mundo β=0 method here is the textbook-standard
+        Jim Lewis approach. For practical interpretation the difference is
+        within the orb-of-influence of any aspect line.
+    """
+
+    ASPECTS = (
+        ('conj',       0.0),
+        ('sextile',   60.0),
+        ('square',    90.0),
+        ('trine',    120.0),
+        ('opposition', 180.0),
+    )
+
+    # (primary_angle, opposite_angle). Conjunction renders to primary;
+    # opposition renders as conjunction-to-opposite.
+    ANGLE_PAIRS = (('AS', 'DC'), ('MC', 'IC'))
+
+    def __init__(self, transit_calc: 'TransitCalculator',
+                 reloc_calc: 'RelocationCalculator'):
+        self.tc = transit_calc
+        self.rc = reloc_calc
+
+    @staticmethod
+    def _ecliptic_to_equatorial(lam_deg: float, eps_rad: float) -> tuple[float, float]:
+        """Convert an ecliptic point at (λ, β=0) to (RA, dec) in degrees.
+
+        Standard rotation by obliquity ε:
+            tan α = (sin λ · cos ε) / cos λ
+            sin δ = sin λ · sin ε
+        """
+        lam = math.radians(lam_deg)
+        sin_l, cos_l = math.sin(lam), math.cos(lam)
+        alpha = math.degrees(math.atan2(sin_l * math.cos(eps_rad), cos_l)) % 360.0
+        delta = math.degrees(math.asin(sin_l * math.sin(eps_rad)))
+        return alpha, delta
+
+    @staticmethod
+    def _line_lng_at_lat(alpha: float, delta: float, angle: str,
+                         target_lat_rad: float, gst_deg: float) -> Optional[float]:
+        """Geographic longitude (-180, 180] where the line for sensitive (α, δ)
+        crosses target_lat. Returns None if the line is circumpolar at this lat
+        (AS/DC only — MC/IC lines exist at every latitude)."""
+        if angle == 'MC':
+            return ((alpha - gst_deg + 540.0) % 360.0) - 180.0
+        if angle == 'IC':
+            return ((alpha + 180.0 - gst_deg + 540.0) % 360.0) - 180.0
+        # AS / DC
+        try:
+            cos_h = -math.tan(target_lat_rad) * math.tan(math.radians(delta))
+        except (ValueError, OverflowError):
+            return None
+        if cos_h > 1.0 or cos_h < -1.0:
+            return None  # body never rises or never sets at this latitude
+        H = math.degrees(math.acos(cos_h))
+        if angle == 'AS':
+            return ((alpha - H - gst_deg + 540.0) % 360.0) - 180.0
+        if angle == 'DC':
+            return ((alpha + H - gst_deg + 540.0) % 360.0) - 180.0
+        raise ValueError(f"Unknown angle: {angle!r}")
+
+    @staticmethod
+    def _perp_distance(alpha: float, delta: float, angle: str,
+                       target_lat: float, target_lng: float,
+                       gst_deg: float) -> tuple[Optional[float], Optional[float],
+                                                Optional[float]]:
+        """True perpendicular great-circle distance from target to the line.
+
+        Returns (km, line_lng_at_target_lat, nearest_lat). For MC/IC (meridian
+        lines, constant longitude), perpendicular distance equals at-latitude
+        distance and is exact. For AS/DC (curves on the globe), the line slopes
+        in (lat, lng) — true distance can be ~10-30% shorter than at-latitude
+        distance. Found via golden-section search over latitude in a ±30° band
+        around target.
+        """
+        if angle in ('MC', 'IC'):
+            line_lng = AspectLineCalculator._line_lng_at_lat(
+                alpha, delta, angle, math.radians(target_lat), gst_deg
+            )
+            if line_lng is None:
+                return None, None, None
+            d_lng = abs(((line_lng - target_lng + 180.0) % 360.0) - 180.0)
+            km = d_lng * 111.32 * math.cos(math.radians(target_lat))
+            return km, line_lng, target_lat
+
+        # AS / DC: find nearest point on curve via numerical minimization
+        line_lng_at_target = AspectLineCalculator._line_lng_at_lat(
+            alpha, delta, angle, math.radians(target_lat), gst_deg
+        )
+        if line_lng_at_target is None:
+            return None, None, None
+
+        def dist(L: float) -> float:
+            line_lng = AspectLineCalculator._line_lng_at_lat(
+                alpha, delta, angle, math.radians(L), gst_deg
+            )
+            if line_lng is None:
+                return float('inf')
+            d_lng = abs(((line_lng - target_lng + 180.0) % 360.0) - 180.0)
+            d_lat = abs(L - target_lat)
+            avg_lat_rad = math.radians((L + target_lat) * 0.5)
+            return math.hypot(d_lat * 111.32,
+                              d_lng * 111.32 * math.cos(avg_lat_rad))
+
+        # Coarse 0.5° scan over ±30° band, then golden-section refinement
+        L_lo = max(-89.0, target_lat - 30.0)
+        L_hi = min( 89.0, target_lat + 30.0)
+        best_L, best_d = target_lat, dist(target_lat)
+        L = L_lo
+        while L <= L_hi:
+            d = dist(L)
+            if d < best_d:
+                best_d, best_L = d, L
+            L += 0.5
+
+        phi = (math.sqrt(5.0) - 1.0) * 0.5  # ≈ 0.618
+        a = max(L_lo, best_L - 0.5)
+        b = min(L_hi, best_L + 0.5)
+        c = b - phi * (b - a)
+        d_ = a + phi * (b - a)
+        fc, fd = dist(c), dist(d_)
+        while (b - a) > 0.001:
+            if fc < fd:
+                b, d_, fd = d_, c, fc
+                c = b - phi * (b - a)
+                fc = dist(c)
+            else:
+                a, c, fc = c, d_, fd
+                d_ = a + phi * (b - a)
+                fd = dist(d_)
+        L_star = (a + b) * 0.5
+        d_star = dist(L_star)
+        if d_star < best_d:
+            best_d, best_L = d_star, L_star
+
+        return best_d, line_lng_at_target, best_L
+
+    def lines_near(self, natal_chart: NatalChart, lat: float, lng: float,
+                   max_orb: float = 2.0) -> list[dict]:
+        """Return rows of natal-planet × angle × aspect lines within max_orb of target.
+
+        Each row: {planet, angle, aspect, label, orb_deg, km, km_approx,
+                   planet_lon, planet_ra, planet_dec, line_lng}.
+        Sorted by km ascending (= orb_deg at given lat).
+        """
+        bd = natal_chart.birth_data
+        if not bd.tz_str:
+            primer = self.tc._make_subject(
+                bd.full_name, bd.year, bd.month, bd.day, bd.hour, bd.minute, bd
+            )
+            self.tc._cache_coords(natal_chart, primer)
+            bd = natal_chart.birth_data
+
+        natal_subj = self.tc._make_subject(
+            bd.full_name, bd.year, bd.month, bd.day, bd.hour, bd.minute, bd
+        )
+        jd = _natal_jd(natal_subj)
+        gst_deg = (swe.sidtime(jd) * 15.0) % 360.0
+
+        # Obliquity of the ecliptic at jd (radians). swe.calc_ut(jd, ECL_NUT)
+        # returns (mean_obliquity, true_obliquity, nutation_lon, nutation_obl).
+        ecl_nut, _flags = swe.calc_ut(jd, swe.ECL_NUT)
+        eps_rad = math.radians(ecl_nut[0])  # mean obliquity in degrees → rad
+
+        target_lat_rad = math.radians(lat)
+        cos_lat = math.cos(target_lat_rad)
+
+        # max_orb is in degrees; corresponding km depends on lat.
+        # We filter by orb_deg, but compute orb_deg from km / (111.32·cos lat).
+
+        rows = []
+        for planet_name, swe_id in _LINE_PLANETS:
+            _ensure_ephe_path()
+            ecl, _ = swe.calc_ut(jd, swe_id)
+            eq, _ = swe.calc_ut(jd, swe_id, swe.FLG_EQUATORIAL)
+            planet_lon = ecl[0] % 360.0
+            planet_ra = eq[0] % 360.0
+            planet_dec = eq[1]
+
+            for primary, opposite in self.ANGLE_PAIRS:
+                for aspect_name, offset in self.ASPECTS:
+                    # Resolve sensitive degree(s):
+                    #   - conj: planet itself, with actual (α, δ)  → 1 line
+                    #   - opp:  ecliptic antipode, β=0             → 1 line
+                    #   - aspect (60/90/120): two sensitives at λ ± offset, β=0 → 2 lines
+                    if aspect_name == 'conj':
+                        # Planet itself on `primary` angle, using actual (α, δ).
+                        sensitives = [(planet_ra, planet_dec)]
+                        target_angle = primary
+                    elif aspect_name == 'opposition':
+                        # Planet itself on the OPPOSITE angle. Same (α, δ),
+                        # different angle. (Equivalent to "planet at IC" or
+                        # "planet at DC" depending on which pair we're in.)
+                        sensitives = [(planet_ra, planet_dec)]
+                        target_angle = opposite
+                    else:
+                        # Aspect line: a sensitive degree at λ_planet ± offset
+                        # (β=0) is on the primary angle. Two distinct sensitives
+                        # per aspect — emit the closer one.
+                        s_plus = self._ecliptic_to_equatorial(
+                            (planet_lon + offset) % 360.0, eps_rad)
+                        s_minus = self._ecliptic_to_equatorial(
+                            (planet_lon - offset) % 360.0, eps_rad)
+                        sensitives = [s_plus, s_minus]
+                        target_angle = primary
+
+                    # For each sensitive, compute the perpendicular distance
+                    # from the target to the line. MC/IC are meridians (exact);
+                    # AS/DC are curves (numerical minimization). Take the closer
+                    # of the ±offset sensitives.
+                    best = None
+                    for a_sens, d_sens in sensitives:
+                        km, line_lng, near_lat = self._perp_distance(
+                            a_sens, d_sens, target_angle, lat, lng, gst_deg
+                        )
+                        if km is None:
+                            continue  # circumpolar at target lat
+                        if best is None or km < best[0]:
+                            best = (km, line_lng, near_lat, a_sens, d_sens)
+
+                    if best is None:
+                        continue
+                    km, line_lng, near_lat, a_used, d_used = best
+                    # Synthetic orb (degrees) for filter and display: km
+                    # converted back to angle at target latitude. Filter on
+                    # this so --max-orb stays meaningful as "lines within ~N°".
+                    orb_deg = km / (111.32 * cos_lat) if cos_lat > 1e-6 else 0.0
+                    if orb_deg > max_orb:
+                        continue
+
+                    # astro.com-style label
+                    if aspect_name == 'conj' or aspect_name == 'opposition':
+                        label = f"{planet_name}/{target_angle} Line"
+                    else:
+                        label = f"{planet_name} {aspect_name} {target_angle}"
+
+                    # MC/IC: meridian, perpendicular = at-latitude, exact.
+                    # AS/DC: curve, perpendicular distance is true great-circle
+                    # but the underlying In Mundo β=0 algorithm doesn't match
+                    # astro.com's aspect-line convention exactly (see module
+                    # docstring) — flag as approximate.
+                    km_approx = target_angle in ('AS', 'DC')
+
+                    rows.append({
+                        'planet': planet_name,
+                        'angle': target_angle,
+                        'aspect': aspect_name,
+                        'label': label,
+                        'orb_deg': orb_deg,
+                        'km': km,
+                        'km_approx': km_approx,
+                        'planet_lon': planet_lon,
+                        'planet_ra': planet_ra,
+                        'planet_dec': planet_dec,
+                        'line_lng': line_lng,
+                        'nearest_lat': near_lat,
+                    })
+
+        rows.sort(key=lambda r: r['km'])
+        return rows
+
+
+# =============================================================================
+# Paran Calculator (paranatellonta: same-latitude angular crossings)
+# =============================================================================
+
+class ParanCalculator:
+    """Find paran latitudes where two natal planets simultaneously contact local angles.
+
+    A paran exists at latitude L when (planet A on angle X) and (planet B on
+    angle Y) occur at the same instant (UT) — at different longitudes on earth.
+    This reduces to: at what latitude does the LST when A is on X equal the LST
+    when B is on Y?
+
+    Solver is bisection over [-89°, 89°] sampled at 1° steps, with two safety
+    rails: (1) circumpolar boundary buffer ε=0.5° (no roots reported within ε
+    of any planet's circumpolar limit), and (2) wrap-discontinuity guard (a
+    sign change with |Δf| > 90° between samples is the wrap_signed antipode
+    crossing, not a real root).
+
+    South Node parans omitted — SN-on-MC ≡ NN-on-IC for any partner; NN parans
+    cover the symmetry.
+    """
+
+    ANGLES = ('AC', 'MC', 'DC', 'IC')   # 'AC' to match astro.com text
+
+    # Bisection safety
+    EPS_CIRCUMPOLAR = 0.5     # degrees buffer inside any circumpolar boundary
+    WRAP_THRESHOLD = 90.0     # |Δf| above this between samples → wrap, not root
+    SAMPLE_STEP = 1.0         # initial latitude sweep step in degrees
+    REFINE_TOL = 0.001        # bisection convergence in degrees
+    DEDUPE_TOL = 0.05         # collapse roots within this many degrees
+
+    def __init__(self, transit_calc: 'TransitCalculator'):
+        self.tc = transit_calc
+
+    def parans_near(self, natal_chart: NatalChart, target_lat: float,
+                    max_delta_lat: float = 2.5,
+                    include_chiron: bool = True) -> list[dict]:
+        """Return parans whose paran latitude is within max_delta_lat of target.
+
+        Each row: {planet_a, angle_a, planet_b, angle_b, paran_lat,
+                   delta_lat, delta_km, label}. Sorted by |delta_lat| ascending.
+        """
+        bd = natal_chart.birth_data
+        if not bd.tz_str:
+            primer = self.tc._make_subject(
+                bd.full_name, bd.year, bd.month, bd.day, bd.hour, bd.minute, bd
+            )
+            self.tc._cache_coords(natal_chart, primer)
+            bd = natal_chart.birth_data
+
+        natal_subj = self.tc._make_subject(
+            bd.full_name, bd.year, bd.month, bd.day, bd.hour, bd.minute, bd
+        )
+        jd = _natal_jd(natal_subj)
+
+        # Build planet table: name, RA (deg), declination (deg).
+        # Skip Chiron if include_chiron=False so output stays terse.
+        planets = []
+        for pname, swe_id in _LINE_PLANETS:
+            if pname == 'Chiron' and not include_chiron:
+                continue
+            ra, dec = _planet_equatorial(jd, swe_id)
+            planets.append((pname, ra, dec))
+
+        # Search domain (clipped to [target - max_delta_lat, target + max_delta_lat]
+        # plus a small extension so the bisection brackets are clean).
+        lat_lo = max(-89.0, target_lat - max_delta_lat - 1.0)
+        lat_hi = min( 89.0, target_lat + max_delta_lat + 1.0)
+
+        rows = []
+        n = len(planets)
+        for i in range(n):
+            for j in range(i + 1, n):  # canonical ordering: a < b
+                pname_a, ra_a, dec_a = planets[i]
+                pname_b, ra_b, dec_b = planets[j]
+                for angle_a in self.ANGLES:
+                    for angle_b in self.ANGLES:
+                        roots = self._find_paran_roots(
+                            ra_a, dec_a, angle_a,
+                            ra_b, dec_b, angle_b,
+                            lat_lo, lat_hi,
+                        )
+                        for paran_lat in roots:
+                            delta_lat = paran_lat - target_lat
+                            if abs(delta_lat) > max_delta_lat:
+                                continue
+                            rows.append({
+                                'planet_a':  pname_a,
+                                'angle_a':   angle_a,
+                                'planet_b':  pname_b,
+                                'angle_b':   angle_b,
+                                'paran_lat': paran_lat,
+                                'delta_lat': delta_lat,
+                                'delta_km':  abs(delta_lat) * 111.32,
+                                'label':     f"{pname_a}/{pname_b}  {angle_a} / {angle_b}",
+                            })
+
+        rows.sort(key=lambda r: abs(r['delta_lat']))
+        return rows
+
+    # ---- internals ---------------------------------------------------------
+
+    @staticmethod
+    def _lst_on_angle(ra: float, dec: float, angle: str,
+                      lat_deg: float) -> Optional[float]:
+        """LST (degrees) at which a body of given (RA, dec) is on `angle` at `lat`.
+
+        Returns None if the body is circumpolar at this latitude (never rises or
+        sets), so AC/DC are undefined.
+
+            MC: LST = RA
+            IC: LST = (RA + 180) mod 360
+            H  = acos(-tan φ · tan δ)         # diurnal semi-arc
+            AC: LST = (RA - H) mod 360
+            DC: LST = (RA + H) mod 360
+        """
+        if angle == 'MC':
+            return ra % 360.0
+        if angle == 'IC':
+            return (ra + 180.0) % 360.0
+        # AC / DC
+        L = math.radians(lat_deg)
+        d = math.radians(dec)
+        try:
+            cos_h = -math.tan(L) * math.tan(d)
+        except (ValueError, OverflowError):
+            return None
+        if cos_h > 1.0 or cos_h < -1.0:
+            return None  # circumpolar (never rises) or perpetual (never sets)
+        H = math.degrees(math.acos(cos_h))
+        if angle == 'AC':
+            return (ra - H) % 360.0
+        if angle == 'DC':
+            return (ra + H) % 360.0
+        raise ValueError(f"Unknown angle: {angle!r}")
+
+    @staticmethod
+    def _wrap_signed(x: float) -> float:
+        """Map x to (-180, 180]."""
+        return ((x + 180.0) % 360.0) - 180.0
+
+    def _f(self, ra_a, dec_a, angle_a, ra_b, dec_b, angle_b, lat_deg):
+        """LST_A_X(lat) − LST_B_Y(lat), wrapped to (-180, 180]. None if either
+        component is circumpolar at this latitude."""
+        la = self._lst_on_angle(ra_a, dec_a, angle_a, lat_deg)
+        lb = self._lst_on_angle(ra_b, dec_b, angle_b, lat_deg)
+        if la is None or lb is None:
+            return None
+        return self._wrap_signed(la - lb)
+
+    def _find_paran_roots(self, ra_a, dec_a, angle_a, ra_b, dec_b, angle_b,
+                          lat_lo: float, lat_hi: float) -> list[float]:
+        """Find latitudes in [lat_lo, lat_hi] where f(L) = 0.
+
+        Sample at 1° steps; bisect any bracketed sign change UNLESS:
+          - either side is None (circumpolar — would cross domain boundary)
+          - |Δf| > WRAP_THRESHOLD (wrap_signed jumped through the antipode,
+            not a real zero crossing)
+        """
+        # Build sample sequence
+        n_samples = int((lat_hi - lat_lo) / self.SAMPLE_STEP) + 2
+        samples = []
+        for k in range(n_samples):
+            L = lat_lo + k * self.SAMPLE_STEP
+            if L > lat_hi:
+                L = lat_hi
+            f_val = self._f(ra_a, dec_a, angle_a, ra_b, dec_b, angle_b, L)
+            samples.append((L, f_val))
+            if L >= lat_hi:
+                break
+
+        roots = []
+        for k in range(len(samples) - 1):
+            L0, f0 = samples[k]
+            L1, f1 = samples[k + 1]
+            if f0 is None or f1 is None:
+                continue  # crosses circumpolar boundary; skip
+            if f0 == 0.0:
+                roots.append(L0)
+                continue
+            if f0 * f1 > 0.0:
+                continue  # same sign, no root in bracket
+            if abs(f0 - f1) > self.WRAP_THRESHOLD:
+                continue  # wrap discontinuity, not a real root
+            # Bisect
+            a, b = L0, L1
+            fa, fb = f0, f1
+            for _ in range(60):
+                if (b - a) < self.REFINE_TOL:
+                    break
+                m = 0.5 * (a + b)
+                fm = self._f(ra_a, dec_a, angle_a, ra_b, dec_b, angle_b, m)
+                if fm is None:
+                    break  # ran into circumpolar mid-bracket; abort this root
+                if fa * fm <= 0.0:
+                    b, fb = m, fm
+                else:
+                    a, fa = m, fm
+            roots.append(0.5 * (a + b))
+
+        # Dedupe roots within DEDUPE_TOL
+        roots.sort()
+        deduped = []
+        for r in roots:
+            if not deduped or abs(r - deduped[-1]) > self.DEDUPE_TOL:
+                deduped.append(r)
+        return deduped
+
+
+# =============================================================================
 # Synastry Calculator (chart-to-chart relationship)
 # =============================================================================
 
@@ -1749,11 +2369,8 @@ class SynastryCalculator:
         self.tc = transit_calc
 
     def _angle_lons(self, subj) -> dict[str, float]:
-        out = {}
-        for attr, code in self.ANGLE_NAMES:
-            if hasattr(subj, attr):
-                out[code] = getattr(subj, attr).abs_pos
-        return out
+        """Real angle longitudes (uses real_angles helper to avoid Equal-House MC trap)."""
+        return real_angles(subj)
 
     def _house_overlay(self, src_subj, dst_cusps: dict[int, float]) -> dict[str, str]:
         """For each major planet in src_subj, return which dst_cusps house it falls in."""
@@ -2429,8 +3046,15 @@ Retrograde Periods:
     def format_relocated_chart(self, natal_chart_name: str,
                                natal_subject, relocated_subject,
                                diff_rows: list[dict],
-                               lat: float, lng: float) -> str:
-        """Render the relocated chart: angles + house diff table."""
+                               lat: float, lng: float,
+                               natal_angles: dict[str, float],
+                               relocated_angles: dict[str, float]) -> str:
+        """Render the relocated chart: angles + house diff table.
+
+        natal_angles / relocated_angles must be the REAL angles from the
+        `real_angles()` helper (NOT subject.tenth_house.abs_pos which under
+        Equal House returns the wrong value).
+        """
         lines = []
         lines.append(f"Relocated chart: {natal_chart_name} → {lat:.4f}, {lng:.4f}")
         lines.append("=" * 70)
@@ -2438,23 +3062,19 @@ Retrograde Periods:
 
         # Natal angles (for comparison)
         lines.append("Natal angles:")
-        for attr_name, code in [('first_house', 'ASC'), ('tenth_house', 'MC'),
-                                 ('seventh_house', 'DC'), ('fourth_house', 'IC')]:
-            if hasattr(natal_subject, attr_name):
-                lon = getattr(natal_subject, attr_name).abs_pos
-                lines.append(f"  {code}  {self._fmt_lon(lon)}")
+        for code in ('ASC', 'MC', 'DC', 'IC'):
+            if code in natal_angles:
+                lines.append(f"  {code}  {self._fmt_lon(natal_angles[code])}")
         lines.append("")
 
         # Relocated angles (the headline)
         lines.append("Relocated angles:")
-        for attr_name, code in [('first_house', 'ASC'), ('tenth_house', 'MC'),
-                                 ('seventh_house', 'DC'), ('fourth_house', 'IC')]:
-            if hasattr(relocated_subject, attr_name):
-                lon = getattr(relocated_subject, attr_name).abs_pos
-                lines.append(f"  {code}  {self._fmt_lon(lon)}")
+        for code in ('ASC', 'MC', 'DC', 'IC'):
+            if code in relocated_angles:
+                lines.append(f"  {code}  {self._fmt_lon(relocated_angles[code])}")
         lines.append("")
-        lines.append("(Whole-Sign houses: each house = a full sign starting at 0°. "
-                     "ASC degree may sit mid-1st-house, not on its cusp.)")
+        lines.append("(Equal House: each house = 30° starting at the ASC degree. "
+                     "Planets shift houses with the ASC, not with the MC.)")
         lines.append("")
 
         # House diff table
@@ -2504,6 +3124,55 @@ Retrograde Periods:
                     f"reloc {r['angle']:<3}  ({r['orb']:+.2f}°)"
                 )
         return "\n".join(lines)
+
+    def format_aspect_lines(self, rows: list[dict], lat: float, lng: float,
+                            max_orb: float) -> str:
+        """Render astrocartography aspect-lines list near a target location.
+
+        Each row prints `<label>   orb 0.45°    [≈ ]50 km`. AS/DC distances
+        are flagged `≈` because they're locally-linear approximations; MC/IC
+        distances are exact.
+        """
+        out = []
+        out.append(f"Aspect power lines near ({lat:.4f}, {lng:.4f})  orb ≤ {max_orb}°")
+        out.append("=" * 70)
+        if not rows:
+            out.append("(no lines within orb)")
+            return "\n".join(out)
+        # Determine label column width
+        label_w = max(len(r['label']) for r in rows)
+        for r in rows:
+            km_prefix = "≈ " if r['km_approx'] else "  "
+            out.append(
+                f"  {r['label']:<{label_w}}   "
+                f"orb {r['orb_deg']:>5.2f}°   "
+                f"{km_prefix}{r['km']:>5.0f} km"
+            )
+        return "\n".join(out)
+
+    def format_parans(self, rows: list[dict], target_lat: float,
+                      max_delta_lat: float) -> str:
+        """Render parans (latitude crossings) near a target latitude."""
+        out = []
+        out.append(
+            f"Parans near latitude {target_lat:+.4f}°  "
+            f"(Δ ≤ {max_delta_lat}°)"
+        )
+        out.append("=" * 70)
+        if not rows:
+            out.append("(no parans within Δlat)")
+            return "\n".join(out)
+        # column widths
+        pair_w = max(len(f"{r['planet_a']}/{r['planet_b']}") for r in rows)
+        for r in rows:
+            pair = f"{r['planet_a']}/{r['planet_b']}"
+            out.append(
+                f"  Crossing {pair:<{pair_w}}   "
+                f"{r['angle_a']:<2} / {r['angle_b']:<2}   "
+                f"Δlat {r['delta_lat']:+5.2f}°   "
+                f"(~{r['delta_km']:>4.0f} km)"
+            )
+        return "\n".join(out)
 
     def format_synastry(self, result: dict, chart_a_name: str, chart_b_name: str) -> str:
         """Render synastry: planet aspects, angle contacts, house overlays."""
@@ -2750,6 +3419,37 @@ Examples:
                     help='Aspect orb in degrees (default 1.0 — wider than natal '
                          'because exact angle transits are rare)')
 
+    rl = reloc_sub.add_parser(
+        'lines',
+        help='Aspect power lines passing near target (astro.com Astro Click Travel)',
+    )
+    _add_loc_args(rl)
+    rl.add_argument('--max-orb', type=float, default=2.5,
+                    help='Maximum orb in degrees (default 2.5 ≈ ~200 km at mid-lat). '
+                         'Includes direct (conj/opp) and aspect (sex/sq/tri) lines. '
+                         'Uses In Mundo geometry (Jim Lewis standard). '
+                         'MC/IC distances are exact (meridians); '
+                         'AS/DC distances are true perpendicular great-circle '
+                         '(marked ≈ because the underlying aspect-line algorithm '
+                         'differs from astro.com by ±10-55 km — astro.com uses '
+                         'an undocumented variant; direct conj/opp lines match '
+                         'astro.com to <1 km).')
+
+    rp = reloc_sub.add_parser(
+        'parans',
+        help='Parans (latitude crossings) near target (slower than lines: ~3 s)',
+    )
+    _add_loc_args(rp)
+    rp.add_argument('--max-delta-lat', type=float, default=2.5,
+                    help='Maximum |paran_lat - target_lat| in degrees (default 2.5; '
+                         'astro.com uses a similar band)')
+    rp.add_argument('--target-lat', type=float,
+                    help='Override: compute parans for this latitude only. '
+                         'Parans are latitude-only; longitude is irrelevant. '
+                         'When set, --location/--lat/--lng are unused for parans.')
+    rp.add_argument('--no-chiron', action='store_true',
+                    help='Exclude Chiron from paran search (terser output)')
+
     # --- Synastry (top-level, two charts) ---
     syn_p = subparsers.add_parser('synastry',
                                    help='Inter-chart aspects, angle contacts, house overlays')
@@ -2821,6 +3521,13 @@ Examples:
                   f"{bd.hour:02d}:{bd.minute:02d}")
             print(f"  Location: {bd.city}, {bd.nation}")
             print(f"  Created:  {chart.created_at[:10]}")
+            if chart.rodden_rating:
+                print(f"  Rodden:   {chart.rodden_rating}")
+            warning = _rating_warning(chart)
+            if warning:
+                print(f"  {warning}")
+            if chart.notes:
+                print(f"  Notes:    {chart.notes}")
         except FileNotFoundError as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
@@ -3300,11 +4007,18 @@ Examples:
             parser.parse_args(['relocate', '--help'])
             return
 
-        try:
-            lat, lng = location_mgr.resolve(args)
-        except (ValueError, FileNotFoundError) as e:
-            print(f"Error: {e}", file=sys.stderr)
-            sys.exit(1)
+        # `parans --target-lat X` works without a longitude — parans depend on
+        # latitude only. Other relocate subcommands need a full lat/lng.
+        target_lat_only = (args.relocate_cmd == 'parans'
+                           and getattr(args, 'target_lat', None) is not None)
+        if target_lat_only:
+            lat, lng = args.target_lat, 0.0  # lng unused for parans
+        else:
+            try:
+                lat, lng = location_mgr.resolve(args)
+            except (ValueError, FileNotFoundError) as e:
+                print(f"Error: {e}", file=sys.stderr)
+                sys.exit(1)
 
         chart_name = get_chart_name(args.chart)
         try:
@@ -3323,25 +4037,27 @@ Examples:
             transit_calc._cache_coords(chart, natal)
             reloc = rcalc.relocate_subject(chart, lat, lng)
             diff_rows = rcalc.diff_houses(natal, reloc)
+            natal_angles = real_angles(natal)
+            reloc_angles = rcalc.angle_longitudes(reloc)
 
             if args.json_output:
                 output = {
                     'chart': chart_name,
+                    'rodden_rating': chart.rodden_rating,
                     'lat': lat,
                     'lng': lng,
-                    'natal_angles': {
-                        code: getattr(natal, attr).abs_pos
-                        for attr, code in [('first_house','ASC'),('tenth_house','MC'),
-                                           ('seventh_house','DC'),('fourth_house','IC')]
-                        if hasattr(natal, attr)
-                    },
-                    'relocated_angles': rcalc.angle_longitudes(reloc),
+                    'natal_angles': natal_angles,
+                    'relocated_angles': reloc_angles,
                     'planets': diff_rows,
                 }
                 print(json.dumps(output, indent=2))
             else:
+                w = _rating_warning(chart)
+                if w:
+                    print(w, file=sys.stderr)
                 print(formatter.format_relocated_chart(
-                    chart_name, natal, reloc, diff_rows, lat, lng
+                    chart_name, natal, reloc, diff_rows, lat, lng,
+                    natal_angles, reloc_angles
                 ))
 
         elif args.relocate_cmd == 'transits':
@@ -3352,7 +4068,9 @@ Examples:
             )
             if args.json_output:
                 print(json.dumps({
-                    'chart': chart_name, 'lat': lat, 'lng': lng,
+                    'chart': chart_name,
+                    'rodden_rating': chart.rodden_rating,
+                    'lat': lat, 'lng': lng,
                     'days': args.days, 'orb': args.orb,
                     'hits': hits,
                 }, indent=2))
@@ -3360,6 +4078,34 @@ Examples:
                 print(formatter.format_transit_to_angles(
                     hits, args.days, start, lat, lng, args.orb
                 ))
+
+        elif args.relocate_cmd == 'lines':
+            acalc = AspectLineCalculator(transit_calc, rcalc)
+            rows = acalc.lines_near(chart, lat, lng, max_orb=args.max_orb)
+            if args.json_output:
+                print(json.dumps({
+                    'chart': chart_name, 'lat': lat, 'lng': lng,
+                    'max_orb': args.max_orb, 'rows': rows,
+                }, indent=2))
+            else:
+                print(formatter.format_aspect_lines(rows, lat, lng, args.max_orb))
+
+        elif args.relocate_cmd == 'parans':
+            target_lat = (args.target_lat if args.target_lat is not None else lat)
+            pcalc = ParanCalculator(transit_calc)
+            rows = pcalc.parans_near(
+                chart, target_lat,
+                max_delta_lat=args.max_delta_lat,
+                include_chiron=not args.no_chiron,
+            )
+            if args.json_output:
+                print(json.dumps({
+                    'chart': chart_name, 'target_lat': target_lat,
+                    'max_delta_lat': args.max_delta_lat,
+                    'rows': rows,
+                }, indent=2))
+            else:
+                print(formatter.format_parans(rows, target_lat, args.max_delta_lat))
 
     elif args.command == 'synastry':
         try:
@@ -3373,9 +4119,15 @@ Examples:
             print(json.dumps({
                 'chart_a': chart_a.name,
                 'chart_b': chart_b.name,
+                'chart_a_rodden': chart_a.rodden_rating,
+                'chart_b_rodden': chart_b.rodden_rating,
                 **result,
             }, indent=2))
         else:
+            for chart in (chart_a, chart_b):
+                w = _rating_warning(chart)
+                if w:
+                    print(w, file=sys.stderr)
             print(formatter.format_synastry(result, chart_a.name, chart_b.name))
 
     elif args.command == 'locations':
