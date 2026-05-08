@@ -5,6 +5,7 @@ tap 'homebrew/bundle'
 tap 'homebrew/cask'
 tap 'homebrew/core'
 tap 'neovim/neovim'
+tap 'rads/bbin'
 
 # Shell & CLI Tools
 brew 'fish'
@@ -75,6 +76,7 @@ brew 'yabai'
 
 brew 'borkdude/brew/babashka'
 brew 'borkdude/brew/clj-kondo'
+brew 'rads/bbin/bbin'
 
 # Applications
 cask 'android-platform-tools'

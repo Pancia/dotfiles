@@ -100,9 +100,26 @@ task_image_wall () {
     (cd cmd/image-wall && swiftc -O -framework AppKit -o ../../bin/image-wall main.swift)
 }
 
+task_bbin () {
+    hash bbin || { echo "bbin not found — run './install brew' first"; return 1; }
+
+    bbin install io.github.bhauman/clojure-mcp-light \
+        --as clj-nrepl-eval \
+        --main-opts '["-m" "clojure-mcp-light.nrepl-eval"]'
+
+    bbin install io.github.bhauman/clojure-mcp-light \
+        --as clj-paren-repair \
+        --main-opts '["-m" "clojure-mcp-light.paren-repair"]'
+
+    bbin install io.github.bhauman/clojure-mcp-light \
+        --as clj-paren-repair-claude-hook \
+        --main-opts '["-m" "clojure-mcp-light.hook"]'
+}
+
 task_all () {
     task_init_dotfiles
     task_brew
+    task_bbin
     task_ruby
     task_luarocks
     task_fonts
@@ -118,9 +135,10 @@ main() {
     [[ ! "$(pwd)" == "$HOME/dotfiles" ]] && (echo 'CANNOT EXECUTE outside of dotfiles root'; exit 2)
     case "$1" in
         '') task_all && exec fish ;;
+        bbin) task_bbin ;;
         brew) task_brew ;;
         gitconfig|git) task_gitconfig ;;
-        help) echo "init brew gitconfig neovim opt vendor image-wall" ;;
+        help) echo "init brew bbin gitconfig neovim opt vendor image-wall" ;;
         init) task_init_dotfiles ;;
         vendor) task_vendor ;;
         image-wall) task_image_wall ;;
