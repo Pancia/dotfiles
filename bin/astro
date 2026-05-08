@@ -533,9 +533,9 @@ class LocationManager:
 
         Precedence: --lat/--lng explicit pair > --location preset.
         Returns (lat, lng) only — destination tz is intentionally NOT
-        returned because relocation must keep the natal chart's original
-        tz_str (UTC moment unchanged); destination tz is irrelevant to the
-        relocated chart math.
+        returned because relocation (chart/transits/lines/parans) must keep
+        the natal chart's original tz_str (UTC moment unchanged); destination
+        tz is irrelevant to relocated angle math.
         """
         if args.lat is not None and args.lng is not None:
             return (args.lat, args.lng)
@@ -546,6 +546,31 @@ class LocationManager:
                              "List presets with `astro locations list`.")
         loc = self.storage.load_location(args.location)
         return (loc.lat, loc.lng)
+
+    def resolve_full(self, args) -> tuple[float, float, str]:
+        """Resolve (lat, lng, tz_str) from CLI args.
+
+        Used by features that NEED destination tz (e.g. solar return — SR
+        chart is cast in destination-local time at the SR UT moment).
+        Precedence: --lat/--lng + --tz > --location preset.
+
+        Raises if --lat/--lng are given without --tz and no --location.
+        """
+        if args.lat is not None and args.lng is not None:
+            tz = getattr(args, 'tz', None)
+            if not tz:
+                raise ValueError(
+                    "--tz is required when --lat/--lng are passed without --location "
+                    "(needed to cast the chart in destination-local time)."
+                )
+            return (args.lat, args.lng, tz)
+        if args.lat is not None or args.lng is not None:
+            raise ValueError("--lat and --lng must be provided together")
+        if not args.location:
+            raise ValueError("Provide --location PRESET, or --lat/--lng/--tz. "
+                             "List presets with `astro locations list`.")
+        loc = self.storage.load_location(args.location)
+        return (loc.lat, loc.lng, loc.tz_str)
 
 
 # =============================================================================
@@ -2352,6 +2377,162 @@ class ParanCalculator:
 
 
 # =============================================================================
+# Eclipse Calculator (eclipse hits to relocated angles)
+# =============================================================================
+
+class EclipseCalculator:
+    """Find solar/lunar eclipses whose ecliptic longitude aspects relocated angles.
+
+    Eclipses are heavyweight transit events; an eclipse degree near a relocated
+    angle activates that location's identity (AS) / vocation (MC) / relationships
+    (DC) / home (IC) layer for ~6 months around the event. The standard
+    astrocartographic convention is conjunction-to-angle (and the equivalent
+    opposition). Sextile/square/trine to angles is non-standard for eclipses
+    and is only available via `--aspects all`.
+
+    Eclipse degree:
+      - Solar eclipse (New Moon under Sun's path): Sun and Moon are conjunct →
+        eclipse_lon = Sun longitude at peak.
+      - Lunar eclipse (Full Moon in Earth's shadow): Moon is opposite Sun →
+        eclipse_lon = Moon longitude at peak (NOT Sun, which is 180° away).
+    """
+
+    ASPECT_OFFSETS = {
+        'conj':       0.0,
+        'opposition': 180.0,
+        'sextile':    60.0,
+        'square':     90.0,
+        'trine':      120.0,
+    }
+    ASPECT_SETS = {
+        'conj':     ('conj',),
+        'conj-opp': ('conj', 'opposition'),
+        'all':      ('conj', 'opposition', 'sextile', 'square', 'trine'),
+    }
+
+    MAX_ITER = 200  # safety guard against infinite loops
+
+    def __init__(self, transit_calc: 'TransitCalculator',
+                 reloc_calc: 'RelocationCalculator'):
+        self.tc = transit_calc
+        self.rc = reloc_calc
+
+    def eclipses_in_range(self, jd_start: float, years: float,
+                          types: tuple[str, ...] = ('solar', 'lunar')
+                          ) -> list[dict]:
+        """Return eclipses (solar, lunar, or both) whose peak JD is within
+        [jd_start, jd_start + years × 365.25]. Each row: {type, jd, lon, sign}.
+
+        Uses swe.sol_eclipse_when_glob and swe.lun_eclipse_when (global finders).
+        Iteration advances jd by `eclipse_jd + 1.0` to find subsequent eclipses;
+        bounded by MAX_ITER as a safety net.
+        """
+        _ensure_ephe_path()
+        jd_end = jd_start + years * 365.25
+        rows = []
+
+        if 'solar' in types:
+            jd = jd_start
+            for _ in range(self.MAX_ITER):
+                _retflag, tret = swe.sol_eclipse_when_glob(jd)
+                eclipse_jd = tret[0]
+                if eclipse_jd >= jd_end:
+                    break
+                ecl, _f = swe.calc_ut(eclipse_jd, swe.SUN)
+                rows.append({
+                    'type': 'solar',
+                    'jd': eclipse_jd,
+                    'lon': ecl[0] % 360.0,
+                })
+                jd = eclipse_jd + 1.0
+
+        if 'lunar' in types:
+            jd = jd_start
+            for _ in range(self.MAX_ITER):
+                _retflag, tret = swe.lun_eclipse_when(jd)
+                eclipse_jd = tret[0]
+                if eclipse_jd >= jd_end:
+                    break
+                # Lunar eclipse: Moon is opposite Sun at peak, so Moon's longitude
+                # IS the eclipse degree (NOT the Sun's, which is 180° away).
+                ecl, _f = swe.calc_ut(eclipse_jd, swe.MOON)
+                rows.append({
+                    'type': 'lunar',
+                    'jd': eclipse_jd,
+                    'lon': ecl[0] % 360.0,
+                })
+                jd = eclipse_jd + 1.0
+
+        rows.sort(key=lambda r: r['jd'])
+        # Annotate sign + UTC date for display
+        signs = ['Ari', 'Tau', 'Gem', 'Can', 'Leo', 'Vir',
+                 'Lib', 'Sco', 'Sag', 'Cap', 'Aqu', 'Pis']
+        for r in rows:
+            r['sign'] = signs[int(r['lon'] / 30) % 12]
+            r['date_utc'] = swe.revjul(r['jd'])  # (year, month, day, hour_dec)
+        return rows
+
+    def hits_to_relocated_angles(
+        self, natal_chart: NatalChart, lat: float, lng: float,
+        years: float = 2.0, orb: float = 3.0,
+        types: tuple[str, ...] = ('solar', 'lunar'),
+        aspect_set: str = 'conj-opp',
+        jd_start: Optional[float] = None,
+    ) -> list[dict]:
+        """For each upcoming eclipse, report its tightest aspect to any of the
+        4 relocated angles within `orb` degrees.
+
+        Each row: {date_utc_iso, type, eclipse_lon, eclipse_sign, angle,
+                   aspect, orb_deg, jd}.
+        """
+        if jd_start is None:
+            now = datetime.now()
+            jd_start = swe.julday(now.year, now.month, now.day,
+                                  now.hour + now.minute / 60.0)
+
+        active_aspects = self.ASPECT_SETS[aspect_set]
+        active_offsets = [(name, self.ASPECT_OFFSETS[name]) for name in active_aspects]
+
+        # Build relocated subject; get angles
+        reloc = self.rc.relocate_subject(natal_chart, lat, lng)
+        rc_angles = real_angles(reloc)
+        # Use astro.com-style 'AS' label
+        angles = {ac: rc_angles[code]
+                  for ac, code in (('AS', 'ASC'), ('MC', 'MC'),
+                                   ('DC', 'DC'), ('IC', 'IC'))}
+
+        eclipses = self.eclipses_in_range(jd_start, years, types=types)
+
+        rows = []
+        for ecl in eclipses:
+            best = None  # (orb, aspect_name, angle_code)
+            for angle_code, angle_lon in angles.items():
+                diff = abs(((ecl['lon'] - angle_lon + 180.0) % 360.0) - 180.0)
+                for aspect_name, target in active_offsets:
+                    aspect_orb = abs(diff - target)
+                    if aspect_orb > orb:
+                        continue
+                    if best is None or aspect_orb < best[0]:
+                        best = (aspect_orb, aspect_name, angle_code)
+            if best is None:
+                continue
+            aspect_orb, aspect_name, angle_code = best
+            y, m, d, h = ecl['date_utc']
+            iso = f"{y:04d}-{m:02d}-{d:02d}T{int(h):02d}:{int((h%1)*60):02d}Z"
+            rows.append({
+                'date_utc_iso': iso,
+                'jd': ecl['jd'],
+                'type': ecl['type'],
+                'eclipse_lon': ecl['lon'],
+                'eclipse_sign': ecl['sign'],
+                'angle': angle_code,
+                'aspect': aspect_name,
+                'orb_deg': aspect_orb,
+            })
+        return rows
+
+
+# =============================================================================
 # Synastry Calculator (chart-to-chart relationship)
 # =============================================================================
 
@@ -3182,6 +3363,30 @@ Retrograde Periods:
             )
         return "\n".join(out)
 
+    def format_eclipses(self, rows: list[dict], lat: float, lng: float,
+                        years: float, orb: float) -> str:
+        """Render eclipse hits to relocated angles."""
+        out = []
+        out.append(
+            f"Eclipses near relocated angles ({lat:.4f}, {lng:.4f})  "
+            f"next {years:.0f}y, orb ≤ {orb}°"
+        )
+        out.append("=" * 70)
+        if not rows:
+            out.append("(no eclipses with hits to relocated angles in window)")
+            return "\n".join(out)
+        for r in rows:
+            type_glyph = '☉' if r['type'] == 'solar' else '☽'
+            sign_sym = self.SIGN_SYMBOLS.get(r['eclipse_sign'], r['eclipse_sign'])
+            asp_sym = self.ASPECT_SYMBOLS.get(r['aspect'], r['aspect'])
+            out.append(
+                f"  {r['date_utc_iso']}  {type_glyph} {r['type']:<5}  "
+                f"{sign_sym} {r['eclipse_lon'] % 30:5.2f}° {r['eclipse_sign']:<3}  "
+                f"{asp_sym} {r['aspect']:<10} reloc {r['angle']:<2}  "
+                f"orb {r['orb_deg']:+5.2f}°"
+            )
+        return "\n".join(out)
+
     def format_synastry(self, result: dict, chart_a_name: str, chart_b_name: str) -> str:
         """Render synastry: planet aspects, angle contacts, house overlays."""
         lines = []
@@ -3457,6 +3662,26 @@ Examples:
                          'When set, --location/--lat/--lng are unused for parans.')
     rp.add_argument('--no-chiron', action='store_true',
                     help='Exclude Chiron from paran search (terser output)')
+
+    re_ = reloc_sub.add_parser(
+        'eclipses',
+        help='Eclipses with conj/opp hits to relocated angles (timing tool)',
+    )
+    _add_loc_args(re_)
+    re_.add_argument('--years', type=float, default=2.0,
+                     help='Look-ahead window in years (default 2.0)')
+    re_.add_argument('--orb', type=float, default=3.0,
+                     help='Aspect orb in degrees (default 3.0 — eclipses get '
+                          'wider orbs than transit aspects because their effect '
+                          'window is ~6 months either side)')
+    re_.add_argument('--type', dest='eclipse_type',
+                     choices=('solar', 'lunar', 'both'), default='both',
+                     help='Filter by eclipse type (default both)')
+    re_.add_argument('--aspects', dest='eclipse_aspects',
+                     choices=('conj', 'conj-opp', 'all'), default='conj-opp',
+                     help='Aspects to consider (default conj-opp = standard '
+                          'astrocartographic eclipse-on-angle convention; '
+                          '`all` adds sextile/square/trine for completeness)')
 
     # --- Synastry (top-level, two charts) ---
     syn_p = subparsers.add_parser('synastry',
@@ -4128,6 +4353,26 @@ Examples:
                 }, indent=2))
             else:
                 print(formatter.format_parans(rows, target_lat, args.max_delta_lat))
+
+        elif args.relocate_cmd == 'eclipses':
+            ecalc = EclipseCalculator(transit_calc, rcalc)
+            types = (('solar', 'lunar') if args.eclipse_type == 'both'
+                     else (args.eclipse_type,))
+            rows = ecalc.hits_to_relocated_angles(
+                chart, lat, lng,
+                years=args.years, orb=args.orb,
+                types=types, aspect_set=args.eclipse_aspects,
+            )
+            if args.json_output:
+                print(json.dumps({
+                    'chart': chart_name, 'lat': lat, 'lng': lng,
+                    'years': args.years, 'orb': args.orb,
+                    'type': args.eclipse_type, 'aspects': args.eclipse_aspects,
+                    'rows': rows,
+                }, indent=2))
+            else:
+                print(formatter.format_eclipses(rows, lat, lng,
+                                                args.years, args.orb))
 
     elif args.command == 'synastry':
         try:
