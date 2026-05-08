@@ -11,7 +11,16 @@ import pytest
 # Silence kerykeion v5 deprecation warnings (legacy AstrologicalSubject /
 # NatalAspects / SynastryAspects). Migration to the v5 Factory pattern is
 # a separate task; bin/astro installs the same filter at module load.
-warnings.filterwarnings('ignore', category=DeprecationWarning, module='kerykeion.*')
+# kerykeion uses stacklevel=2 so warnings appear to originate from caller —
+# filter by message text instead of module regex.
+warnings.filterwarnings(
+    'ignore', category=DeprecationWarning,
+    message=r".*(deprecated in Kerykeion|"
+            r"'AstrologicalSubject' is deprecated|"
+            r"'NatalAspects' is deprecated|"
+            r"'SynastryAspects' is deprecated|"
+            r"'true_node'|'true_south_node'|'mean_lilith').*",
+)
 
 
 @pytest.fixture(scope="session")

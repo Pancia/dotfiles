@@ -38,7 +38,17 @@ from typing import Optional
 # (AstrologicalSubjectFactory.from_birth_data, AspectsFactory.{single,dual}_chart_aspects)
 # is a separate task — those classes also expose new attribute names like
 # `true_north_lunar_node`. Tactical filter until that migration lands.
-warnings.filterwarnings('ignore', category=DeprecationWarning, module='kerykeion.*')
+# kerykeion uses stacklevel=2 in its _deprecated() helper, so the warning's
+# reported module is OUR module not 'kerykeion'. Filter via message text.
+# Two distinct message formats exist (one mentions "in Kerykeion", one doesn't).
+warnings.filterwarnings(
+    'ignore', category=DeprecationWarning,
+    message=r".*(deprecated in Kerykeion|"
+            r"'AstrologicalSubject' is deprecated|"
+            r"'NatalAspects' is deprecated|"
+            r"'SynastryAspects' is deprecated|"
+            r"'true_node'|'true_south_node'|'mean_lilith').*",
+)
 
 os.environ['KERYKEION_GEONAMES_CACHE_NAME'] = str(
     Path.home() / ".local" / "share" / "astro" / "geonames_cache"
@@ -2533,6 +2543,197 @@ class EclipseCalculator:
 
 
 # =============================================================================
+# Solar Return Calculator (chart cast at SR moment, at destination location)
+# =============================================================================
+
+class SolarReturnCalculator:
+    """Cast a Solar Return chart at relocated coordinates.
+
+    SR chart = chart for the moment when transiting Sun returns to natal Sun
+    longitude (within target year), cast at the destination geographic location
+    using DESTINATION local time. This differs critically from
+    `RelocationCalculator.relocate_subject()` which preserves natal tz_str.
+
+    SR convention (Solar Fire / astro.com / Brady's "Astrology, A Place In
+    Your Life"): the chart is for the moment Sun returns; you cast it WITH
+    THE LOCAL TIME at the location you're at when the SR fires. Different
+    locations on the same SR moment produce wildly different ASC/MC because
+    local time differs by hours of LST.
+
+    Bisection bracket: ±15 days around `natal_jd + N × 365.2422` to keep the
+    signed-wrap function `((sun_lon - target + 180) mod 360) - 180` monotone
+    inside the bracket, avoiding the 0°/360° wrap discontinuity.
+    """
+
+    SUN_DEG_PER_DAY = 0.985647   # tropical year ≈ 365.2422 d
+    BISECT_TOL_DEG = 0.001       # ~1.5 minutes of solar arc
+    BISECT_MAX_ITER = 60
+    BRACKET_HALF_DAYS = 15.0
+
+    def __init__(self, transit_calc: 'TransitCalculator'):
+        self.tc = transit_calc
+
+    @staticmethod
+    def _signed_wrap(x: float) -> float:
+        return ((x + 180.0) % 360.0) - 180.0
+
+    @classmethod
+    def _sun_lon(cls, jd: float) -> float:
+        _ensure_ephe_path()
+        result, _ = swe.calc_ut(jd, swe.SUN)
+        return result[0] % 360.0
+
+    @classmethod
+    def find_sr_jd(cls, natal_jd: float, natal_sun_lon: float,
+                   target_year_offset: int) -> float:
+        """Find the Julian Day where transiting Sun longitude equals natal
+        Sun longitude, in the target year.
+
+        target_year_offset = SR_year - natal_year. 0 = natal year (returns
+        natal_jd), N = N years after birth.
+
+        Bracketed bisection in [anchor − 15 d, anchor + 15 d] where anchor =
+        natal_jd + offset × 365.2422. Inside the bracket, the signed-wrap
+        function is monotone, so bisection converges cleanly.
+        """
+        if target_year_offset == 0:
+            return natal_jd
+        anchor = natal_jd + target_year_offset * 365.2422
+        lo = anchor - cls.BRACKET_HALF_DAYS
+        hi = anchor + cls.BRACKET_HALF_DAYS
+
+        def f(jd):
+            return cls._signed_wrap(cls._sun_lon(jd) - natal_sun_lon)
+
+        f_lo, f_hi = f(lo), f(hi)
+        # Sun moves ~0.985°/day. Over 30 days that's ~29.6° — well inside
+        # the unwrapped band. f(lo) and f(hi) MUST have opposite signs
+        # bracketing the SR moment if our anchor estimate is correct.
+        if f_lo * f_hi > 0:
+            # Anchor was off — extend search. Try ±30d.
+            lo = anchor - 30.0
+            hi = anchor + 30.0
+            f_lo, f_hi = f(lo), f(hi)
+            if f_lo * f_hi > 0:
+                raise ValueError(
+                    f"SR bisection bracket failed: f({lo:.2f})={f_lo:.4f}, "
+                    f"f({hi:.2f})={f_hi:.4f}. Anchor estimate {anchor:.2f} "
+                    f"may be too far from actual SR for natal_sun_lon "
+                    f"{natal_sun_lon:.4f}°."
+                )
+
+        # Bisection
+        for _ in range(cls.BISECT_MAX_ITER):
+            mid = 0.5 * (lo + hi)
+            f_mid = f(mid)
+            if abs(f_mid) < cls.BISECT_TOL_DEG:
+                return mid
+            if f_lo * f_mid <= 0:
+                hi, f_hi = mid, f_mid
+            else:
+                lo, f_lo = mid, f_mid
+        return 0.5 * (lo + hi)
+
+    def compute(self, natal_chart: NatalChart, lat: float, lng: float,
+                tz_str: str, target_year: Optional[int] = None) -> dict:
+        """Cast SR chart at (lat, lng) for target_year, in destination tz.
+
+        Returns dict: {sr_jd, sr_utc_iso, sr_local_iso, target_year, lat, lng,
+                       tz_str, sun_lon (= natal Sun), planets, angles}.
+        """
+        # Resolve natal subject + jd + Sun longitude
+        bd = natal_chart.birth_data
+        if not bd.tz_str:
+            primer = self.tc._make_subject(
+                bd.full_name, bd.year, bd.month, bd.day, bd.hour, bd.minute, bd
+            )
+            self.tc._cache_coords(natal_chart, primer)
+            bd = natal_chart.birth_data
+        natal_subj = self.tc._make_subject(
+            bd.full_name, bd.year, bd.month, bd.day, bd.hour, bd.minute, bd
+        )
+        natal_jd = _natal_jd(natal_subj)
+        natal_sun = natal_subj.sun.abs_pos
+
+        # Determine target year (default heuristic: next upcoming birthday)
+        if target_year is None:
+            today = datetime.now()
+            this_year_birthday = datetime(today.year, bd.month, bd.day)
+            target_year = today.year if today < this_year_birthday else today.year + 1
+
+        offset = target_year - bd.year
+        sr_jd = self.find_sr_jd(natal_jd, natal_sun, offset)
+
+        # Convert sr_jd back to UTC datetime, then to destination-local datetime
+        y, mo, d, hour_dec = swe.revjul(sr_jd)
+        h = int(hour_dec)
+        m = int((hour_dec - h) * 60)
+        s = int((((hour_dec - h) * 60) - m) * 60)
+        from datetime import timezone
+        try:
+            from zoneinfo import ZoneInfo
+        except ImportError:
+            from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
+        sr_utc = datetime(y, mo, d, h, m, s, tzinfo=timezone.utc)
+        sr_local = sr_utc.astimezone(ZoneInfo(tz_str))
+
+        # Build the SR subject in DESTINATION local time + DESTINATION tz_str.
+        # This is THE SR convention; using natal tz here would produce wrong
+        # houses for the relocated SR.
+        from kerykeion import AstrologicalSubject
+        sr_subj = AstrologicalSubject(
+            f"SR-{target_year}",
+            sr_local.year, sr_local.month, sr_local.day,
+            sr_local.hour, sr_local.minute,
+            bd.city, bd.nation,
+            lat=lat, lng=lng, tz_str=tz_str,
+            houses_system_identifier="A",
+        )
+
+        # Extract planets, angles, houses
+        angles = real_angles(sr_subj)
+        sr_cusps = self.tc._calculate_natal_houses(sr_subj)
+        signs = ['Ari', 'Tau', 'Gem', 'Can', 'Leo', 'Vir',
+                 'Lib', 'Sco', 'Sag', 'Cap', 'Aqu', 'Pis']
+
+        planets = []
+        for attr, display in [
+            ('sun', 'Sun'), ('moon', 'Moon'), ('mercury', 'Mercury'),
+            ('venus', 'Venus'), ('mars', 'Mars'), ('jupiter', 'Jupiter'),
+            ('saturn', 'Saturn'), ('uranus', 'Uranus'),
+            ('neptune', 'Neptune'), ('pluto', 'Pluto'),
+            ('chiron', 'Chiron'),
+            ('true_node', 'North Node'),
+        ]:
+            obj = getattr(sr_subj, attr, None)
+            if obj is None:
+                continue
+            lon = obj.abs_pos
+            sign = signs[int(lon / 30) % 12]
+            house = self.tc._planet_in_natal_house(lon, sr_cusps)
+            planets.append({
+                'name': display,
+                'longitude': lon,
+                'sign': sign,
+                'degree_in_sign': lon % 30,
+                'house': house,
+            })
+
+        return {
+            'target_year': target_year,
+            'sr_jd': sr_jd,
+            'sr_utc_iso': sr_utc.isoformat(),
+            'sr_local_iso': sr_local.isoformat(),
+            'lat': lat,
+            'lng': lng,
+            'tz_str': tz_str,
+            'natal_sun_lon': natal_sun,
+            'planets': planets,
+            'angles': {k: v for k, v in angles.items()},
+        }
+
+
+# =============================================================================
 # Synastry Calculator (chart-to-chart relationship)
 # =============================================================================
 
@@ -3363,6 +3564,37 @@ Retrograde Periods:
             )
         return "\n".join(out)
 
+    def format_solar_return(self, sr: dict) -> str:
+        """Render a Solar Return chart cast at relocated coordinates."""
+        signs = {sym for sym in self.SIGN_SYMBOLS}
+        out = []
+        out.append(
+            f"Solar Return — {sr['target_year']} @ ({sr['lat']:.4f}, "
+            f"{sr['lng']:.4f}) [{sr['tz_str']}]"
+        )
+        out.append("=" * 70)
+        out.append(f"  SR moment (UTC):   {sr['sr_utc_iso']}")
+        out.append(f"  SR moment (local): {sr['sr_local_iso']}")
+        out.append(f"  Sun returns to:    {sr['natal_sun_lon']:.4f}° (natal)")
+        out.append("")
+        out.append("Planets:")
+        for p in sr['planets']:
+            sym = self.SIGN_SYMBOLS.get(p['sign'], p['sign'])
+            out.append(
+                f"  {p['name']:<12} {sym} {p['sign']:<3} "
+                f"{p['degree_in_sign']:6.2f}°   House {p['house']}"
+            )
+        out.append("")
+        out.append("Angles:")
+        for code in ('ASC', 'MC', 'DC', 'IC'):
+            lon = sr['angles'][code]
+            sign_idx = int(lon / 30) % 12
+            sign = ['Ari', 'Tau', 'Gem', 'Can', 'Leo', 'Vir',
+                    'Lib', 'Sco', 'Sag', 'Cap', 'Aqu', 'Pis'][sign_idx]
+            sym = self.SIGN_SYMBOLS.get(sign, sign)
+            out.append(f"  {code:<3}  {sym} {sign:<3} {lon % 30:6.2f}°")
+        return "\n".join(out)
+
     def format_eclipses(self, rows: list[dict], lat: float, lng: float,
                         years: float, orb: float) -> str:
         """Render eclipse hits to relocated angles."""
@@ -3682,6 +3914,19 @@ Examples:
                      help='Aspects to consider (default conj-opp = standard '
                           'astrocartographic eclipse-on-angle convention; '
                           '`all` adds sextile/square/trine for completeness)')
+
+    rsr = reloc_sub.add_parser(
+        'solar-return',
+        help='Cast Solar Return chart at relocated coords (annual timing tool)',
+    )
+    _add_loc_args(rsr)
+    rsr.add_argument('--year', type=int,
+                     help='SR year (default: next upcoming birthday). Pass '
+                          'a past year for retrospective analysis.')
+    rsr.add_argument('--tz', help='Destination tz (e.g. Europe/Prague). '
+                                  'Required when --lat/--lng are given without '
+                                  '--location. SR is cast in destination-local '
+                                  'time, NOT natal-local.')
 
     # --- Synastry (top-level, two charts) ---
     syn_p = subparsers.add_parser('synastry',
@@ -4255,11 +4500,20 @@ Examples:
             return
 
         # `parans --target-lat X` works without a longitude — parans depend on
-        # latitude only. Other relocate subcommands need a full lat/lng.
+        # latitude only. `solar-return` also needs tz_str (chart cast in
+        # destination-local time). Other relocate subcommands need only (lat, lng).
         target_lat_only = (args.relocate_cmd == 'parans'
                            and getattr(args, 'target_lat', None) is not None)
+        sr_needs_tz = (args.relocate_cmd == 'solar-return')
+        sr_tz_str = None
         if target_lat_only:
             lat, lng = args.target_lat, 0.0  # lng unused for parans
+        elif sr_needs_tz:
+            try:
+                lat, lng, sr_tz_str = location_mgr.resolve_full(args)
+            except (ValueError, FileNotFoundError) as e:
+                print(f"Error: {e}", file=sys.stderr)
+                sys.exit(1)
         else:
             try:
                 lat, lng = location_mgr.resolve(args)
@@ -4373,6 +4627,19 @@ Examples:
             else:
                 print(formatter.format_eclipses(rows, lat, lng,
                                                 args.years, args.orb))
+
+        elif args.relocate_cmd == 'solar-return':
+            srcalc = SolarReturnCalculator(transit_calc)
+            try:
+                sr = srcalc.compute(chart, lat, lng, sr_tz_str,
+                                    target_year=args.year)
+            except ValueError as e:
+                print(f"Error: {e}", file=sys.stderr)
+                sys.exit(1)
+            if args.json_output:
+                print(json.dumps(sr, indent=2, default=str))
+            else:
+                print(formatter.format_solar_return(sr))
 
     elif args.command == 'synastry':
         try:
