@@ -9,7 +9,7 @@ function __fzf_complete_gather_raw
     __fzf_complete_log "gather: fd start anchor=$anchor_clean depth=$depth"
     set -l strip "$anchor_clean/"
     test "$anchor_clean" = /; and set strip /
-    fd --type d --type f --type l --hidden --follow --max-depth $depth . "$anchor_clean" 2>/dev/null \
+    fd --type d --type f --type l --hidden --max-depth $depth . "$anchor_clean" 2>/dev/null \
         | awk -v p="$prefix" -v s="$strip" '
             BEGIN { slen = length(s) }
             {
