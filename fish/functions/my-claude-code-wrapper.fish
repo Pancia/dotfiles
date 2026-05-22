@@ -57,15 +57,15 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
     else
         set label "$label $timestamp"
     end
-    # Skip post-session review for non-interactive invocations
-    set -l skip_review 0
+    # Skip post-session extras (review + open-session tracking) for non-interactive invocations
+    set -l skip_extras 0
     if contains -- -p $pass_argv; or contains -- --print $pass_argv
-        set skip_review 1
+        set skip_extras 1
     end
-    # Skip review if this invocation is itself processing pending updates
+    # Skip extras if this invocation is itself processing pending updates
     for arg in $pass_argv
         if string match -q '*/cc:pending-updates*' -- $arg
-            set skip_review 1
+            set skip_extras 1
             break
         end
     end
@@ -74,14 +74,25 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
     set -l sessions_dir "$HOME/.claude/projects/"(string replace -a '/' '-' (pwd))
     set -l pre_latest
     if test -d "$sessions_dir"
-        set pre_latest (ls -t "$sessions_dir"/*.jsonl 2>/dev/null | head -1)
+        set pre_latest (find "$sessions_dir" -maxdepth 1 -name '*.jsonl' -type f -exec stat -f '%m %N' {} + 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+    end
+
+    # Register this invocation in the open-sessions registry + spawn a watcher
+    # to capture the session_id once claude writes its JSONL. Survives crashes.
+    if test $skip_extras -eq 0
+        # Helpers live in ccs.fish; autoload only picks up the top-level `ccs`
+        # function, so source explicitly the first time.
+        functions -q _ccs_open_register; or source ~/dotfiles/fish/functions/ccs.fish
+        _ccs_open_register $fish_pid
+        fish -c "source ~/dotfiles/fish/functions/ccs.fish; cd '"(pwd)"'; _ccs_open_watch '$fish_pid' '$pre_latest'" &>/dev/null &
+        disown
     end
 
     proc-label "claude [$label]" claude --verbose $pass_argv
 
     # Post-session review: find the session JSONL and review in background
-    if test $skip_review -eq 0; and test -d "$sessions_dir"
-        set -l post_latest (ls -t "$sessions_dir"/*.jsonl 2>/dev/null | head -1)
+    if test $skip_extras -eq 0; and test -d "$sessions_dir"
+        set -l post_latest (find "$sessions_dir" -maxdepth 1 -name '*.jsonl' -type f -exec stat -f '%m %N' {} + 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
         if test -n "$post_latest"
             echo "📋 Reviewing session for CLAUDE.md updates (background)..."
             fish -c "cc-session-review '$post_latest'" &>/dev/null &
@@ -98,5 +109,11 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
                 end
             end
         end
+    end
+
+    # Clean exit: drop the open-sessions entry. (Both saved and unsaved clean
+    # exits delete the file — only crashes leave it behind for recovery.)
+    if test $skip_extras -eq 0
+        _ccs_open_finalize $fish_pid
     end
 end
