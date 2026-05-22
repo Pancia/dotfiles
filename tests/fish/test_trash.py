@@ -1,5 +1,6 @@
 """Tests for fish/functions/trash.fish."""
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -8,7 +9,9 @@ DOTFILES = Path(__file__).resolve().parents[2]
 TRASH_FISH = DOTFILES / "fish" / "functions" / "trash.fish"
 
 
-def fish_eval(code: str, *, env: dict | None = None) -> subprocess.CompletedProcess:
+def fish_eval(
+    code: str, *, env: dict | None = None, stdin=None
+) -> subprocess.CompletedProcess:
     """Source trash.fish then run code in Fish shell."""
     full_code = f"source {TRASH_FISH}\n{code}"
     run_env = {**os.environ, **(env or {})}
@@ -17,6 +20,7 @@ def fish_eval(code: str, *, env: dict | None = None) -> subprocess.CompletedProc
         capture_output=True,
         text=True,
         env=run_env,
+        stdin=stdin,
     )
 
 
@@ -264,8 +268,10 @@ class TestHistory:
         lines = history.read_text().strip().split("\n")
         assert len(lines) == 1
         fields = lines[0].split("\t")
-        assert len(fields) == 4
+        assert len(fields) == 5
         assert fields[0] == "tracked.txt"
+        # 5th column is the stable id generated at trash time
+        assert fields[4] != ""
 
     def test_history_appends(self, tmp_path):
         """Multiple trash operations append to history."""
@@ -291,9 +297,16 @@ class TestHistory:
 # =============================================================================
 
 
+def _list_json(home, tmp_path):
+    """Run `trash list --json` and parse the result."""
+    r = fish_eval(f"cd {tmp_path} && trash list --json", env={"HOME": str(home)})
+    assert r.returncode == 0, r.stderr
+    return json.loads(r.stdout)
+
+
 class TestRestore:
-    def test_restore_by_line_number(self, tmp_path):
-        """Restore a file by history line number."""
+    def test_restore_last(self, tmp_path):
+        """`restore --last` brings back the most recently trashed file."""
         src = tmp_path / "restore_me.txt"
         src.write_text("come back")
         home = tmp_path / "home"
@@ -301,43 +314,54 @@ class TestRestore:
         (home / ".Trash").mkdir()
 
         fish_eval(
-            f'cd {tmp_path} && trash restore_me.txt',
+            f"cd {tmp_path} && trash restore_me.txt",
             env={"HOME": str(home)},
         )
         assert not src.exists()
 
         r = fish_eval(
-            f'cd {tmp_path} && restore 1',
+            f"cd {tmp_path} && restore --last",
             env={"HOME": str(home)},
         )
-        assert r.returncode == 0
+        assert r.returncode == 0, r.stderr
         assert src.exists()
         assert src.read_text() == "come back"
 
-    def test_restore_removes_history_line(self, tmp_path):
-        """After restore, the history entry should be removed."""
+    def test_restore_middle_by_id(self, tmp_path):
+        """Restoring a non-last entry by id targets exactly that entry."""
         home = tmp_path / "home"
         home.mkdir()
         (home / ".Trash").mkdir()
 
-        f1 = tmp_path / "first.txt"
-        f1.write_text("1")
-        fish_eval(f'cd {tmp_path} && trash first.txt', env={"HOME": str(home)})
+        for name, body in [("a.txt", "1"), ("b.txt", "2"), ("c.txt", "3")]:
+            f = tmp_path / name
+            f.write_text(body)
+            fish_eval(f"cd {tmp_path} && trash {name}", env={"HOME": str(home)})
 
-        f2 = tmp_path / "second.txt"
-        f2.write_text("2")
-        fish_eval(f'cd {tmp_path} && trash second.txt', env={"HOME": str(home)})
+        entries = _list_json(home, tmp_path)
+        assert len(entries) == 3
+        # Newest-first ordering: c, b, a — middle is b.txt
+        b_entry = next(e for e in entries if e["path"].endswith("b.txt"))
 
-        # Restore line 1 (first.txt)
-        fish_eval(f'cd {tmp_path} && restore 1', env={"HOME": str(home)})
+        r = fish_eval(
+            f"cd {tmp_path} && restore {b_entry['id']}",
+            env={"HOME": str(home)},
+        )
+        assert r.returncode == 0, r.stderr
+
+        # Only b.txt came back; a.txt and c.txt stay trashed.
+        assert (tmp_path / "b.txt").exists()
+        assert (tmp_path / "b.txt").read_text() == "2"
+        assert not (tmp_path / "a.txt").exists()
+        assert not (tmp_path / "c.txt").exists()
 
         history = home / ".cache" / "dotfiles" / "trash" / "history"
         lines = history.read_text().strip().split("\n")
-        assert len(lines) == 1
-        assert "second.txt" in lines[0]
+        assert len(lines) == 2
+        assert not any("\tb.txt" in line or line.startswith("b.txt") for line in lines)
 
     def test_restore_long_filename(self, tmp_path):
-        """Restore works correctly for files whose trash name was truncated."""
+        """Restore works for files whose trash name was truncated."""
         long_name = "한글테스트" * 10 + ".m4a"
         src = tmp_path / long_name
         src.write_text("music data")
@@ -352,27 +376,91 @@ class TestRestore:
         assert not src.exists()
 
         r = fish_eval(
-            f"cd {tmp_path} && restore 1",
+            f"cd {tmp_path} && restore --last",
             env={"HOME": str(home)},
         )
-        assert r.returncode == 0
+        assert r.returncode == 0, r.stderr
         assert src.exists()
         assert src.read_text() == "music data"
 
-    def test_restore_invalid_line_number(self, tmp_path):
-        """Restoring a nonexistent line should fail."""
+    def test_restore_absolute_path(self, tmp_path):
+        """A file trashed by absolute path restores to that absolute path."""
+        home = tmp_path / "home"
+        home.mkdir()
+        (home / ".Trash").mkdir()
+        src = tmp_path / "abs.txt"
+        src.write_text("absolute")
+
+        fish_eval(f"trash {src}", env={"HOME": str(home)})
+        assert not src.exists()
+
+        entries = _list_json(home, tmp_path)
+        assert entries[0]["path"] == str(src)
+
+        r = fish_eval(
+            f"restore {entries[0]['id']}",
+            env={"HOME": str(home)},
+        )
+        assert r.returncode == 0, r.stderr
+        assert src.exists()
+        assert src.read_text() == "absolute"
+
+    def test_restore_unknown_id(self, tmp_path):
+        """Restoring an id that doesn't exist should fail."""
         home = tmp_path / "home"
         home.mkdir()
         (home / ".Trash").mkdir()
         f = tmp_path / "only.txt"
         f.write_text("x")
-        fish_eval(f'cd {tmp_path} && trash only.txt', env={"HOME": str(home)})
+        fish_eval(f"cd {tmp_path} && trash only.txt", env={"HOME": str(home)})
 
         r = fish_eval(
-            f'cd {tmp_path} && restore 99',
+            f"cd {tmp_path} && restore deadbeef",
             env={"HOME": str(home)},
         )
         assert r.returncode == 1
+
+    def test_restore_last_empty_history(self, tmp_path):
+        """`restore --last` with no history exits 1 cleanly (no sed crash)."""
+        home = tmp_path / "home"
+        home.mkdir()
+        r = fish_eval("restore --last", env={"HOME": str(home)})
+        assert r.returncode == 1
+
+    def test_restore_no_selector_non_tty(self, tmp_path):
+        """Bare `restore` with no tty errors instead of launching peco."""
+        home = tmp_path / "home"
+        home.mkdir()
+        (home / ".Trash").mkdir()
+        f = tmp_path / "x.txt"
+        f.write_text("x")
+        fish_eval(f"cd {tmp_path} && trash x.txt", env={"HOME": str(home)})
+
+        r = fish_eval(
+            "restore", env={"HOME": str(home)}, stdin=subprocess.DEVNULL
+        )
+        assert r.returncode == 1
+        assert "--last" in r.stderr
+
+    def test_restore_refuses_to_clobber(self, tmp_path):
+        """Restore aborts if a live file reappeared at the original path."""
+        home = tmp_path / "home"
+        home.mkdir()
+        (home / ".Trash").mkdir()
+        src = tmp_path / "z.txt"
+        src.write_text("trashed")
+
+        fish_eval(f"cd {tmp_path} && trash z.txt", env={"HOME": str(home)})
+        # Recreate a live file at the original path.
+        src.write_text("live")
+
+        r = fish_eval(
+            f"cd {tmp_path} && restore --last",
+            env={"HOME": str(home)},
+        )
+        assert r.returncode == 1
+        assert "already exists" in r.stderr
+        assert src.read_text() == "live", "Live file must not be overwritten"
 
     def test_restore_unmounted_volume(self, tmp_path):
         """Restore should fail gracefully when the trash file doesn't exist."""
@@ -380,17 +468,122 @@ class TestRestore:
         home.mkdir()
         (home / ".Trash").mkdir()
 
-        # Write a fake history entry pointing to a nonexistent path
+        # Write a fake history entry pointing to a nonexistent path (5 columns).
         history_dir = home / ".cache" / "dotfiles" / "trash"
         history_dir.mkdir(parents=True)
         history = history_dir / "history"
         history.write_text(
-            "ghost.txt\t%2Ftmp%2Ffake\t2026-01-01_00:00:00\t/Volumes/Gone/.Trashes/501/ghost\n"
+            "ghost.txt\t%2Ftmp%2Ffake\t2026-01-01_00:00:00"
+            "\t/Volumes/Gone/.Trashes/501/ghost\tabc123\n"
         )
 
-        r = fish_eval(f'restore 1', env={"HOME": str(home)})
+        r = fish_eval("restore --last", env={"HOME": str(home)})
         assert r.returncode == 1
         assert "not found in trash" in r.stderr
+
+
+# =============================================================================
+# Listing
+# =============================================================================
+
+
+class TestList:
+    def test_list_json_shape(self, tmp_path):
+        """`trash list --json` emits one object per entry with stable ids."""
+        home = tmp_path / "home"
+        home.mkdir()
+        (home / ".Trash").mkdir()
+        for name in ["one.txt", "two.txt"]:
+            (tmp_path / name).write_text(name)
+            fish_eval(f"cd {tmp_path} && trash {name}", env={"HOME": str(home)})
+
+        entries = _list_json(home, tmp_path)
+        assert len(entries) == 2
+        for e in entries:
+            assert set(e) >= {"id", "path", "dir", "when", "dest", "present"}
+            assert e["present"] is True
+        ids = [e["id"] for e in entries]
+        assert ids[0] != ids[1], "ids must be distinct"
+
+    def test_list_json_empty(self, tmp_path):
+        """`trash list --json` with no history outputs an empty array."""
+        home = tmp_path / "home"
+        home.mkdir()
+        r = fish_eval("trash list --json", env={"HOME": str(home)})
+        assert r.returncode == 0
+        assert json.loads(r.stdout) == []
+
+    def test_list_present_false(self, tmp_path):
+        """An entry whose trash file is gone is reported present:false."""
+        home = tmp_path / "home"
+        home.mkdir()
+        history_dir = home / ".cache" / "dotfiles" / "trash"
+        history_dir.mkdir(parents=True)
+        (history_dir / "history").write_text(
+            "ghost.txt\t%2Ftmp%2Ffake\t2026-01-01_00:00:00"
+            "\t/Volumes/Gone/.Trashes/501/ghost\tabc123\n"
+        )
+        entries = _list_json(home, tmp_path)
+        assert len(entries) == 1
+        assert entries[0]["present"] is False
+        assert entries[0]["id"] == "abc123"
+
+    def test_list_human(self, tmp_path):
+        """`trash list` (no --json) prints a table mentioning the file."""
+        home = tmp_path / "home"
+        home.mkdir()
+        (home / ".Trash").mkdir()
+        (tmp_path / "visible.txt").write_text("x")
+        fish_eval(f"cd {tmp_path} && trash visible.txt", env={"HOME": str(home)})
+
+        r = fish_eval("trash list", env={"HOME": str(home)})
+        assert r.returncode == 0
+        assert "visible.txt" in r.stdout
+
+
+# =============================================================================
+# Subcommand dispatch
+# =============================================================================
+
+
+class TestSubcommands:
+    def test_put_subcommand(self, tmp_path):
+        """`trash put <file>` trashes like bare `trash <file>`."""
+        home = tmp_path / "home"
+        home.mkdir()
+        (home / ".Trash").mkdir()
+        src = tmp_path / "p.txt"
+        src.write_text("put me")
+
+        r = fish_eval(f"cd {tmp_path} && trash put p.txt", env={"HOME": str(home)})
+        assert r.returncode == 0, r.stderr
+        assert not src.exists()
+        assert len(list((home / ".Trash").iterdir())) == 1
+
+    def test_put_escape_reserved_name(self, tmp_path):
+        """A file named like a subcommand can be trashed via `trash put`."""
+        home = tmp_path / "home"
+        home.mkdir()
+        (home / ".Trash").mkdir()
+        src = tmp_path / "list"  # collides with the `list` subcommand
+        src.write_text("reserved")
+
+        r = fish_eval(f"cd {tmp_path} && trash put list", env={"HOME": str(home)})
+        assert r.returncode == 0, r.stderr
+        assert not src.exists()
+        assert len(list((home / ".Trash").iterdir())) == 1
+
+    def test_legacy_bare_trash_still_works(self, tmp_path):
+        """Bare `trash <file>` (no subcommand) still trashes — backward compat."""
+        home = tmp_path / "home"
+        home.mkdir()
+        (home / ".Trash").mkdir()
+        src = tmp_path / "legacy.txt"
+        src.write_text("legacy")
+
+        r = fish_eval(f"cd {tmp_path} && trash legacy.txt", env={"HOME": str(home)})
+        assert r.returncode == 0, r.stderr
+        assert not src.exists()
 
 
 # =============================================================================
