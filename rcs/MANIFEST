@@ -13,6 +13,7 @@ clojure.deps.edn                -> $HOME/.config/clojure/deps.edn
 cmus.rc                         -> $HOME/.config/cmus/rc
 config.fish                     -> $HOME/.config/fish/config.fish
 datomic.dev-local.edn           -> $HOME/.datomic/dev-local.edn
+fd.ignore                       -> $HOME/.config/fd/ignore
 ghostty.config                  -> $HOME/.config/ghostty/config
 ghostty-theme-MyColors-Light    -> $HOME/.config/ghostty/themes/MyColors-Light
 ghostty-theme-MyColors-Dark     -> $HOME/.config/ghostty/themes/MyColors-Dark
