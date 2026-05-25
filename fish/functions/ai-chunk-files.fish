@@ -1,18 +1,16 @@
 function ai-chunk-files --description 'AI groups files into optimal chunks for commit messages'
-    echo "DEBUG: ai-chunk-files called with argv: $argv" >&2
-
     argparse 'v/verbose' -- $argv
     or return 1
 
-    echo "DEBUG: after argparse, argv: $argv, verbose: "(set -q _flag_verbose; and echo yes; or echo no) >&2
-
     set -l budget $argv[1]
     set -l manifest_file $argv[2]
-    echo "DEBUG: reading from file $manifest_file" >&2
     set -l input (cat $manifest_file)
-    echo "DEBUG: input has "(printf '%s\n' "$input" | wc -l | string trim)" lines" >&2
 
     set -l file_count (printf '%s\n' "$input" | wc -l | string trim)
+
+    if set -q _flag_verbose
+        echo "    Reading manifest from $manifest_file ($file_count files)" >&2
+    end
 
     set -l input_text (printf '%s\n' $input | string collect)
     set -l prompt "Group these files into chunks for git commit messages.

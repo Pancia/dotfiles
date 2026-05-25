@@ -1,17 +1,37 @@
-function ai-git-commit-chunked --description 'Generate commit message via chunking for large diffs'
-    argparse 'v/verbose' -- $argv
+function ai-git-commit-chunked --description 'Generate commit message via chunking for large diffs (git or jj)'
+    argparse 'v/verbose' 'vcs=' -- $argv
     or return 1
+
+    set -l vcs git
+    set -q _flag_vcs; and set vcs $_flag_vcs
+    if not contains -- $vcs git jj
+        echo "ai-git-commit-chunked: --vcs must be 'git' or 'jj' (got '$vcs')" >&2
+        return 1
+    end
 
     set -l chunk_budget 40000  # tokens per chunk target
 
     # Step 1: Build file manifest with token counts
     if set -q _flag_verbose
-        echo "[1/4] Building file manifest..." >&2
+        echo "[1/4] Building file manifest ($vcs)..." >&2
+    end
+    set -l file_list
+    if test "$vcs" = jj
+        set file_list (jj diff --name-only)
+    else
+        set file_list (git diff --staged --name-only)
     end
     set -l manifest
     set -l total_tokens 0
-    for file in (git diff --staged --name-only)
-        set -l chars (git diff --staged -- "$file" | wc -c | string trim)
+    for file in $file_list
+        # jj parses paths after `--` as filesets, not literal paths; wrap as an
+        # exact-file fileset so names with spaces/()/~ are handled (git uses pathspecs).
+        set -l chars
+        if test "$vcs" = jj
+            set chars (jj diff -- "file:\"$file\"" | wc -c | string trim)
+        else
+            set chars (git diff --staged -- "$file" | wc -c | string trim)
+        end
         set -l tokens (math "ceil($chars / 4)")  # ~4 chars per token
         set total_tokens (math "$total_tokens + $tokens")
         set -l entry (printf '%s\t%s' "$file" "$tokens")
@@ -21,35 +41,36 @@ function ai-git-commit-chunked --description 'Generate commit message via chunki
         end
     end
     if set -q _flag_verbose
-        echo "DEBUG: manifest[1] = '$manifest[1]'" >&2
-        echo "DEBUG: manifest[2] = '$manifest[2]'" >&2
-    end
-    if set -q _flag_verbose
-        echo "  Total: ~$total_tokens tokens" >&2
+        echo "  Total: ~$total_tokens tokens across "(count $manifest)" files" >&2
     end
 
     # Step 2: AI groups files into chunks (Sonnet - fast/cheap)
     if set -q _flag_verbose
         echo "[2/4] AI grouping files into chunks (budget: $chunk_budget tokens/chunk)..." >&2
-        echo "DEBUG: manifest has "(count $manifest)" entries" >&2
-        echo "DEBUG: first entry: $manifest[1]" >&2
     end
     # Write manifest to temp file (piping doesn't work reliably)
     set -l manifest_file (mktemp)
     printf '%s\n' $manifest > $manifest_file
-    if set -q _flag_verbose
-        echo "DEBUG: wrote manifest to $manifest_file ("(wc -l < $manifest_file | string trim)" lines)" >&2
-    end
     set -l chunk_args $chunk_budget $manifest_file
     set -q _flag_verbose; and set -a chunk_args --verbose
     set -l chunks (ai-chunk-files $chunk_args)
     rm -f $manifest_file
-    echo "DEBUG: ai-chunk-files returned "(count $chunks)" chunks" >&2
+
+    # Drop empty entries; fail fast if chunking produced nothing usable
+    set -l real_chunks
+    for chunk in $chunks
+        test -z "$chunk"; and continue
+        set -a real_chunks "$chunk"
+    end
+    if test (count $real_chunks) -eq 0
+        echo "ai-git-commit-chunked: chunking produced no file groups" >&2
+        echo '{"message": ""}'
+        return 1
+    end
     if set -q _flag_verbose
-        echo "  Created "(count $chunks)" chunks:" >&2
+        echo "  Created "(count $real_chunks)" chunks:" >&2
         set -l i 0
-        for chunk in $chunks
-            test -z "$chunk"; and continue
+        for chunk in $real_chunks
             set i (math "$i + 1")
             echo "  Chunk $i: $chunk" >&2
         end
@@ -61,17 +82,32 @@ function ai-git-commit-chunked --description 'Generate commit message via chunki
     end
     set -l messages
     set -l i 0
-    for chunk in $chunks
-        test -z "$chunk"; and continue
+    for chunk in $real_chunks
         set i (math "$i + 1")
         set -l files (string split ',' "$chunk")
-        set -l chunk_diff (git diff --staged -- $files | string collect)
-        if set -q _flag_verbose
-            set -l chunk_chars (string length "$chunk_diff")
-            echo "  Chunk $i: $chunk_chars chars -> AI..." >&2
+        set -l chunk_diff
+        if test "$vcs" = jj
+            set -l dargs
+            for f in $files
+                set -a dargs "file:\"$f\""
+            end
+            set chunk_diff (jj diff -- $dargs | string collect)
+        else
+            set chunk_diff (git diff --staged -- $files | string collect)
         end
-        set -l chunk_json (printf '%s' "$chunk_diff" | ai_write_git_commit | string collect)
-        set -l msg (printf '%s' "$chunk_json" | jq -r .message)
+        if set -q _flag_verbose
+            echo "  Chunk $i: "(string length "$chunk_diff")" chars -> AI..." >&2
+        end
+        set -l chunk_jsonfile (mktemp)
+        printf '%s' "$chunk_diff" | ai_write_git_commit > $chunk_jsonfile
+        set -l chunk_status $pipestatus[2]
+        set -l msg (jq -r '.message // empty' < $chunk_jsonfile | string collect)
+        rm -f $chunk_jsonfile
+        if test $chunk_status -ne 0; or not string match -qr '\S' -- "$msg"
+            echo "ai-git-commit-chunked: chunk $i message generation failed" >&2
+            echo '{"message": ""}'
+            return 1
+        end
         set -a messages "---CHUNK---" "$msg"
         if set -q _flag_verbose
             echo "  Chunk $i message:" >&2
@@ -87,8 +123,13 @@ function ai-git-commit-chunked --description 'Generate commit message via chunki
     printf '%s\n' $messages > $messages_file
     set -l merge_args $messages_file
     set -q _flag_verbose; and set -a merge_args --verbose
-    set -l final_message (ai-merge-commit-messages $merge_args)
+    set -l final_message (ai-merge-commit-messages $merge_args | string collect)
     rm -f $messages_file
+    if not string match -qr '\S' -- "$final_message"
+        echo "ai-git-commit-chunked: merging chunk messages produced empty output" >&2
+        echo '{"message": ""}'
+        return 1
+    end
     # Output JSON to match ai_write_git_commit contract
     printf '%s' "$final_message" | jq -Rs '{message: .}'
 end

@@ -7,6 +7,7 @@ writes a human-editable plan file, then executes it via FIFO.
 Usage:
     tab-organize plan [--dry-run] [--goal "..."] [--window ID]
     tab-organize execute <plan-file> [--dry-run]
+    tab-organize resync
     tab-organize windows
 """
 
@@ -17,8 +18,10 @@ import re
 import signal
 import subprocess
 import sys
+import time
+import uuid
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -28,6 +31,7 @@ FIFO_PATH = BROWSER_SYNC / "cmd.fifo"
 PLANS_DIR = BROWSER_SYNC / "plans"
 PLANS_ARCHIVE_DIR = PLANS_DIR / "archive"
 CLOSED_DIR = BROWSER_SYNC / "closed"
+LOGS_DIR = BROWSER_SYNC / "logs"
 
 VALID_COMMANDS = {"close_tab", "group_tabs", "ungroup_tabs", "move_tab"}
 COMMAND_ORDER = {"close_tab": 0, "ungroup_tabs": 1, "move_tab": 2, "group_tabs": 3}
@@ -290,6 +294,62 @@ def write_all_to_fifo(commands):
         signal.signal(signal.SIGALRM, old_handler)
 
 
+def today_log_path():
+    return LOGS_DIR / f"{date.today().isoformat()}.jsonl"
+
+
+def log_position():
+    """Byte offset of the end of today's log, for tailing-after-write."""
+    p = today_log_path()
+    return p.stat().st_size if p.exists() else 0
+
+
+def wait_for_results(start_offset, pending_ids, timeout_s):
+    """Poll today's log from start_offset for COMMAND_OK/COMMAND_ERROR events
+    matching the given cmdIds. Yields (cmdId, ok, payload) tuples as they arrive.
+    Stops when all pending_ids are seen or timeout elapses.
+    """
+    pending = set(pending_ids)
+    deadline = time.monotonic() + timeout_s
+    offset = start_offset
+    buf = ""
+    while pending and time.monotonic() < deadline:
+        p = today_log_path()
+        if not p.exists():
+            time.sleep(0.2)
+            continue
+        with open(p, "r", encoding="utf-8") as f:
+            f.seek(offset)
+            chunk = f.read()
+            offset = f.tell()
+        if not chunk:
+            time.sleep(0.2)
+            continue
+        buf += chunk
+        while "\n" in buf:
+            line, buf = buf.split("\n", 1)
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                ev = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            cid = ev.get("cmdId")
+            if cid is None or cid not in pending:
+                continue
+            t = ev.get("type")
+            if t == "COMMAND_OK":
+                pending.discard(cid)
+                yield (cid, True, ev)
+            elif t == "COMMAND_ERROR":
+                pending.discard(cid)
+                yield (cid, False, ev)
+    # Anything still pending = timeout
+    for cid in pending:
+        yield (cid, False, {"error": "timeout waiting for result"})
+
+
 def cmd_plan(args):
     if not STATE_PATH.exists():
         print(f"Error: {STATE_PATH} not found", file=sys.stderr)
@@ -354,6 +414,33 @@ def cmd_edit(args):
     os.execvp(editor, [editor, str(plan_path)])
 
 
+def cmd_resync(args):
+    """Force the extension to re-enumerate all tabs and groups.
+
+    Use this when state.json has stale tab IDs (e.g. after Chrome auto-discards
+    a tab and Chrome assigns it a new id). Symptom: execute fails with
+    'No tab with id: N' even though the tab is visible in the browser.
+    """
+    if not FIFO_PATH.exists():
+        print(f"Error: FIFO not found at {FIFO_PATH}", file=sys.stderr)
+        sys.exit(1)
+    cmd_id = f"to-resync-{uuid.uuid4().hex[:8]}"
+    start = log_position()
+    try:
+        write_all_to_fifo([{"command": "resync", "cmdId": cmd_id}])
+    except TimeoutError:
+        print("Error: FIFO write timed out", file=sys.stderr)
+        sys.exit(1)
+    print("Resync requested, waiting for extension to re-enumerate tabs...")
+    for cid, ok, ev in wait_for_results(start, [cmd_id], timeout_s=30):
+        if ok:
+            tabs_now = len(json.loads(STATE_PATH.read_text()).get("tabs", {}))
+            print(f"Resync complete. state.json now has {tabs_now} tabs.")
+        else:
+            print(f"Resync failed: {ev.get('error', 'unknown')}", file=sys.stderr)
+            sys.exit(1)
+
+
 def cmd_archive(args):
     plan_path = resolve_plan(args.plan_file)
     if PLANS_ARCHIVE_DIR in plan_path.parents:
@@ -408,13 +495,39 @@ def cmd_execute(args):
     if args.dry_run:
         return
 
+    # Tag each command with a unique id so we can correlate results from the log.
+    batch = uuid.uuid4().hex[:8]
+    for i, cmd in enumerate(commands):
+        cmd["cmdId"] = f"to-{batch}-{i}"
+    id_to_cmd = {c["cmdId"]: c for c in commands}
+
+    start = log_position()
     try:
         write_all_to_fifo(commands)
-        print(f"All {total} commands sent.")
     except TimeoutError:
         print("Error: FIFO write timed out (is the browser extension running?)",
               file=sys.stderr)
         sys.exit(1)
+
+    print(f"Waiting for {total} results...")
+    failures = []
+    seen = 0
+    for cid, ok, ev in wait_for_results(start, id_to_cmd.keys(), timeout_s=max(15, total * 3)):
+        seen += 1
+        cmd = id_to_cmd[cid]
+        label = describe_command(cmd)
+        if ok:
+            print(f"  ok    [{seen}/{total}] {label}")
+        else:
+            err = ev.get("error", "unknown error")
+            print(f"  FAIL  [{seen}/{total}] {label}  ← {err}", file=sys.stderr)
+            failures.append((cmd, err))
+
+    if failures:
+        print(f"\n{len(failures)} of {total} commands FAILED.", file=sys.stderr)
+        print("Tip: run `tab-organize resync` if errors say 'No tab with id: N'",
+              file=sys.stderr)
+        sys.exit(2)
 
     try:
         PLANS_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
@@ -464,6 +577,9 @@ def main():
     p_arch.add_argument("plan_file", nargs="?", default=None,
                         help="Path to plan markdown file (defaults to latest)")
 
+    sub.add_parser("resync",
+                   help="Ask the extension to re-enumerate all tabs (fixes 'No tab with id: N')")
+
     args = parser.parse_args()
     if args.cmd == "windows":
         state = json.loads(STATE_PATH.read_text())
@@ -476,6 +592,8 @@ def main():
         cmd_edit(args)
     elif args.cmd == "archive":
         cmd_archive(args)
+    elif args.cmd == "resync":
+        cmd_resync(args)
     else:
         parser.print_help()
 

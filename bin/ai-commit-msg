@@ -7,7 +7,12 @@ import os
 import re
 import sys
 
-from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, ResultMessage
+from claude_agent_sdk import (
+    ClaudeSDKClient,
+    ClaudeAgentOptions,
+    ResultMessage,
+    ClaudeSDKError,
+)
 
 _COMMIT_RE = re.compile(r"<commit>\s*(.*?)\s*</commit>", re.DOTALL)
 _INCLUDE_RE = re.compile(r"^@(\S+)\s*$", re.MULTILINE)
@@ -57,8 +62,11 @@ async def generate(system_prompt: str, diff: str) -> str:
         await client.query(diff)
         async for msg in client.receive_response():
             if isinstance(msg, ResultMessage):
+                if msg.is_error or msg.result is None:
+                    detail = msg.result or (msg.errors and "; ".join(msg.errors))
+                    raise RuntimeError(detail or f"generation failed ({msg.subtype})")
                 return extract_commit(msg.result)
-    return ""
+    raise RuntimeError("no result returned from model")
 
 
 def main():
@@ -73,7 +81,23 @@ def main():
     else:
         system_prompt = "You are a git commit message writer. Output ONLY the commit message, nothing else."
 
-    message = asyncio.run(generate(system_prompt, diff))
+    try:
+        message = asyncio.run(generate(system_prompt, diff))
+    except (ClaudeSDKError, OSError, RuntimeError) as e:
+        # Emit empty-message JSON (so callers checking .message also abort) plus a
+        # non-zero exit. Narrow catch: genuine bugs still surface as a traceback.
+        reason = f"{type(e).__name__}: {e}"
+        json.dump({"message": "", "error": reason}, sys.stdout)
+        print()
+        print(f"ai-commit-msg: {reason}", file=sys.stderr)
+        sys.exit(1)
+
+    if not message.strip():
+        json.dump({"message": "", "error": "model returned empty message"}, sys.stdout)
+        print()
+        print("ai-commit-msg: model returned empty message", file=sys.stderr)
+        sys.exit(1)
+
     json.dump({"message": message}, sys.stdout)
     print()
 

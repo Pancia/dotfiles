@@ -108,12 +108,13 @@ local lotus = engage("seeds.lotus.init", {
         {
             name  = "short",
             path  = "bowl.wav",
+            volume = .2,
             notif = notif("Ohm... #short")
         },
         {
             name   = "long",
             path   = "gong.wav",
-            volume = .5,
+            volume = .2,
             notif  = notif("Ohm! #long")
         }
     }

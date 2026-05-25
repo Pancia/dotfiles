@@ -12,6 +12,8 @@
     "l": ["LOCK IT DOWN", "launch-lock-screen-dialog"],
     "i": ["inbox", {"interactive": "ai_inbox"}],
     "j": ["Emoji Picker", {"shell": "emoji-pick"}],
+    "n": ["Save to Pinterest", {"interactive": "cd ~/private/pancia && _bin/pinterest_save"}],
+    "o": ["tab-organize plan (prefill)", {"interactive": "fish -iC 'function __pre --on-event fish_prompt; commandline -r \"tab-organize plan \"; functions -e __pre; end'"}],
     "f": {
         "_desc": "+finder",
         "_": ["View spirituality", "finder-here $HOME/ProtonDrive/_spirituality"],

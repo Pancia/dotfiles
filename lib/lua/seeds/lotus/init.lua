@@ -95,7 +95,7 @@ function obj:speakTime()
     end
 
     local speaker = hs.speech.new()
-    speaker:volume(obj.speakVolume or 0.5)
+    speaker:volume(obj.speakVolume or 0.2)
     speaker:speak(msg)
 end
 
@@ -261,7 +261,7 @@ function obj:renderMenuBar()
     end
 
     local title = table.concat(parts, " ")
-    obj._menubar:setTitle(title)
+    obj._menubar:setTitle("")
 end
 
 function renderMenu()

@@ -59,4 +59,5 @@
     :local/tee
       {:extra-deps
          {tee/tee {:local/root "/private/links/dotfiles/lib/clojure/tee"}}}}
- :mvn/local-repo "/Volumes/vansuny128/caches/m2/repository"}
+ ;:mvn/local-repo "/Volumes/vansuny128/caches/m2/repository"
+ }

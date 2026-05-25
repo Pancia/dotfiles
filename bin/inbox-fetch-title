@@ -37,6 +37,36 @@ def extract_youtube_id(url: str) -> str | None:
     return None
 
 
+def extract_imdb_id(url: str) -> str | None:
+    """Extract IMDb title ID (tt\\d+) from URLs like imdb.com/title/tt33100314/."""
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+    if "imdb.com" not in host:
+        return None
+    m = re.search(r"/title/(tt\d+)", parsed.path)
+    return m.group(1) if m else None
+
+
+def fetch_imdb_title(imdb_id: str) -> str:
+    """Fetch IMDb title via the unprotected suggestion API (imdb.com itself is WAF-gated)."""
+    try:
+        r = httpx.get(
+            f"https://v3.sg.media-imdb.com/suggestion/t/{imdb_id}.json",
+            timeout=10,
+        )
+        r.raise_for_status()
+        data = r.json()
+        items = data.get("d", [])
+        if not items:
+            return "[NO TITLE]"
+        item = items[0]
+        title = item.get("l", "[NO TITLE]")
+        year = item.get("y")
+        return f"IMDb: {title} ({year})" if year else f"IMDb: {title}"
+    except Exception as e:
+        return f"[FAILED: {e}]"
+
+
 def is_youtube_playlist(url: str) -> bool:
     """Check if URL is a YouTube playlist."""
     parsed = urlparse(url)
@@ -92,6 +122,10 @@ def fetch_title(url: str) -> str:
     yt_id = extract_youtube_id(url)
     if yt_id:
         return fetch_youtube_title(url, yt_id)
+
+    imdb_id = extract_imdb_id(url)
+    if imdb_id:
+        return fetch_imdb_title(imdb_id)
 
     try:
         with httpx.stream(

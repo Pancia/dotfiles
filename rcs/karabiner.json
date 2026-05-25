@@ -107,7 +107,7 @@
                                 "to_if_alone": [
                                     {
                                         "key_code": "spacebar",
-                                        "modifiers": ["right_control"]
+                                        "modifiers": ["left_control"]
                                     }
                                 ],
                                 "type": "basic"
