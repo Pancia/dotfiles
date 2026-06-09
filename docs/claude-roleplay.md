@@ -1,3 +1,23 @@
+# 🎭 Claude Code Character Roleplay
+
+A lightweight personality layer for Claude Code: every response is **bookended**
+with in-character flavor — an **opener** at the top and a **closer** at the
+bottom — drawn from a randomly-rolled archetype. The technical content in between
+is written normally.
+
+This is fully self-contained and shareable. It has two pieces:
+
+1. A prompt section dropped into your global `~/.claude/CLAUDE.md`.
+2. A `UserPromptSubmit` hook in `~/.claude/settings.json` that injects a random
+   roll into each prompt.
+
+---
+
+## 1. Prompt section
+
+Paste this into `~/.claude/CLAUDE.md` (global) or a project `CLAUDE.md`.
+
+````markdown
 ## 🎭 Personality: Character Roleplay
 
 Each response is **bookended** with in-character flavor from the same archetype — an **opener** and a **closer**. The technical content between them is written normally.
@@ -46,44 +66,47 @@ Each response is **bookended** with in-character flavor from the same archetype 
 ---
 
 Keep both opener and closer **brief** and **contextually relevant**. Don't force universe jargon into the technical content — just the bookends.
+````
 
-## File Deletion
+---
 
-Prefer `trash` over `rm` when deleting files. If `trash` fails, try `rm` as a fallback — but always as a separate command, never chained together (no `trash ... || rm ...`).
+## 2. The randomizer hook
 
-`trash` is a subcommand CLI, usable from any shell (the `bin/trash` shim forwards to the Fish function):
-- `trash <paths>` (or `trash put <paths>`) — move files to the trash
-- `trash list [--json]` — list trashed files, newest first; `--json` emits one object per entry with a stable `id`, original `path`, and `present` flag
-- `trash restore --last` — restore the most recently trashed file
-- `trash restore <id>` — restore a specific entry by the `id` shown in `trash list` (`restore` is a top-level alias for `trash restore`)
+Add this to the `hooks` object in `~/.claude/settings.json`. It fires on every
+prompt and injects a `[🎲 Character Roll: N]` tag (1–13) that the prompt section
+above reads to pick the archetype.
 
-To trash a file literally named `put`/`list`/`restore`/`help`, use `trash put <name>`.
+```json
+"UserPromptSubmit": [
+  {
+    "hooks": [
+      {
+        "type": "command",
+        "command": "printf '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"[🎲 Character Roll: %d]\"}}' $((RANDOM % 13 + 1))"
+      }
+    ]
+  }
+]
+```
 
-## Web Search
+`$((RANDOM % 13 + 1))` produces a number from 1 to 13 — change `13` if you add or
+remove archetypes (keep the prompt section's "1-13" wording in sync).
 
-Prefer the built-in WebSearch tool for web searches. Kagi search (`mcp__kagi__kagi_search_fetch`) is also available as an alternative. Occasionally remind the user that Kagi search is an option and ask if they'd like to try it instead.
+---
 
-## VCS Menu (`g`)
+## Customizing
 
-`g` is a which-key modal menu for git/jj that auto-detects the repo type. Use `g ls` to see all available commands.
+- **Different cast?** Swap the tables for your own characters. Update the modulo
+  in the hook to match the count.
+- **No randomness?** Drop the hook; the prompt section falls back to mapping the
+  first letter of your message to an archetype.
+- **Per-project flavor?** Put the prompt section in a project `CLAUDE.md` instead
+  of the global one.
 
-**Non-interactive CLI** (for scripting and AI agents):
-- `g ls` / `g help` — list all commands with key paths and shell commands
-- `g run <keys>` — execute by key path (e.g. `g run cc`, `g run ci`, `g run s`)
+---
 
-**Jujutsu (jj) workflow:** In jj repos (`.jj/` directory), the working copy (`@`) is always a mutable change — no staging area. Key operations:
-- `jj describe` — set/update the commit message on `@` (stays in same change)
-- `jj commit` — describe `@` and create a new empty change on top (`describe` + `new`)
-- `jj new` — create new empty change on top of `@`
-- Advance + push — `jj commit` → `jj bookmark set master -r @-` → `jj git push`
+## Where this lives in these dotfiles
 
-AI-generated commit messages available via `g run ci` (`ai_jj_commit` / `ai_git_commit`).
-
-**VCS Hooks:** Repos can define `./vcs-hooks/post-commit` (executable) to run after commit-like operations through `g`.
-
-## cmds.rb (Per-Directory Command Definitions)
-
-Projects can have a `cmds.rb` file with shell command shortcuts for human use.
-- `cmds path` — prints the cmds.rb file path for the current directory
-- `cmds init` — creates a new cmds.rb from template (no editor), prints the path
-- Load the `/cmds` skill for full documentation on reading/writing commands
+- Prompt section: `rcs/claude-user-claude.md` → `~/.claude/CLAUDE.md`
+- Hook: `rcs/claude-settings.json` → `~/.claude/settings.json`
+- Both symlinks managed via `rcs/MANIFEST`.

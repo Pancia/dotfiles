@@ -350,6 +350,7 @@ vendor approve <name>                  # Approve current state after review
 | [docs/vpc-schema.md](docs/vpc-schema.md) | VPC file format specification |
 | [docs/astro.md](docs/astro.md) | Astrological transit tracker CLI |
 | [docs/proc-label.md](docs/proc-label.md) | Process labeling for Activity Monitor |
+| [docs/claude-roleplay.md](docs/claude-roleplay.md) | Claude Code character roleplay (personas + randomizer hook) |
 
 ## File Locations
 
