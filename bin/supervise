@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+# supervise - run a long-lived dev process in YOUR terminal, but let an LLM/tool
+# restart it on demand. You start it (e.g. via `cmds`), so the process stays
+# owned by this terminal: your TTY, your Ctrl-C, output in your pane. An
+# out-of-band `svc restart <name>` sends SIGHUP, which respawns the child in place.
+#
+#   supervise [--keep] <name> -- <command> [args...]
+#
+# State (all under .run/ of the cwd):
+#   .run/<name>.pid     "PID COOKIE" of THIS supervisor (cookie = start epoch)
+#   .run/<name>.gen     "<generation> <child-pid>" - bumped each (re)spawn
+#   .run/<name>.log     teed child stdout+stderr (also streamed live to the pane)
+#   .run/<name>.status  last terminal exit, e.g. "rc=1 <date>"
+#   .run/<name>.stdin   FIFO feeding the child's stdin (see below)
+#
+# Signals:
+#   SIGHUP            restart the child in place (used by `svc restart`)
+#   SIGINT/SIGTERM    your Ctrl-C - kill child and exit (tears the service down)
+#
+# On an unexpected child exit (crash) the supervisor STOPS, leaving the error on
+# screen and in the log. Pass --keep (before <name>) to auto-respawn on any exit.
+#
+# Per-project config (optional): if a `.svc.conf` and/or `.svc.local.conf` exists
+# in the cwd, it is sourced. Define `svc_port_file <name>` there (echo a readiness
+# file, e.g. an nREPL .nrepl-port) and supervise will clear it on restart/exit so a
+# stale port can't mislead the next client. Without it, supervise is a plain
+# generic supervisor. See `svc` for the rest of the config surface.
+#
+# Bash-3.2-safe; env-vars set before exec'ing supervise are inherited by every
+# respawn (no per-restart re-auth of whatever the launching shell set up).
+set -euo pipefail
+# Job control: each child runs as its own process-group leader so we can signal
+# the WHOLE tree. Needed when the command is a launcher that spawns the real
+# process as a non-exec child (e.g. a node CLI that forks a JVM) - a single-PID
+# TERM would orphan the grandchild. Harmless when the command execs in place.
+set -m
+
+keep=0
+if [ "${1:-}" = "--keep" ]; then keep=1; shift; fi
+name="${1:?usage: supervise [--keep] <name> -- <command...>}"; shift
+if [ "${1:-}" = "--" ]; then shift; fi
+[ "$#" -ge 1 ] || { echo "supervise: no command given" >&2; exit 2; }
+
+# Per-project config (project specifics live here, not in this script).
+for _cf in .svc.conf .svc.local.conf; do [ -r "$_cf" ] && . "./$_cf"; done
+declare -F svc_port_file >/dev/null || svc_port_file() { echo ""; }
+
+run_dir=".run"
+mkdir -p "$run_dir"
+pidfile="$run_dir/$name.pid"
+logfile="$run_dir/$name.log"
+statusfile="$run_dir/$name.status"
+genfile="$run_dir/$name.gen"
+stdinfifo="$run_dir/$name.stdin"
+
+is_supervise() {  # $1 = pid - true if it's a live `supervise <name>`
+  local pid="$1" cmd
+  [ -n "$pid" ] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  cmd="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  # Require a trailing space so e.g. name 'repl' can't match 'supervise test_repl'.
+  case "$cmd" in *"supervise $name "*) return 0 ;; *) return 1 ;; esac
+}
+
+port_up() {  # $1 = numeric port
+  case "$1" in ''|*[!0-9]*) return 1 ;; esac
+  (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
+}
+
+# Clear this name's readiness/port file(s). $1=mode: "force" = unconditional
+# (restart path); otherwise only if the port is actually down (terminal path, so
+# we never nuke a file a concurrent manual instance owns).
+clear_ports() {
+  local pf p
+  for pf in $(svc_port_file "$name"); do
+    [ -n "$pf" ] || continue
+    if [ "$1" = force ]; then rm -f "$pf"; continue; fi
+    [ -r "$pf" ] || continue
+    p="$(tr -d '[:space:]' < "$pf" 2>/dev/null || true)"
+    port_up "$p" || rm -f "$pf"
+  done
+}
+
+# Single-instance guard: don't clobber a live supervisor's pidfile.
+if [ -r "$pidfile" ]; then
+  existing="$(awk '{print $1}' "$pidfile" 2>/dev/null || true)"
+  if is_supervise "$existing"; then
+    echo "supervise: '$name' already running (pid $existing) - refusing to start a second." >&2
+    exit 1
+  fi
+fi
+
+echo "$$ $(date +%s)" > "$pidfile"
+: > "$logfile"   # truncate once at startup so the log can't grow unbounded
+
+# Child stdin: `set -m` puts the child in its own (background) process group, so
+# if it read the controlling terminal it would get SIGTTIN and stop (e.g. a REPL
+# opening a prompt on stdin -> rc=149). Feed it a never-closing FIFO instead:
+# reads block forever (a REPL sits idle, the process stays up), and a FIFO is not
+# the tty so no SIGTTIN. Trade-off: you can't type into the terminal REPL (drive
+# the process via its nREPL / socket instead).
+rm -f "$stdinfifo"; mkfifo "$stdinfifo"
+exec 9<>"$stdinfifo"   # hold the FIFO open (r+w) so the child never sees EOF
+
+cleanup() { exec 9>&- 2>/dev/null || true; rm -f "$pidfile" "$genfile" "$stdinfifo"; }
+trap cleanup EXIT
+
+child=""
+restart=0
+
+# Drain the child's WHOLE process group: TERM it, wait for every member to die
+# (shutdown hooks can take seconds), escalate to KILL, then reap the leader.
+drain_group() {
+  [ -n "$child" ] || return 0
+  kill -TERM "-$child" 2>/dev/null || true
+  local i=0
+  while kill -0 "-$child" 2>/dev/null; do        # group still has members?
+    i=$((i + 1))
+    [ "$i" -ge 50 ] && { kill -KILL "-$child" 2>/dev/null || true; break; }   # ~10s
+    sleep 0.2
+  done
+  set +e; wait "$child" 2>/dev/null; set -e       # reap the leader
+}
+
+on_hup() {
+  restart=1
+  trap '' HUP                       # mask further HUP through drain+respawn
+  kill -TERM "-$child" 2>/dev/null || true
+}
+on_stop() {
+  trap '' HUP INT TERM              # ignore further signals while we tear down
+  drain_group                       # never exit while the child is still alive
+  exit 0
+}
+trap on_hup HUP
+trap on_stop INT TERM
+
+gen=0
+while :; do
+  restart=0
+  gen=$((gen + 1))
+  # Tee to the pane AND the log; $! is the command (not tee) - relied on for signalling.
+  # stdin <- held-open FIFO so a REPL read blocks instead of taking SIGTTIN on the tty.
+  "$@" < "$stdinfifo" > >(tee -a "$logfile") 2>&1 &
+  child=$!
+  echo "$gen $child" > "$genfile"
+  echo "[supervise] $name pid=$child (gen $gen) - 'svc restart $name' to restart" >&2
+
+  set +e; wait "$child"; rc=$?; set -e   # returns immediately when a trap fires
+
+  if [ "$restart" = 1 ]; then
+    drain_group
+    clear_ports force      # clean absence->presence edge for the new instance
+    echo "[supervise] restarting $name..." >&2
+    trap on_hup HUP        # re-arm for the next restart
+    continue
+  fi
+
+  drain_group   # child exited on its own; make sure the whole group is reaped
+
+  if [ "$keep" = 1 ]; then
+    echo "[supervise] $name exited (rc=$rc); respawning (--keep)..." >&2
+    continue
+  fi
+
+  # Terminal exit (crash or clean stop): record it and clear a now-dead port file
+  # so the next client fails fast instead of hitting a stale port.
+  echo "rc=$rc $(date '+%Y-%m-%d %H:%M:%S')" > "$statusfile"
+  clear_ports
+  echo "[supervise] $name exited (rc=$rc); supervisor stopping." >&2
+  exit "$rc"
+done

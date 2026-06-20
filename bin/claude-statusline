@@ -110,7 +110,16 @@ model_info=""
 agent_info=""
 [ -n "$agent" ] && agent_info=" (agent: ${agent})"
 
+# --- Effort ---
+effort=$(echo "$input" | jq -r '.effort.level // ""')
+effort_info=""
+[ -n "$effort" ] && effort_info="effort: ${effort}"
+
 # --- Output ---
 line1="${context_info}${rate_info}${model_info}${agent_info}"
 line2="${task_prefix}${short_cwd}${git_info}"
-printf "%s\n%s" "$line1" "$line2"
+if [ -n "$effort_info" ]; then
+  printf "%s\n%s\n%s" "$line1" "$line2" "$effort_info"
+else
+  printf "%s\n%s" "$line1" "$line2"
+fi

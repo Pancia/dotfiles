@@ -192,6 +192,7 @@ function _ytdl_download_text
 
     # Download audio (prefer m4a to avoid opus conversion issues during transcription)
     _ytdl_run $ytid -o $out_file -f 'bestaudio[ext=m4a]/bestaudio'
+    or return 1
 
     # Find the audio file we just downloaded (matches this specific ytid)
     set -l audio_file $out_dir/*__#__$ytid.*
@@ -200,7 +201,36 @@ function _ytdl_download_text
             set -l txt_file (string replace -r '\.[^.]+$' '.txt' -- $audio_file[1])
             echo "[Transcribing] $audio_file[1]"
             transcribe $audio_file[1] | tee $txt_file
+            return $pipestatus[1]
         end
+    end
+    return 0
+end
+
+# Post a Notification Center alert via terminal-notifier (reliable from
+# background/detached processes, unlike `osascript display notification`).
+# Clicking a success notification opens the output folder.
+function _ytdl_notify
+    set -l dl_status $argv[1]
+    set -l dl_type $argv[2]
+    set -l ytid $argv[3]
+    set -l title $argv[4]
+
+    if not type -q terminal-notifier
+        return 0
+    end
+
+    set -l msg $title
+    test -z "$msg"; and set msg $ytid
+    set -l out_dir "$YTDL_OUTPUT_DIR/$dl_type"
+
+    if test $dl_status -eq 0
+        terminal-notifier -title "ytdl ✅ $dl_type" -subtitle "$msg" \
+            -message "saved to $out_dir" -sound default \
+            -execute "open '$out_dir'" >/dev/null 2>&1
+    else
+        terminal-notifier -title "ytdl ❌ $dl_type FAILED" -subtitle "$msg" \
+            -message "$ytid" -sound Basso >/dev/null 2>&1
     end
 end
 
@@ -212,8 +242,9 @@ set -l ytdl_type ""
 set -l input ""
 set -g YTDL_QUIET 0
 set -g YTDL_QUALITY regular
+set -g YTDL_NOTIFY 0
 
-# Parse flags: --quiet, --quality <value>
+# Parse flags: --quiet, --notify, --quality <value>
 set -l args
 set -l expect_quality 0
 for arg in $argv
@@ -222,6 +253,8 @@ for arg in $argv
         set expect_quality 0
     else if test "$arg" = "--quiet"
         set YTDL_QUIET 1
+    else if test "$arg" = "--notify"
+        set YTDL_NOTIFY 1
     else if test "$arg" = "--quality"
         set expect_quality 1
     else
@@ -299,3 +332,10 @@ switch $ytdl_type
     case text notes
         _ytdl_download_text $video_id $ytdl_type
 end
+set -l dl_status $status
+
+if test $YTDL_NOTIFY -eq 1
+    _ytdl_notify $dl_status $ytdl_type $video_id "$video_title[1]"
+end
+
+exit $dl_status

@@ -130,12 +130,6 @@ local watch = engage("seeds.watch.init", {
       delayStart = 0
     },
     {
-      name = "ytdl",
-      command = HOME.."/dotfiles/misc/watch/ytdl/ytdl.watch.sh",
-      triggerEvery = 15,
-      delayStart = 5
-    },
-    {
       name = "extra",
       command = HOME.."/dotfiles/misc/watch/extra.watch.sh",
       triggerEvery = 60 * 3,

@@ -190,6 +190,7 @@
     "pyright-lsp@claude-plugins-official": true,
     "swift-lsp@claude-plugins-official": true
   },
+  "effortLevel": "xhigh",
   "alwaysThinkingEnabled": true,
   "skipDangerousModePermissionPrompt": true,
   "cleanupPeriodDays": 365

@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+# svc - control dev processes started in your terminal via `supervise`.
+# This is the LLM/tool-facing surface. It never STARTS a service (you own that);
+# it only inspects, restarts, or stops one that's already supervised.
+#
+#   svc status [<name>]      pid / alive / readiness + prev exit
+#   svc logs   <name> [-n N] tail .run/<name>.log (the captured crash output)
+#   svc restart <name>       SIGHUP the supervisor -> respawn in your terminal pane
+#   svc stop    <name>       SIGTERM the supervisor -> stop it
+#
+# Run from the project root. Project specifics come from `.svc.conf` and/or
+# `.svc.local.conf` (sourced, in that order; *.local.* is git-ignored so it can
+# hold personal setup). Define there:
+#   SVC_SERVICES="a b c"                 # names for `svc status` with no arg
+#   svc_port_file() { case "$1" in ...esac; }   # name -> readiness/port file (optional)
+#   svc_eval() { ...; }                  # $1=port file; exit 0 if it answers (optional)
+# With svc_eval, status distinguishes up|wedged and restart waits for a real
+# round-trip; without it, a TCP connect to the port (if any) is the signal.
+# Bash-3.2-safe.
+set -euo pipefail
+
+run_dir=".run"
+
+# Per-project config.
+for _cf in .svc.conf .svc.local.conf; do [ -r "$_cf" ] && . "./$_cf"; done
+SVC_SERVICES="${SVC_SERVICES:-}"
+declare -F svc_port_file >/dev/null || svc_port_file() { echo ""; }
+
+# Echo the supervisor PID iff it's alive AND really a `supervise <name>` (guards
+# against a recycled PID after an unclean supervisor death).
+live_sup() {
+  local name="$1" pidfile pid cmd
+  pidfile="$run_dir/$name.pid"
+  [ -r "$pidfile" ] || return 1
+  pid="$(awk '{print $1}' "$pidfile" 2>/dev/null || true)"
+  [ -n "$pid" ] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  cmd="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  # Trailing space: 'repl' must not match 'supervise test_repl'.
+  case "$cmd" in *"supervise $name "*) echo "$pid"; return 0 ;; *) return 1 ;; esac
+}
+
+port_value() {  # echo numeric port from the name's port file, or empty
+  local pf p; pf="$(svc_port_file "$1")"
+  [ -n "$pf" ] && [ -r "$pf" ] || return 0
+  p="$(tr -d '[:space:]' < "$pf" 2>/dev/null || true)"
+  case "$p" in ''|*[!0-9]*) return 0 ;; esac
+  echo "$p"
+}
+
+port_up() {  # $1 = numeric port
+  case "$1" in ''|*[!0-9]*) return 1 ;; esac
+  (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
+}
+
+# Bounded liveness eval via the project's svc_eval: 0 if it answers within ~5s.
+# (macOS has no `timeout`, so watchdog-kill a backgrounded eval.) `set -m` makes
+# the eval its own process group so the watchdog can kill the WHOLE tree - a JVM
+# the eval spawns would otherwise orphan and leak on timeout.
+responsive() {
+  local pf rc; pf="$(svc_port_file "$1")"
+  [ -n "$pf" ] || return 1
+  set -m
+  ( svc_eval "$pf" >/dev/null 2>&1 ) &
+  local ep=$!
+  set +m
+  ( sleep 5; kill -TERM "-$ep" 2>/dev/null ) >/dev/null 2>&1 &
+  local wp=$!
+  if wait "$ep" 2>/dev/null; then rc=0; else rc=1; fi
+  kill -TERM "-$ep" 2>/dev/null || true   # ensure the eval's group is gone either way
+  kill "$wp"  2>/dev/null || true
+  wait "$wp"  2>/dev/null || true
+  return $rc
+}
+
+ready_state() {  # echo up|down|wedged|n/a for a name
+  local name="$1" port; port="$(port_value "$name")"
+  [ -n "$port" ] || { echo "n/a"; return; }
+  if ! port_up "$port"; then echo "down"; return; fi
+  if declare -F svc_eval >/dev/null; then
+    if responsive "$name"; then echo "up"; else echo "wedged"; fi
+  else
+    echo "up"   # port open; no eval probe configured
+  fi
+}
+
+# 0 if the (new) instance is actually serving - used to confirm a restart.
+confirmed() {
+  if declare -F svc_eval >/dev/null; then responsive "$1"; return; fi
+  local p; p="$(port_value "$1")"
+  [ -n "$p" ] && { port_up "$p"; return; }
+  return 0   # no readiness probe configured: gen-advance alone is the signal
+}
+
+cmd_status() {
+  local names="${1:-$SVC_SERVICES}" n pid st last
+  if [ -z "$names" ]; then
+    echo "svc: no SVC_SERVICES configured (.svc.conf) and no name given" >&2; exit 2
+  fi
+  for n in $names; do
+    if pid="$(live_sup "$n")"; then st="running (sup pid $pid)"; else st="not running"; fi
+    last=""; [ -r "$run_dir/$n.status" ] && last="prev exit: $(cat "$run_dir/$n.status")"
+    printf '%-10s %-26s ready=%-7s %s\n' "$n" "$st" "$(ready_state "$n")" "$last"
+  done
+}
+
+cmd_logs() {
+  local name="${1:?svc logs <name> [-n N]}" n=80
+  [ "${2:-}" = "-n" ] && n="${3:?-n needs a value}"
+  local lf="$run_dir/$name.log"
+  [ -r "$lf" ] || { echo "svc: no log for '$name' ($lf)" >&2; exit 1; }
+  tail -n "$n" "$lf"
+}
+
+gen_of() {  # echo the supervisor's current spawn generation, or empty
+  local gf="$run_dir/$1.gen"
+  [ -r "$gf" ] && awk '{print $1}' "$gf" 2>/dev/null || true
+}
+
+cmd_restart() {
+  local name="${1:?svc restart <name>}" pid before now i
+  if ! pid="$(live_sup "$name")"; then
+    echo "svc: '$name' is not running - start it yourself (e.g. cmds $name)." >&2
+    exit 1
+  fi
+  before="$(gen_of "$name")"
+  echo "svc: restarting '$name' (HUP $pid)..."
+  kill -HUP "$pid"
+  # Restart-complete requires BOTH: the supervisor spawned a NEW instance
+  # (generation advanced -> not the dying old process) AND that instance is
+  # actually serving (a real probe, not a TCP connect a corpse could satisfy).
+  for i in $(seq 1 180); do   # ~90s; process start can be slow
+    now="$(gen_of "$name")"
+    if [ -n "$now" ] && [ "$now" != "$before" ] && confirmed "$name"; then
+      echo "svc: '$name' back up."
+      return 0
+    fi
+    sleep 0.5
+  done
+  echo "svc: '$name' restarted but not confirmed up yet - check the pane / svc logs $name." >&2
+  return 1
+}
+
+cmd_stop() {
+  local name="${1:?svc stop <name>}" pid
+  if pid="$(live_sup "$name")"; then
+    echo "svc: stopping '$name' (TERM $pid)..."; kill -TERM "$pid"
+  else
+    echo "svc: '$name' not running."
+  fi
+}
+
+sub="${1:-status}"; shift || true
+case "$sub" in
+  status)  cmd_status "${1:-}" ;;
+  logs)    cmd_logs "$@" ;;
+  restart) cmd_restart "$@" ;;
+  stop)    cmd_stop "$@" ;;
+  -h|--help|help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) echo "usage: svc {status [name]|logs <name> [-n N]|restart <name>|stop <name>}" >&2; exit 2 ;;
+esac

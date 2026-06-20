@@ -1,0 +1,437 @@
+#!/Users/anthony/.pyenv/versions/3.11.11/bin/python3
+"""whisper-serverd — supervise a warm whisper-server with an idle TTL.
+
+Owns a `whisper-server` process as a direct child and keeps the model loaded
+across `live-transcribe` runs, so repeat startups skip the 8-20s model load.
+The server is reaped after a configurable idle timeout (default 5 min) based on
+a heartbeat file that `live-transcribe` touches while it is running.
+
+Concurrency-safe: every lifecycle transition (spawn / adopt / restart / reap) is
+guarded by an flock, so the multiple entry points that share the port
+(alt-space launcher, Hermes binding, manual CLI) can never double-spawn the
+server or hand a caller a server that is being reaped.
+
+Subcommands:
+  ensure --model M [--port P] [--idle-ttl S]   idempotent: start or adopt, wait ready
+  supervise --model M --port P --idle-ttl S     internal: the long-lived loop
+  stop                                          kill the server and supervisor
+  status [--port P]                             report state as JSON
+
+Stdlib only (no third-party deps), so any python3 can run it.
+"""
+import argparse
+import fcntl
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+# --- paths / state --------------------------------------------------------
+STATE_DIR = Path.home() / ".local/state/whisper-server"
+LOCK_FILE = STATE_DIR / "lock"
+SUPERVISOR_PID = STATE_DIR / "supervisor.pid"
+SERVER_PID = STATE_DIR / "server.pid"
+SERVER_MODEL = STATE_DIR / "server.model"
+HEARTBEAT = STATE_DIR / "heartbeat"
+SERVER_LOG = STATE_DIR / "server.log"
+SUPERVISOR_LOG = STATE_DIR / "supervisor.log"
+
+MODEL_DIR = Path.home() / ".local/share/whisper-cpp/models"
+MODEL_MAP = {
+    "tiny": "ggml-tiny.bin",
+    "base": "ggml-base.bin",
+    "small": "ggml-small.bin",
+    "medium": "ggml-medium.bin",
+    "large": "ggml-large-v3-turbo.bin",
+}
+VAD_MODEL = MODEL_DIR / "silero-v6.2.0.ggml"
+
+DEFAULT_PORT = 8178
+DEFAULT_IDLE_TTL = 300
+READY_TIMEOUT = 60      # seconds to wait for the server to load its model
+REAP_INTERVAL = 30      # seconds between idle checks
+REAP_DEBOUNCE = 2       # consecutive idle-exceeded checks required before reaping
+
+
+def log(msg):
+    print(f"[whisper-serverd] {msg}", file=sys.stderr, flush=True)
+
+
+def model_path(model):
+    return MODEL_DIR / MODEL_MAP.get(model, f"ggml-{model}.bin")
+
+
+# --- flock helper ---------------------------------------------------------
+class FileLock:
+    """Blocking exclusive flock over LOCK_FILE, used to serialize lifecycle
+    transitions. Lifecycle transitions are short (spawn a process, write a few
+    files) — the slow model load happens asynchronously in the child, not under
+    the lock."""
+
+    def __init__(self, path):
+        self.path = path
+        self.fd = None
+
+    def __enter__(self):
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        self.fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o644)
+        fcntl.flock(self.fd, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        fcntl.flock(self.fd, fcntl.LOCK_UN)
+        os.close(self.fd)
+        self.fd = None
+
+
+# --- pid validation (pid + start-time, defeats PID reuse) -----------------
+def _lstart(pid):
+    """Process start time string from ps, or '' if no such process."""
+    try:
+        out = subprocess.run(
+            ["ps", "-o", "lstart=", "-p", str(pid)],
+            capture_output=True, text=True,
+        )
+        return out.stdout.strip()
+    except Exception:
+        return ""
+
+
+def _whisper_pid_on_port(port):
+    """Return the pid of a whisper-server LISTENing on `port`, or None. Used to
+    reclaim an untracked orphan (e.g. a legacy server, or one whose pidfile was
+    lost) without ever killing an unrelated process on the port."""
+    try:
+        out = subprocess.run(
+            ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
+            capture_output=True, text=True,
+        )
+    except Exception:
+        return None
+    for line in out.stdout.split():
+        try:
+            pid = int(line)
+        except ValueError:
+            continue
+        cmd = subprocess.run(["ps", "-o", "command=", "-p", str(pid)],
+                             capture_output=True, text=True).stdout
+        if "whisper-server" in cmd:
+            return pid
+    return None
+
+
+def _pid_alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def write_pidfile(path, pid):
+    path.write_text(f"{pid}\t{_lstart(pid)}\n")
+
+
+def read_pidfile(path):
+    """Return the recorded pid only if it still maps to the *same* process
+    (pid + start time match). Returns None on missing file, dead process, or
+    PID reuse after a reboot."""
+    try:
+        raw = path.read_text().strip()
+    except FileNotFoundError:
+        return None
+    if not raw:
+        return None
+    parts = raw.split("\t", 1)
+    try:
+        pid = int(parts[0])
+    except ValueError:
+        return None
+    recorded = parts[1] if len(parts) > 1 else ""
+    cur = _lstart(pid)
+    if not cur:
+        return None                      # no such process
+    if recorded and cur != recorded:
+        return None                      # pid reused
+    return pid
+
+
+# --- readiness probe (mirrors live-transcribe's existing probe) -----------
+def server_ready(port, timeout=1):
+    url = f"http://127.0.0.1:{port}/inference"
+    try:
+        urllib.request.urlopen(urllib.request.Request(url, method="GET"), timeout=timeout)
+        return True
+    except urllib.error.HTTPError:
+        return True                       # responding, just an error status
+    except (urllib.error.URLError, ConnectionError, OSError):
+        return False
+
+
+def wait_ready(port, timeout=READY_TIMEOUT):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if server_ready(port):
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def touch_heartbeat():
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    HEARTBEAT.touch()
+    os.utime(HEARTBEAT, None)
+
+
+def _idle_seconds():
+    """Seconds since the heartbeat was last touched. Clock-jump safe: a
+    backward jump (negative delta) and an implausibly large forward jump are
+    both treated as 'fresh' (0) so a live session is never reaped out from
+    under itself."""
+    try:
+        mt = HEARTBEAT.stat().st_mtime
+    except FileNotFoundError:
+        return None
+    delta = time.time() - mt
+    if delta < 0 or delta > 86400:
+        return 0.0
+    return delta
+
+
+def _kill_supervisor(sup_pid):
+    """SIGTERM a supervisor and wait for it to clean up. Caller MUST hold the
+    lock so no new supervisor races in."""
+    try:
+        os.kill(sup_pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    for _ in range(40):                   # up to ~10s
+        if not _pid_alive(sup_pid):
+            return
+        time.sleep(0.25)
+
+
+# --- supervise (the long-lived loop) --------------------------------------
+_child = None
+
+
+def _cleanup_and_exit(code=0):
+    global _child
+    if _child is not None and _child.poll() is None:
+        try:
+            _child.terminate()
+            try:
+                _child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                _child.kill()
+        except Exception:
+            pass
+    for f in (SERVER_PID, SERVER_MODEL, SUPERVISOR_PID, HEARTBEAT):
+        try:
+            f.unlink()
+        except FileNotFoundError:
+            pass
+    os._exit(code)
+
+
+def cmd_supervise(args):
+    global _child
+
+    def handler(signum, frame):
+        log(f"signal {signum} received; killing server and exiting")
+        _cleanup_and_exit(0)
+
+    signal.signal(signal.SIGTERM, handler)
+    signal.signal(signal.SIGINT, handler)
+
+    # Startup: under lock, clear any orphan server (from a crashed supervisor)
+    # then spawn a fresh child we own.
+    with FileLock(LOCK_FILE):
+        # Reclaim any server already on our port: our own recorded child first,
+        # else an untracked whisper-server orphan. The lock invariant guarantees
+        # no other valid supervisor exists, so this is safe.
+        old = read_pidfile(SERVER_PID) or _whisper_pid_on_port(args.port)
+        if old:
+            log(f"reclaiming orphan whisper-server pid {old}")
+            try:
+                os.kill(old, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        # Wait for the port to free before binding.
+        for _ in range(40):
+            if not server_ready(args.port):
+                break
+            time.sleep(0.25)
+
+        mp = model_path(args.model)
+        if not mp.exists():
+            log(f"model not found: {mp}")
+            _cleanup_and_exit(1)
+
+        cmd = [
+            "whisper-server",
+            "-m", str(mp),
+            "--port", str(args.port),
+            "--convert",
+            "-nt",
+            "-mc", "64",
+            "-et", "2.0",
+            "-lpt", "-0.3",
+            "--suppress-nst",
+        ]
+        if VAD_MODEL.exists():
+            cmd += ["--vad", "--vad-model", str(VAD_MODEL)]
+
+        logf = open(SERVER_LOG, "w")      # truncate each spawn (bounded)
+        _child = subprocess.Popen(cmd, stdout=logf, stderr=logf, close_fds=True)
+        write_pidfile(SERVER_PID, _child.pid)
+        SERVER_MODEL.write_text(args.model + "\n")
+        touch_heartbeat()
+
+    if not wait_ready(args.port):
+        log("whisper-server did not become ready in time")
+        _cleanup_and_exit(1)
+    log(f"whisper-server ready on port {args.port} (model {args.model})")
+
+    # Reaper loop. Uses a non-blocking lock so SIGTERM is always handled
+    # promptly during the sleep; a debounce avoids reaping on a transient
+    # clock anomaly.
+    idle_strikes = 0
+    while True:
+        if _child.poll() is not None:
+            log(f"whisper-server exited ({_child.returncode}); supervisor exiting")
+            _cleanup_and_exit(1)
+
+        reaped = False
+        fd = os.open(LOCK_FILE, os.O_RDWR | os.O_CREAT, 0o644)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            got = True
+        except OSError:
+            got = False                   # a transition is in progress; skip
+        if got:
+            try:
+                idle = _idle_seconds()
+                if idle is not None and idle > args.idle_ttl:
+                    idle_strikes += 1
+                    if idle_strikes >= REAP_DEBOUNCE:
+                        log(f"idle {idle:.0f}s > ttl {args.idle_ttl}s; reaping")
+                        reaped = True
+                else:
+                    idle_strikes = 0
+            finally:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+                os.close(fd)
+        else:
+            os.close(fd)
+
+        if reaped:
+            _cleanup_and_exit(0)
+        time.sleep(REAP_INTERVAL)
+
+
+# --- ensure (the hot path) ------------------------------------------------
+def _spawn_supervisor(args):
+    serverd = os.path.abspath(__file__)
+    logf = open(SUPERVISOR_LOG, "w")
+    proc = subprocess.Popen(
+        [serverd, "supervise",
+         "--model", args.model,
+         "--port", str(args.port),
+         "--idle-ttl", str(args.idle_ttl)],
+        stdout=logf, stderr=logf,
+        start_new_session=True, close_fds=True,
+    )
+    write_pidfile(SUPERVISOR_PID, proc.pid)
+
+
+def cmd_ensure(args):
+    with FileLock(LOCK_FILE):
+        sup = read_pidfile(SUPERVISOR_PID)
+        cur_model = SERVER_MODEL.read_text().strip() if SERVER_MODEL.exists() else None
+
+        if sup and cur_model == args.model:
+            # Adopt the running supervisor. Touch heartbeat *under the lock* so
+            # the reaper (which checks under the same lock) cannot kill the
+            # server between here and the caller's first request.
+            touch_heartbeat()
+        else:
+            if not model_path(args.model).exists():
+                log(f"model not found: {model_path(args.model)}")
+                return 1
+            if sup:
+                log(f"model change ({cur_model} -> {args.model}); restarting server")
+                _kill_supervisor(sup)
+            # Record the intended model *now*, under the lock, so a concurrent
+            # ensure adopts this supervisor instead of treating the not-yet-
+            # written marker as a mismatch and killing it.
+            SERVER_MODEL.write_text(args.model + "\n")
+            touch_heartbeat()             # so the new supervisor won't insta-reap
+            _spawn_supervisor(args)
+
+    # Wait for readiness outside the lock (the model load is async).
+    if wait_ready(args.port):
+        return 0
+    log("server did not become ready in time")
+    return 1
+
+
+def cmd_stop(args):
+    with FileLock(LOCK_FILE):
+        sup = read_pidfile(SUPERVISOR_PID)
+        if sup:
+            _kill_supervisor(sup)
+        else:
+            log("no running supervisor")
+    return 0
+
+
+def cmd_status(args):
+    state = {
+        "supervisor_pid": read_pidfile(SUPERVISOR_PID),
+        "server_pid": read_pidfile(SERVER_PID),
+        "model": SERVER_MODEL.read_text().strip() if SERVER_MODEL.exists() else None,
+        "idle_seconds": round(_idle_seconds(), 1) if _idle_seconds() is not None else None,
+        "port": args.port,
+        "ready": server_ready(args.port),
+    }
+    print(json.dumps(state, indent=2))
+    return 0
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Supervise a warm whisper-server with an idle TTL")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p_ensure = sub.add_parser("ensure", help="start or adopt the warm server, wait until ready")
+    p_ensure.add_argument("--model", default="large")
+    p_ensure.add_argument("--port", type=int, default=DEFAULT_PORT)
+    p_ensure.add_argument("--idle-ttl", type=int, default=DEFAULT_IDLE_TTL)
+    p_ensure.set_defaults(func=cmd_ensure)
+
+    p_sup = sub.add_parser("supervise", help="internal: run the long-lived supervisor loop")
+    p_sup.add_argument("--model", default="large")
+    p_sup.add_argument("--port", type=int, default=DEFAULT_PORT)
+    p_sup.add_argument("--idle-ttl", type=int, default=DEFAULT_IDLE_TTL)
+    p_sup.set_defaults(func=cmd_supervise)
+
+    p_stop = sub.add_parser("stop", help="kill the warm server and supervisor")
+    p_stop.set_defaults(func=cmd_stop)
+
+    p_status = sub.add_parser("status", help="report state as JSON")
+    p_status.add_argument("--port", type=int, default=DEFAULT_PORT)
+    p_status.set_defaults(func=cmd_status)
+
+    args = parser.parse_args()
+    sys.exit(args.func(args))
+
+
+if __name__ == "__main__":
+    main()

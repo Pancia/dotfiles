@@ -149,7 +149,7 @@
                         ]
                     },
                     {
-                        "description": "alt-space -> activate voice transcription",
+                        "description": "alt-space -> live-transcribe (BOYA mic)",
                         "manipulators": [
                             {
                                 "from": {
@@ -161,7 +161,7 @@
                                     }
                                 },
                                 "to": {
-                                    "shell_command": "/Users/anthony/private/bin/voicetotext; /Users/anthony/Developer/bin/hs -c 'superwhisperSync()'"
+                                    "shell_command": "/Users/anthony/dotfiles/bin/live-transcribe-launch"
                                 },
                                 "type": "basic"
                             },
@@ -175,7 +175,7 @@
                                     }
                                 },
                                 "to": {
-                                    "shell_command": "/Users/anthony/private/bin/voicetotext; /Users/anthony/Developer/bin/hs -c 'superwhisperSync()'"
+                                    "shell_command": "/Users/anthony/dotfiles/bin/live-transcribe-launch"
                                 },
                                 "type": "basic"
                             }

@@ -61,7 +61,7 @@ To trash a file literally named `put`/`list`/`restore`/`help`, use `trash put <n
 
 ## Web Search
 
-Prefer the built-in WebSearch tool for web searches. Kagi search (`mcp__kagi__kagi_search_fetch`) is also available as an alternative. Occasionally remind the user that Kagi search is an option and ask if they'd like to try it instead.
+Prefer the built-in WebSearch tool for web searches. Kagi search (`mcp__kagi__kagi_search_fetch`) is also available as an alternative.
 
 ## VCS Menu (`g`)
 
@@ -87,3 +87,16 @@ Projects can have a `cmds.rb` file with shell command shortcuts for human use.
 - `cmds path` — prints the cmds.rb file path for the current directory
 - `cmds init` — creates a new cmds.rb from template (no editor), prints the path
 - Load the `/cmds` skill for full documentation on reading/writing commands
+
+## supervise / svc (restartable dev services)
+
+`supervise` and `svc` (on PATH from `~/dotfiles/bin/`) run long-lived dev
+processes that stay **owned by my terminal** while an LLM can **restart** them on
+demand. I start one with `supervise <name> -- <cmd>` (usually a `cmds` entry); an
+LLM uses `svc status|logs|restart|stop <name>` to inspect/restart it — but
+**never starts one itself** (if `svc restart` says "not running", ask me). Per-project
+services are declared in `.svc.conf` / `.svc.local.conf` (`SVC_SERVICES`,
+`svc_port_file`, optional `svc_eval`).
+
+Full docs (read if you need the config format, restart/crash semantics, or to add
+it to a project): `~/dotfiles/wiki/pages/supervise-svc.md`

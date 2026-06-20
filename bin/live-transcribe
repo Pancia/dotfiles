@@ -18,6 +18,13 @@ import json
 import time
 import signal
 
+# Shared warm-server state (managed by bin/whisper-serverd)
+STATE_DIR = Path.home() / ".local/state/whisper-server"
+HEARTBEAT = STATE_DIR / "heartbeat"
+SERVERD = str(Path(__file__).resolve().parent / "whisper-serverd")
+READY_TIMEOUT = 60  # must match whisper-serverd
+HEARTBEAT_INTERVAL = 10  # seconds between heartbeat touches while running
+
 # Configuration
 SAMPLE_RATE = 16000  # Whisper expects 16kHz
 VAD_FRAME_DURATION = 30  # ms - WebRTC VAD supports 10, 20, or 30ms
@@ -25,12 +32,14 @@ VAD_AGGRESSIVENESS = 2  # 0-3, where 3 is most aggressive
 SILENCE_DURATION = 1.0  # seconds of silence before chunking
 MIN_CHUNK_DURATION = 2.0  # minimum chunk duration in seconds
 MAX_CHUNK_DURATION = 10.0  # maximum chunk duration in seconds
+NOISE_GATE = 0.01  # frames with peak below this are treated as silence
+METER_INTERVAL = 3  # seconds between mic signal-level reports
 
 class LiveTranscriber:
     def __init__(self, model_size="base", output_dir=None, mic_device=None, computer_device=None,
                  vad_aggressiveness=VAD_AGGRESSIVENESS, silence_duration=SILENCE_DURATION,
                  min_chunk_duration=MIN_CHUNK_DURATION, max_chunk_duration=MAX_CHUNK_DURATION,
-                 server_url=None, server_port=8178):
+                 server_url=None, server_port=8178, shared_supervisor=None, debug=False):
         # Set model path for whisper-cpp
         model_dir = Path.home() / ".local/share/whisper-cpp/models"
         model_map = {
@@ -46,13 +55,21 @@ class LiveTranscriber:
         if not self.model_path.exists():
             print(f"Error: model not found: {self.model_path}", file=sys.stderr)
             sys.exit(1)
-        self.server_url = server_url
         self.server_port = server_port
         self.server_process = None
-        if self.server_url:
-            print(f"Using external whisper-server at {self.server_url}", file=sys.stderr)
+        # Shared-supervisor mode: a persistent whisper-serverd keeps the model
+        # warm across runs. We connect to it like any external server and never
+        # spawn/kill it ourselves; the supervisor owns its lifecycle (idle TTL).
+        self.shared = shared_supervisor
+        if self.shared:
+            self.server_url = f"http://127.0.0.1:{self.server_port}"
+            print(f"Using warm whisper-server (port {self.server_port}, idle-ttl {self.shared['idle_ttl']}s)", file=sys.stderr)
         else:
-            print(f"Using {self.model_path} with whisper-server (port {self.server_port})...", file=sys.stderr)
+            self.server_url = server_url
+            if self.server_url:
+                print(f"Using external whisper-server at {self.server_url}", file=sys.stderr)
+            else:
+                print(f"Using {self.model_path} with whisper-server (port {self.server_port})...", file=sys.stderr)
         self.audio_queue = queue.Queue()
         self.running = True
 
@@ -115,6 +132,18 @@ class LiveTranscriber:
         self.computer_speaking = False
         self.computer_silence_frames = 0
         self.computer_chunk_start_time = None
+
+        # Signal meter state: written by the audio callback, drained by
+        # _meter_loop every METER_INTERVAL seconds so the log shows whether the
+        # mic is actually delivering signal.
+        self.debug = debug
+        self._meter_lock = threading.Lock()
+        self._mic_peak = 0.0           # max sample amplitude this interval
+        self._mic_level_sum = 0.0      # sum of per-callback mean levels
+        self._mic_level_count = 0      # number of callbacks this interval
+        self._mic_speech_frames = 0    # VAD-positive frames this interval
+        self._chunks_sent = 0          # cumulative chunks queued for transcription
+        self._silent_reports = 0       # consecutive intervals below the noise gate
 
     def _get_device_channels(self, device_info):
         """Get the appropriate number of channels for a device"""
@@ -182,7 +211,7 @@ class LiveTranscriber:
 
             # Noise gate: if frame is too quiet, treat as silence
             frame_level = np.abs(frame).max()
-            if frame_level < 0.01:
+            if frame_level < NOISE_GATE:
                 is_speech = False
             else:
                 is_speech = self._is_speech(frame)
@@ -193,16 +222,26 @@ class LiveTranscriber:
                     # Transition to speaking - start new chunk
                     self.mic_speaking = True
                     self.mic_chunk_start_time = datetime.now()
-                    # print(f"[VAD] Mic: Started speaking (level avg={audio_level:.4f}, max={max_level:.4f})", file=sys.stderr)
+                    if self.debug:
+                        print(f"[VAD] Mic: Started speaking (level avg={audio_level:.4f}, max={max_level:.4f})", file=sys.stderr)
                 self.mic_silence_frames = 0
             else:
                 silence_frames += 1
                 if self.mic_speaking:
                     self.mic_silence_frames += 1
 
-        # Debug output when there's significant audio
-        # if max_level > 0.01:
-        #     print(f"[VAD] Mic: speech_frames={speech_frames}, silence_frames={silence_frames}, level avg={audio_level:.4f}, max={max_level:.4f}, speaking={self.mic_speaking}, buffer={len(self.mic_vad_buffer)}", file=sys.stderr)
+        # Feed the signal meter (drained by _meter_loop).
+        with self._meter_lock:
+            if max_level > self._mic_peak:
+                self._mic_peak = float(max_level)
+            self._mic_level_sum += float(audio_level)
+            self._mic_level_count += 1
+            self._mic_speech_frames += speech_frames
+
+        if self.debug and max_level > NOISE_GATE:
+            print(f"[VAD] Mic: speech_frames={speech_frames}, silence_frames={silence_frames}, "
+                  f"level avg={audio_level:.4f}, max={max_level:.4f}, speaking={self.mic_speaking}, "
+                  f"buffer={len(self.mic_vad_buffer)}", file=sys.stderr)
 
         # Add incoming audio to buffer AFTER VAD processing
         self.mic_buffer.append(resampled_audio)
@@ -228,7 +267,10 @@ class LiveTranscriber:
             # Concatenate all buffered audio chunks
             complete_audio = np.concatenate(self.mic_buffer)
             duration = len(complete_audio) / SAMPLE_RATE
-            # print(f"[DEBUG] Sending mic chunk: {duration:.2f}s, silence_frames={self.mic_silence_frames}, chunk_dur={chunk_duration:.2f}s", file=sys.stderr)
+            if self.debug:
+                print(f"[DEBUG] Sending mic chunk: {duration:.2f}s, silence_frames={self.mic_silence_frames}, chunk_dur={chunk_duration:.2f}s", file=sys.stderr)
+            with self._meter_lock:
+                self._chunks_sent += 1
             self.audio_queue.put(("Microphone", complete_audio.copy()))
             # Reset state
             self.mic_buffer = []
@@ -259,7 +301,7 @@ class LiveTranscriber:
 
             # Noise gate: if frame is too quiet, treat as silence
             frame_level = np.abs(frame).max()
-            if frame_level < 0.01:
+            if frame_level < NOISE_GATE:
                 is_speech = False
             else:
                 is_speech = self._is_speech(frame)
@@ -369,6 +411,18 @@ class LiveTranscriber:
 
     def _ensure_server(self):
         """Restart the server if it has died"""
+        if self.shared:
+            # Re-ask the supervisor to (re)spawn/adopt the warm server.
+            try:
+                subprocess.run(
+                    [SERVERD, "ensure", "--model", self.shared["model"],
+                     "--port", str(self.server_port),
+                     "--idle-ttl", str(self.shared["idle_ttl"])],
+                    check=True, timeout=READY_TIMEOUT + 5,
+                )
+            except Exception as e:
+                print(f"Warning: could not re-ensure warm server: {e}", file=sys.stderr)
+            return
         if self.server_url:
             return  # External server, not our problem
         if self.server_process and self.server_process.poll() is not None:
@@ -461,6 +515,69 @@ class LiveTranscriber:
             except Exception as e:
                 print(f"Error transcribing: {e}", file=sys.stderr)
 
+    def _touch_heartbeat(self):
+        """Bump the shared heartbeat so the supervisor keeps the warm server
+        alive while we're running."""
+        try:
+            HEARTBEAT.parent.mkdir(parents=True, exist_ok=True)
+            HEARTBEAT.touch()
+        except Exception:
+            pass
+
+    def _heartbeat_loop(self):
+        """Touch the heartbeat every HEARTBEAT_INTERVAL seconds. Runs on its own
+        daemon thread (not the audio sleep loop) so a long silence or a stalled
+        audio thread can't let the warm server be reaped mid-session."""
+        next_at = time.monotonic()
+        while self.running:
+            now = time.monotonic()
+            if now >= next_at:
+                self._touch_heartbeat()
+                next_at = now + HEARTBEAT_INTERVAL
+            time.sleep(1)
+
+    def _meter_loop(self):
+        """Report the mic signal level every METER_INTERVAL seconds so the log
+        shows whether audio is actually arriving. Runs on its own daemon thread."""
+        while self.running:
+            time.sleep(METER_INTERVAL)
+            with self._meter_lock:
+                peak = self._mic_peak
+                count = self._mic_level_count
+                avg = (self._mic_level_sum / count) if count else 0.0
+                speech = self._mic_speech_frames
+                chunks = self._chunks_sent
+                self._mic_peak = 0.0
+                self._mic_level_sum = 0.0
+                self._mic_level_count = 0
+                self._mic_speech_frames = 0
+
+            if count == 0:
+                print("[mic] ⚠ no audio frames from the input stream "
+                      "(stream stalled or device delivering nothing)", file=sys.stderr)
+                continue
+
+            filled = int(min(1.0, peak / 0.3) * 20)
+            bar = "[" + "#" * filled + "-" * (20 - filled) + "]"
+            gated = peak < NOISE_GATE
+            if gated:
+                state = "SILENT (below noise gate)"
+            elif speech:
+                state = f"speech ({speech} frames)"
+            else:
+                state = "sound, no speech"
+            print(f"[mic] {bar} peak={peak:.3f} avg={avg:.4f}  {state}  chunks_sent={chunks}",
+                  file=sys.stderr)
+
+            if gated:
+                self._silent_reports += 1
+                if self._silent_reports == 3:
+                    print(f"[mic] ⚠ no signal for ~{3 * METER_INTERVAL}s — the mic may be muted, "
+                          "or this process lacks Microphone permission "
+                          "(System Settings ▸ Privacy & Security ▸ Microphone).", file=sys.stderr)
+            else:
+                self._silent_reports = 0
+
     def _flush_buffers(self):
         """Flush any remaining audio in buffers to the queue"""
         # Flush mic buffer if it has any data
@@ -482,9 +599,17 @@ class LiveTranscriber:
         self._start_server()
 
         try:
+            # Keep the shared warm server alive while we run.
+            if self.shared:
+                self._touch_heartbeat()
+                threading.Thread(target=self._heartbeat_loop, daemon=True).start()
+
             # Start transcription worker thread
             transcription_thread = threading.Thread(target=self.transcription_worker)
             transcription_thread.start()
+
+            # Start the mic signal meter (visibility into whether audio arrives)
+            threading.Thread(target=self._meter_loop, daemon=True).start()
 
             try:
                 # Start audio streams
@@ -524,7 +649,21 @@ class LiveTranscriber:
             self.file_handle.close()
             print(f"\nTranscript saved to: {self.output_file}", file=sys.stderr)
         finally:
+            if self.shared:
+                # Start the idle-TTL countdown from now; the supervisor reaps
+                # the warm server after its idle timeout.
+                self._touch_heartbeat()
             self._stop_server()
+
+def _free_port():
+    """Pick a free localhost TCP port for an ephemeral private server."""
+    import socket
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
 
 def get_current_audio_output():
     """Get the current system audio output device name"""
@@ -611,7 +750,19 @@ def main():
     parser.add_argument("--server-port",
                        type=int,
                        default=8178,
-                       help="Port for auto-managed whisper-server (default: 8178)")
+                       help="Port for the shared/auto-managed whisper-server (default: 8178)")
+    parser.add_argument("--ephemeral",
+                       action="store_true",
+                       help="Spawn a private whisper-server for this run only (legacy behavior), "
+                            "killed on exit. Uses a private port, never the shared one.")
+    parser.add_argument("--idle-ttl",
+                       type=int,
+                       default=300,
+                       help="Seconds to keep the shared warm server alive after the last "
+                            "transcriber exits (default: 300; minimum 60)")
+    parser.add_argument("--debug",
+                       action="store_true",
+                       help="Verbose per-chunk VAD/level diagnostics (the signal meter is always on)")
     parser.add_argument("--auto-switch-output",
                        action="store_true",
                        help="Automatically switch to Multi-Output Device and restore on exit")
@@ -682,6 +833,30 @@ def main():
             print("Warning: Could not detect current output device (is SwitchAudioSource installed?)", file=sys.stderr)
             print("Install with: brew install switchaudio-osx", file=sys.stderr)
 
+    # Decide how the whisper-server is provided:
+    #  --server-url  -> connect to a caller-provided server (unchanged)
+    #  --ephemeral   -> private server on a free port, spawned & killed by us
+    #  default       -> shared warm server managed by whisper-serverd (idle TTL)
+    shared_supervisor = None
+    if not args.server_url:
+        if args.ephemeral:
+            args.server_port = _free_port()
+        else:
+            ttl = max(60, args.idle_ttl)
+            if ttl != args.idle_ttl:
+                print(f"Note: --idle-ttl raised to {ttl}s (minimum)", file=sys.stderr)
+            try:
+                subprocess.run(
+                    [SERVERD, "ensure", "--model", args.model,
+                     "--port", str(args.server_port), "--idle-ttl", str(ttl)],
+                    check=True,
+                )
+                shared_supervisor = {"model": args.model, "idle_ttl": ttl}
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                print(f"Warning: warm server unavailable ({e}); spawning a private one",
+                      file=sys.stderr)
+                args.server_port = _free_port()
+
     try:
         # Create and start transcriber
         transcriber = LiveTranscriber(
@@ -694,7 +869,9 @@ def main():
             min_chunk_duration=args.min_chunk_duration,
             max_chunk_duration=args.max_chunk_duration,
             server_url=args.server_url,
-            server_port=args.server_port
+            server_port=args.server_port,
+            shared_supervisor=shared_supervisor,
+            debug=args.debug
         )
 
         transcriber.start()
