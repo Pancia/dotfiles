@@ -33,5 +33,7 @@ fish/functions/fish_mode_prompt.fish
 fish/functions/fzfm_fre_prune.clj
 tmp/
 cache/
+# Built Swift app bundle (source in cmd/live-transcribe-app/ is tracked)
+bin/LiveTranscribe.app/
 # Vendored dependency clones (MANIFEST.json is tracked)
 vendor/*/

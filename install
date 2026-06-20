@@ -100,6 +100,11 @@ task_image_wall () {
     (cd cmd/image-wall && swiftc -O -framework AppKit -o ../../bin/image-wall main.swift)
 }
 
+task_live_transcribe_app () {
+    echo "Building live-transcribe-app..."
+    make -C cmd/live-transcribe-app
+}
+
 task_bbin () {
     hash bbin || { echo "bbin not found — run './install brew' first"; return 1; }
 
@@ -129,6 +134,7 @@ task_all () {
     task_opt
     task_vendor
     task_image_wall
+    task_live_transcribe_app
 }
 
 main() {
@@ -138,10 +144,11 @@ main() {
         bbin) task_bbin ;;
         brew) task_brew ;;
         gitconfig|git) task_gitconfig ;;
-        help) echo "init brew bbin gitconfig neovim opt vendor image-wall" ;;
+        help) echo "init brew bbin gitconfig neovim opt vendor image-wall live-transcribe-app" ;;
         init) task_init_dotfiles ;;
         vendor) task_vendor ;;
         image-wall) task_image_wall ;;
+        live-transcribe-app|lta) task_live_transcribe_app ;;
         manual) task_manual ;;
         neovim|nvim|vim) task_neovim ;;
         opt) task_opt ;;

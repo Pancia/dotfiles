@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Live Transcribe</string>
+    <key>CFBundleDisplayName</key>
+    <string>Live Transcribe</string>
+    <key>CFBundleIdentifier</key>
+    <string>org.pancia.live-transcribe-app</string>
+    <key>CFBundleExecutable</key>
+    <string>live-transcribe-app</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Live Transcribe records your microphone to produce a live transcript.</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+</dict>
+</plist>

@@ -1,0 +1,49 @@
+#!/opt/homebrew/bin/fish
+# live-transcribe-launch — toggle LiveTranscribe.app. Bound to Alt+Space.
+#
+#   idle    -> open LiveTranscribe.app (the app spawns the live-transcribe
+#              engine itself)
+#   running -> quit the app (it SIGINTs/flushes the engine, copies the
+#              transcript to the clipboard, then closes)
+#
+# Why the app — not this script — spawns the engine: macOS attributes a
+# microphone request to the *responsible process* at the top of the launch
+# chain. Launched by Karabiner's shell_command, that process is a Karabiner
+# helper with no grantable mic entry, so capture silently fails. A .app opened
+# via LaunchServices (`open`) is its own responsible process and (with
+# NSMicrophoneUsageDescription) gets a real, persistent "Live Transcribe" grant
+# in System Settings ▸ Privacy & Security ▸ Microphone.
+
+set -l mic 'BOYA'
+set -l app /Users/anthony/dotfiles/bin/LiveTranscribe.app
+set -l appbin $app/Contents/MacOS/live-transcribe-app
+
+set -l statedir ~/.local/state/live-transcribe
+mkdir -p $statedir
+
+# --- serialize concurrent invocations (debounce a fast double-press) -------
+# mkdir is atomic. Steal a stale lock (>20s old) left by a crashed invocation
+# so a leaked lock can't wedge the toggle. Released at every real exit below.
+set -l lockdir $statedir/launch.lock
+if not mkdir $lockdir 2>/dev/null
+    set -l mt (stat -f %m $lockdir 2>/dev/null)
+    if test -n "$mt"; and test (math (date +%s) - $mt) -gt 20
+        rmdir $lockdir 2>/dev/null
+        mkdir $lockdir 2>/dev/null; or exit 0
+    else
+        exit 0
+    end
+end
+
+# --- TOGGLE OFF: app already running -> quit it cleanly --------------------
+# SIGTERM is caught by the app, which SIGINTs the engine (flush + save), copies
+# the transcript to the clipboard, then exits.
+if pgrep -f $appbin >/dev/null 2>&1
+    pkill -TERM -f $appbin 2>/dev/null
+    rmdir $lockdir 2>/dev/null
+    exit 0
+end
+
+# --- TOGGLE ON ------------------------------------------------------------
+/usr/bin/open $app --args --mic $mic
+rmdir $lockdir 2>/dev/null
