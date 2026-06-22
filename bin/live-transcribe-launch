@@ -18,6 +18,58 @@ set -l mic 'BOYA'
 set -l app /Users/anthony/dotfiles/bin/LiveTranscribe.app
 set -l appbin $app/Contents/MacOS/live-transcribe-app
 
+# terminal-notifier via absolute path (Karabiner/Hermes give a minimal PATH);
+# degrade silently when it's absent so recovery still copies.
+function __lt_notify -a title msg
+    set -l tn /opt/homebrew/bin/terminal-notifier
+    if test -x $tn
+        $tn -title "$title" -message "$msg" >/dev/null 2>&1
+    end
+end
+
+# Mode: default toggles the app. --ref makes a stop copy a `read <path>` reference
+# instead of the full transcript. --copy / --copy-ref recover the newest saved
+# transcript to the clipboard WITHOUT starting a session (the "I forgot / used the
+# wrong shortcut after it already closed" fix).
+set -l mode toggle
+switch "$argv[1]"
+    case --ref
+        set mode ref
+    case --copy
+        set mode copy-full
+    case --copy-ref
+        set mode copy-ref
+end
+
+# --- RECOVERY: copy the newest saved transcript; never touch the app -------
+# Runs before the launch lock so it can't be wedged by / can't wedge a toggle,
+# and never opens the app (a fresh launch would create an empty transcript that
+# shadows the one you wanted).
+if test "$mode" = copy-full -o "$mode" = copy-ref
+    set -l tdir ~/Cloud/transcripts
+    # Newest by filename: transcript_<ts> sorts lexically with record-start, so
+    # this is immune to ProtonDrive rewriting mtimes when it syncs remote files.
+    set -l txts $tdir/transcript_*.txt
+    if test (count $txts) -eq 0
+        __lt_notify 'Live Transcribe' 'No transcripts found'
+        exit 0
+    end
+    set -l newest $txts[-1]
+    if not test -s $newest
+        __lt_notify 'Live Transcribe' 'Newest transcript is empty — nothing copied'
+        exit 0
+    end
+    if test "$mode" = copy-ref
+        set -l abbrev (string replace $HOME '~' $newest)
+        printf '%s' "read $abbrev" | pbcopy
+        __lt_notify 'Live Transcribe' "Copied reference: read $abbrev"
+    else
+        pbcopy <$newest
+        __lt_notify 'Live Transcribe' 'Copied transcript: '(basename $newest)
+    end
+    exit 0
+end
+
 set -l statedir ~/.local/state/live-transcribe
 mkdir -p $statedir
 
@@ -39,7 +91,12 @@ end
 # SIGTERM is caught by the app, which SIGINTs the engine (flush + save), copies
 # the transcript to the clipboard, then exits.
 if pgrep -f $appbin >/dev/null 2>&1
-    pkill -TERM -f $appbin 2>/dev/null
+    # --ref → SIGUSR1 (app copies a reference); default → SIGTERM (full copy).
+    if test "$mode" = ref
+        pkill -USR1 -f $appbin 2>/dev/null
+    else
+        pkill -TERM -f $appbin 2>/dev/null
+    end
     rmdir $lockdir 2>/dev/null
     exit 0
 end

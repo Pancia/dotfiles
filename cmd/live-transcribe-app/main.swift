@@ -32,6 +32,11 @@ let enginePath = "/Users/anthony/dotfiles/bin/live-transcribe"
 let stateDir = ("~/.local/state/live-transcribe" as NSString).expandingTildeInPath
 let logFilePath = stateDir + "/last.log"
 
+// Transcripts + recordings land in the synced ProtonDrive folder so the
+// `read <path>` reference is meaningful on other devices. Same physical dir as
+// the engine's legacy ~/transcripts symlink.
+let cloudTranscriptsDir = ("~/Cloud/transcripts" as NSString).expandingTildeInPath
+
 // The engine shells out to `whisper-server` (and friends) by name, so the child
 // needs a real PATH — LaunchServices gives us a minimal one.
 func enrichedEnvironment() -> [String: String] {
@@ -73,8 +78,10 @@ func stripANSI(_ s: String) -> String {
     return ansiRegex.stringByReplacingMatches(in: s, range: r, withTemplate: "")
 }
 
-// [HH:MM:SS] Source: text
-let transcriptRegex = try! NSRegularExpression(pattern: "^\\[(\\d{2}:\\d{2}:\\d{2})\\] (\\w+): (.*)$")
+// [HH:MM:SS] text   — the "Source: " prefix is present only when >1 source is
+// active. Anchored to the known source literals so an in-text colon (e.g.
+// "Note: ...") in single-source output isn't mistaken for a source label.
+let transcriptRegex = try! NSRegularExpression(pattern: "^\\[(\\d{2}:\\d{2}:\\d{2})\\] (?:(Microphone|Computer): )?(.*)$")
 
 struct StyledLine {
     let attr: NSAttributedString
@@ -101,15 +108,17 @@ func styleLine(_ raw: String) -> StyledLine {
 
     if let m = transcriptRegex.firstMatch(in: plain, range: range),
        let tsR = Range(m.range(at: 1), in: plain),
-       let srcR = Range(m.range(at: 2), in: plain),
        let txtR = Range(m.range(at: 3), in: plain) {
         let ts = String(plain[tsR])
-        let src = String(plain[srcR])
         let txt = String(plain[txtR])
-        let srcColor = src.lowercased().hasPrefix("comp") ? Palette.compSource : Palette.micSource
         let a = NSMutableAttributedString()
         a.append(NSAttributedString(string: "[\(ts)] ", attributes: [.font: monoFont, .foregroundColor: Palette.timestamp]))
-        a.append(NSAttributedString(string: "\(src): ", attributes: [.font: monoBold, .foregroundColor: srcColor]))
+        // Source span only when the engine emitted one (multi-source sessions).
+        if let srcR = Range(m.range(at: 2), in: plain) {
+            let src = String(plain[srcR])
+            let srcColor = src.lowercased().hasPrefix("comp") ? Palette.compSource : Palette.micSource
+            a.append(NSAttributedString(string: "\(src): ", attributes: [.font: monoBold, .foregroundColor: srcColor]))
+        }
         a.append(NSAttributedString(string: txt, attributes: [.font: monoFont, .foregroundColor: Palette.normal]))
         return StyledLine(attr: a, plain: plain, isTranscript: true)
     }
@@ -117,6 +126,14 @@ func styleLine(_ raw: String) -> StyledLine {
     let a = NSAttributedString(string: plain, attributes: [.font: monoFont, .foregroundColor: Palette.dim])
     return StyledLine(attr: a, plain: plain, isTranscript: false)
 }
+
+// MARK: - Copy mode
+
+// How the transcript reaches the clipboard on stop. `.full` copies the whole
+// transcript (default, Alt+Space); `.reference` copies a short `read <path>`
+// line (Cmd+Alt+Space → live-transcribe-launch --ref → SIGUSR1) for when the
+// transcript would overflow a chat message limit.
+enum CopyMode { case full, reference }
 
 // MARK: - App delegate
 
@@ -134,6 +151,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var accumulated: [String] = []
     private var terminating = false
     private var signalSources: [DispatchSourceSignal] = []
+    private var copyMode: CopyMode = .full
+
+    // Menu items whose actions need a known transcript path; disabled until then.
+    private var copyTranscriptItem: NSMenuItem!
+    private var copyRefItem: NSMenuItem!
+    private var revealItem: NSMenuItem!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Single-instance: a second launch just reveals the first.
@@ -197,9 +220,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         content.addSubview(scroll)
         textView = tv
 
-        if let screen = NSScreen.main {
-            let vf = screen.visibleFrame
-            panel.setFrame(NSRect(x: vf.maxX - w - 20, y: vf.maxY - h - 20, width: w, height: h), display: true)
+        // Remember the last position/size across launches. Once the autosave
+        // name is set, AppKit persists the frame (keyed to the bundle id) on every
+        // move/resize; setFrameUsingName returns false when nothing is saved yet.
+        panel.setFrameAutosaveName("LiveTranscribePanel")
+        let restored = panel.setFrameUsingName("LiveTranscribePanel")
+        let onScreen = NSScreen.screens.contains { $0.frame.intersects(panel.frame) }
+        if !restored || !onScreen {
+            // Default: top-right of the main screen. Also the fallback when the
+            // saved frame belonged to a display that's since been disconnected.
+            if let screen = NSScreen.main {
+                let vf = screen.visibleFrame
+                panel.setFrame(NSRect(x: vf.maxX - w - 20, y: vf.maxY - h - 20, width: w, height: h), display: true)
+            }
         }
     }
 
@@ -208,10 +241,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         updateIcon(running: true)
         let menu = NSMenu()
         menu.delegate = self
+        menu.autoenablesItems = false   // enablement is managed in menuNeedsUpdate
+
         let toggle = NSMenuItem(title: "Hide Panel", action: #selector(togglePanel), keyEquivalent: "")
         toggle.target = self
         menu.addItem(toggle)
+
         menu.addItem(.separator())
+
+        // Copy actions on the current session — grab the reference mid-session if
+        // you know it'll be long, without waiting for stop.
+        copyTranscriptItem = NSMenuItem(title: "Copy Transcript", action: #selector(copyTranscriptAction), keyEquivalent: "")
+        copyTranscriptItem.target = self
+        menu.addItem(copyTranscriptItem)
+
+        copyRefItem = NSMenuItem(title: "Copy \u{201C}read <path>\u{201D} Reference", action: #selector(copyReferenceAction), keyEquivalent: "")
+        copyRefItem.target = self
+        menu.addItem(copyRefItem)
+
+        revealItem = NSMenuItem(title: "Reveal Transcript in Finder", action: #selector(revealInFinder), keyEquivalent: "")
+        revealItem.target = self
+        menu.addItem(revealItem)
+
+        menu.addItem(.separator())
+
         let quit = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
@@ -230,6 +283,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.item(at: 0)?.title = panel.isVisible ? "Hide Panel" : "Show Panel"
+        // The copy/reveal actions need a known transcript path (nil for ~1s at
+        // startup until the engine emits "Writing transcript to:").
+        let hasPath = (transcriptPath != nil)
+        copyTranscriptItem?.isEnabled = hasPath
+        copyRefItem?.isEnabled = hasPath
+        revealItem?.isEnabled = hasPath
+    }
+
+    @objc private func copyTranscriptAction() { copyFullToPasteboard() }
+    @objc private func copyReferenceAction() { copyReferenceToPasteboard() }
+
+    @objc private func revealInFinder() {
+        // Mid-session the .m4a doesn't exist yet (transcode happens at stop), so
+        // reveal the .txt — it's flushed per line and always present.
+        guard let p = transcriptPath else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: p)])
     }
 
     @objc private func togglePanel() {
@@ -258,7 +327,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: enginePath)
-        p.arguments = ["--mic-device", micDevice]
+        // --output-dir pins the canonical ~/Cloud path (so the reference string
+        // resolves to ~/Cloud/... cross-device); --save-audio keeps the recording.
+        p.arguments = ["--mic-device", micDevice, "--output-dir", cloudTranscriptsDir, "--save-audio"]
         p.environment = enrichedEnvironment()
         // LaunchServices gives the app CWD "/" (read-only). whisper-server writes
         // a relative temp WAV for ffmpeg, so the chain needs a writable CWD or
@@ -335,6 +406,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     private func installSignalHandlers() {
+        // Full-copy terminators (Alt+Space → launcher SIGTERM; ⌃C).
         for sig in [SIGTERM, SIGINT] {
             signal(sig, SIG_IGN)
             let src = DispatchSource.makeSignalSource(signal: sig, queue: .main)
@@ -342,6 +414,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             src.resume()
             signalSources.append(src)
         }
+        // SIGUSR1 = "stop and copy a `read <path>` reference instead of the full
+        // text" (Cmd+Alt+Space → live-transcribe-launch --ref). SIGUSR1's default
+        // disposition is *terminate*, so SIG_IGN MUST come first or the process
+        // dies before the handler sets copyMode.
+        signal(SIGUSR1, SIG_IGN)
+        let refSrc = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
+        refSrc.setEventHandler { [weak self] in
+            self?.copyMode = .reference
+            NSApp.terminate(nil)
+        }
+        refSrc.resume()
+        signalSources.append(refSrc)
     }
 
     // Runs for every quit route (menu, SIGTERM from the launcher, engine exit).
@@ -351,14 +435,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         enginePipe?.fileHandleForReading.readabilityHandler = nil
         if let p = engine, p.isRunning {
             kill(p.processIdentifier, SIGINT)
-            let deadline = Date().addingTimeInterval(2.0)
+            // The engine finalizes the audio early (before its transcript-queue
+            // drain), so the .m4a is safe well within this window. The headroom
+            // (was 2s) lets the network-bound transcript drain finish on longer
+            // sessions instead of losing the tail to SIGKILL.
+            let deadline = Date().addingTimeInterval(10.0)
             while p.isRunning && Date() < deadline { usleep(100_000) }
             if p.isRunning { kill(p.processIdentifier, SIGKILL) }
         }
         copyTranscriptToClipboard()
     }
 
+    // Called on every stop route. Reference mode requires a known path; if the
+    // engine died before emitting one, fall through to a full copy rather than
+    // clobbering the clipboard with a bare "read ".
     private func copyTranscriptToClipboard() {
+        if copyMode == .reference, transcriptPath != nil {
+            copyReferenceToPasteboard()
+        } else {
+            copyFullToPasteboard()
+        }
+    }
+
+    private func copyFullToPasteboard() {
         var text: String?
         if let p = transcriptPath, let s = try? String(contentsOfFile: p, encoding: .utf8),
            !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -371,6 +470,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(out, forType: .string)
+    }
+
+    // Short cross-device reference for when the full transcript overflows a chat
+    // limit — ~/Cloud/... resolves on other devices since the folder syncs.
+    private func copyReferenceToPasteboard() {
+        guard let p = transcriptPath else { return }
+        let ref = "read " + (p as NSString).abbreviatingWithTildeInPath
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(ref, forType: .string)
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

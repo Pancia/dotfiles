@@ -39,7 +39,8 @@ class LiveTranscriber:
     def __init__(self, model_size="base", output_dir=None, mic_device=None, computer_device=None,
                  vad_aggressiveness=VAD_AGGRESSIVENESS, silence_duration=SILENCE_DURATION,
                  min_chunk_duration=MIN_CHUNK_DURATION, max_chunk_duration=MAX_CHUNK_DURATION,
-                 server_url=None, server_port=8178, shared_supervisor=None, debug=False):
+                 server_url=None, server_port=8178, shared_supervisor=None, debug=False,
+                 save_audio=False):
         # Set model path for whisper-cpp
         model_dir = Path.home() / ".local/share/whisper-cpp/models"
         model_map = {
@@ -93,9 +94,51 @@ class LiveTranscriber:
         self.file_handle = open(self.output_file, 'w')
         print(f"Writing transcript to: {self.output_file}", file=sys.stderr)
 
+        # Optional full-session audio recording. We stream the mic (already
+        # resampled to 16kHz mono) into a *local* temp WAV during capture and
+        # transcode to a compressed .m4a next to the transcript on stop. Local,
+        # not Cloud, so ProtonDrive doesn't sync-churn a growing file mid-session.
+        self.save_audio = save_audio
+        self._rec_lock = threading.Lock()
+        self.wav_writer = None
+        self.wav_tmp_path = None
+        self.audio_output_path = None
+        self._recording = False
+        self._rec_frames = 0
+        if self.save_audio:
+            state_dir = Path.home() / ".local/state/live-transcribe"
+            state_dir.mkdir(parents=True, exist_ok=True)
+            # Belt-and-suspenders: clear any orphan WAV a prior hard-killed run
+            # left behind (finalize normally deletes its own temp).
+            for stale in state_dir.glob("rec_*.wav"):
+                try:
+                    stale.unlink()
+                except OSError:
+                    pass
+            self.wav_tmp_path = state_dir / f"rec_{timestamp}.wav"
+            self.audio_output_path = self.output_file.with_suffix(".m4a")
+            try:
+                wf = wave.open(str(self.wav_tmp_path), 'wb')
+                wf.setnchannels(1)
+                wf.setsampwidth(2)  # 16-bit
+                wf.setframerate(SAMPLE_RATE)
+                self.wav_writer = wf
+                self._recording = True
+                print(f"Recording audio to: {self.wav_tmp_path} "
+                      f"(transcode to {self.audio_output_path.name} on stop)",
+                      file=sys.stderr)
+            except Exception as e:
+                print(f"Warning: could not open audio recording file: {e}", file=sys.stderr)
+                self.wav_writer = None
+                self._recording = False
+
         # Device configuration
         self.mic_device = mic_device
         self.computer_device = computer_device
+
+        # Only label lines with their source when more than one source is active.
+        # With just the mic, every line would say "Microphone:" — pure clutter.
+        self.label_sources = computer_device is not None
 
         # Query device info to get channel counts and sample rates
         devices = sd.query_devices()
@@ -193,6 +236,10 @@ class LiveTranscriber:
         # Convert incoming audio to mono and resample to 16kHz for VAD
         mono_audio = self._to_mono(indata.copy())
         resampled_audio = self._resample(mono_audio, self.mic_sample_rate)
+
+        # Persist the full mic stream to the session recording (if enabled).
+        if self._recording:
+            self._append_recording(resampled_audio)
 
         # Add to VAD buffer
         self.mic_vad_buffer = np.concatenate([self.mic_vad_buffer, resampled_audio])
@@ -501,7 +548,10 @@ class LiveTranscriber:
 
                     last_text_by_source[source] = text
                     timestamp = datetime.now().strftime("%H:%M:%S")
-                    output_line = f"[{timestamp}] {source}: {text}"
+                    if self.label_sources:
+                        output_line = f"[{timestamp}] {source}: {text}"
+                    else:
+                        output_line = f"[{timestamp}] {text}"
 
                     # Output to both stdout and file
                     print(output_line, flush=True)
@@ -594,6 +644,71 @@ class LiveTranscriber:
             self.computer_buffer = []
             self.audio_queue.put(("Computer", audio_data))
 
+    def _append_recording(self, audio):
+        """Append 16kHz mono float32 audio to the session WAV. Clips before the
+        int16 cast (raw *32768 wraps full-scale peaks to -32768 → clicks in a file
+        a human plays back). Any I/O error disables recording rather than raising
+        out of the realtime audio callback (which would stop capture entirely)."""
+        with self._rec_lock:
+            if not self._recording or self.wav_writer is None:
+                return
+            try:
+                pcm = (np.clip(audio, -1.0, 1.0) * 32767.0).astype(np.int16)
+                self.wav_writer.writeframes(pcm.tobytes())
+                self._rec_frames += len(pcm)
+            except Exception as e:
+                print(f"[audio] recording disabled after write error: {e}", file=sys.stderr)
+                self._recording = False
+                try:
+                    self.wav_writer.close()
+                except Exception:
+                    pass
+                self.wav_writer = None
+
+    def _finalize_recording(self):
+        """Close the session WAV and transcode it to .m4a next to the transcript.
+        Idempotent — safe to call from both the normal stop path and a finally.
+        Called BEFORE the transcript-queue drain so the audio artifact survives
+        even if the process is killed while that (network-bound) drain runs."""
+        with self._rec_lock:
+            writer = self.wav_writer
+            self.wav_writer = None
+            self._recording = False
+            frames = self._rec_frames
+            tmp = self.wav_tmp_path
+            self.wav_tmp_path = None
+        if writer is None and tmp is None:
+            return
+        if writer is not None:
+            try:
+                writer.close()
+            except Exception as e:
+                print(f"Warning: closing audio recording failed: {e}", file=sys.stderr)
+        if not tmp or not tmp.exists():
+            return
+        # Nothing captured (e.g. start-then-immediately-stop) → don't hand ffmpeg
+        # an empty input, it errors.
+        if frames == 0:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+            return
+        out = self.audio_output_path
+        try:
+            subprocess.run(
+                ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                 "-i", str(tmp), "-c:a", "aac", "-b:a", "48k", str(out)],
+                check=True,
+            )
+            tmp.unlink()
+            print(f"Saved audio to: {out}", file=sys.stderr)
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            # ffmpeg missing/failed: keep the WAV locally (NOT Cloud — a long
+            # session is 100+ MB of sync churn) and report where it landed.
+            print(f"Warning: ffmpeg transcode failed ({e}); keeping WAV", file=sys.stderr)
+            print(f"Saved audio to: {tmp}", file=sys.stderr)
+
     def start(self):
         """Start live transcription"""
         self._start_server()
@@ -637,6 +752,13 @@ class LiveTranscriber:
                 print("\n\nStopping recording...", file=sys.stderr)
                 self.running = False
 
+            # Audio is fully captured the instant the `with mic_stream` block above
+            # exits (the stream is stopped). Finalize + transcode the recording NOW,
+            # before the transcript-queue drain below — that drain makes blocking
+            # whisper-server calls that can exceed the app's SIGKILL deadline, so
+            # doing audio first guarantees the .m4a exists even if we're killed.
+            self._finalize_recording()
+
             # Flush any remaining buffered audio
             print("Flushing remaining audio buffers...", file=sys.stderr)
             self._flush_buffers()
@@ -649,6 +771,9 @@ class LiveTranscriber:
             self.file_handle.close()
             print(f"\nTranscript saved to: {self.output_file}", file=sys.stderr)
         finally:
+            # Idempotent safety net: if we bailed before the normal finalize
+            # (e.g. an exception other than KeyboardInterrupt), still save audio.
+            self._finalize_recording()
             if self.shared:
                 # Start the idle-TTL countdown from now; the supervisor reaps
                 # the warm server after its idle timeout.
@@ -763,6 +888,10 @@ def main():
     parser.add_argument("--debug",
                        action="store_true",
                        help="Verbose per-chunk VAD/level diagnostics (the signal meter is always on)")
+    parser.add_argument("--save-audio",
+                       action="store_true",
+                       help="Record the full mic session and save a compressed .m4a "
+                            "next to the transcript (same basename)")
     parser.add_argument("--auto-switch-output",
                        action="store_true",
                        help="Automatically switch to Multi-Output Device and restore on exit")
@@ -871,7 +1000,8 @@ def main():
             server_url=args.server_url,
             server_port=args.server_port,
             shared_supervisor=shared_supervisor,
-            debug=args.debug
+            debug=args.debug,
+            save_audio=args.save_audio
         )
 
         transcriber.start()
