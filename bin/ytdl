@@ -210,6 +210,24 @@ end
 # Post a Notification Center alert via terminal-notifier (reliable from
 # background/detached processes, unlike `osascript display notification`).
 # Clicking a success notification opens the output folder.
+# Start and finish alerts share a -group keyed on the video ID so the
+# completion banner replaces the "started" one in place instead of stacking.
+function _ytdl_notify_start
+    set -l dl_type $argv[1]
+    set -l ytid $argv[2]
+    set -l title $argv[3]
+
+    if not type -q terminal-notifier
+        return 0
+    end
+
+    set -l msg $title
+    test -z "$msg"; and set msg $ytid
+
+    terminal-notifier -title "ytdl ⏳ $dl_type started" -subtitle "$msg" \
+        -message "downloading…" -group "ytdl-$ytid" >/dev/null 2>&1
+end
+
 function _ytdl_notify
     set -l dl_status $argv[1]
     set -l dl_type $argv[2]
@@ -226,11 +244,11 @@ function _ytdl_notify
 
     if test $dl_status -eq 0
         terminal-notifier -title "ytdl ✅ $dl_type" -subtitle "$msg" \
-            -message "saved to $out_dir" -sound default \
+            -message "saved to $out_dir" -sound default -group "ytdl-$ytid" \
             -execute "open '$out_dir'" >/dev/null 2>&1
     else
         terminal-notifier -title "ytdl ❌ $dl_type FAILED" -subtitle "$msg" \
-            -message "$ytid" -sound Basso >/dev/null 2>&1
+            -message "$ytid" -sound Basso -group "ytdl-$ytid" >/dev/null 2>&1
     end
 end
 
@@ -324,6 +342,10 @@ if test -n "$video_title"
 end
 echo "============"
 echo
+
+if test $YTDL_NOTIFY -eq 1
+    _ytdl_notify_start $ytdl_type $video_id "$video_title[1]"
+end
 
 # Download based on type
 switch $ytdl_type
