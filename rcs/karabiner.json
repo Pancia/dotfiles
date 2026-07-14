@@ -156,6 +156,21 @@
                                     "key_code": "spacebar",
                                     "modifiers": {
                                         "mandatory": [
+                                            "command",
+                                            "option"
+                                        ]
+                                    }
+                                },
+                                "to": {
+                                    "shell_command": "/Users/anthony/dotfiles/bin/live-transcribe-launch --ref"
+                                },
+                                "type": "basic"
+                            },
+                            {
+                                "from": {
+                                    "key_code": "spacebar",
+                                    "modifiers": {
+                                        "mandatory": [
                                             "left_alt"
                                         ]
                                     }
@@ -299,7 +314,7 @@
                         "key_code": "caps_lock"
                     },
                     "to": {
-                        "key_code": "right_control"
+                        "key_code": "left_control"
                     }
                 },
                 {

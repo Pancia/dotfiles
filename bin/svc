@@ -7,6 +7,8 @@
 #   svc logs   <name> [-n N] tail .run/<name>.log (the captured crash output)
 #   svc restart <name>       SIGHUP the supervisor -> respawn in your terminal pane
 #   svc stop    <name>       SIGTERM the supervisor -> stop it
+#   svc suspend <name>       SIGUSR1 -> drain the child & HOLD (frees its RAM)
+#   svc resume  <name>       SIGUSR2 -> respawn the held child
 #
 # Run from the project root. Project specifics come from `.svc.conf` and/or
 # `.svc.local.conf` (sourced, in that order; *.local.* is git-ignored so it can
@@ -73,8 +75,14 @@ responsive() {
   return $rc
 }
 
-ready_state() {  # echo up|down|wedged|n/a for a name
-  local name="$1" port; port="$(port_value "$name")"
+ready_state() {  # echo up|down|wedged|suspended|n/a for a name
+  local name="$1" port
+  # A suspended supervisor has cleanly stopped its child; the port is down by
+  # design. Report it as such and skip the (slow) eval probe on a dead port - but
+  # only if the supervisor is actually alive: a marker left behind by a SIGKILLed
+  # supervisor is stale and must not mask the real (down) state.
+  if [ -e "$run_dir/$name.suspended" ] && live_sup "$name" >/dev/null 2>&1; then echo "suspended"; return; fi
+  port="$(port_value "$name")"
   [ -n "$port" ] || { echo "n/a"; return; }
   if ! port_up "$port"; then echo "down"; return; fi
   if declare -F svc_eval >/dev/null; then
@@ -150,12 +158,57 @@ cmd_stop() {
   fi
 }
 
+# Suspend: cleanly drain the child (freeing its RAM) and leave the supervisor
+# holding, ready to resume. Blocks until the supervisor confirms via the
+# .suspended marker (bounded ~20s) so a heavy job can start KNOWING the RAM is
+# freed; on timeout we fail loud rather than run beside a still-draining JVM.
+# NOTE: only supervisors started from the suspend-aware `supervise` handle USR1;
+# an older one would be KILLED by it. Fully restart services after upgrading.
+cmd_suspend() {
+  local name="${1:?svc suspend <name>}" pid i
+  if ! pid="$(live_sup "$name")"; then
+    echo "svc: '$name' not running - nothing to suspend."   # caller skips it; never started here
+    return 0
+  fi
+  if [ -e "$run_dir/$name.suspended" ]; then
+    echo "svc: '$name' already suspended."; return 0
+  fi
+  echo "svc: suspending '$name' (USR1 $pid)..."
+  kill -USR1 "$pid"
+  for i in $(seq 1 40); do   # ~20s; marker is written only after the child is reaped
+    [ -e "$run_dir/$name.suspended" ] && { echo "svc: '$name' suspended (child stopped, RAM freed)."; return 0; }
+    sleep 0.5
+  done
+  echo "svc: '$name' did NOT confirm suspend within ~20s (no .suspended marker)." >&2
+  echo "svc: refusing to proceed - the supervisor may predate USR1 support (restart it)." >&2
+  return 1
+}
+
+# Resume: respawn the held child. Fire-and-forget (the supervisor cold-boots it
+# in your pane in the background). Only USR2 a supervisor we KNOW is suspended -
+# USR2 to a non-suspended one would interrupt its wait for no reason.
+cmd_resume() {
+  local name="${1:?svc resume <name>}" pid
+  if [ ! -e "$run_dir/$name.suspended" ]; then
+    echo "svc: '$name' not suspended - nothing to resume."; return 0
+  fi
+  if pid="$(live_sup "$name")"; then
+    echo "svc: resuming '$name' (USR2 $pid)..."; kill -USR2 "$pid"
+  else
+    echo "svc: '$name' marked suspended but its supervisor is gone - clearing stale marker; start it yourself (e.g. cmds $name)." >&2
+    rm -f "$run_dir/$name.suspended"
+  fi
+  return 0
+}
+
 sub="${1:-status}"; shift || true
 case "$sub" in
   status)  cmd_status "${1:-}" ;;
   logs)    cmd_logs "$@" ;;
   restart) cmd_restart "$@" ;;
   stop)    cmd_stop "$@" ;;
-  -h|--help|help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//' ;;
-  *) echo "usage: svc {status [name]|logs <name> [-n N]|restart <name>|stop <name>}" >&2; exit 2 ;;
+  suspend) cmd_suspend "$@" ;;
+  resume)  cmd_resume "$@" ;;
+  -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) echo "usage: svc {status [name]|logs <name> [-n N]|restart <name>|stop <name>|suspend <name>|resume <name>}" >&2; exit 2 ;;
 esac

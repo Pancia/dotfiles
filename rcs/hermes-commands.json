@@ -61,6 +61,7 @@
     },
     "k": {
         "_desc": "+karabiner",
+        "c": ["Toggle Caps: L/R Ctrl", "karabiner-caps toggle"],
         "e": ["Edit Config", {"shell": "nvim ~/dotfiles/rcs/karabiner.json"}],
         "v": ["Event Viewer", "open -a 'Karabiner-EventViewer'"],
         "k": ["Karabiner Elements", "open -a 'Karabiner-Elements'"]

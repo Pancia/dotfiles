@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""karabiner-caps — switch the Caps Lock remap between right_control and left_control.
+
+Caps Lock is remapped in Karabiner's `simple_modifications`. This flips ONLY that
+one entry's target key_code and leaves the rest of the config byte-for-byte intact
+(the value `right_control` also appears in an unrelated complex_modification, so a
+blind find/replace would corrupt that rule — we match the caps_lock block only).
+
+The config file is hard-linked between ~/.config/karabiner/karabiner.json and
+~/dotfiles/rcs/karabiner.json, so we rewrite it IN PLACE (truncate + write the same
+inode) rather than temp-file-and-rename, which would break the link and let the two
+copies drift apart. Karabiner-Elements watches the file and auto-reloads on change.
+
+Usage:
+    karabiner-caps            # toggle (default)
+    karabiner-caps toggle     # toggle
+    karabiner-caps left       # force caps_lock -> left_control
+    karabiner-caps right      # force caps_lock -> right_control
+    karabiner-caps status     # print current target, make no change
+"""
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+CONFIG = os.path.expanduser("~/.config/karabiner/karabiner.json")
+
+# Capture the caps_lock simple_modification's target key_code. The comma between the
+# "from" and "to" objects is always present, which anchors us to the right block.
+PATTERN = re.compile(
+    r'("caps_lock"\s*\}\s*,\s*"to"\s*:\s*\{\s*"key_code"\s*:\s*")'
+    r"(right_control|left_control)"
+    r'(")'
+)
+
+# On-screen reminder of what each control does in this setup: right_control has a
+# complex_modification (tap = Escape, hold = Ctrl); left_control is a plain modifier.
+# Newlines are escaped (\\n) so they land as literal \n in the Lua string we pass.
+MESSAGE = {
+    "right_control": "Caps → Right Control\\ntap = Esc · hold = Ctrl",
+    "left_control": "Caps → Left Control\\nplain Ctrl (no tap-Esc)",
+}
+
+HS = shutil.which("hs") or os.path.expanduser("~/Developer/bin/hs")
+
+
+def alert(target):
+    """Show a Hammerspoon toast (same overlay the clipboard detector uses)."""
+    subprocess.run(
+        [HS, "-c", f'hs.alert.show("{MESSAGE[target]}", 1.5)'],
+        check=False,
+    )
+
+
+def main():
+    arg = (sys.argv[1] if len(sys.argv) > 1 else "toggle").lower()
+
+    with open(CONFIG) as f:
+        text = f.read()
+
+    m = PATTERN.search(text)
+    if not m:
+        sys.exit(f"error: caps_lock simple_modification not found in {CONFIG}")
+    current = m.group(2)
+
+    if arg == "status":
+        print(current)
+        return
+    if arg in ("left", "left_control"):
+        target = "left_control"
+    elif arg in ("right", "right_control"):
+        target = "right_control"
+    elif arg == "toggle":
+        target = "left_control" if current == "right_control" else "right_control"
+    else:
+        sys.exit("usage: karabiner-caps [toggle|left|right|status]")
+
+    if target != current:
+        new_text = PATTERN.sub(rf"\g<1>{target}\g<3>", text, count=1)
+        with open(CONFIG, "w") as f:  # in-place truncate preserves the hard link
+            f.write(new_text)
+        print(f"caps_lock -> {target}")
+    else:
+        print(f"caps_lock -> {target} (unchanged)")
+
+    alert(target)
+
+
+if __name__ == "__main__":
+    main()

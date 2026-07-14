@@ -52,6 +52,7 @@ logfile="$run_dir/$name.log"
 statusfile="$run_dir/$name.status"
 genfile="$run_dir/$name.gen"
 stdinfifo="$run_dir/$name.stdin"
+suspendfile="$run_dir/$name.suspended"   # present iff currently suspended (held)
 
 is_supervise() {  # $1 = pid - true if it's a live `supervise <name>`
   local pid="$1" cmd
@@ -91,6 +92,7 @@ if [ -r "$pidfile" ]; then
 fi
 
 echo "$$ $(date +%s)" > "$pidfile"
+rm -f "$suspendfile"   # clear any stale suspend marker (e.g. from a SIGKILLed prior hold)
 : > "$logfile"   # truncate once at startup so the log can't grow unbounded
 
 # Child stdin: `set -m` puts the child in its own (background) process group, so
@@ -102,11 +104,12 @@ echo "$$ $(date +%s)" > "$pidfile"
 rm -f "$stdinfifo"; mkfifo "$stdinfifo"
 exec 9<>"$stdinfifo"   # hold the FIFO open (r+w) so the child never sees EOF
 
-cleanup() { exec 9>&- 2>/dev/null || true; rm -f "$pidfile" "$genfile" "$stdinfifo"; }
+cleanup() { exec 9>&- 2>/dev/null || true; rm -f "$pidfile" "$genfile" "$stdinfifo" "$suspendfile"; }
 trap cleanup EXIT
 
 child=""
 restart=0
+suspend=0
 
 # Drain the child's WHOLE process group: TERM it, wait for every member to die
 # (shutdown hooks can take seconds), escalate to KILL, then reap the leader.
@@ -127,38 +130,84 @@ on_hup() {
   trap '' HUP                       # mask further HUP through drain+respawn
   kill -TERM "-$child" 2>/dev/null || true
 }
+# `svc suspend` (USR1): cleanly drain the child to free its RAM, then HOLD until
+# `svc resume`. Unlike a crash this is intentional, so the supervisor stays alive
+# in your pane and respawns the child on resume. Mask HUP so a stray `svc restart`
+# mid-suspend can't fight the hold (it'd block until resume); re-armed after.
+on_suspend() {
+  suspend=1
+  trap '' HUP
+  kill -TERM "-$child" 2>/dev/null || true
+}
+on_resume() { suspend=0; }          # `svc resume` (USR2): drop out of the hold loop
 on_stop() {
-  trap '' HUP INT TERM              # ignore further signals while we tear down
+  trap '' HUP INT TERM USR1 USR2    # ignore further signals while we tear down
   drain_group                       # never exit while the child is still alive
   exit 0
 }
 trap on_hup HUP
+trap on_suspend USR1
+trap on_resume USR2
 trap on_stop INT TERM
 
 gen=0
 while :; do
-  restart=0
-  gen=$((gen + 1))
-  # Tee to the pane AND the log; $! is the command (not tee) - relied on for signalling.
-  # stdin <- held-open FIFO so a REPL read blocks instead of taking SIGTTIN on the tty.
-  "$@" < "$stdinfifo" > >(tee -a "$logfile") 2>&1 &
-  child=$!
-  echo "$gen $child" > "$genfile"
-  echo "[supervise] $name pid=$child (gen $gen) - 'svc restart $name' to restart" >&2
+  # Spawn only when there's no live child. A signal that does NOT terminate the
+  # child (e.g. a stray/double USR2 - see the re-wait guard below) leaves $child
+  # set, so we skip the spawn and go straight back to waiting on the SAME child
+  # rather than starting a duplicate.
+  if [ -z "$child" ]; then
+    restart=0
+    gen=$((gen + 1))
+    # Tee to the pane AND the log; $! is the command (not tee) - relied on for signalling.
+    # stdin <- held-open FIFO so a REPL read blocks instead of taking SIGTTIN on the tty.
+    "$@" < "$stdinfifo" > >(tee -a "$logfile") 2>&1 &
+    child=$!
+    echo "$gen $child" > "$genfile"
+    echo "[supervise] $name pid=$child (gen $gen) - 'svc restart $name' to restart" >&2
+  fi
 
   set +e; wait "$child"; rc=$?; set -e   # returns immediately when a trap fires
 
   if [ "$restart" = 1 ]; then
     drain_group
+    child=""; suspend=0    # respawn; clear any stray suspend (a HUP+USR1 race could
+                           # leave suspend=1, which would self-suspend the new child)
     clear_ports force      # clean absence->presence edge for the new instance
     echo "[supervise] restarting $name..." >&2
     trap on_hup HUP        # re-arm for the next restart
     continue
   fi
 
+  if [ "$suspend" = 1 ]; then
+    # Clean drain (TERM + wait for shutdown hooks, KILL only after ~10s) so the
+    # JVM actually exits and frees its RAM, then HOLD until resume. child="" makes
+    # a subsequent Ctrl-C (on_stop -> drain_group) a safe no-op.
+    drain_group
+    child=""
+    clear_ports force
+    # If a resume (USR2) raced in during the drain, suspend is already 0 - skip the
+    # marker/hold and just respawn, so we never flash a marker svc could misread.
+    if [ "$suspend" = 1 ]; then
+      : > "$suspendfile"                            # state marker for `svc status`
+      echo "[supervise] $name suspended; 'svc resume $name' to respawn." >&2
+      while [ "$suspend" = 1 ]; do sleep 5 & wait $! 2>/dev/null || true; done  # signal-interruptible hold, ~0 CPU
+      rm -f "$suspendfile"
+    fi
+    trap on_hup HUP; trap on_suspend USR1           # re-arm (on_suspend had masked HUP)
+    continue                                        # child="" -> loop top respawns
+  fi
+
+  # A signal that did NOT kill the child (e.g. a stray/double USR2 while not
+  # suspended) interrupts wait with the child still ALIVE and matches neither
+  # branch above. Don't tear down a healthy service - re-wait on the same child
+  # (child is still set, so the loop top won't spawn a second one).
+  if kill -0 "$child" 2>/dev/null; then continue; fi
+
   drain_group   # child exited on its own; make sure the whole group is reaped
 
   if [ "$keep" = 1 ]; then
+    child=""
     echo "[supervise] $name exited (rc=$rc); respawning (--keep)..." >&2
     continue
   fi
