@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""bt-battery — report Bluetooth peripheral battery levels.
+
+Battery % comes from ioreg (the source of truth for what is present and its
+charge). Friendly names and device types come from system_profiler, read from
+BOTH its connected and not-connected buckets — Apple Magic peripherals often sit
+in "not connected" even while ioreg reports them live, so joining on only the
+connected bucket silently loses them. The two sources are joined on the
+normalized Bluetooth address.
+
+Usage:
+    bt-battery           human-readable table
+    bt-battery --json    compact JSON array: [{"name","type","address","percent"}]
+
+Stdlib only, on purpose: this runs under Hammerspoon's hs.task, where
+#!/usr/bin/env python3 resolves to /usr/bin/python3 (Command Line Tools) on the
+minimal launchd PATH. A third-party import would break there but not in a shell.
+"""
+import argparse
+import json
+import re
+import subprocess
+
+IOREG = "/usr/sbin/ioreg"
+SYSTEM_PROFILER = "/usr/sbin/system_profiler"
+
+
+def _run(cmd):
+    """Run a command, returning stdout text, or '' on any failure."""
+    try:
+        return subprocess.run(
+            cmd, capture_output=True, text=True, timeout=15, check=False
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def _norm_addr(addr):
+    """Normalize a Bluetooth address to lowercase hex with no separators."""
+    if not addr:
+        return ""
+    return re.sub(r"[^0-9a-f]", "", addr.lower())
+
+
+def read_ioreg():
+    """Battery-reporting HID nodes as [{addr, product, percent}]."""
+    text = _run([IOREG, "-c", "AppleDeviceManagementHIDEventService",
+                 "-r", "-l", "-d", "1"])
+    devices = []
+    # Each device node begins with a '+-o' tree line; -d 1 keeps them flat.
+    # [ \t]* (not \s*) so a match can't span newlines — an empty "Product" =
+    # would otherwise grab the quoted field NAME on the following line.
+    for block in re.split(r"^\+-o ", text, flags=re.MULTILINE)[1:]:
+        m = re.search(r'"BatteryPercent"[ \t]*=[ \t]*(\d+)', block)
+        if not m:
+            continue
+        percent = int(m.group(1))
+
+        addr = ""
+        ma = re.search(r'"DeviceAddress"[ \t]*=[ \t]*"([^"]+)"', block)
+        if ma:
+            addr = _norm_addr(ma.group(1))
+        if not addr:
+            mb = re.search(r'"BD_ADDR"[ \t]*=[ \t]*<([0-9a-fA-F]+)>', block)
+            if mb:
+                addr = _norm_addr(mb.group(1))
+        if not addr:
+            continue  # no usable join key; skip
+
+        product = ""
+        mp = re.search(r'"Product"[ \t]*=[ \t]*"([^"]*)"', block)
+        if mp:
+            product = mp.group(1).strip()
+
+        devices.append({"addr": addr, "product": product, "percent": percent})
+    return devices
+
+
+def read_sp_map():
+    """{normAddr: {name, type}} from both system_profiler device buckets."""
+    text = _run([SYSTEM_PROFILER, "-json", "SPBluetoothDataType"])
+    result = {}
+    try:
+        data = json.loads(text)
+    except (ValueError, TypeError):
+        return result
+    if not isinstance(data, dict):
+        return result
+    for controller in data.get("SPBluetoothDataType", []):
+        if not isinstance(controller, dict):
+            continue
+        for bucket in ("device_connected", "device_not_connected"):
+            for entry in controller.get(bucket) or []:
+                if not isinstance(entry, dict):
+                    continue
+                for name, info in entry.items():
+                    if not isinstance(info, dict):
+                        continue
+                    addr = _norm_addr(info.get("device_address") or "")
+                    if not addr:
+                        continue
+                    result[addr] = {
+                        "name": name,
+                        "type": info.get("device_minorType"),
+                    }
+    return result
+
+
+def classify(product, sp_type):
+    """Device type: prefer SP minorType, fall back to keywords in the product."""
+    if sp_type:
+        return sp_type
+    blob = (product or "").lower()
+    for kw, label in (("mouse", "Mouse"), ("keyboard", "Keyboard"),
+                      ("trackpad", "Trackpad")):
+        if kw in blob:
+            return label
+    return "Unknown"
+
+
+def collect():
+    sp = read_sp_map()
+    out = []
+    for dev in read_ioreg():
+        meta = sp.get(dev["addr"], {})
+        out.append({
+            "name": dev["product"] or meta.get("name") or dev["addr"],
+            "type": classify(dev["product"], meta.get("type")),
+            "address": dev["addr"],
+            "percent": dev["percent"],
+        })
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="Report Bluetooth peripheral battery levels.")
+    ap.add_argument("--json", action="store_true", help="emit JSON")
+    args = ap.parse_args()
+
+    devices = collect()
+    if args.json:
+        print(json.dumps(devices, separators=(",", ":")))
+        return
+    if not devices:
+        print("No battery-reporting Bluetooth devices found.")
+        return
+    width = max(len(d["type"]) for d in devices)
+    for d in devices:
+        print(f"{d['type']:<{width}}  {d['percent']:>3}%  {d['name']}")
+
+
+if __name__ == "__main__":
+    main()

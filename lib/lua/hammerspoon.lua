@@ -167,6 +167,10 @@ local cursor = engage("seeds.cursor", {
   strokeColor = {red = 0.7, green = 0.3, blue = 1, alpha = 0.95},
 })
 
+local battery = engage("seeds.battery", {
+  -- defaults are fine; override here if desired, e.g. tiers / pollInterval
+})
+
 local _engageElapsed = (hs.timer.absoluteTime() - _engageStart) / 1e6
 table.insert(_G._profile, string.format("  seeds: %.1fms", _engageElapsed))
 
@@ -194,6 +198,7 @@ if emoji then seeds.emoji = emoji end
 if clipboard then seeds.clipboard = clipboard end
 if cmus then seeds.cmus = cmus end
 if cursor then seeds.cursor = cursor end
+if battery then seeds.battery = battery end
 
 local hs_global_modifier = {"cmd", "ctrl"}
 
@@ -243,6 +248,7 @@ local function softReload()
         "seeds.emoji",
         "seeds.clipboard",
         "seeds.cursor",
+        "seeds.battery",
     }
 
     for _, modulePath in ipairs(seedModules) do
