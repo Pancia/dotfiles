@@ -64,10 +64,14 @@ enum Palette {
     static let bannerBG   = NSColor(calibratedRed: 0.20, green: 0.62, blue: 0.30, alpha: 1.0)
     static let bannerFG   = NSColor.white
     static let errorFG    = NSColor(calibratedRed: 0.95, green: 0.45, blue: 0.40, alpha: 1.0)
+    static let amber      = NSColor(calibratedRed: 0.95, green: 0.75, blue: 0.30, alpha: 1.0)
+    static let separator  = NSColor(calibratedWhite: 0.22, alpha: 1.0)
 }
 
 let monoFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
 let monoBold = NSFont.monospacedSystemFont(ofSize: 13, weight: .semibold)
+let statusFont = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+let statusFontBold = NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold)
 
 // MARK: - ANSI parsing + line styling
 
@@ -82,6 +86,10 @@ func stripANSI(_ s: String) -> String {
 // active. Anchored to the known source literals so an in-text colon (e.g.
 // "Note: ...") in single-source output isn't mistaken for a source label.
 let transcriptRegex = try! NSRegularExpression(pattern: "^\\[(\\d{2}:\\d{2}:\\d{2})\\] (?:(Microphone|Computer): )?(.*)$")
+
+// [mic] [####----] peak=0.045 avg=0.012  <state>  chunks_sent=3  — the periodic
+// signal meter (bin/live-transcribe _meter_loop). Captured: bar fill, state, count.
+let meterRegex = try! NSRegularExpression(pattern: "^\\[mic\\] \\[([#-]*)\\] peak=[0-9.]+ avg=[0-9.]+\\s+(.+?)\\s+chunks_sent=(\\d+)$")
 
 struct StyledLine {
     let attr: NSAttributedString
@@ -132,14 +140,16 @@ func styleLine(_ raw: String) -> StyledLine {
 // How the transcript reaches the clipboard on stop. `.full` copies the whole
 // transcript (default, Alt+Space); `.reference` copies a short `read <path>`
 // line (Cmd+Alt+Space → live-transcribe-launch --ref → SIGUSR1) for when the
-// transcript would overflow a chat message limit.
-enum CopyMode { case full, reference }
+// transcript would overflow a chat message limit; `.none` is a cancel (Escape /
+// close) — stop recording, keep the saved files, leave the clipboard untouched.
+enum CopyMode { case full, reference, none }
 
 // MARK: - App delegate
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate {
     private var panel: NSPanel!
     private var textView: NSTextView!
+    private var statusField: NSTextField!   // bottom footer: live mic meter
     private var statusItem: NSStatusItem!
 
     private var engine: Process?
@@ -197,7 +207,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         panel.backgroundColor = Palette.background
 
         let content = panel.contentView!
-        let scroll = NSScrollView(frame: content.bounds)
+        let barH: CGFloat = 28   // status footer strip at the bottom
+
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: barH, width: content.bounds.width, height: content.bounds.height - barH))
         scroll.autoresizingMask = [.width, .height]
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = true
@@ -219,6 +231,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         scroll.documentView = tv
         content.addSubview(scroll)
         textView = tv
+
+        // Status footer: the periodic mic meter is routed here (updateStatus)
+        // and updates in place, instead of scrolling with the transcript.
+        let sep = NSView(frame: NSRect(x: 0, y: barH - 1, width: content.bounds.width, height: 1))
+        sep.wantsLayer = true
+        sep.layer?.backgroundColor = Palette.separator.cgColor
+        sep.autoresizingMask = [.width, .maxYMargin]
+        content.addSubview(sep)
+
+        let sf = NSTextField(frame: NSRect(x: 8, y: (barH - 18) / 2, width: content.bounds.width - 16, height: 18))
+        sf.isEditable = false
+        sf.isSelectable = false
+        sf.isBordered = false
+        sf.drawsBackground = false
+        sf.font = statusFont
+        sf.textColor = Palette.dim   // covers the initial text + any parse-miss fallback
+        sf.usesSingleLineMode = true
+        sf.lineBreakMode = .byTruncatingTail
+        sf.stringValue = "🎙 waiting for audio…"
+        sf.autoresizingMask = [.width, .maxYMargin]
+        content.addSubview(sf)
+        statusField = sf
 
         // Remember the last position/size across launches. Once the autosave
         // name is set, AppKit persists the frame (keyed to the bundle id) on every
@@ -312,10 +346,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     @objc private func quit() { NSApp.terminate(nil) }
 
-    // Closing the panel only hides it; the menu-bar item keeps the session alive.
+    // Closing the window — the red button OR Escape (both route here) — cancels
+    // the session: stop recording, keep the saved .txt/.m4a, but don't copy
+    // anything to the clipboard. (Use the menu's "Hide Panel" to hide while
+    // recording continues.)
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        panel.orderOut(nil)
+        cancelSession()
         return false
+    }
+
+    @objc private func cancelSession() {
+        copyMode = .none
+        NSApp.terminate(nil)
     }
 
     // MARK: Engine
@@ -373,12 +415,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     private func handle(_ raw: String) {
+        // Route the periodic mic meter to the status footer instead of the scroll.
+        // (Warnings "[mic] ⚠ …" don't start with "[mic] [", so they fall through
+        // and persist in the transcript scroll.)
+        let plain = stripANSI(raw)
+        if plain.hasPrefix("[mic] [") {
+            updateStatus(plain)
+            return
+        }
         if transcriptPath == nil, let r = raw.range(of: "Writing transcript to: ") {
             transcriptPath = String(raw[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
         }
         let styled = styleLine(raw)
         if styled.isTranscript { accumulated.append(styled.plain) }
         append(styled.attr)
+    }
+
+    // Render the periodic mic meter into the bottom footer (color-coded bar +
+    // state), replacing the previous value. Parse-miss → show the line verbatim
+    // (dim, via the cell's textColor set in buildPanel).
+    private func updateStatus(_ plain: String) {
+        let range = NSRange(plain.startIndex..., in: plain)
+        guard let m = meterRegex.firstMatch(in: plain, range: range),
+              let fillR = Range(m.range(at: 1), in: plain),
+              let stateR = Range(m.range(at: 2), in: plain),
+              let chunkR = Range(m.range(at: 3), in: plain) else {
+            statusField.stringValue = plain
+            return
+        }
+        let cells = plain[fillR].map { $0 == "#" ? Character("█") : Character("░") }
+        let bar = "▐" + String(cells) + "▌"
+        let stateText = String(plain[stateR])
+        let chunks = String(plain[chunkR])
+
+        // Check "sound" before "speech": the state "sound, no speech" contains
+        // the substring "speech", so a speech-first test would misclassify it.
+        let word: String
+        let color: NSColor
+        if stateText.contains("SILENT") {
+            word = "silent"; color = Palette.dim
+        } else if stateText.contains("sound") {
+            word = "sound"; color = Palette.amber
+        } else {
+            word = "speech"; color = Palette.compSource
+        }
+
+        let s = NSMutableAttributedString()
+        s.append(NSAttributedString(string: "🎙 ", attributes: [.font: statusFont]))
+        s.append(NSAttributedString(string: bar, attributes: [.font: statusFont, .foregroundColor: color]))
+        s.append(NSAttributedString(string: "  \(word)", attributes: [.font: statusFontBold, .foregroundColor: color]))
+        s.append(NSAttributedString(string: "  · sent \(chunks)", attributes: [.font: statusFont, .foregroundColor: Palette.dim]))
+        statusField.attributedStringValue = s
     }
 
     private func appendError(_ msg: String) {
@@ -399,6 +486,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private func engineEnded() {
         enginePipe?.fileHandleForReading.readabilityHandler = nil
         updateIcon(running: false)
+        statusField?.stringValue = "🎙 stopped"   // best-effort; runloop may not repaint before quit
         if terminating { return }
         terminating = true
         copyTranscriptToClipboard()
@@ -406,7 +494,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     private func installSignalHandlers() {
-        // Full-copy terminators (Alt+Space → launcher SIGTERM; ⌃C).
+        // Hard-stop terminators (⌃C, external SIGTERM — e.g. logout/pkill).
         for sig in [SIGTERM, SIGINT] {
             signal(sig, SIG_IGN)
             let src = DispatchSource.makeSignalSource(signal: sig, queue: .main)
@@ -450,10 +538,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     // engine died before emitting one, fall through to a full copy rather than
     // clobbering the clipboard with a bare "read ".
     private func copyTranscriptToClipboard() {
-        if copyMode == .reference, transcriptPath != nil {
+        switch copyMode {
+        case .none:
+            return                                   // cancelled — leave the clipboard alone
+        case .reference where transcriptPath != nil:
             copyReferenceToPasteboard()
-        } else {
-            copyFullToPasteboard()
+        default:
+            copyFullToPasteboard()                   // full, or reference with unknown path
         }
     }
 
