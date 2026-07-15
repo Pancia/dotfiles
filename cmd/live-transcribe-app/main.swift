@@ -17,6 +17,7 @@
 // Build: see Makefile (plain swiftc → .app bundle, codesigned).
 
 import AppKit
+import CoreGraphics   // CGEvent + CGPreflight/RequestPostEventAccess (auto-linked via AppKit)
 import Foundation
 
 // MARK: - Config / args
@@ -68,10 +69,10 @@ enum Palette {
     static let separator  = NSColor(calibratedWhite: 0.22, alpha: 1.0)
 }
 
-let monoFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-let monoBold = NSFont.monospacedSystemFont(ofSize: 13, weight: .semibold)
-let statusFont = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-let statusFontBold = NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold)
+let monoFont = NSFont.monospacedSystemFont(ofSize: 22, weight: .regular)
+let monoBold = NSFont.monospacedSystemFont(ofSize: 22, weight: .semibold)
+let statusFont = NSFont.monospacedSystemFont(ofSize: 16, weight: .regular)
+let statusFontBold = NSFont.monospacedSystemFont(ofSize: 16, weight: .semibold)
 
 // MARK: - ANSI parsing + line styling
 
@@ -91,13 +92,26 @@ let transcriptRegex = try! NSRegularExpression(pattern: "^\\[(\\d{2}:\\d{2}:\\d{
 // signal meter (bin/live-transcribe _meter_loop). Captured: bar fill, state, count.
 let meterRegex = try! NSRegularExpression(pattern: "^\\[mic\\] \\[([#-]*)\\] peak=[0-9.]+ avg=[0-9.]+\\s+(.+?)\\s+chunks_sent=(\\d+)$")
 
+// Strips a leading `[HH:MM:SS] ` from each line, preserving any `Microphone: `/
+// `Computer: ` label + text. Idempotent (already-clean lines have nothing to match),
+// so it's safe to run on both the file and the in-memory `accumulated` fallback.
+let tsPrefixRegex = try! NSRegularExpression(pattern: "^\\[\\d{2}:\\d{2}:\\d{2}\\] ")
+
+func stripTimestamps(_ text: String) -> String {
+    text.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
+        let s = String(line)
+        let r = NSRange(s.startIndex..., in: s)
+        return tsPrefixRegex.stringByReplacingMatches(in: s, range: r, withTemplate: "")
+    }.joined(separator: "\n")
+}
+
 struct StyledLine {
     let attr: NSAttributedString
     let plain: String
     let isTranscript: Bool
 }
 
-func styleLine(_ raw: String) -> StyledLine {
+func styleLine(_ raw: String, showTimestamps: Bool) -> StyledLine {
     // Green banner — detected from the RAW escape before stripping.
     if raw.contains("\u{1B}[42m") {
         let text = stripANSI(raw).trimmingCharacters(in: .whitespaces)
@@ -120,7 +134,11 @@ func styleLine(_ raw: String) -> StyledLine {
         let ts = String(plain[tsR])
         let txt = String(plain[txtR])
         let a = NSMutableAttributedString()
-        a.append(NSAttributedString(string: "[\(ts)] ", attributes: [.font: monoFont, .foregroundColor: Palette.timestamp]))
+        // The [HH:MM:SS] span is display-only and suppressed when the Timestamps
+        // checkbox is off. `plain` keeps the timestamp so `accumulated` stays canonical.
+        if showTimestamps {
+            a.append(NSAttributedString(string: "[\(ts)] ", attributes: [.font: monoFont, .foregroundColor: Palette.timestamp]))
+        }
         // Source span only when the engine emitted one (multi-source sessions).
         if let srcR = Range(m.range(at: 2), in: plain) {
             let src = String(plain[srcR])
@@ -134,15 +152,6 @@ func styleLine(_ raw: String) -> StyledLine {
     let a = NSAttributedString(string: plain, attributes: [.font: monoFont, .foregroundColor: Palette.dim])
     return StyledLine(attr: a, plain: plain, isTranscript: false)
 }
-
-// MARK: - Copy mode
-
-// How the transcript reaches the clipboard on stop. `.full` copies the whole
-// transcript (default, Alt+Space); `.reference` copies a short `read <path>`
-// line (Cmd+Alt+Space → live-transcribe-launch --ref → SIGUSR1) for when the
-// transcript would overflow a chat message limit; `.none` is a cancel (Escape /
-// close) — stop recording, keep the saved files, leave the clipboard untouched.
-enum CopyMode { case full, reference, none }
 
 // MARK: - App delegate
 
@@ -159,9 +168,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     private var transcriptPath: String?
     private var accumulated: [String] = []
-    private var terminating = false
+    // Every raw line that reached the transcript scroll (meter lines excluded), in
+    // order — replayed by rerenderTranscript() when the Timestamps checkbox toggles.
+    private var displayedRawLines: [String] = []
     private var signalSources: [DispatchSourceSignal] = []
-    private var copyMode: CopyMode = .full
+
+    // Stop/copy state (was `enum CopyMode`). `cancelled` = Escape/Cancel → no copy;
+    // `forceReference` = Cmd+Alt+Space (SIGUSR1) → force `read <path>` regardless of
+    // the checkbox. `pasteEligible` = an explicit user stop (Complete/Alt+Space/
+    // Cmd+Alt+Space) — the only routes allowed to auto-paste.
+    private var cancelled = false
+    private var forceReference = false
+    private var pasteEligible = false
+    private var finishing = false          // guards the shutdown funnel (first caller wins)
+    // True once the transcript has been placed on the clipboard this session. Guards the
+    // applicationWillTerminate safety net so it copies exactly once — including the race
+    // where a hard terminate (logout/Force-Quit) fires DURING finish()'s off-main drain,
+    // before afterEngineStopped() got to copy (there `finishing` is already true).
+    private var clipboardWritten = false
+
+    // Cached hot-path pref (avoid a UserDefaults hit per rendered line).
+    private var showTimestamps = true
+    // The app to reactivate + paste into on an auto-paste stop. Seeded at launch,
+    // kept current by the didActivateApplication observer.
+    private var targetApp: NSRunningApplication?
+
+    // In-window controls.
+    private var tsCheck: NSButton!
+    private var refCheck: NSButton!
+    private var pasteCheck: NSButton!
+    private var completeButton: NSButton!
+    private var cancelButton: NSButton!
 
     // Menu items whose actions need a known transcript path; disabled until then.
     private var copyTranscriptItem: NSMenuItem!
@@ -169,6 +206,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var revealItem: NSMenuItem!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Non-persisted fallback layer — makes the checkbox defaults (Timestamps ON,
+        // the other two OFF) correct on a fresh machine without a first-launch write.
+        UserDefaults.standard.register(defaults: [
+            "pref.timestamps": true,
+            "pref.copyAsReference": false,
+            "pref.autoPaste": false,
+        ])
+
         // Single-instance: a second launch just reveals the first.
         if let bid = Bundle.main.bundleIdentifier {
             let others = NSRunningApplication.runningApplications(withBundleIdentifier: bid)
@@ -180,6 +225,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             }
         }
 
+        // Track the app to paste into on an auto-paste stop. Subscribe FIRST (on the
+        // WORKSPACE center — the default NotificationCenter never gets this), then seed
+        // from the current frontmost (self-filtered) BEFORE our own NSApp.activate below.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(appActivated(_:)),
+            name: NSWorkspace.didActivateApplicationNotification, object: nil)
+        if let seed = NSWorkspace.shared.frontmostApplication, seed != .current {
+            targetApp = seed
+        }
+
         buildPanel()
         buildStatusItem()
         installSignalHandlers()
@@ -189,10 +244,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         panel.makeKeyAndOrderFront(nil)
     }
 
+    // Keep `targetApp` on the latest non-self foreground app so auto-paste follows
+    // the user if they switch apps mid-session. Ignore our own activations.
+    @objc private func appActivated(_ note: Notification) {
+        if let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+           app != .current {
+            targetApp = app
+        }
+    }
+
     // MARK: UI
 
     private func buildPanel() {
-        let w: CGFloat = 460, h: CGFloat = 520
+        let w: CGFloat = 660, h: CGFloat = 740
         panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: w, height: h),
             styleMask: [.titled, .closable, .resizable, .utilityWindow],
@@ -205,11 +269,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.delegate = self
         panel.backgroundColor = Palette.background
+        // Pin to dark so checkbox labels/checkmarks/scroller render light-on-dark
+        // against the near-black background even when the system is in Light mode.
+        panel.appearance = NSAppearance(named: .darkAqua)
 
         let content = panel.contentView!
-        let barH: CGFloat = 28   // status footer strip at the bottom
+        let barH: CGFloat = 38   // mic-meter footer strip at the bottom
+        let topH: CGFloat = 40   // control bar (checkboxes + buttons) at the top
+        panel.contentMinSize = NSSize(width: 520, height: topH + barH + 200)
 
-        let scroll = NSScrollView(frame: NSRect(x: 0, y: barH, width: content.bounds.width, height: content.bounds.height - barH))
+        // Middle: transcript scroll, inset by the top control bar AND the bottom footer.
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: barH, width: content.bounds.width, height: content.bounds.height - barH - topH))
         scroll.autoresizingMask = [.width, .height]
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = true
@@ -240,7 +310,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         sep.autoresizingMask = [.width, .maxYMargin]
         content.addSubview(sep)
 
-        let sf = NSTextField(frame: NSRect(x: 8, y: (barH - 18) / 2, width: content.bounds.width - 16, height: 18))
+        let sfH: CGFloat = 24
+        let sf = NSTextField(frame: NSRect(x: 8, y: (barH - sfH) / 2, width: content.bounds.width - 16, height: sfH))
         sf.isEditable = false
         sf.isSelectable = false
         sf.isBordered = false
@@ -254,11 +325,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         content.addSubview(sf)
         statusField = sf
 
+        // Top control bar: 3 checkboxes (left) + Cancel/Complete (right).
+        buildControlBar(in: content, topH: topH)
+
         // Remember the last position/size across launches. Once the autosave
         // name is set, AppKit persists the frame (keyed to the bundle id) on every
         // move/resize; setFrameUsingName returns false when nothing is saved yet.
-        panel.setFrameAutosaveName("LiveTranscribePanel")
-        let restored = panel.setFrameUsingName("LiveTranscribePanel")
+        // V2: the old key's saved ~460×520 frame is unusable at 22pt + a top bar, so
+        // bump the key to reset everyone to the new default once (then re-persist).
+        panel.setFrameAutosaveName("LiveTranscribePanelV2")
+        let restored = panel.setFrameUsingName("LiveTranscribePanelV2")
         let onScreen = NSScreen.screens.contains { $0.frame.intersects(panel.frame) }
         if !restored || !onScreen {
             // Default: top-right of the main screen. Also the fallback when the
@@ -269,6 +345,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             }
         }
     }
+
+    // Top strip: 3 checkboxes left, Cancel/Complete right. A programmatic NSStackView
+    // keeps translatesAutoresizingMask=true, so positioning it by frame + mask is legal
+    // while it lays out its ARRANGED subviews via constraints.
+    private func buildControlBar(in content: NSView, topH: CGFloat) {
+        let bar = NSStackView(frame: NSRect(x: 0, y: content.bounds.height - topH,
+                                            width: content.bounds.width, height: topH))
+        bar.autoresizingMask = [.width, .minYMargin]   // pinned to top, fixed height
+        bar.orientation = .horizontal
+        bar.alignment = .centerY
+        bar.distribution = .gravityAreas               // leading pinned left, trailing right
+        bar.spacing = 10
+        bar.edgeInsets = NSEdgeInsets(top: 4, left: 12, bottom: 4, right: 12)
+
+        func check(_ title: String, _ on: Bool, _ action: Selector) -> NSButton {
+            let b = NSButton(checkboxWithTitle: title, target: self, action: action)
+            b.font = NSFont.systemFont(ofSize: 13)     // NOT tiny .small next to 22pt transcript
+            b.state = on ? .on : .off
+            return b
+        }
+        let d = UserDefaults.standard
+        showTimestamps = d.bool(forKey: "pref.timestamps")
+        tsCheck    = check("Timestamps",             showTimestamps,                        #selector(toggleTimestamps(_:)))
+        refCheck   = check("Copy as file reference", d.bool(forKey: "pref.copyAsReference"), #selector(togglePrefRef(_:)))
+        pasteCheck = check("Auto-paste (⌘V)",        d.bool(forKey: "pref.autoPaste"),       #selector(togglePrefPaste(_:)))
+
+        completeButton = NSButton(title: "Complete", target: self, action: #selector(completeAction))
+        completeButton.bezelStyle = .rounded
+        completeButton.keyEquivalent = "\r"            // default button; Return = Complete
+        cancelButton = NSButton(title: "Cancel", target: self, action: #selector(cancelSession))
+        cancelButton.bezelStyle = .rounded
+
+        bar.addView(tsCheck, in: .leading)
+        bar.addView(refCheck, in: .leading)
+        bar.addView(pasteCheck, in: .leading)
+        bar.addView(cancelButton, in: .trailing)
+        bar.addView(completeButton, in: .trailing)     // Complete rightmost
+        content.addSubview(bar)
+
+        // Separator under the bar, mirroring the bottom footer's.
+        let topSep = NSView(frame: NSRect(x: 0, y: content.bounds.height - topH, width: content.bounds.width, height: 1))
+        topSep.wantsLayer = true
+        topSep.layer?.backgroundColor = Palette.separator.cgColor
+        topSep.autoresizingMask = [.width, .minYMargin]
+        content.addSubview(topSep)
+    }
+
+    private func setControlsEnabled(_ on: Bool) {
+        [tsCheck, refCheck, pasteCheck, completeButton, cancelButton].forEach { $0?.isEnabled = on }
+    }
+
+    @objc private func toggleTimestamps(_ s: NSButton) {
+        showTimestamps = (s.state == .on)
+        UserDefaults.standard.set(showTimestamps, forKey: "pref.timestamps")
+        rerenderTranscript()
+    }
+
+    @objc private func togglePrefRef(_ s: NSButton) {
+        UserDefaults.standard.set(s.state == .on, forKey: "pref.copyAsReference")
+    }
+
+    @objc private func togglePrefPaste(_ s: NSButton) {
+        let on = (s.state == .on)
+        UserDefaults.standard.set(on, forKey: "pref.autoPaste")
+        // Prompt for Accessibility now (app is active). The grant lands async and
+        // usually needs a relaunch, so triggering it here beats prompting mid-stop.
+        if on, !CGPreflightPostEventAccess() { _ = CGRequestPostEventAccess() }
+    }
+
+    @objc private func completeAction() { finish(cancelled: false, userInitiated: true) }
 
     private func buildStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -344,7 +490,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
 
-    @objc private func quit() { NSApp.terminate(nil) }
+    @objc private func quit() { finish(cancelled: false, userInitiated: false) }
 
     // Closing the window — the red button OR Escape (both route here) — cancels
     // the session: stop recording, keep the saved .txt/.m4a, but don't copy
@@ -355,10 +501,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         return false
     }
 
-    @objc private func cancelSession() {
-        copyMode = .none
-        NSApp.terminate(nil)
-    }
+    @objc private func cancelSession() { finish(cancelled: true, userInitiated: false) }
 
     // MARK: Engine
 
@@ -426,7 +569,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if transcriptPath == nil, let r = raw.range(of: "Writing transcript to: ") {
             transcriptPath = String(raw[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        let styled = styleLine(raw)
+        displayedRawLines.append(raw)   // replayed by rerenderTranscript() on a Timestamps toggle
+        let styled = styleLine(raw, showTimestamps: showTimestamps)
         if styled.isTranscript { accumulated.append(styled.plain) }
         append(styled.attr)
     }
@@ -480,46 +624,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         textView.scrollToEndOfDocument(nil)
     }
 
+    // Rebuild the whole scroll under the current `showTimestamps` — called when the
+    // Timestamps checkbox toggles. Replays every stored raw line (meter lines aren't
+    // stored; pre-engine appendError lines bypass handle() and are dropped on rebuild).
+    private func rerenderTranscript() {
+        guard let storage = textView.textStorage else { return }
+        storage.beginEditing()
+        storage.setAttributedString(NSAttributedString())
+        for raw in displayedRawLines {
+            let line = NSMutableAttributedString(attributedString: styleLine(raw, showTimestamps: showTimestamps).attr)
+            line.append(NSAttributedString(string: "\n"))   // matches append()'s per-line newline
+            storage.append(line)
+        }
+        storage.endEditing()
+        textView.scrollToEndOfDocument(nil)
+    }
+
     // MARK: Shutdown
 
-    // The engine exited on its own (self-stop / crash). Wrap up and close.
+    // The engine exited on its own (self-stop / crash). Copy per prefs, no paste.
+    // The `finishing` guard absorbs the race with a concurrent user stop.
     private func engineEnded() {
-        enginePipe?.fileHandleForReading.readabilityHandler = nil
-        updateIcon(running: false)
-        statusField?.stringValue = "🎙 stopped"   // best-effort; runloop may not repaint before quit
-        if terminating { return }
-        terminating = true
-        copyTranscriptToClipboard()
-        NSApp.terminate(nil)
+        finish(cancelled: false, userInitiated: false)
     }
 
     private func installSignalHandlers() {
-        // Hard-stop terminators (⌃C, external SIGTERM — e.g. logout/pkill).
-        for sig in [SIGTERM, SIGINT] {
-            signal(sig, SIG_IGN)
-            let src = DispatchSource.makeSignalSource(signal: sig, queue: .main)
-            src.setEventHandler { NSApp.terminate(nil) }
-            src.resume()
-            signalSources.append(src)
-        }
-        // SIGUSR1 = "stop and copy a `read <path>` reference instead of the full
-        // text" (Cmd+Alt+Space → live-transcribe-launch --ref). SIGUSR1's default
-        // disposition is *terminate*, so SIG_IGN MUST come first or the process
-        // dies before the handler sets copyMode.
+        // SIGTERM (launcher Alt+Space stop) = explicit user stop → copy per prefs + paste.
+        signal(SIGTERM, SIG_IGN)
+        let termSrc = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        termSrc.setEventHandler { [weak self] in self?.finish(cancelled: false, userInitiated: true) }
+        termSrc.resume()
+        signalSources.append(termSrc)
+
+        // SIGINT (⌃C / logout) = hard stop → copy per prefs, no paste.
+        signal(SIGINT, SIG_IGN)
+        let intSrc = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
+        intSrc.setEventHandler { [weak self] in self?.finish(cancelled: false, userInitiated: false) }
+        intSrc.resume()
+        signalSources.append(intSrc)
+
+        // SIGUSR1 (Cmd+Alt+Space → live-transcribe-launch --ref) = explicit user stop
+        // that forces a `read <path>` reference regardless of the checkbox. Its default
+        // disposition is *terminate*, so SIG_IGN MUST come first.
         signal(SIGUSR1, SIG_IGN)
         let refSrc = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
-        refSrc.setEventHandler { [weak self] in
-            self?.copyMode = .reference
-            NSApp.terminate(nil)
-        }
+        refSrc.setEventHandler { [weak self] in self?.finish(cancelled: false, userInitiated: true, forceReference: true) }
         refSrc.resume()
         signalSources.append(refSrc)
     }
 
-    // Runs for every quit route (menu, SIGTERM from the launcher, engine exit).
-    // Guarantees the child dies — no orphan engine — and the transcript is copied.
+    // Safety net for hard-kill/logout routes that bypass finish() (which normally does
+    // all of this asynchronously). Guarantees no orphan engine + a best-effort copy;
+    // never pastes — there's no runloop left once this returns.
     func applicationWillTerminate(_ notification: Notification) {
-        terminating = true
         enginePipe?.fileHandleForReading.readabilityHandler = nil
         if let p = engine, p.isRunning {
             kill(p.processIdentifier, SIGINT)
@@ -531,24 +688,119 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             while p.isRunning && Date() < deadline { usleep(100_000) }
             if p.isRunning { kill(p.processIdentifier, SIGKILL) }
         }
-        copyTranscriptToClipboard()
-    }
-
-    // Called on every stop route. Reference mode requires a known path; if the
-    // engine died before emitting one, fall through to a full copy rather than
-    // clobbering the clipboard with a bare "read ".
-    private func copyTranscriptToClipboard() {
-        switch copyMode {
-        case .none:
-            return                                   // cancelled — leave the clipboard alone
-        case .reference where transcriptPath != nil:
-            copyReferenceToPasteboard()
-        default:
-            copyFullToPasteboard()                   // full, or reference with unknown path
+        // Copy iff we haven't already (covers a hard terminate that raced finish()'s
+        // async drain). `cancelled` still means "leave the clipboard alone".
+        if !clipboardWritten, !cancelled {
+            normalizeSavedTranscript()
+            clipboardWritten = deliver()
         }
     }
 
-    private func copyFullToPasteboard() {
+    // MARK: Stop funnel
+
+    // Single async shutdown path for every stop route; first caller wins (sets the
+    // intent). The ≤10s engine-flush wait runs OFF the main thread so the runloop stays
+    // live for the async auto-paste; we only terminate at the very end.
+    private func finish(cancelled: Bool, userInitiated: Bool, forceReference: Bool = false) {
+        if finishing { return }
+        finishing = true
+        self.cancelled = cancelled
+        self.pasteEligible = userInitiated
+        self.forceReference = forceReference
+        updateIcon(running: false)
+        statusField?.stringValue = "🎙 stopped"
+        setControlsEnabled(false)
+
+        let p = engine
+        DispatchQueue.global(qos: .userInitiated).async {
+            if let p = p, p.isRunning {
+                kill(p.processIdentifier, SIGINT)
+                let deadline = Date().addingTimeInterval(10.0)
+                while p.isRunning && Date() < deadline { usleep(100_000) }
+                if p.isRunning { kill(p.processIdentifier, SIGKILL) }
+            }
+            DispatchQueue.main.async { [weak self] in self?.afterEngineStopped() }
+        }
+    }
+
+    // Engine is dead and the .txt handle is released — safe to normalize the file,
+    // copy, and (if eligible) auto-paste.
+    private func afterEngineStopped() {
+        enginePipe?.fileHandleForReading.readabilityHandler = nil
+        normalizeSavedTranscript()                 // §5c: rewrite .txt clean if Timestamps off
+        let didWrite = deliver()
+        clipboardWritten = didWrite
+
+        // Auto-paste ONLY when the copy actually wrote — else ⌘V would paste a STALE
+        // clipboard into a live field. Also gated on: an explicit user stop, not
+        // cancelled, the checkbox, live permission, and a valid non-self target app.
+        guard pasteEligible, !cancelled, didWrite,
+              UserDefaults.standard.bool(forKey: "pref.autoPaste"),
+              CGPreflightPostEventAccess(),
+              let target = targetApp, !target.isTerminated, target != .current
+        else { terminateNow(); return }
+
+        if #available(macOS 14.0, *) { NSApp.yieldActivation(to: target) }
+        target.activate(options: [.activateIgnoringOtherApps])
+        pollFrontmost(target, attempts: 20)        // runloop-based, ~1s cap
+    }
+
+    // Wait — via the runloop, NOT a blocking sleep — until the target is actually
+    // frontmost, then post ⌘V. On timeout, do NOT blind-fire: leave the text on the
+    // clipboard so the keystroke can't land in our own view or the wrong app.
+    private func pollFrontmost(_ app: NSRunningApplication, attempts: Int) {
+        if NSWorkspace.shared.frontmostApplication == app {
+            postCommandV()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { [weak self] in self?.terminateNow() }
+            return
+        }
+        if attempts <= 0 { terminateNow(); return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.pollFrontmost(app, attempts: attempts - 1)
+        }
+    }
+
+    private func postCommandV() {
+        let src = CGEventSource(stateID: .combinedSessionState)
+        let v: CGKeyCode = 0x09   // kVK_ANSI_V (physical 'v'; assumes a QWERTY/ANSI layout)
+        let down = CGEvent(keyboardEventSource: src, virtualKey: v, keyDown: true)
+        let up   = CGEvent(keyboardEventSource: src, virtualKey: v, keyDown: false)
+        down?.flags = .maskCommand
+        up?.flags = .maskCommand   // set on both — some apps check the modifier on key-up
+        down?.post(tap: .cgSessionEventTap)
+        up?.post(tap: .cgSessionEventTap)
+    }
+
+    private func terminateNow() {
+        NSApp.terminate(nil)
+    }
+
+    // Rewrite the saved .txt without timestamps when the checkbox is off. Only safe
+    // after the engine exits (handle released), so it runs from afterEngineStopped.
+    // Cancel leaves the archive exactly as the engine wrote it. Atomic + guarded so a
+    // failed read or empty result never clobbers the file.
+    private func normalizeSavedTranscript() {
+        guard !cancelled, !showTimestamps, let p = transcriptPath,
+              let original = try? String(contentsOfFile: p, encoding: .utf8),
+              !original.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let stripped = stripTimestamps(original)
+        guard stripped != original,
+              !stripped.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        try? stripped.write(toFile: p, atomically: true, encoding: .utf8)
+    }
+
+    // Puts the transcript on the clipboard per the checkboxes; returns whether it
+    // actually wrote. Reference (Cmd+Alt+Space or the checkbox) needs a known path.
+    @discardableResult
+    private func deliver() -> Bool {
+        if cancelled { return false }   // Escape/Cancel/close: leave the clipboard alone
+        let useRef = forceReference || UserDefaults.standard.bool(forKey: "pref.copyAsReference")
+        if useRef, transcriptPath != nil { return copyReferenceToPasteboard() }
+        return copyFullToPasteboard()   // full, or reference with an unknown path
+    }
+
+    @discardableResult
+    private func copyFullToPasteboard() -> Bool {
         var text: String?
         if let p = transcriptPath, let s = try? String(contentsOfFile: p, encoding: .utf8),
            !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -557,20 +809,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if text == nil, !accumulated.isEmpty {
             text = accumulated.joined(separator: "\n") + "\n"
         }
-        guard let out = text, !out.isEmpty else { return }   // never clobber with empty
+        guard var out = text, !out.isEmpty else { return false }   // never clobber with empty
+        if !showTimestamps { out = stripTimestamps(out) }          // strips file OR accumulated
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(out, forType: .string)
+        return true
     }
 
     // Short cross-device reference for when the full transcript overflows a chat
     // limit — ~/Cloud/... resolves on other devices since the folder syncs.
-    private func copyReferenceToPasteboard() {
-        guard let p = transcriptPath else { return }
+    @discardableResult
+    private func copyReferenceToPasteboard() -> Bool {
+        guard let p = transcriptPath else { return false }
         let ref = "read " + (p as NSString).abbreviatingWithTildeInPath
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(ref, forType: .string)
+        return true
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

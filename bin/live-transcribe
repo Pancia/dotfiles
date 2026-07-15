@@ -33,7 +33,8 @@ SILENCE_DURATION = 1.0  # seconds of silence before chunking
 MIN_CHUNK_DURATION = 2.0  # minimum chunk duration in seconds
 MAX_CHUNK_DURATION = 10.0  # maximum chunk duration in seconds
 NOISE_GATE = 0.01  # frames with peak below this are treated as silence
-METER_INTERVAL = 3  # seconds between mic signal-level reports
+METER_INTERVAL = 1  # seconds between mic signal-level reports
+SILENT_WARN_AFTER = 9  # consecutive gated reports (~9s) before the "no signal" warning
 
 class LiveTranscriber:
     def __init__(self, model_size="base", output_dir=None, mic_device=None, computer_device=None,
@@ -621,8 +622,8 @@ class LiveTranscriber:
 
             if gated:
                 self._silent_reports += 1
-                if self._silent_reports == 3:
-                    print(f"[mic] ⚠ no signal for ~{3 * METER_INTERVAL}s — the mic may be muted, "
+                if self._silent_reports == SILENT_WARN_AFTER:
+                    print(f"[mic] ⚠ no signal for ~{SILENT_WARN_AFTER * METER_INTERVAL}s — the mic may be muted, "
                           "or this process lacks Microphone permission "
                           "(System Settings ▸ Privacy & Security ▸ Microphone).", file=sys.stderr)
             else:
