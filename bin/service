@@ -13,6 +13,102 @@ def log_for(name)
   "#{$log_dir}#{name}.log"
 end
 
+# Lines that are almost always noise in a polling-bot log (Telegram long-poll, etc.).
+# Hidden by `service log <name> --quiet`.
+LOG_NOISE = [
+  "HTTP Request: POST https://api.telegram.org",
+  "HTTP Request: GET https://api.telegram.org",
+  "getUpdates",
+].freeze
+
+# Pull the value out of trailing args for `--flag value` or `--flag=value`.
+# Accepts several aliases (first match wins). Returns nil if absent.
+def flag_val(args, *names)
+  names.each do |flag|
+    if (hit = args.find { |a| a.start_with?("#{flag}=") })
+      return hit.split("=", 2)[1]
+    end
+    idx = args.index(flag)
+    return args[idx + 1] if idx && args[idx + 1]
+  end
+  nil
+end
+
+# ---------------------------------------------------------------------------
+# Log viewing (shared by `service log` and `service restart --log`)
+# ---------------------------------------------------------------------------
+
+LOG_FLAG_NOTES = <<~NOTES
+  Log view notes:
+      Flags work before or after <name> (`log -q inari` == `log inari -q`).
+      TTY, no filters : live follow in `less +GF` (q or Ctrl-C to quit).
+      TTY, filtered   : live follow through `grep --line-buffered`.
+      Not a TTY       : always a snapshot, as if -p were given (agent/pipe safe).
+      Snapshots filter the whole file first, so --lines counts *matching* lines.
+      --no-follow / --tail N are accepted as aliases of -p / --lines N.
+NOTES
+
+# Declare the log-view flags on a subcommand's parser, so they show up in
+# `service <cmd> --help` and in fish completions. Flags seen *before* <name>
+# are appended to `pre` in their raw form; flags after <name> land in the
+# handler's *args. Both are parsed by `parse_log_args`.
+def add_log_flags(opts, pre)
+  opts.on("-p", "--print", "Print the last N lines and exit (no pager, no follow)") { pre << "--print" }
+  opts.on("-q", "--quiet", "Hide known polling noise (see LOG_NOISE in this script)") { pre << "--quiet" }
+  opts.on("--lines N", "How many lines to show (default 200)") { |v| pre.push("--lines", v) }
+  opts.on("--grep PAT", "Keep only lines matching extended-regex PAT") { |v| pre.push("--grep", v) }
+  opts.on("--exclude PAT", "Drop lines matching extended-regex PAT") { |v| pre.push("--exclude", v) }
+end
+
+def parse_log_args(args)
+  n = (flag_val(args, "--lines", "--tail") || "200").to_i
+  {
+    quiet:   args.include?("-q") || args.include?("--quiet"),
+    grep:    flag_val(args, "--grep"),
+    exclude: flag_val(args, "--exclude"),
+    lines:   n <= 0 ? 200 : n,
+    # Snapshot (print & exit) when asked with -p/--print, or when stdout isn't a
+    # terminal (piped / run by an agent). Otherwise follow the log live.
+    snapshot: args.include?("-p") || args.include?("--print") ||
+              args.include?("--no-follow") || !$stdout.tty?,
+  }
+end
+
+# Replaces this process with the log viewer. Returns (having printed a message)
+# only when there is no log file.
+def view_log!(name, args)
+  short   = short_name(normalize_service_name(name))
+  logfile = log_for(short)
+  return puts "No log file at #{logfile}" unless File.exist?(logfile)
+
+  o        = parse_log_args(args)
+  filtered = o[:quiet] || o[:grep] || o[:exclude]
+
+  # Fast path: interactive live follow with paging, no filtering (original
+  # behavior). Press Ctrl-C (or q) to stop.
+  if !o[:snapshot] && !filtered
+    Kernel.exec("command less +GF #{logfile.shellescape}")
+  end
+
+  # grep filters (line-buffered when following so output isn't stuck in a buffer).
+  lb = o[:snapshot] ? "" : "--line-buffered "
+  greps = []
+  LOG_NOISE.each { |p| greps << "grep #{lb}-v -F -e #{p.shellescape}" } if o[:quiet]
+  greps << "grep #{lb}-v -E -e #{o[:exclude].shellescape}" if o[:exclude]
+  greps << "grep #{lb}-E -e #{o[:grep].shellescape}" if o[:grep]
+
+  pipeline =
+    if o[:snapshot]
+      # Filter the whole file, then show the last N matching lines.
+      ["cat #{logfile.shellescape}", *greps, "tail -n #{o[:lines]}"]
+    else
+      # Live, filtered follow: seed with the last N lines, then stream new ones.
+      ["tail -n #{o[:lines]} -f #{logfile.shellescape}", *greps]
+    end
+
+  Kernel.exec("bash", "-c", pipeline.join(" | "))
+end
+
 def normalize_service_name(name)
   # Accept "vpc" or "org.pancia.vpc"
   name.start_with?("org.pancia.") ? name : "org.pancia.#{name}"
@@ -102,12 +198,27 @@ class ServiceCMDS
     }
   end
   def self.restart(opts)
-    opts.info = "Restart a service."
+    opts.info = "Restart a service, optionally tailing its log afterwards."
+    opts.banner = "Usage: service restart <name> [-l|--log] [LOG FLAGS]"
+    pre = []
+    opts.on("-l", "--log", "Show the log after restarting (accepts the `service log` flags below)") { pre << "--log" }
+    add_log_flags(opts, pre)
+    opts.separator ""
+    opts.separator LOG_FLAG_NOTES
+    opts.separator ""
+    opts.separator "Examples:"
+    opts.separator "    service restart inari --log                     restart, then follow in less"
+    opts.separator "    service restart inari --log -q                  restart, then follow, noise filtered"
+    opts.separator "    service restart inari --log -q -p --lines 50    restart, print 50 clean lines, exit"
+    opts.separator ""
     lambda { |name, *args|
-      return puts "Usage: service restart <name> [--log]" unless name
+      return puts opts.to_s unless name
 
-      # Check for --log flag in remaining arguments
-      open_log = args.include?("--log") || args.include?("-l")
+      log_args = pre + args
+      # Strip the --log flag itself; whatever is left are `service log` flags,
+      # and passing any of those implies --log.
+      asked_log = [log_args.delete("--log"), log_args.delete("-l")].any?
+      open_log  = asked_log || !log_args.empty?
 
       full_name = normalize_service_name(name)
       plist_dest = plist_path_in_launch_agents(full_name)
@@ -124,10 +235,7 @@ class ServiceCMDS
       execute("launchctl start #{full_name.shellescape}")
       puts "Restarted #{full_name}"
 
-      if open_log
-        short = short_name(full_name)
-        Kernel.exec("command less +GF #{log_for(short)}")
-      end
+      view_log!(full_name, log_args) if open_log
     }
   end
   def self.status(opts)
@@ -151,13 +259,22 @@ class ServiceCMDS
     }
   end
   def self.log(opts)
-    opts.info = "Show the logs for a service."
-    lambda { |name|
-      return puts "Usage: service log <name>" unless name
-      full_name = normalize_service_name(name)
-      short = short_name(full_name)
-      # Become that process, so we can  to stop +F paging & look around with less
-      Kernel.exec("command less +GF #{log_for(short)}")
+    opts.info = "Show a service's logs (live in a pager, or a filtered snapshot)."
+    opts.banner = "Usage: service log <name> [FLAGS]"
+    pre = []
+    add_log_flags(opts, pre)
+    opts.separator ""
+    opts.separator LOG_FLAG_NOTES
+    opts.separator ""
+    opts.separator "Examples:"
+    opts.separator "    service log inari                     live follow in less"
+    opts.separator "    service log inari -q                  live follow, noise filtered"
+    opts.separator "    service log inari -q -p --lines 80    last 80 clean lines, then exit"
+    opts.separator "    service log inari --grep 'Error|Traceback' -p"
+    opts.separator ""
+    lambda { |name, *args|
+      return puts opts.to_s unless name
+      view_log!(name, pre + args)
     }
   end
   def self.create(opts)

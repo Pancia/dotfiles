@@ -43,9 +43,14 @@ class CLI
       end
       opts.separator ""
       opts.separator "COMMANDs:"
+      # Only the first line of each command's info, so a long multi-line info
+      # (with per-flag docs) stays readable here. `CMD --help` shows the rest.
+      width = cmd_to_opts.keys.map(&:length).max.to_i
       opts.separator cmd_to_opts
-        .map {|m,i| "\t#{m.to_s}\t:\t#{i[:opts].info}" }
+        .map {|m,i| "    %-#{width}s  %s" % [m, (i[:opts].info || "").lines.first.to_s.strip] }
         .join "\n"
+      opts.separator ""
+      opts.separator "Run `#{@program_name} COMMAND --help` for a command's own flags."
       opts.separator ""
       opts.on("--fish-completions", "Print fish shell completions") do
         # Subcommand names with descriptions
