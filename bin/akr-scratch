@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+#
+# Open a new dated scratch note in ~/AKR/scratch and copy a "read <path>" line
+# to the clipboard. Filenames are mon-day[-pN].hermes-note.txt.
+#
+#   akr-scratch            -> jul-20.hermes-note.txt (then -p2, -p3, ...)
+#   akr-scratch 7          -> jul-20-p7.hermes-note.txt
+#   akr-scratch night      -> jul-20-night.hermes-note.txt
+#   akr-scratch --paste    -> new note pre-filled with the clipboard
+#
+set -euo pipefail
+
+paste=0
+suffix=""
+while (( $# )); do
+    case "$1" in
+        --paste) paste=1 ;;
+        *)       suffix="$1" ;;
+    esac
+    shift
+done
+
+dir="$HOME/AKR/scratch"
+ext=".hermes-note.txt"
+mkdir -p "$dir"
+
+# jul-20 — lowercase month abbrev, unpadded day (matches jul-6.txt)
+base="$(date +%b | tr '[:upper:]' '[:lower:]')-$(date +%-d)"
+
+if [[ -n "$suffix" ]]; then
+    # numeric -> -pN, otherwise verbatim (-night)
+    [[ "$suffix" =~ ^[0-9]+$ ]] && suffix="p$suffix"
+    name="$base-$suffix$ext"
+else
+    name="$base$ext"
+    n=2
+    while [[ -e "$dir/$name" ]]; do
+        name="$base-p$n$ext"
+        n=$((n + 1))
+    done
+fi
+
+# Read the clipboard BEFORE overwriting it with the read-command
+if (( paste )); then
+    clip="$(pbpaste)"
+    if [[ -z "$clip" ]]; then
+        # Non-text (e.g. image) or empty pasteboard: bail without creating the
+        # note and without clobbering the clipboard
+        osascript -e 'display notification "Clipboard is empty" with title "akr-scratch"'
+        exit 1
+    fi
+    printf '%s\n' "$clip" > "$dir/$name"
+else
+    # Create it now — nvim won't until :w, so back-to-back runs would collide
+    : > "$dir/$name"
+fi
+
+printf 'read ~/AKR/scratch/%s' "$name" | pbcopy
+exec nvim "$dir/$name"

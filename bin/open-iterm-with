@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 
-command="$@"
+command="$*"
+
+# iTerm's profile command does not search $PATH — it needs an absolute path
+fish="$(command -v fish || echo /opt/homebrew/bin/fish)"
 
 osascript <<EOF
 tell application "iterm2"
-  create window with default profile command "fish -c '$command'"
+  activate
+  create window with default profile command "$fish -c '$command'"
 end tell
 EOF

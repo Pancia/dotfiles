@@ -29,6 +29,11 @@
         "w": ["View Downloads", "finder-here $HOME/Downloads"],
         "y": ["View YTDL", "finder-here $HOME/Downloads/ytdl/"]
     },
+    "r": {
+        "_desc": "+AKR",
+        "s": ["scratch note", "open-iterm-with ~/dotfiles/bin/akr-scratch"],
+        "p": ["scratch note (paste clipboard)", "open-iterm-with ~/dotfiles/bin/akr-scratch --paste"]
+    },
     "q": {
         "_desc": "+apps",
         "b": ["Brave", "open -a 'Brave Browser'"],
