@@ -1,31 +1,34 @@
 #!/usr/bin/env bash
 #
-# Open a new dated scratch note in ~/AKR/scratch and copy a "read <path>" line
-# to the clipboard. Filenames are mon-day[-pN].hermes-note.txt.
+# Open a new dated note in ~/AKR/hermes-notes and copy a "read <path>" line
+# to the clipboard. Filenames are YYYY-MM-DD[-pN].txt.
 #
-#   akr-scratch            -> jul-20.hermes-note.txt (then -p2, -p3, ...)
-#   akr-scratch 7          -> jul-20-p7.hermes-note.txt
-#   akr-scratch night      -> jul-20-night.hermes-note.txt
+#   akr-scratch            -> 2026-07-20.txt (then -p2, -p3, ...)
+#   akr-scratch 7          -> 2026-07-20-p7.txt
+#   akr-scratch night      -> 2026-07-20-night.txt
 #   akr-scratch --paste    -> new note pre-filled with the clipboard
+#   akr-scratch --no-edit  -> write the note + clipboard, skip opening nvim
 #
 set -euo pipefail
 
 paste=0
+edit=1
 suffix=""
 while (( $# )); do
     case "$1" in
-        --paste) paste=1 ;;
-        *)       suffix="$1" ;;
+        --paste)   paste=1 ;;
+        --no-edit) edit=0 ;;
+        *)         suffix="$1" ;;
     esac
     shift
 done
 
-dir="$HOME/AKR/scratch"
-ext=".hermes-note.txt"
+dir="$HOME/AKR/hermes-notes"
+ext=".txt"
 mkdir -p "$dir"
 
-# jul-20 — lowercase month abbrev, unpadded day (matches jul-6.txt)
-base="$(date +%b | tr '[:upper:]' '[:lower:]')-$(date +%-d)"
+# 2026-07-20 — matches the vault convention (inari-chats/, memories/, ...)
+base="$(date +%F)"
 
 if [[ -n "$suffix" ]]; then
     # numeric -> -pN, otherwise verbatim (-night)
@@ -55,5 +58,11 @@ else
     : > "$dir/$name"
 fi
 
-printf 'read ~/AKR/scratch/%s' "$name" | pbcopy
-exec nvim "$dir/$name"
+printf 'read ~/AKR/hermes-notes/%s' "$name" | pbcopy
+
+if (( edit )); then
+    exec nvim "$dir/$name"
+fi
+
+# Headless mode: no editor to confirm the write, so say so
+osascript -e "display notification \"$name\" with title \"akr-scratch\"" >/dev/null 2>&1 || true

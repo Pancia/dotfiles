@@ -32,7 +32,7 @@
     "r": {
         "_desc": "+AKR",
         "s": ["scratch note", "open-iterm-with ~/dotfiles/bin/akr-scratch"],
-        "p": ["scratch note (paste clipboard)", "open-iterm-with ~/dotfiles/bin/akr-scratch --paste"]
+        "p": ["scratch note (paste clipboard)", "$HOME/dotfiles/bin/akr-scratch --paste --no-edit"]
     },
     "q": {
         "_desc": "+apps",
