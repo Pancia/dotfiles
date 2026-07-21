@@ -81,7 +81,7 @@ printf '%s\n' $output
 
 # Write to file unless --no-file
 if test "$no_file" = false
-    set -l transcript_path "$audio_file.transcript.txt"
+    set -l transcript_path (path resolve "$audio_file").transcript.txt
     printf '%s\n' $output > "$transcript_path"
     echo "Transcript saved to: $transcript_path" >&2
 end
