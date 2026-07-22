@@ -92,26 +92,62 @@ let transcriptRegex = try! NSRegularExpression(pattern: "^\\[(\\d{2}:\\d{2}:\\d{
 // signal meter (bin/live-transcribe _meter_loop). Captured: bar fill, state, count.
 let meterRegex = try! NSRegularExpression(pattern: "^\\[mic\\] \\[([#-]*)\\] peak=[0-9.]+ avg=[0-9.]+\\s+(.+?)\\s+chunks_sent=(\\d+)$")
 
-// Strips a leading `[HH:MM:SS] ` from each line, preserving any `Microphone: `/
-// `Computer: ` label + text. Idempotent (already-clean lines have nothing to match),
-// so it's safe to run on both the file and the in-memory `accumulated` fallback.
-let tsPrefixRegex = try! NSRegularExpression(pattern: "^\\[\\d{2}:\\d{2}:\\d{2}\\] ")
-
-func stripTimestamps(_ text: String) -> String {
-    text.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
+// Collapses a timestamped transcript into flowing prose — what the Timestamps
+// checkbox produces when it's off. The `[HH:MM:SS] ` prefix is dropped and
+// consecutive lines from the same source are joined with a space; a source change
+// starts a new line (re-printing the `Microphone: `/`Computer: ` label) so speech
+// stays attributed. Lines that aren't transcript output (headers, blanks) pass
+// through untouched on their own line and break the run, which also makes this
+// safe to run on both the file and the in-memory `accumulated` fallback.
+func flowTranscript(_ text: String) -> String {
+    var out: [String] = []
+    var runSource: String?
+    var runOpen = false
+    for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
         let s = String(line)
         let r = NSRange(s.startIndex..., in: s)
-        return tsPrefixRegex.stringByReplacingMatches(in: s, range: r, withTemplate: "")
-    }.joined(separator: "\n")
+        guard let m = transcriptRegex.firstMatch(in: s, range: r),
+              let txtR = Range(m.range(at: 3), in: s) else {
+            // Older archives contain multi-segment entries whose 2nd+ lines carry no
+            // timestamp (whisper joined segments with newlines; the engine now folds
+            // those, see bin/live-transcribe). Fold them into the open paragraph rather
+            // than stranding them unattributed. With no run open — an already-flowed
+            // file, a header — the line stands alone and does NOT open a run, which is
+            // what keeps re-flowing a flowed file a no-op.
+            let cont = String(s.drop(while: { $0 == " " || $0 == "\t" }))
+            if runOpen, !cont.isEmpty, var last = out.popLast() {
+                if !last.isEmpty && !last.hasSuffix(" ") { last += " " }
+                out.append(last + cont)
+            } else {
+                out.append(s)
+                runOpen = false
+            }
+            continue
+        }
+        let src = Range(m.range(at: 2), in: s).map { String(s[$0]) }
+        let txt = String(s[txtR])
+        if runOpen, src == runSource, var last = out.popLast() {
+            if !last.isEmpty && !last.hasSuffix(" ") && !txt.isEmpty { last += " " }
+            out.append(last + txt)
+        } else {
+            out.append(src.map { "\($0): \(txt)" } ?? txt)
+            runSource = src
+            runOpen = true
+        }
+    }
+    return out.joined(separator: "\n")
 }
 
 struct StyledLine {
     let attr: NSAttributedString
     let plain: String
     let isTranscript: Bool
+    let source: String?   // "Microphone"/"Computer" when the engine labeled the line
 }
 
-func styleLine(_ raw: String, showTimestamps: Bool) -> StyledLine {
+// `continuing` = this line is being joined onto the previous one as flowing prose
+// (Timestamps off), so its source label would be a redundant mid-sentence repeat.
+func styleLine(_ raw: String, showTimestamps: Bool, continuing: Bool = false) -> StyledLine {
     // Green banner — detected from the RAW escape before stripping.
     if raw.contains("\u{1B}[42m") {
         let text = stripANSI(raw).trimmingCharacters(in: .whitespaces)
@@ -122,7 +158,7 @@ func styleLine(_ raw: String, showTimestamps: Bool) -> StyledLine {
                 .foregroundColor: Palette.bannerFG,
                 .backgroundColor: Palette.bannerBG,
             ])
-        return StyledLine(attr: a, plain: text, isTranscript: false)
+        return StyledLine(attr: a, plain: text, isTranscript: false, source: nil)
     }
 
     let plain = stripANSI(raw)
@@ -139,18 +175,19 @@ func styleLine(_ raw: String, showTimestamps: Bool) -> StyledLine {
         if showTimestamps {
             a.append(NSAttributedString(string: "[\(ts)] ", attributes: [.font: monoFont, .foregroundColor: Palette.timestamp]))
         }
-        // Source span only when the engine emitted one (multi-source sessions).
-        if let srcR = Range(m.range(at: 2), in: plain) {
-            let src = String(plain[srcR])
+        // Source span only when the engine emitted one (multi-source sessions), and
+        // only at the head of a flowed paragraph.
+        let src = Range(m.range(at: 2), in: plain).map { String(plain[$0]) }
+        if let src, !continuing {
             let srcColor = src.lowercased().hasPrefix("comp") ? Palette.compSource : Palette.micSource
             a.append(NSAttributedString(string: "\(src): ", attributes: [.font: monoBold, .foregroundColor: srcColor]))
         }
         a.append(NSAttributedString(string: txt, attributes: [.font: monoFont, .foregroundColor: Palette.normal]))
-        return StyledLine(attr: a, plain: plain, isTranscript: true)
+        return StyledLine(attr: a, plain: plain, isTranscript: true, source: src)
     }
 
     let a = NSAttributedString(string: plain, attributes: [.font: monoFont, .foregroundColor: Palette.dim])
-    return StyledLine(attr: a, plain: plain, isTranscript: false)
+    return StyledLine(attr: a, plain: plain, isTranscript: false, source: nil)
 }
 
 // MARK: - App delegate
@@ -189,6 +226,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     // Cached hot-path pref (avoid a UserDefaults hit per rendered line).
     private var showTimestamps = true
+    // Flow state for the scroll when Timestamps is off: what the last appended line
+    // was, so a transcript line continuing the same source joins it with a space
+    // instead of starting a new one. Any other line ends the paragraph.
+    private var lastLineWasTranscript = false
+    private var lastLineSource: String?
     // The app to reactivate + paste into on an auto-paste stop. Seeded at launch,
     // kept current by the didActivateApplication observer.
     private var targetApp: NSRunningApplication?
@@ -572,7 +614,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         displayedRawLines.append(raw)   // replayed by rerenderTranscript() on a Timestamps toggle
         let styled = styleLine(raw, showTimestamps: showTimestamps)
         if styled.isTranscript { accumulated.append(styled.plain) }
-        append(styled.attr)
+        guard let storage = textView.textStorage else { return }
+        appendStyled(styled, raw: raw, to: storage)
+        textView.scrollToEndOfDocument(nil)
     }
 
     // Render the periodic mic meter into the bottom footer (color-coded bar +
@@ -616,12 +660,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         append(NSAttributedString(string: msg, attributes: [.font: monoBold, .foregroundColor: Palette.errorFG]))
     }
 
+    // Non-transcript output (errors, notices) always gets its own line and ends any
+    // paragraph in progress.
     private func append(_ attr: NSAttributedString) {
         guard let storage = textView.textStorage else { return }
-        let line = NSMutableAttributedString(attributedString: attr)
-        line.append(NSAttributedString(string: "\n"))
-        storage.append(line)
+        if storage.length > 0 { storage.append(NSAttributedString(string: "\n", attributes: [.font: monoFont])) }
+        storage.append(attr)
+        lastLineWasTranscript = false
+        lastLineSource = nil
         textView.scrollToEndOfDocument(nil)
+    }
+
+    // Appends one styled line, choosing the separator that PRECEDES it: with
+    // Timestamps off, a transcript line continuing the same source is joined onto the
+    // previous one with a space (and re-rendered without its now-redundant source
+    // label); everything else starts a new line.
+    private func appendStyled(_ styled: StyledLine, raw: String, to storage: NSTextStorage) {
+        let joins = !showTimestamps && styled.isTranscript
+            && lastLineWasTranscript && styled.source == lastLineSource
+        if storage.length > 0 {
+            storage.append(NSAttributedString(string: joins ? " " : "\n", attributes: [.font: monoFont]))
+        }
+        let attr = (joins && styled.source != nil)
+            ? styleLine(raw, showTimestamps: showTimestamps, continuing: true).attr
+            : styled.attr
+        storage.append(attr)
+        lastLineWasTranscript = styled.isTranscript
+        lastLineSource = styled.source
     }
 
     // Rebuild the whole scroll under the current `showTimestamps` — called when the
@@ -631,10 +696,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         guard let storage = textView.textStorage else { return }
         storage.beginEditing()
         storage.setAttributedString(NSAttributedString())
+        lastLineWasTranscript = false
+        lastLineSource = nil
         for raw in displayedRawLines {
-            let line = NSMutableAttributedString(attributedString: styleLine(raw, showTimestamps: showTimestamps).attr)
-            line.append(NSAttributedString(string: "\n"))   // matches append()'s per-line newline
-            storage.append(line)
+            appendStyled(styleLine(raw, showTimestamps: showTimestamps), raw: raw, to: storage)
         }
         storage.endEditing()
         textView.scrollToEndOfDocument(nil)
@@ -691,7 +756,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         // Copy iff we haven't already (covers a hard terminate that raced finish()'s
         // async drain). `cancelled` still means "leave the clipboard alone".
         if !clipboardWritten, !cancelled {
-            normalizeSavedTranscript()
             clipboardWritten = deliver()
         }
     }
@@ -723,11 +787,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
 
-    // Engine is dead and the .txt handle is released — safe to normalize the file,
-    // copy, and (if eligible) auto-paste.
+    // Engine is dead and the .txt handle is released — safe to copy and (if eligible)
+    // auto-paste. The saved .txt is deliberately left exactly as the engine wrote it,
+    // timestamps and all: it's the Cloud-synced record aligned with the sibling .m4a,
+    // and flattening it would be irreversible. The Timestamps checkbox governs only
+    // what's displayed and copied, both of which are re-derivable from the archive.
     private func afterEngineStopped() {
         enginePipe?.fileHandleForReading.readabilityHandler = nil
-        normalizeSavedTranscript()                 // §5c: rewrite .txt clean if Timestamps off
         let didWrite = deliver()
         clipboardWritten = didWrite
 
@@ -775,20 +841,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         NSApp.terminate(nil)
     }
 
-    // Rewrite the saved .txt without timestamps when the checkbox is off. Only safe
-    // after the engine exits (handle released), so it runs from afterEngineStopped.
-    // Cancel leaves the archive exactly as the engine wrote it. Atomic + guarded so a
-    // failed read or empty result never clobbers the file.
-    private func normalizeSavedTranscript() {
-        guard !cancelled, !showTimestamps, let p = transcriptPath,
-              let original = try? String(contentsOfFile: p, encoding: .utf8),
-              !original.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        let stripped = stripTimestamps(original)
-        guard stripped != original,
-              !stripped.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        try? stripped.write(toFile: p, atomically: true, encoding: .utf8)
-    }
-
     // Puts the transcript on the clipboard per the checkboxes; returns whether it
     // actually wrote. Reference (Cmd+Alt+Space or the checkbox) needs a known path.
     @discardableResult
@@ -810,7 +862,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             text = accumulated.joined(separator: "\n") + "\n"
         }
         guard var out = text, !out.isEmpty else { return false }   // never clobber with empty
-        if !showTimestamps { out = stripTimestamps(out) }          // strips file OR accumulated
+        if !showTimestamps { out = flowTranscript(out) }           // flows file OR accumulated
+        // Re-check AFTER flowing: a transcript of nothing but empty entries reduces to
+        // whitespace, and a blank clipboard would still satisfy deliver()'s auto-paste gate.
+        guard !out.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(out, forType: .string)

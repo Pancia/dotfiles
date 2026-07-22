@@ -502,7 +502,11 @@ class LiveTranscriber:
         )
         resp = urllib.request.urlopen(req, timeout=30)
         result = json.loads(resp.read().decode())
-        return result.get("text", "").strip()
+        # whisper-server joins a multi-segment result with newlines, but the transcript
+        # format is one line per entry — both the .txt parser in LiveTranscribe.app and
+        # the no-timestamp "flow" mode assume it. Fold interior whitespace (newlines
+        # included) into single spaces so a chunk never spills onto extra lines.
+        return " ".join(result.get("text", "").split())
 
     def _transcribe_audio(self, audio_data):
         """Transcribe audio data via whisper-server HTTP API, returns text"""
