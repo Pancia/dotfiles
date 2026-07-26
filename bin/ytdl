@@ -212,6 +212,10 @@ end
 # Clicking a success notification opens the output folder.
 # Start and finish alerts share a -group keyed on the video ID so the
 # completion banner replaces the "started" one in place instead of stacking.
+#
+# _ytdl_notify_start is posted twice: once with no title, the instant the ID is
+# known, and again after the (network-bound) title probe resolves. The shared
+# -group means the second post rewrites the first banner in place.
 function _ytdl_notify_start
     set -l dl_type $argv[1]
     set -l ytid $argv[2]
@@ -222,10 +226,14 @@ function _ytdl_notify_start
     end
 
     set -l msg $title
-    test -z "$msg"; and set msg $ytid
+    set -l body "downloading…"
+    if test -z "$msg"
+        set msg $ytid
+        set body "starting…"
+    end
 
     terminal-notifier -title "ytdl ⏳ $dl_type started" -subtitle "$msg" \
-        -message "downloading…" -group "ytdl-$ytid" >/dev/null 2>&1
+        -message "$body" -group "ytdl-$ytid" >/dev/null 2>&1
 end
 
 function _ytdl_notify
@@ -331,6 +339,12 @@ if string match -qr 'list=' -- $input
     end
 end
 
+# Fire the start banner before the title probe — the probe is a network round
+# trip (~2-3s), and waiting on it used to be the whole notification delay.
+if test $YTDL_NOTIFY -eq 1
+    _ytdl_notify_start $ytdl_type $video_id ""
+end
+
 set -l video_title (yt-dlp --get-title -- $video_id 2>/dev/null)
 
 echo "=== ytdl ==="
@@ -343,7 +357,8 @@ end
 echo "============"
 echo
 
-if test $YTDL_NOTIFY -eq 1
+# Rewrite the banner in place now that the title is known.
+if test $YTDL_NOTIFY -eq 1; and test -n "$video_title[1]"
     _ytdl_notify_start $ytdl_type $video_id "$video_title[1]"
 end
 
