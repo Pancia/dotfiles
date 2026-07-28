@@ -157,6 +157,11 @@
             "type": "command",
             "command": "~/.claude/hooks/jj-snapshot.sh stop",
             "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "ccs-title-hook",
+            "timeout": 5000
           }
         ]
       }

@@ -1,4 +1,63 @@
 #!/usr/bin/env bash
-INPUT=$(cat)
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
-echo "export CLAUDE_SESSION_ID=$SESSION_ID" >> "$CLAUDE_ENV_FILE"
+# Claude Code SessionStart hook. Two jobs:
+#   1. Export CLAUDE_SESSION_ID into the session's shell env, for `ccsave`.
+#   2. Stamp the session id into this invocation's ccs open-session entry, so a
+#      crash (usually power loss) leaves an identifiable, resumable record.
+#
+# (2) replaces _ccs_open_watch, which polled for "the newest unclaimed .jsonl"
+# and could claim the wrong one — the cause of duplicate entries in `ccs list`.
+#
+# Must never exit non-zero and must print nothing on stdout: this hook's stdout
+# is injected into the session's context.
+
+INPUT=$(cat 2>/dev/null)
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+SOURCE=$(printf '%s' "$INPUT" | jq -r '.source // empty' 2>/dev/null)
+
+# Guarded: an unset CLAUDE_ENV_FILE would otherwise make this script fail.
+if [ -n "$SESSION_ID" ] && [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+    { echo "export CLAUDE_SESSION_ID=$SESSION_ID" >> "$CLAUDE_ENV_FILE"; } 2>/dev/null
+fi
+
+# Stamp the ccs entry. CCS_ENTRY_FILE is exported and so inherited by every
+# descendant process, and `claude -p` runs hooks too — so a nested helper session
+# must never be able to claim the entry, or `ccs resume` would confidently open
+# the wrong conversation. Hence: stamp only when unstamped.
+#
+# The exception is /clear and compaction, which start a NEW session id in the
+# same terminal. There the entry must follow, or ccs would keep pointing at the
+# pre-clear conversation and everything since would be invisible. A nested
+# session always reports source=startup (or resume), never clear/compact, so
+# allowing those two does not reopen the hole. An unknown source stays write-once.
+if [ -n "$SESSION_ID" ] && [ -n "${CCS_ENTRY_FILE:-}" ] && [ -f "$CCS_ENTRY_FILE" ]; then
+    STAMPED=$(jq -r '.session_id // empty' "$CCS_ENTRY_FILE" 2>/dev/null)
+    RESTAMP=""
+    if [ -z "$STAMPED" ]; then
+        RESTAMP=fresh
+    elif [ "$STAMPED" != "$SESSION_ID" ] && { [ "$SOURCE" = "clear" ] || [ "$SOURCE" = "compact" ]; }; then
+        RESTAMP=rotated
+    fi
+
+    if [ -n "$RESTAMP" ]; then
+        TMP="$CCS_ENTRY_FILE.tmp.$$"
+        # On a rotation the recorded title describes the previous conversation,
+        # so drop it rather than pair an old title with a new id.
+        FILTER='.session_id = $id'
+        if [ "$RESTAMP" = rotated ]; then
+            FILTER='.session_id = $id | .title = "" | .transcript_path = ""'
+        fi
+        if { jq --arg id "$SESSION_ID" "$FILTER" "$CCS_ENTRY_FILE" > "$TMP"; } 2>/dev/null; then
+            # Re-check before replacing: a clean exit may have deleted the entry
+            # while we worked, and we must not resurrect it.
+            if [ -f "$CCS_ENTRY_FILE" ]; then
+                mv "$TMP" "$CCS_ENTRY_FILE" 2>/dev/null || rm -f "$TMP"
+            else
+                rm -f "$TMP"
+            fi
+        else
+            rm -f "$TMP"
+        fi
+    fi
+fi
+
+exit 0

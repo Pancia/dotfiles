@@ -70,22 +70,23 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
         end
     end
 
-    # Snapshot the most recent session JSONL before running
-    set -l sessions_dir "$HOME/.claude/projects/"(string replace -a '/' '-' (pwd))
-    set -l pre_latest
-    if test -d "$sessions_dir"
-        set pre_latest (find "$sessions_dir" -maxdepth 1 -name '*.jsonl' -type f -exec stat -f '%m %N' {} + 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
-    end
+    # Claude Code mangles '.' and ':' as well as '/' (~/.claude -> --claude), so
+    # replacing only '/' silently pointed at a directory that never exists —
+    # which made the post-session review below a no-op for any dotted path,
+    # including every .alt/worktrees checkout.
+    set -l sessions_dir "$HOME/.claude/projects/"(string replace -a '/' '-' (pwd) | string replace -a '.' '-' | string replace -a ':' '-')
 
-    # Register this invocation in the open-sessions registry + spawn a watcher
-    # to capture the session_id once claude writes its JSONL. Survives crashes.
+    # Register this invocation in the open-sessions registry so the session stays
+    # recoverable after a crash. CCS_ENTRY_FILE is exported so the SessionStart
+    # and Stop hooks (bin/ccsave-hook, bin/ccs-title-hook) can stamp the session
+    # id and record its title while the session is still alive — a crash is
+    # usually power loss, so nothing can run afterwards.
+    set -lx CCS_ENTRY_FILE
     if test $skip_extras -eq 0
         # Helpers live in ccs.fish; autoload only picks up the top-level `ccs`
         # function, so source explicitly the first time.
         functions -q _ccs_open_register; or source ~/dotfiles/fish/functions/ccs.fish
-        _ccs_open_register $fish_pid
-        fish -c "source ~/dotfiles/fish/functions/ccs.fish; cd '"(pwd)"'; _ccs_open_watch '$fish_pid' '$pre_latest'" &>/dev/null &
-        disown
+        set CCS_ENTRY_FILE (_ccs_open_register $fish_pid)
     end
 
     proc-label "claude [$label]" claude --verbose $pass_argv

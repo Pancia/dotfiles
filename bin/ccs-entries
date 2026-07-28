@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""List tracked Claude session entries for a directory, as `id<TAB>title`.
+
+Read-only by design: this backs shell completion, and `_ccs_open_scan` cannot be
+used there because it reaps stale entries as a side effect — TAB should never
+delete files. Also avoids sourcing ccs.fish into the interactive shell.
+
+Usage: ccs-entries [cwd]   (defaults to $PWD)
+"""
+import json
+import os
+import sys
+
+
+def state_dir():
+    base = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
+    return os.path.join(base, "claude-sessions")
+
+
+def project_dirs():
+    try:
+        root = os.path.expanduser("~/.claude/projects")
+        return [e.path for e in os.scandir(root) if e.is_dir()]
+    except OSError:
+        return []
+
+
+def title_from(path):
+    """Last ai-title in a transcript, else the last user prompt.
+
+    Parses the record rather than slicing between quotes, so an escaped quote in
+    a title doesn't get cut mid-escape.
+    """
+    try:
+        with open(path, "rb") as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        return ""
+    for key, field in ((b'"type":"ai-title"', "aiTitle"),
+                       (b'"type":"last-prompt"', "lastPrompt")):
+        for line in reversed(lines):
+            if key not in line:
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            val = rec.get(field)
+            if isinstance(val, str) and val:
+                return " ".join(val.split())
+    return ""
+
+
+def main():
+    # Fish records its logical (pwd), symlinks unresolved — realpath here would
+    # disagree with the entries for any symlinked checkout.
+    want = (sys.argv[1] if len(sys.argv) > 1 else
+            (os.environ.get("PWD") or os.getcwd())).lower()
+
+    found = []
+    for sub in ("open", "archive"):
+        d = os.path.join(state_dir(), sub)
+        try:
+            names = os.listdir(d)
+        except OSError:
+            continue
+        for name in names:
+            if not name.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(d, name)) as fh:
+                    e = json.load(fh)
+            except Exception:
+                # A corrupt entry must not cost us the rest of the list
+                continue
+            if not isinstance(e, dict):
+                continue
+            if str(e.get("cwd", "")).lower() != want:
+                continue
+            sid = str(e.get("session_id") or "")
+            if not sid:
+                continue
+            try:
+                started = int(e.get("started_at") or 0)
+            except (TypeError, ValueError):
+                started = 0
+            title = e.get("title")
+            title = " ".join(title.split()) if isinstance(title, str) else ""
+            found.append([started, sid, title, sub])
+
+    # Fall back to the transcript for anything the Stop hook hasn't titled yet —
+    # otherwise completion is a wall of bare UUIDs. Only for live entries;
+    # archived ones have usually lost their transcript anyway.
+    cache = {}
+    dirs = None
+    for row in found:
+        if row[2] or row[3] != "open":
+            continue
+        if row[1] in cache:
+            row[2] = cache[row[1]]
+            continue
+        if dirs is None:
+            dirs = project_dirs()
+        for d in dirs:
+            p = os.path.join(d, row[1] + ".jsonl")
+            if os.path.isfile(p):
+                row[2] = title_from(p)
+                break
+        cache[row[1]] = row[2]
+
+    # Sort once, then keep the first per id: prefer a titled entry, then the
+    # newest. Comparing pairwise here is how the scan's dedup grew a bug where a
+    # newer row could override the very preference it was meant to respect.
+    best = {}
+    for started, sid, title, _sub in sorted(found, key=lambda r: (not r[2], -r[0])):
+        if sid not in best:
+            best[sid] = (started, title)
+
+    for sid, (_started, title) in sorted(best.items(), key=lambda kv: -kv[1][0]):
+        print("%s\t%s" % (sid, title))
+
+
+if __name__ == "__main__":
+    main()

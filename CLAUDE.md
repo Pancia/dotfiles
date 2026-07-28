@@ -126,6 +126,36 @@ end
 echo $msg  # works
 ```
 
+### Crashed Session Titles (ccs)
+
+`ccs list` shows crashed sessions with real titles, not just `crashed <date>`. A crash is
+usually power loss, so nothing can run afterwards — the title has to already be on disk:
+
+- Claude Code writes its own title into the transcript (`{"type":"ai-title","aiTitle":...}`,
+  refreshed as the session drifts). `_ccs_open_scan` reads the last one.
+- `bin/ccs-title-hook` (a `Stop` hook) copies it into the session's entry file each turn, so
+  it outlives the transcript. It also keeps a local zstd copy in
+  `$XDG_STATE_HOME/claude-sessions/transcripts/` — deliberately *not* `~/Cloud`, which is a
+  ProtonDrive symlink. That copy is throttled to one write per 10 minutes, so it can lag the
+  live transcript by up to that much. `ccs resume` puts it back via
+  `_ccs_restore_transcript` before resuming, since `--resume` needs the real file in
+  `~/.claude/projects/`.
+- `bin/ccsave-hook` (a `SessionStart` hook) stamps the real `session_id` into the entry,
+  **write-once** — except on `/clear` and compaction (`.source`), which start a new session
+  id in the same terminal and so must be followed, or ccs would keep pointing at the
+  pre-`/clear` conversation. A rotation clears the recorded title too.
+- Both hooks gate on identity, because `CCS_ENTRY_FILE` is inherited by every descendant and
+  `claude -p` runs hooks too: without it a nested helper session would overwrite the parent's
+  id or title. A nested session always reports `source=startup`, never `clear`.
+- `ccs rename` on a crashed session sets `.title_manual`, which stops the hook overwriting it.
+- The wrapper exports `CCS_ENTRY_FILE`; if it's unset, both hooks no-op silently.
+
+**Known limitation:** if you quit a session in the millisecond window while its `Stop` hook is
+mid-write, the hook can recreate the entry that `_ccs_open_finalize` just deleted, leaving a
+phantom `crashed` row in `ccs list`. Delete the entry from
+`$XDG_STATE_HOME/claude-sessions/open/` by hand. Every fix considered (tombstone files, pid
+checks) introduced a worse failure mode than the one it closed.
+
 ### Session Review
 After each interactive Claude Code session, a background Haiku process reviews the session transcript and suggests CLAUDE.md updates. Results are written to `.cc/pending-updates-<timestamp>-<session-id>.md`.
 
@@ -212,6 +242,8 @@ Hermes is a which-key app launcher. Commands are defined in `rcs/hermes-commands
 | `astro` | Astrological transit tracker |
 | `ccpu` | Run claude wrapper with /cc:pending-updates (auto-detects jj/git repo) |
 | `ccsave [title]` | Save current Claude Code session to `~/Cloud/cc-sessions/` (autogenerates title if omitted) |
+| `ccs list` / `ccs resume` | List/pick sessions, including crashed ones (titled — see below) |
+| `ccs prune [--dry-run]` | Archive crashed entries with no surviving transcript, backup, or saved record |
 | `service` | LaunchAgent manager (list/start/stop/restart/log/status) |
 | `tab-organize windows` | List open browser windows with tab counts |
 | `tab-organize plan [--window ID]` | Generate AI organization plan (editable before execute) |

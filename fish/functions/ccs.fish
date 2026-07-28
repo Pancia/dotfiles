@@ -75,7 +75,7 @@ function _ccs_list --description 'List claude sessions'
     set -l file (_ccs_file)
     set -l saved_lines
     if test -f "$file"
-        set saved_lines (jq -r '.[] | [.id, (.title | gsub("\t"; " ")), .ts] | @tsv' "$file" 2>/dev/null)
+        set saved_lines (jq -r '.[] | [.id, (.title // "" | gsub("\t"; " ")), .ts] | @tsv' "$file" 2>/dev/null)
     end
 
     set -l have_running (count $running_lines)
@@ -104,10 +104,15 @@ function _ccs_list --description 'List claude sessions'
                     set also_saved " (also saved)"
                 end
             end
+            set -l title $parts[6]
+            set -l meta "running since $when, $term$also_saved"
+            if test -n "$title"
+                set meta "$title — running since $when, $term$also_saved"
+            end
             printf '  %s  %s  %s\n' \
                 (set_color green)"●"(set_color normal) \
                 (set_color cyan)"$short_id"(set_color normal) \
-                (set_color brblack)"running since $when, $term$also_saved"(set_color normal)
+                (set_color brblack)"$meta"(set_color normal)
         end
         set printed_any 1
     end
@@ -115,16 +120,22 @@ function _ccs_list --description 'List claude sessions'
     if test $have_crashed -gt 0
         test $printed_any -eq 1; and echo ""
         echo (set_color brblack)"  Open (unrecovered)"(set_color normal)
+        # _ccs_open_scan already emits newest-first
         for line in $crashed_lines
             set -l parts (string split \t -- $line)
             set -l sid $parts[2]
             set -l started $parts[4]
             set -l short_id (string sub -l 8 "$sid")
             set -l when (date -r "$started" '+%Y-%m-%d %H:%M' 2>/dev/null)
+            set -l title $parts[6]
+            set -l meta "crashed $when"
+            if test -n "$title"
+                set meta "$title — $when"
+            end
             printf '  %s  %s  %s\n' \
                 (set_color yellow)"⚠"(set_color normal) \
                 (set_color cyan)"$short_id"(set_color normal) \
-                (set_color brblack)"crashed $when"(set_color normal)
+                (set_color brblack)"$meta"(set_color normal)
         end
         set printed_any 1
     end
@@ -201,24 +212,135 @@ function _ccs_rename --description 'Rename a claude session'
     jq -c --arg id "$id" --arg title "$new_title" \
         '[.[] | if .id == $id then .title = $title else . end]' "$file" > "$file.tmp"
     mv "$file.tmp" "$file"
+    # Capture into a variable rather than comparing against a substitution: on a
+    # zero-byte sessions.json the substitution yields no elements at all, and
+    # `test` then errors out and reports a rename that never happened.
+    set -l after (string collect < "$file")
 
-    # Check if anything changed
-    if test "$before" = (string collect < "$file")
+    # Not a saved session? It may still be a crashed/archived open entry, whose
+    # title lives in the entry file instead. Without this, retitling anything
+    # that isn't in sessions.json fails outright.
+    if test "$before" = "$after"
+        if _ccs_entry_set_title "$id" "$new_title"
+            echo "Renamed session $id -> $new_title"
+            return 0
+        end
         echo "Session $id not found"
         return 1
     end
     echo "Renamed session $id -> $new_title"
 end
 
+function _ccs_entry_set_title --description 'Record a title on an open/archived session entry'
+    set -l id $argv[1]
+    set -l title $argv[2]
+    test -n "$id"; or return 1
+    test -n "$title"; or return 1
+
+    # Write to EVERY entry with this id, not just the first found. Duplicate
+    # entries for one session do occur, and the scan displays whichever has the
+    # newest started_at — stopping at the first match would silently title the
+    # row you can't see.
+    set -l wrote 0
+    for dir in (_ccs_open_dir) (_ccs_archive_dir)
+        test -d "$dir"; or continue
+        for f in "$dir"/*.json
+            test -f "$f"; or continue
+            set -l sid (jq -r '.session_id // ""' "$f" 2>/dev/null)
+            if test "$sid" != "$id"
+                continue
+            end
+            set -l tmp "$f.tmp.$fish_pid"
+            # Flag it manual, or the Stop hook overwrites it with the
+            # Claude-generated title on the very next turn. The begin/end wrapper
+            # catches fish's own redirect failure on a read-only state dir —
+            # a trailing 2>/dev/null only covers jq's stderr, not the redirect.
+            if begin
+                    jq --arg t "$title" '.title = $t | .title_manual = true' "$f" > "$tmp"
+                end 2>/dev/null
+                # Re-check: a clean exit may have removed the entry meanwhile
+                if test -f "$f"
+                    mv "$tmp" "$f"
+                    set wrote 1
+                else
+                    rm -f "$tmp"
+                end
+            else
+                rm -f "$tmp"
+            end
+        end
+    end
+    test $wrote -eq 1
+end
+
 function _ccs_session_jsonl --description 'Find the JSONL file for a session ID'
     set -l id $argv[1]
-    set -l project_dir (string replace -a '/' '-' (pwd))
-    set -l jsonl "$HOME/.claude/projects/$project_dir/$id.jsonl"
-    if test -f "$jsonl"
-        echo "$jsonl"
-        return 0
+    test -n "$id"; or return 1
+    # Glob rather than deriving the project dir from (pwd): Claude Code mangles
+    # '.' as well as '/' (~/.claude/projects -> -Users-anthony--claude-projects)
+    # and the full rule isn't documented, so deriving it silently misses sessions.
+    for f in "$HOME"/.claude/projects/*/"$id".jsonl
+        if test -f "$f"
+            echo "$f"
+            return 0
+        end
     end
     return 1
+end
+
+function _ccs_truncate --description 'Truncate a string to a display width'
+    set -l s $argv[1]
+    set -l max $argv[2]
+    # printf, not echo: a title of exactly "-e" or "-n" would be eaten as a flag
+    if test (string length -- "$s") -gt $max
+        printf '%s…\n' (string sub -l (math $max - 1) -- "$s")
+    else
+        printf '%s\n' "$s"
+    end
+end
+
+function _ccs_session_title --description 'Read a session title out of its transcript'
+    set -l id $argv[1]
+    set -l entry_file $argv[2]
+
+    # Prefer the title the Stop hook recorded while the session was alive: it
+    # survives the transcript being pruned, and saves re-reading a large file
+    # on every `cd` (ccs list runs from chpwd).
+    if test -n "$entry_file"; and test -f "$entry_file"
+        set -l cached (jq -r '.title // empty' "$entry_file" 2>/dev/null)
+        if test -n "$cached"
+            _ccs_truncate "$cached" 58
+            return 0
+        end
+    end
+
+    set -l jsonl (_ccs_session_jsonl "$id")
+    or return 1
+
+    # Claude Code writes its own generated title as {"type":"ai-title","aiTitle":...},
+    # refreshed as the session drifts, so the last record is current. Decode with
+    # jq rather than slicing between quotes: a title containing an escaped quote
+    # would be cut mid-escape and left with a trailing backslash. Conversational
+    # mentions of the field are JSON-escaped, so the grep can't match them.
+    # The type guard keeps a non-string field from being flattened into a bogus
+    # title: jq -r on an array emits one element per line, which the command
+    # substitution below would silently join into nonsense.
+    set -l raw (grep '"type":"ai-title"' "$jsonl" 2>/dev/null | tail -1 \
+        | jq -r 'if (.aiTitle | type) == "string" then .aiTitle else empty end' 2>/dev/null)
+
+    if test -z "$raw"
+        # Fall back to the last user prompt, for sessions Claude never titled
+        set raw (grep '"type":"last-prompt"' "$jsonl" 2>/dev/null | tail -1 \
+            | jq -r 'if (.lastPrompt | type) == "string" then .lastPrompt else empty end' 2>/dev/null)
+    end
+
+    set -l title (string join ' ' $raw)
+    test -n "$title"; or return 1
+
+    # Collapse to a single display line
+    set title (string replace -ra '\s+' ' ' -- "$title" | string trim)
+    test -n "$title"; or return 1
+    _ccs_truncate "$title" 58
 end
 
 function _ccs_extract_messages --description 'Extract text messages from a session JSONL'
@@ -343,6 +465,7 @@ function _ccs_open --description 'Pick and resume/switch to a session'
 
     # Build picker lines: <klass>\t<id>\t<entry_file>\t<short>\t<marker>\t<label>
     set -l picker_lines
+    # _ccs_open_scan already emits newest-first
     for line in $open_lines
         set -l parts (string split \t -- $line)
         set -l klass $parts[1]
@@ -351,15 +474,24 @@ function _ccs_open --description 'Pick and resume/switch to a session'
         set -l started $parts[4]
         set -l term $parts[5]
         set -l short_id (string sub -l 8 "$sid")
+        set -l title $parts[6]
         if test "$klass" = running
             set -a running_ids $sid
             set -l when (date -r "$started" '+%H:%M' 2>/dev/null)
+            set -l label "running since $when, $term"
+            if test -n "$title"
+                set label "$title — running since $when, $term"
+            end
             set -a picker_lines (printf '%s\t%s\t%s\t%s\t%s\t%s' \
-                $klass $sid $ef $short_id "●" "running since $when, $term")
+                $klass $sid $ef $short_id "●" $label)
         else if test "$klass" = crashed
             set -l when (date -r "$started" '+%Y-%m-%d %H:%M' 2>/dev/null)
+            set -l label "crashed $when"
+            if test -n "$title"
+                set label "$title — $when"
+            end
             set -a picker_lines (printf '%s\t%s\t%s\t%s\t%s\t%s' \
-                $klass $sid $ef $short_id "⚠" "crashed $when")
+                $klass $sid $ef $short_id "⚠" $label)
         end
     end
 
@@ -367,7 +499,7 @@ function _ccs_open --description 'Pick and resume/switch to a session'
     set -l file (_ccs_file)
     if test -f "$file"
         # User-supplied titles can contain tabs; sanitize before TSV embedding
-        set -l saved_lines (jq -r '.[] | [.id, (.title | gsub("\t"; " ")), .ts] | @tsv' "$file" 2>/dev/null)
+        set -l saved_lines (jq -r '.[] | [.id, (.title // "" | gsub("\t"; " ")), .ts] | @tsv' "$file" 2>/dev/null)
         for entry in $saved_lines
             set -l parts (string split \t -- $entry)
             set -l id $parts[1]
@@ -410,6 +542,14 @@ function _ccs_open --description 'Pick and resume/switch to a session'
         case running
             _ccs_switch_to "$ef"
         case crashed
+            # Claude Code eventually prunes transcripts; put ours back first, or
+            # --resume has nothing to open. Must run before the entry is
+            # archived, since it holds the path to restore to.
+            if not _ccs_session_jsonl "$sid" >/dev/null
+                if not _ccs_restore_transcript "$sid" "$ef"
+                    echo (set_color yellow)"Transcript for $sid is gone and could not be restored — resume will likely fail."(set_color normal)
+                end
+            end
             _ccs_archive_entry "$ef"
             echo "Resuming session $sid..."
             my-claude-code-wrapper --resume "$sid"
@@ -493,6 +633,50 @@ function _ccs_archive_dir --description 'Directory holding archived session entr
     echo "$base/claude-sessions/archive"
 end
 
+function _ccs_restore_transcript --description 'Put a crashed session transcript back so it can be resumed'
+    set -l sid $argv[1]
+    set -l entry_file $argv[2]
+    test -n "$sid"; or return 1
+
+    # Still present — nothing to do
+    if _ccs_session_jsonl "$sid" >/dev/null
+        return 0
+    end
+
+    # We can only restore to where the file actually belongs, and the only
+    # reliable source for that is the path the Stop hook recorded from the hook
+    # payload. Deriving the project dir name from cwd is not dependable, and
+    # writing a transcript to the wrong dir would make it unresumable anyway.
+    set -l target
+    if test -n "$entry_file"; and test -f "$entry_file"
+        set target (jq -r '.transcript_path // ""' "$entry_file" 2>/dev/null)
+    end
+    if test -z "$target"
+        return 1
+    end
+
+    set -l backup (_ccs_local_backup_dir)"/$sid.jsonl.zst"
+    if not test -f "$backup"
+        set backup "$HOME/Cloud/cc-sessions"(jq -r '.cwd // ""' "$entry_file" 2>/dev/null)"/session-backups/$sid.jsonl.zst"
+    end
+    test -f "$backup"; or return 1
+
+    mkdir -p (dirname "$target") 2>/dev/null
+    if zstd -dqf "$backup" -o "$target" 2>/dev/null
+        echo "Restored transcript from backup: "(basename "$target")
+        return 0
+    end
+    return 1
+end
+
+function _ccs_local_backup_dir --description 'Local (non-cloud) transcript backups written by the Stop hook'
+    set -l base $XDG_STATE_HOME
+    if test -z "$base"
+        set base "$HOME/.local/state"
+    end
+    echo "$base/claude-sessions/transcripts"
+end
+
 function _ccs_open_register --description 'Register a new open session entry'
     set -l pid $argv[1]
     if test -z "$pid"
@@ -555,7 +739,12 @@ function _ccs_open_register --description 'Register a new open session entry'
             }
         }' > "$tmp"
     and mv "$tmp" "$file"
-    or rm -f "$tmp"
+    # Echo the path so callers can export it as CCS_ENTRY_FILE for the hooks
+    and echo "$file"
+    or begin
+        rm -f "$tmp"
+        return 1
+    end
 end
 
 function _ccs_open_entry_for_pid --description 'Find the open file for a pid+lstart we currently own'
@@ -575,87 +764,32 @@ function _ccs_open_entry_for_pid --description 'Find the open file for a pid+lst
     return 1
 end
 
-function _ccs_open_watch --description 'Background poller: claim the new JSONL for this session'
-    set -l pid $argv[1]
-    set -l pre_latest $argv[2]
-    set -l dir (_ccs_open_dir)
-    set -l project_dir (string replace -a '/' '-' (pwd))
-    set -l sessions_dir "$HOME/.claude/projects/$project_dir"
-    set -l entry_file (_ccs_open_entry_for_pid $pid)
-    if test -z "$entry_file"
-        return 1
-    end
-
-    set -l pre_mtime 0
-    if test -n "$pre_latest"; and test -f "$pre_latest"
-        set pre_mtime (stat -f %m "$pre_latest" 2>/dev/null)
-    end
-
-    for i in (seq 60)
-        # If the wrapper has died (clean exit deleted the file, or crash) bail
-        # out so we don't resurrect a deleted entry with stale data.
-        if not test -f "$entry_file"
-            return 0
-        end
-        if not kill -0 $pid 2>/dev/null
-            return 0
-        end
-        if not test -d "$sessions_dir"
-            sleep 1
-            continue
-        end
-        # Find candidate JSONLs newer than pre_latest
-        set -l candidates (find "$sessions_dir" -maxdepth 1 -name '*.jsonl' -type f -exec stat -f '%m %N' {} + 2>/dev/null | sort -n | awk -v t=$pre_mtime '$1 > t {print $2}')
-        if test (count $candidates) -gt 0
-            # Read all sibling session_ids to avoid double-claiming
-            set -l claimed
-            for sf in "$dir"/*.json
-                test -f "$sf"; or continue
-                set -l sid (jq -r '.session_id // ""' "$sf" 2>/dev/null)
-                if test -n "$sid"
-                    set -a claimed $sid
-                end
-            end
-            for cand in $candidates
-                set -l cand_id (basename "$cand" .jsonl)
-                if contains $cand_id $claimed
-                    continue
-                end
-                # Verify via line 1 sessionId field for robustness
-                set -l line1_id (head -n1 "$cand" 2>/dev/null | jq -r '.sessionId // empty' 2>/dev/null)
-                if test -n "$line1_id"
-                    set cand_id $line1_id
-                    if contains $cand_id $claimed
-                        continue
-                    end
-                end
-                # Claim it. Re-check entry_file right before mv so we don't
-                # resurrect an entry the wrapper has just deleted on clean exit.
-                set -l tmp "$entry_file.tmp.$fish_pid"
-                jq --arg id "$cand_id" '.session_id = $id' "$entry_file" > "$tmp"
-                or begin
-                    rm -f "$tmp"
-                    return 1
-                end
-                if not test -f "$entry_file"
-                    rm -f "$tmp"
-                    return 0
-                end
-                mv "$tmp" "$entry_file"
-                return 0
-            end
-        end
-        sleep 1
-    end
-    return 1
-end
-
 function _ccs_open_finalize --description 'Delete the open entry for this pid (clean exit)'
     set -l pid $argv[1]
     set -l entry_file (_ccs_open_entry_for_pid $pid)
-    if test -n "$entry_file"
-        rm -f "$entry_file"
+    test -n "$entry_file"; or return 0
+
+    # If this session was saved but never titled, inherit the title the Stop
+    # hook recorded — saves `ccsave` a Haiku round trip.
+    set -l sid (jq -r '.session_id // ""' "$entry_file" 2>/dev/null)
+    set -l title (jq -r '.title // ""' "$entry_file" 2>/dev/null)
+    set -l saved (_ccs_file)
+    if test -n "$sid"; and test -n "$title"; and test -f "$saved"
+        set -l needs (jq -r --arg id "$sid" \
+            'map(select(.id == $id and ((.title // "") == ""))) | length' "$saved" 2>/dev/null)
+        if test "$needs" = 1
+            set -l tmp "$saved.tmp.$fish_pid"
+            if jq -c --arg id "$sid" --arg t "$title" \
+                '[.[] | if .id == $id and ((.title // "") == "") then .title = $t else . end]' \
+                "$saved" > "$tmp" 2>/dev/null
+                mv "$tmp" "$saved"
+            else
+                rm -f "$tmp"
+            end
+        end
     end
+
+    rm -f "$entry_file"
 end
 
 function _ccs_open_alive --description 'True iff entry file points at a live process (PID + lstart match)'
@@ -676,45 +810,164 @@ end
 function _ccs_open_scan --description 'Classify open entries for current pwd; reap garbage; print TSV'
     set -l dir (_ccs_open_dir)
     test -d "$dir"; or return 0
-    set -l cwd (pwd)
-    set -l now (date +%s)
-    set -l garbage_age (math 5 \* 60)
-    for f in "$dir"/*.json
-        test -f "$f"; or continue
-        set -l entry_cwd (jq -r '.cwd' "$f" 2>/dev/null)
-        if test "$entry_cwd" != "$cwd"
-            continue
-        end
-        set -l sid (jq -r '.session_id // ""' "$f" 2>/dev/null)
-        set -l started (jq -r '.started_at // 0' "$f" 2>/dev/null)
-        set -l klass
-        if _ccs_open_alive "$f"
-            set klass running
-        else if test -z "$sid"; and test (math "$now - $started") -gt $garbage_age
-            # Garbage: dead, no session_id, > 5 min old
-            rm -f "$f"
-            continue
-        else if test -z "$sid"
-            # Dead but recent: skip (watcher may still be running)
-            continue
-        else
-            set klass crashed
-        end
+    # One python pass rather than a jq fork per field: this runs on every `cd`
+    # via chpwd, and the old version spawned ~330 processes (~7s). Python also
+    # tolerates a corrupt entry file — `jq -n inputs` aborts the whole stream on
+    # the first parse error, silently truncating the session list.
+    # Emits TSV: klass, session_id, entry_file, started_at, term_summary, title
+    python3 -c '
+import json, os, subprocess, sys
 
-        # Build a short terminal summary. Defaults to "shell" so the picker
-        # never shows a trailing comma with no program name.
-        set -l program (jq -r '.terminal.program // "shell"' "$f" 2>/dev/null)
-        set -l tmux_session (jq -r '.terminal.tmux_session // ""' "$f" 2>/dev/null)
-        set -l tmux_pane (jq -r '.terminal.tmux_pane // ""' "$f" 2>/dev/null)
-        set -l term_summary $program
-        if test -n "$tmux_session"
-            set term_summary "$program $tmux_session:$tmux_pane"
-        end
-        # Sanitize tabs from user/env-supplied fields so TSV stays well-formed
-        set term_summary (string replace -a \t ' ' -- $term_summary)
+open_dir, want_cwd = sys.argv[1], sys.argv[2]
+GARBAGE_AGE = 5 * 60
+now = int(__import__("time").time())
 
-        printf '%s\t%s\t%s\t%s\t%s\n' "$klass" "$sid" "$f" "$started" "$term_summary"
-    end
+# One ps call for every pid, instead of one per entry
+alive = {}
+try:
+    out = subprocess.run(["ps", "-eo", "pid=,lstart="], capture_output=True, text=True).stdout
+    for line in out.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        pid, _, lstart = line.partition(" ")
+        alive[pid.strip()] = lstart.strip()
+except Exception:
+    pass
+
+project_root = os.path.expanduser("~/.claude/projects")
+try:
+    project_dirs = [e.path for e in os.scandir(project_root) if e.is_dir()]
+except OSError:
+    project_dirs = []
+
+def transcript_for(sid):
+    # Glob rather than deriving the dir name from cwd: Claude Code mangles "."
+    # as well as "/", and the full rule is not documented.
+    for d in project_dirs:
+        p = os.path.join(d, sid + ".jsonl")
+        if os.path.isfile(p):
+            return p
+    return ""
+
+def title_from(path):
+    try:
+        with open(path, "rb") as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        return ""
+    # Claude Code records its own title as {"type":"ai-title","aiTitle":...},
+    # refreshed as the session drifts, so the last record wins. Parse the whole
+    # record rather than slicing between quotes: a title containing an escaped
+    # quote would otherwise be cut mid-escape and yield a trailing backslash.
+    # Falls back to the last user prompt for sessions Claude never titled.
+    for key, field in ((b"\"type\":\"ai-title\"", "aiTitle"),
+                       (b"\"type\":\"last-prompt\"", "lastPrompt")):
+        for line in reversed(lines):
+            if key not in line:
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            val = rec.get(field)
+            # Must be a string: a lastPrompt array would otherwise be stored as
+            # its JSON rendering and shown as the title.
+            if isinstance(val, str) and val:
+                return val
+    return ""
+
+def clean(s, limit=58):
+    s = " ".join(str(s).split())
+    if len(s) > limit:
+        s = s[:limit - 1] + "…"
+    return s
+
+rows = []
+try:
+    names = sorted(os.listdir(open_dir))
+except OSError:
+    names = []
+
+for name in names:
+    if not name.endswith(".json"):
+        continue
+    path = os.path.join(open_dir, name)
+    try:
+        with open(path) as fh:
+            e = json.load(fh)
+    except Exception:
+        # Corrupt or half-written: skip this entry, never the whole listing
+        continue
+    if not isinstance(e, dict):
+        continue
+
+    # Case-insensitive: some entries recorded Vaults/, others vaults/, and a
+    # string compare hid whichever case you were not standing in.
+    if str(e.get("cwd", "")).lower() != want_cwd.lower():
+        continue
+
+    sid = str(e.get("session_id") or "")
+    try:
+        started = int(e.get("started_at") or 0)
+    except (TypeError, ValueError):
+        started = 0
+    pid = str(e.get("pid") or "")
+    lstart = str(e.get("pid_lstart") or "")
+
+    is_alive = bool(pid) and alive.get(pid) == lstart and lstart != ""
+    if is_alive:
+        klass = "running"
+    elif not sid:
+        if now - started > GARBAGE_AGE:
+            # Dead and it never captured a session id: nothing recoverable
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        continue
+    else:
+        klass = "crashed"
+
+    term = e.get("terminal") or {}
+    program = str(term.get("program") or "") or "shell"
+    tmux_session = str(term.get("tmux_session") or "")
+    tmux_pane = str(term.get("tmux_pane") or "")
+    summary = "%s %s:%s" % (program, tmux_session, tmux_pane) if tmux_session else program
+
+    # Prefer the title the Stop hook recorded while the session was alive: it
+    # outlives the transcript, which Claude Code eventually prunes.
+    title = str(e.get("title") or "")
+    if not title and sid:
+        p = str(e.get("transcript_path") or "")
+        if not p or not os.path.isfile(p):
+            p = transcript_for(sid)
+        if p:
+            title = title_from(p)
+
+    rows.append((started, klass, sid, path, summary, title))
+
+# Dedup only among real session ids. Several entries share the empty id — one of
+# them can be the live session — so keying on it would collapse them into one row.
+# Order running-first, then newest, and keep the FIRST per id: a dead entry with
+# a newer started_at must never displace a live one, or `ccs list` would show a
+# running session as crashed and `ccs resume` would start a second Claude on an
+# already-open transcript instead of switching to its terminal.
+best = {}
+loose = []
+for r in sorted(rows, key=lambda r: (r[1] != "running", -r[0])):
+    sid = r[2]
+    if not sid:
+        loose.append(r)
+    elif sid not in best:
+        best[sid] = r
+
+for started, klass, sid, path, summary, title in sorted(
+        list(best.values()) + loose, key=lambda r: -r[0]):
+    # Tabs and newlines would break the TSV contract downstream
+    print("\t".join(clean(x, 400) if i < 4 else clean(x) for i, x in
+                    enumerate([klass, sid, path, str(started), summary, title])))
+' "$dir" (pwd)
 end
 
 function _ccs_switch_to --description 'Best-effort focus the terminal running a session'
@@ -778,24 +1031,130 @@ function _ccs_archive_entry --description 'Move an open entry into the archive'
     mv "$entry_file" "$archive/"
 end
 
+function _ccs_prune --description 'Archive crashed entries that can no longer be recovered'
+    set -l dry 0
+    if contains -- --dry-run $argv; or contains -- -n $argv
+        set dry 1
+    end
+
+    set -l dir (_ccs_open_dir)
+    if not test -d "$dir"
+        echo "No open sessions directory"
+        return 1
+    end
+    set -l archive (_ccs_archive_dir)
+    set -l local_backups (_ccs_local_backup_dir)
+
+    set -l checked 0
+    set -l pruned 0
+    set -l kept 0
+
+    # Deliberately sweeps every directory, not just (pwd): the scan only ever
+    # sees entries for the directory you happen to be in.
+    for f in "$dir"/*.json
+        test -f "$f"; or continue
+        # Never touch a live session
+        if _ccs_open_alive "$f"
+            continue
+        end
+        set -l sid (jq -r '.session_id // ""' "$f" 2>/dev/null)
+        # No session id yet — leave those to the scan's garbage collection
+        test -n "$sid"; or continue
+        set checked (math $checked + 1)
+        set -l entry_cwd (jq -r '.cwd // ""' "$f" 2>/dev/null)
+
+        # Recoverable if ANY of three sources survives. Check all before
+        # touching anything — an entry archived by mistake is a lost session.
+        set -l recoverable 0
+        # 1. the transcript itself
+        if _ccs_session_jsonl "$sid" >/dev/null
+            set recoverable 1
+        end
+        # 2. a compressed copy, local or cloud. Keep the entry whenever one
+        #    exists: the conversation is still on disk, so archiving it would be
+        #    throwing away the only copy's only pointer. Restoring it needs the
+        #    transcript_path the Stop hook records, and entries predating that
+        #    hook don't have one — that makes resume fail loudly, which is far
+        #    better than silently discarding a recoverable session.
+        if test $recoverable -eq 0
+            if test -f "$local_backups/$sid.jsonl.zst"
+                set recoverable 1
+            else if test -f "$HOME/Cloud/cc-sessions$entry_cwd/session-backups/$sid.jsonl.zst"
+                set recoverable 1
+            end
+        end
+        # 3. recorded as a saved session
+        if test $recoverable -eq 0
+            set -l saved "$HOME/Cloud/cc-sessions$entry_cwd/sessions.json"
+            if test -f "$saved"
+                set -l in_saved (jq -r --arg id "$sid" '[.[].id] | index($id) // empty' "$saved" 2>/dev/null)
+                if test -n "$in_saved"
+                    set recoverable 1
+                end
+            end
+        end
+
+        if test $recoverable -eq 1
+            set kept (math $kept + 1)
+            continue
+        end
+
+        if test $dry -eq 1
+            set pruned (math $pruned + 1)
+            continue
+        end
+
+        # Archived, never deleted — the record (and any recorded title) survives.
+        # Move FIRST, then annotate the archived copy: `mv -n` refuses silently on
+        # a basename collision, and stamping beforehand would leave a half-mutated
+        # entry sitting in open/ to be re-stamped and re-counted on every prune.
+        mkdir -p "$archive"
+        set -l dest "$archive/"(basename "$f")
+        # BSD mv -n exits 0 while silently refusing, so the -f check is the real
+        # test. Report it: an entry that can't be archived would otherwise be
+        # missing from both the archived and the kept count.
+        if not mv -n "$f" "$dest" 2>/dev/null; or test -f "$f"
+            echo (set_color yellow)"  could not archive "(basename "$f")" (name already in archive)"(set_color normal)
+            continue
+        end
+        set pruned (math $pruned + 1)
+        set -l tmp "$dest.tmp.$fish_pid"
+        if jq '.archived_reason = "unrecoverable"' "$dest" > "$tmp" 2>/dev/null
+            mv "$tmp" "$dest"
+        else
+            rm -f "$tmp"
+        end
+    end
+
+    if test $dry -eq 1
+        echo "Prune (dry run): $pruned of $checked unrecoverable, $kept recoverable"
+    else
+        echo "Prune: archived $pruned of $checked, kept $kept recoverable"
+    end
+end
+
 function _ccs_old --description 'List archived (resumed) session entries for current pwd'
     set -l archive (_ccs_archive_dir)
     if not test -d "$archive"
         echo "No archived sessions"
         return 1
     end
-    set -l cwd (pwd)
-    # Build epoch-prefixed sortable list, newest first
+    # Case-insensitive, like the scan: some entries recorded Vaults/, others
+    # vaults/, and an exact compare hides whichever case you aren't standing in.
+    set -l cwd (string lower (pwd))
+    # Build epoch-prefixed sortable list, newest first. One jq per entry reading
+    # every field at once — and the title comes from the entry only, never from
+    # the transcript: grepping one per archived row cost seconds per call.
     set -l rows
     for f in "$archive"/*.json
         test -f "$f"; or continue
-        set -l entry_cwd (jq -r '.cwd' "$f" 2>/dev/null)
-        if test "$entry_cwd" != "$cwd"
+        set -l fields (jq -r '[(.cwd // ""), (.started_at // 0), (.session_id // ""), (.archived_reason // "resumed"), ((.title // "") | gsub("[\t\n]"; " "))] | @tsv' "$f" 2>/dev/null)
+        test -n "$fields"; or continue
+        set -l e (string split \t -- $fields)
+        if test (string lower "$e[1]") != "$cwd"
             continue
         end
-        set -l started (jq -r '.started_at // 0' "$f" 2>/dev/null)
-        set -l sid (jq -r '.session_id // ""' "$f" 2>/dev/null)
-        set -a rows (printf '%s\t%s\t%s' $started $sid $f)
+        set -a rows (printf '%s\t%s\t%s\t%s\t%s' $e[2] $e[3] $f $e[4] "$e[5]")
     end
     if test (count $rows) -eq 0
         echo "No archived sessions for this directory"
@@ -807,7 +1166,12 @@ function _ccs_old --description 'List archived (resumed) session entries for cur
         set -l sid $parts[2]
         set -l short_id (string sub -l 8 "$sid")
         set -l when (date -r "$started" '+%Y-%m-%d %H:%M' 2>/dev/null)
-        printf '  %s  %s\n' (set_color cyan)"$short_id"(set_color normal) (set_color brblack)"archived $when"(set_color normal)
+        set -l title (_ccs_truncate "$parts[5]" 58)
+        set -l meta "$parts[4] $when"
+        if test -n "$title"
+            set meta "$title — $parts[4] $when"
+        end
+        printf '  %s  %s\n' (set_color cyan)"$short_id"(set_color normal) (set_color brblack)"$meta"(set_color normal)
     end
 end
 
@@ -877,7 +1241,7 @@ function _ccs_migrate --description 'Migrate old session files to ~/Cloud/cc-ses
 end
 
 function _ccs_help
-    echo "ccs [add|list|rename|autotitle|rm|resume|old|backup|migrate|help]"
+    echo "ccs [add|list|rename|autotitle|rm|resume|old|prune|backup|migrate|help]"
     echo "  add <id> [title]    Add a session (also accepts 'claude --resume <id>')"
     echo "  list                List sessions in current directory"
     echo "  rename <id> <title> Rename a session"
@@ -885,6 +1249,7 @@ function _ccs_help
     echo "  remove <id>         Remove a session"
     echo "  resume              Pick and resume a session (fzf)"
     echo "  old                 List archived (previously-resumed) sessions"
+    echo "  prune [--dry-run]   Archive crashed entries that can no longer be recovered"
     echo "  backup              Back up saved session transcripts (zstd)"
     echo "  migrate             Migrate old .claude-sessions/.cc/ to ~/Cloud/cc-sessions/"
     echo "  help                Show this help"
@@ -906,6 +1271,8 @@ function ccs --description 'Claude Code Sessions - manage per-directory sessions
             _ccs_open
         case old archive
             _ccs_old
+        case prune
+            _ccs_prune $argv[2..-1]
         case backup
             _ccs_backup
         case migrate
