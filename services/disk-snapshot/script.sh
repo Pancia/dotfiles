@@ -6,6 +6,14 @@ mkdir -p "$DIR"
 TODAY="$DIR/$(date +%Y-%m-%d)"
 OUT="${TODAY}_$(date +%H%M%S).txt"
 
+# Scan into a .partial file and rename only once every section is written. A
+# killed scan (power loss, Ctrl-C) used to leave a truncated .txt behind that
+# readers could not tell from a complete one — the header for the section it
+# died in was already on disk. The suffix keeps it out of the *.txt glob even
+# if the trap never runs.
+TMP="${OUT}.partial"
+trap 'rm -f "$TMP"' EXIT
+
 log() { echo "$*" >&2; }
 
 log "Starting disk snapshot -> $OUT"
@@ -20,15 +28,15 @@ scan() {
     log "Done scanning $header"
 }
 
-scan "/" du -d 1 -k / > "$OUT"
-scan "~" du -d 1 -k "$HOME" >> "$OUT"
-scan "~/Library" du -d 1 -k "$HOME/Library" >> "$OUT"
-scan "~/Library/Caches" du -d 1 -k "$HOME/Library/Caches" >> "$OUT"
-scan "~/Library/CloudStorage" du -d 1 -k "$HOME/Library/CloudStorage" >> "$OUT"
-scan "~/.cache" du -d 1 -k "$HOME/.cache" >> "$OUT"
-scan "~/.local" du -d 2 -k "$HOME/.local" >> "$OUT"
-scan "~/AndroidStudioProjects" du -d 1 -k "$HOME/AndroidStudioProjects" >> "$OUT"
-[ -d /Volumes/vansuny128 ] && scan "/Volumes/vansuny128" du -d 1 -k /Volumes/vansuny128 >> "$OUT"
+scan "/" du -d 1 -k / > "$TMP"
+scan "~" du -d 1 -k "$HOME" >> "$TMP"
+scan "~/Library" du -d 1 -k "$HOME/Library" >> "$TMP"
+scan "~/Library/Caches" du -d 1 -k "$HOME/Library/Caches" >> "$TMP"
+scan "~/Library/CloudStorage" du -d 1 -k "$HOME/Library/CloudStorage" >> "$TMP"
+scan "~/.cache" du -d 1 -k "$HOME/.cache" >> "$TMP"
+scan "~/.local" du -d 2 -k "$HOME/.local" >> "$TMP"
+scan "~/AndroidStudioProjects" du -d 1 -k "$HOME/AndroidStudioProjects" >> "$TMP"
+[ -d /Volumes/vansuny128 ] && scan "/Volumes/vansuny128" du -d 1 -k /Volumes/vansuny128 >> "$TMP"
 
 log "Scanning ~/projects (git repos) ..."
 {
@@ -37,7 +45,9 @@ log "Scanning ~/projects (git repos) ..."
         du -sk "$(dirname "$d")" 2>/dev/null || true
     done | sort -t$'\t' -k2
     echo ""
-} >> "$OUT"
+} >> "$TMP"
+
+mv "$TMP" "$OUT"
 
 lines=$(wc -l < "$OUT")
 size=$(du -h "$OUT" | cut -f1)

@@ -244,6 +244,7 @@ Hermes is a which-key app launcher. Commands are defined in `rcs/hermes-commands
 | `ccsave [title]` | Save current Claude Code session to `~/Cloud/cc-sessions/` (autogenerates title if omitted) |
 | `ccs list` / `ccs resume` | List/pick sessions, including crashed ones (titled — see below) |
 | `ccs prune [--dry-run]` | Archive crashed entries with no surviving transcript, backup, or saved record |
+| `disk-cleanup` | Report on the latest disk snapshot (biggest consumers + growth vs a ~30-day-old baseline), then offer a Claude session to help free space. `--no-ai` report only, `--ai` skip the prompt, `--scan` fresh snapshot first. Hermes: `Cmd+Space` → `x` → `d` |
 | `service` | LaunchAgent manager (list/start/stop/restart/log/status) |
 | `tab-organize windows` | List open browser windows with tab counts |
 | `tab-organize plan [--window ID]` | Generate AI organization plan (editable before execute) |

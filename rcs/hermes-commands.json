@@ -1,5 +1,9 @@
 {
-    "b": ["browser sync state", {"interactive": "nvim ~/Vaults/the-akashic-records/browser-sync/current.md"}],
+    "b": {
+        "_desc": "+browser",
+        "s": ["browser sync state", {"interactive": "nvim ~/Vaults/the-akashic-records/browser-sync/current.md"}],
+        "o": ["tab-organize plan (prefill)", {"interactive": "fish -iC 'function __pre --on-event fish_prompt; commandline -r \"tab-organize plan \"; functions -e __pre; end'"}]
+    },
     "c": ["calendar", {"interactive": "agenda 24"}],
     "d": {
         "_desc": "+dotfiles",
@@ -13,7 +17,6 @@
     "i": ["inbox", {"interactive": "ai_inbox"}],
     "j": ["Emoji Picker", {"shell": "emoji-pick"}],
     "n": ["Save to Pinterest", {"interactive": "cd ~/private/pancia && _bin/pinterest_save"}],
-    "o": ["tab-organize plan (prefill)", {"interactive": "fish -iC 'function __pre --on-event fish_prompt; commandline -r \"tab-organize plan \"; functions -e __pre; end'"}],
     "f": {
         "_desc": "+finder",
         "_": ["View spirituality", "finder-here $HOME/ProtonDrive/_spirituality"],
@@ -100,6 +103,12 @@
         ",": ["Seek 30 Backwards", "cmus-remote --seek -30"],
         "j": ["Volume Down", "cmus-remote --volume -5"],
         "k": ["Volume Up", "cmus-remote --volume +5"]
+    },
+    "x": {
+        "_desc": "+disk",
+        "d": ["Disk cleanup (report + Claude)", "open-iterm-with 'disk-cleanup; exec fish'"],
+        "r": ["Disk report only", "open-iterm-with 'disk-cleanup --no-ai; exec fish'"],
+        "s": ["Fresh scan, then cleanup", "open-iterm-with 'disk-cleanup --scan; exec fish'"]
     },
     "t": {
         "_desc": "+macOS settings",

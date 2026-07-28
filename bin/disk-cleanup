@@ -1,0 +1,274 @@
+#!/usr/bin/env bash
+#
+# disk-cleanup — investigate the disk-snapshot results and free up space.
+#
+# Reads the latest snapshot from ~/.local/share/disk-snapshots (written by the
+# disk-snapshot service), prints what is eating the disk plus what has grown
+# since an older snapshot, then offers to hand the whole report to Claude.
+#
+set -euo pipefail
+
+SNAP_DIR="$HOME/.local/share/disk-snapshots"
+SCAN_SCRIPT="$HOME/dotfiles/services/disk-snapshot/script.sh"
+DIFF_BIN="$HOME/dotfiles/bin/disk-snapshot-diff"
+REPORT_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/disk-cleanup"
+
+BASELINE_DAYS=30            # how far back to look for the "before" snapshot
+TOPN=8                      # entries shown per section
+FLOOR_MB=50                 # hide anything smaller from the top lists
+THRESHOLD_MB=100            # minimum growth disk-snapshot-diff reports
+ASK=ask                     # ask | yes | no
+SCAN=0
+
+usage() {
+    cat <<'EOF'
+disk-cleanup — investigate the disk-snapshot results and free up space.
+
+  disk-cleanup              report, then offer a Claude session
+  disk-cleanup --ai         report, straight into Claude
+  disk-cleanup --no-ai      report only
+  disk-cleanup --scan       take a fresh snapshot first (slow: du over /)
+
+  -d DAYS   how far back the growth baseline reaches (default 30)
+  -n N      entries shown per area (default 8)
+  -t MB     minimum growth reported (default 100)
+  -f MB     hide entries smaller than this from the top lists (default 50)
+  -h        this help
+EOF
+}
+
+die() { echo "disk-cleanup: $*" >&2; exit 1; }
+
+usage_error() {
+    echo "disk-cleanup: $*" >&2
+    echo "" >&2
+    usage >&2
+    exit 1
+}
+
+# Options take a count, not a path — reject anything that is not one, rather
+# than letting it surface later as an awk/head/date error mid-report.
+need_num() {
+    [[ "${2:-}" =~ ^[0-9]+$ ]] || usage_error "$1 needs a number (got: ${2:-<nothing>})"
+}
+
+while (( $# )); do
+    case "$1" in
+        -d) need_num "$1" "${2:-}"; BASELINE_DAYS="$2"; shift ;;
+        -n) need_num "$1" "${2:-}"; TOPN="$2"; shift ;;
+        -t) need_num "$1" "${2:-}"; THRESHOLD_MB="$2"; shift ;;
+        -f) need_num "$1" "${2:-}"; FLOOR_MB="$2"; shift ;;
+        --scan)   SCAN=1 ;;
+        --ai)     ASK=yes ;;
+        --no-ai)  ASK=no ;;
+        -h|--help) usage; exit 0 ;;
+        *) usage_error "unknown argument: $1" ;;
+    esac
+    shift
+done
+
+FLOOR_KB=$(( FLOOR_MB * 1024 ))
+
+human_size() {
+    awk -v kb="$1" 'BEGIN {
+        sign = (kb < 0) ? "-" : ""
+        a = (kb < 0) ? -kb : kb
+        if (a >= 1048576)   printf "%s%.1fG", sign, a / 1048576
+        else if (a >= 1024) printf "%s%.0fM", sign, a / 1024
+        else                printf "%s%dK", sign, a
+    }'
+}
+
+# ~-ify a path for display
+pretty() { echo "${1/#$HOME/\~}"; }
+
+# Snapshots are named YYYY-MM-DD[_HHMMSS].txt. Anchor every date at UTC noon:
+# whole-day arithmetic is then exact regardless of the local clock, and a DST
+# transition inside the baseline window cannot make a span come up an hour
+# short (which would silently reject a snapshot that is exactly -d days old).
+snap_epoch() { date -u -j -f '%Y-%m-%d %H:%M:%S' "${1:0:10} 12:00:00" +%s 2>/dev/null; }
+days_ago()   { echo $(( ( TODAY_EPOCH - $1 ) / 86400 )); }
+
+# A killed scan leaves a file holding just the first section header (the
+# service echoes "=== / ===" before du runs), so a header is not proof of a
+# usable snapshot — require an actual data line. Also drop anything whose name
+# is not a date, since every later step does arithmetic on that stem.
+list_snaps() {
+    local f stem
+    for f in "$SNAP_DIR"/*.txt; do
+        [[ -f "$f" ]] || continue
+        stem="$(basename "$f" .txt)"
+        snap_epoch "$stem" >/dev/null || continue
+        grep -qE $'^[0-9]+\t' "$f" || continue
+        echo "$f"
+    done | LC_ALL=C sort   # C collation: punctuation counts, so _HHMMSS sorts after the bare date
+}
+
+# Called from a condition below, which disables errexit for this whole body —
+# deliberate, so a failure part-way still shows what was produced rather than
+# printing nothing at all. Every command that can realistically fail is
+# therefore guarded explicitly, and `failed` is what the caller reports on.
+build_report() {
+    local sec root block top kb path base_stem df_target home_re failed=0
+    local _fs size used avail capacity _rest
+
+    # / is the sealed system volume on modern macOS — the numbers that matter
+    # (and the ones that fill up) are on the data volume.
+    df_target=/
+    [[ -d /System/Volumes/Data ]] && df_target=/System/Volumes/Data
+    read -r _fs size used avail capacity _rest < <(df -h "$df_target" | tail -1)
+    printf '=== DISK ===\n'
+    printf '  %s free — %s used of %s (%s)\n\n' "$avail" "$used" "$size" "$capacity"
+
+    printf '  snapshot: %s  (%s days ago)\n' "$LATEST_STEM" "$LATEST_AGE"
+    if [[ -n "$BASE" ]]; then
+        base_stem="$(basename "$BASE" .txt)"
+        printf '  baseline: %s  (%s days ago)\n' \
+            "$base_stem" "$(days_ago "$(snap_epoch "$base_stem")")"
+    fi
+    if (( LATEST_AGE >= 3 )); then
+        printf '  note:     snapshot is %s days old — rerun with --scan for fresh numbers\n' "$LATEST_AGE"
+    fi
+    printf '\n'
+
+    printf '=== BIGGEST CONSUMERS (top %s per area, >= %sM) ===\n' "$TOPN" "$FLOOR_MB"
+    while IFS= read -r sec; do
+        # "~/projects (git repos)" -> "~/projects", then expand ~ so the
+        # section's own root line can be dropped from its own listing.
+        root="${sec% (*}"
+        root="${root/#\~/$HOME}"
+
+        block="$(awk -v s="=== $sec ===" \
+            '$0 == s {f = 1; next} /^=== /{f = 0} f && NF' "$LATEST" || true)"
+        [[ -n "$block" ]] || continue
+
+        # Sections scanned deeper than one level (~/.local, the git repos) list
+        # parents and their children side by side. Keep the parent and drop its
+        # descendants, so N slots mean N distinct places rather than the same
+        # bytes counted twice.
+        # -k1,1rn then -k2,2 so an exact parent/child size tie resolves by path
+        # rather than by sort's reversed whole-line fallback, which would put
+        # the child first and defeat the descendant filter below.
+        top="$(printf '%s\n' "$block" | sort -t$'\t' -k1,1rn -k2,2 | awk -F'\t' \
+            -v floor="$FLOOR_KB" -v root="$root" -v topn="$TOPN" '
+                $1 + 0 < floor { next }
+                $2 == root     { next }
+                {
+                    for (i = 1; i <= n; i++)
+                        if (index($2, kept[i] "/") == 1) next
+                    if (n >= topn) exit
+                    kept[++n] = $2
+                    print
+                }' || true)"
+        [[ -n "$top" ]] || continue
+
+        printf '\n  %s\n' "$sec"
+        while IFS=$'\t' read -r kb path; do
+            [[ -n "${path:-}" ]] || continue
+            printf '   %8s  %s\n' "$(human_size "$kb")" "$(pretty "$path")"
+        done <<< "$top"
+    done < <(grep '^=== ' "$LATEST" | sed 's/^=== //; s/ ===$//')
+    printf '\n'
+
+    if [[ -z "$BASE" ]]; then
+        printf '=== GROWTH ===\n  Only one snapshot so far — nothing to compare against.\n'
+        return 0
+    fi
+
+    printf '=== GROWTH (>= %sM) ===\n' "$THRESHOLD_MB"
+    # Indent under the header and ~-ify paths to match the lists above. gsub
+    # takes a regex, so $HOME goes in escaped — and via the environment rather
+    # than -v, which runs its own escape pass and would strip the backslashes
+    # straight back off.
+    home_re="$(printf '%s' "$HOME" | sed 's/[][\.*^$(){}?+|]/\\&/g')"
+    "$DIFF_BIN" -t "$THRESHOLD_MB" "$BASE" "$LATEST" \
+        | DC_HOME_RE="$home_re" awk \
+            'NF { gsub(ENVIRON["DC_HOME_RE"], "~"); print "  " $0; next } { print "" }' \
+        || { printf '  (disk-snapshot-diff failed — see stderr)\n'; failed=1; }
+
+    return $failed
+}
+
+if (( SCAN )); then
+    [[ -x "$SCAN_SCRIPT" ]] || die "scan script not found: $SCAN_SCRIPT"
+    echo "Taking a fresh disk snapshot (this walks the whole disk, give it a minute)..."
+    "$SCAN_SCRIPT"
+    echo ""
+fi
+
+[[ -x "$DIFF_BIN" ]] || DIFF_BIN="$(command -v disk-snapshot-diff || true)"
+[[ -n "$DIFF_BIN" ]] || die "disk-snapshot-diff not found"
+
+TODAY_EPOCH="$(snap_epoch "$(date +%F)")" || die "cannot determine today's date"
+
+mapfile -t SNAPS < <(list_snaps)
+if (( ${#SNAPS[@]} == 0 )); then
+    die "no usable snapshots in $SNAP_DIR — run 'disk-cleanup --scan', or 'service start disk-snapshot', to make one"
+fi
+
+LATEST="${SNAPS[-1]}"
+LATEST_STEM="$(basename "$LATEST" .txt)"
+LATEST_EPOCH="$(snap_epoch "$LATEST_STEM")" || die "cannot read a date from $LATEST_STEM"
+LATEST_AGE="$(days_ago "$LATEST_EPOCH")"
+
+# Newest snapshot at least BASELINE_DAYS older than the latest; oldest
+# available if nothing reaches back that far.
+BASE=""
+cutoff=$(( LATEST_EPOCH - BASELINE_DAYS * 86400 ))
+for f in "${SNAPS[@]}"; do
+    [[ "$f" == "$LATEST" ]] && continue
+    e="$(snap_epoch "$(basename "$f" .txt)")" || continue
+    (( e <= cutoff )) && BASE="$f"
+done
+if [[ -z "$BASE" && ${#SNAPS[@]} -gt 1 ]]; then
+    BASE="${SNAPS[0]}"
+fi
+
+mkdir -p "$REPORT_DIR"
+REPORT="$REPORT_DIR/report-$(date +%Y%m%d-%H%M%S).txt"
+
+# Built in a condition so a failure part-way still shows what was produced,
+# rather than errexit killing the run before anything reaches the screen.
+if ! build_report > "$REPORT"; then
+    echo "disk-cleanup: the report is incomplete — see the errors above" >&2
+fi
+
+if [[ -t 1 ]]; then
+    sed -E $'s/^(=== .*)$/\033[1;36m\\1\033[0m/' "$REPORT"
+else
+    cat "$REPORT"
+fi
+echo ""
+echo "Report saved to $(pretty "$REPORT")"
+
+if [[ "$ASK" == "no" ]]; then
+    exit 0
+fi
+
+if [[ "$ASK" == "ask" ]]; then
+    [[ -t 0 ]] || exit 0
+    echo ""
+    # EOF (Ctrl-D) means no, not failure.
+    read -r -p "Ask Claude to help free space? [Y/n] " answer || { echo ""; exit 0; }
+    case "${answer:-y}" in
+        [Nn]*) exit 0 ;;
+    esac
+fi
+
+# Passed through the environment rather than interpolated into the fish
+# command string, so an apostrophe in any path cannot break the quoting.
+export DISK_CLEANUP_PROMPT="Help me free up disk space on this Mac. Start with \
+the report at ${REPORT} and the full snapshot at ${LATEST} (du output, one \
+section per area, sizes in KB). The older snapshot at ${BASE:-none} is the \
+baseline the growth numbers came from. Investigate the biggest and \
+fastest-growing directories with du/ls to find what is actually in them, then \
+give me a concrete list of deletion candidates with sizes, safest first, and \
+say what each one is. Do not delete anything without asking me, and use trash \
+rather than rm."
+
+cd "$HOME"
+if command -v fish >/dev/null 2>&1; then
+    exec fish -c 'my-claude-code-wrapper --process-label disk-cleanup "$DISK_CLEANUP_PROMPT"'
+else
+    exec claude "$DISK_CLEANUP_PROMPT"
+fi
