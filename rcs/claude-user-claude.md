@@ -88,13 +88,52 @@ Projects can have a `cmds.rb` file with shell command shortcuts for human use.
 - `cmds init` — creates a new cmds.rb from template (no editor), prints the path
 - Load the `/cmds` skill for full documentation on reading/writing commands
 
-## supervise / svc (restartable dev services)
+## Background processes: `service` vs `svc`
 
-`supervise` and `svc` (on PATH from `~/dotfiles/bin/`) run long-lived dev
+Two **unrelated** systems, both on PATH from `~/dotfiles/bin/`. Pick by lifetime:
+
+| | `service` | `supervise` / `svc` |
+|---|---|---|
+| Backend | launchd (`org.pancia.*`) | my terminal |
+| Lifetime | persistent, survives reboot/logout | dies with the shell that started it |
+| Declared in | `~/dotfiles/services/<name>/` (plist + script) | `.svc.conf` / `.svc.local.conf` in the project |
+| Logs | `~/.log/services/<name>.log` | `.run/<name>.log` |
+
+**Never substitute one for the other.** Similar names, nothing else in common. If
+`svc` reports a name "not running", run `service status` before concluding
+anything — it's probably a launchd service, and the project likely has no
+`.svc.conf` at all.
+
+### `service` — persistent launchd agents
+
+Ruby CLI managing my `org.pancia.*` agents: **inari** (and all six Telegram
+bots), sanctuary, hermes, lakshmi, copyparty, syncthing, vpc, tv-board, ziplog,
+bookmark-manager, youtube-transcribe, wget_server, music-backup, disk-snapshot.
+Names work short or full — `inari` == `org.pancia.inari`.
+
+```
+service status                          # table: SERVICE / PID / STATUS
+service start|stop <name>
+service restart <name> [--log]
+service log <name> -q -p [--lines N]    # agent-friendly: bounded snapshot, noise stripped
+service log <name> --grep 'Error|Traceback|Exception' -p
+```
+
+`service log` auto-detects a non-TTY and prints a bounded snapshot instead of
+hanging in `less +GF`; `-q` strips known polling noise (Telegram `getUpdates` /
+httpx lines). Unlike `svc`, **starting is allowed** here — launchd owns these, not
+my terminal.
+
+Full docs: `~/dotfiles/wiki/pages/service.md`
+
+### `supervise` / `svc` — ephemeral terminal-owned dev processes
+
+`supervise` and `svc` run long-lived dev
 processes that stay **owned by my terminal** while an LLM can **restart** them on
 demand. I start one with `supervise <name> -- <cmd>` (usually a `cmds` entry); an
 LLM uses `svc status|logs|restart|stop <name>` to inspect/restart it — but
-**never starts one itself** (if `svc restart` says "not running", ask me). Per-project
+**never starts one itself** (if `svc restart` says "not running", ask me — or check
+whether it's a `service` after all). Per-project
 services are declared in `.svc.conf` / `.svc.local.conf` (`SVC_SERVICES`,
 `svc_port_file`, optional `svc_eval`).
 
