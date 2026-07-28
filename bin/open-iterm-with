@@ -5,9 +5,13 @@ command="$*"
 # iTerm's profile command does not search $PATH — it needs an absolute path
 fish="$(command -v fish || echo /opt/homebrew/bin/fish)"
 
+# Create the window BEFORE activating. A new window lands on the current space,
+# so activating iTerm afterwards finds a window here and macOS stays put —
+# activating first would swoosh to whatever space iTerm's other windows are on.
 osascript <<EOF
 tell application "iterm2"
+  set w to (create window with default profile command "$fish -c '$command'")
   activate
-  create window with default profile command "$fish -c '$command'"
+  select w
 end tell
 EOF
