@@ -3,6 +3,7 @@
 require "cli.rb"
 
 require "shellwords"
+require "time"
 
 $home_dir = "/Users/#{%x[whoami].strip}/"
 $services_dir = "#{$home_dir}/dotfiles/services/"
@@ -11,6 +12,36 @@ $launch_agents_dir = "#{$home_dir}/Library/LaunchAgents/"
 
 def log_for(name)
   "#{$log_dir}#{name}.log"
+end
+
+# launchd keeps no "started at" timestamp (`launchctl print` only counts runs),
+# so a running job's start time comes from its process instead. One `ps` call
+# for every pid at once; returns { pid_string => Time }.
+def start_times_for(pids)
+  return {} if pids.empty?
+
+  # LC_ALL=C: `lstart` is locale-formatted, and Time.parse can't read a
+  # non-Latin month/day (ja_JP gives "木  7/16 19:01:20 2026" -> ArgumentError).
+  out = %x[LC_ALL=C ps -o pid=,lstart= -p #{pids.join(",").shellescape} 2>/dev/null]
+  out.each_line.with_object({}) do |line, acc|
+    pid, lstart = line.strip.split(/\s+/, 2)
+    next unless pid && lstart
+
+    acc[pid] = (Time.parse(lstart) rescue nil)
+  end.compact
+end
+
+# Coarse "how long ago", one unit — the absolute timestamp next to it carries
+# the precision. The guard also absorbs a negative age (clock skew, or a start
+# time in the future), which reads better as "just now" than as "-27h".
+def time_ago(time)
+  secs = (Time.now - time).to_i
+  return "just now" if secs < 5
+
+  [[86_400, "d"], [3_600, "h"], [60, "m"]].each do |span, unit|
+    return "#{secs / span}#{unit}" if secs >= span
+  end
+  "#{secs}s"
 end
 
 # Lines that are almost always noise in a polling-bot log (Telegram long-poll, etc.).
@@ -239,22 +270,51 @@ class ServiceCMDS
     }
   end
   def self.status(opts)
-    opts.info = "status of all services"
+    opts.info = "status of all services, with when each was last started"
     lambda {
       output = %x[launchctl list | grep org.pancia]
-      if output.empty?
-        puts "No org.pancia services found"
-      else
-        puts "%-30s %-10s %s" % ["SERVICE", "PID", "STATUS"]
-        puts "-" * 60
-        output.each_line do |line|
-          parts = line.strip.split(/\s+/)
-          pid = parts[0] == "-" ? "not running" : parts[0]
-          exit_code = parts[1]
-          name = parts[2].sub("org.pancia.", "")
-          status = pid == "not running" ? "stopped" : (exit_code == "0" ? "running" : "error (#{exit_code})")
-          puts "%-30s %-10s %s" % [name, pid, status]
+      return puts "No org.pancia services found" if output.empty?
+
+      rows = output.each_line.map do |line|
+        parts = line.strip.split(/\s+/)
+        running = parts[0] != "-"
+        exit_code = parts[1]
+        {
+          name:    parts[2].sub("org.pancia.", ""),
+          pid:     running ? parts[0] : "-",
+          running: running,
+          status:  running ? (exit_code == "0" ? "running" : "error (#{exit_code})") : "stopped",
+        }
+      end
+
+      starts = start_times_for(rows.select { |r| r[:running] }.map { |r| r[:pid] })
+
+      # A stopped job has no process to ask, so fall back to the mtime of its
+      # log — for the periodic ones (ziplog, disk-snapshot) that *is* the last
+      # run. Flagged with * since it's a last-write, not a start.
+      rows.each do |row|
+        if row[:running]
+          row[:when] = starts[row[:pid]]
+        else
+          logfile = log_for(row[:name])
+          row[:when] = File.mtime(logfile) if File.exist?(logfile)
+          row[:stale] = !row[:when].nil?
         end
+      end
+
+      fmt = "%-24s %-8s %-12s %-21s %s"
+      puts fmt % ["SERVICE", "PID", "STATUS", "LAST START", "AGO"]
+      puts "-" * 72
+      rows.each do |row|
+        stamp = row[:when] ? row[:when].strftime("%Y-%m-%d %H:%M:%S") : "unknown"
+        stamp += "*" if row[:stale]
+        ago = row[:when] ? time_ago(row[:when]) : ""
+        puts (fmt % [row[:name], row[:pid], row[:status], stamp, ago]).rstrip
+      end
+
+      if rows.any? { |r| r[:stale] }
+        puts ""
+        puts "* stopped: last write to its log, not a start time"
       end
     }
   end

@@ -112,7 +112,7 @@ bookmark-manager, youtube-transcribe, wget_server, music-backup, disk-snapshot.
 Names work short or full — `inari` == `org.pancia.inari`.
 
 ```
-service status                          # table: SERVICE / PID / STATUS
+service status                          # table: SERVICE / PID / STATUS / LAST START / AGO
 service start|stop <name>
 service restart <name> [--log]
 service log <name> -q -p [--lines N]    # agent-friendly: bounded snapshot, noise stripped

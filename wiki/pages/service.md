@@ -11,7 +11,7 @@ Names are accepted short or full: `inari` == `org.pancia.inari`.
 
 ```
 service list                          # launchctl list, filtered to org.pancia
-service status                        # table: SERVICE / PID / STATUS (running|stopped|error)
+service status                        # table: SERVICE / PID / STATUS / LAST START / AGO
 service start   <name>
 service stop    <name>
 service restart <name> [--log FLAGS]  # --log/-l shows the log after restarting
