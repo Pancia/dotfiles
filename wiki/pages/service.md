@@ -39,7 +39,7 @@ Flags work **before or after** `<name>` (`log -q inari` == `log inari -q`):
 |------|--------|
 | `-p`, `--print` (`--no-follow`) | Non-interactive: print the last N lines and exit. |
 | `--lines N` (`--tail N`) | How many lines the snapshot shows (default **200**). |
-| `-q`, `--quiet` | Hide known polling noise (Telegram long-poll `getUpdates` / httpx lines — see `LOG_NOISE` in the script). |
+| `-q`, `--quiet` | Hide known polling noise — **only** *successful* Telegram long-poll responses (`getUpdates` … `200 OK`). Failed polls (502/429/409) and every other httpx line are kept. See `LOG_NOISE` in the script; entries are extended regexes. |
 | `--grep PAT` | Keep only lines matching the extended-regex `PAT`. |
 | `--exclude PAT` | Drop lines matching the extended-regex `PAT`. |
 

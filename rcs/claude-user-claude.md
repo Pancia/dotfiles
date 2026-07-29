@@ -88,6 +88,32 @@ Projects can have a `cmds.rb` file with shell command shortcuts for human use.
 - `cmds init` — creates a new cmds.rb from template (no editor), prints the path
 - Load the `/cmds` skill for full documentation on reading/writing commands
 
+## Shelling out to Claude (`claude -p`)
+
+Use **`claude-p`** (`~/dotfiles/bin/claude-p`), never bare `claude -p` — in scripts
+and in ad-hoc commands alike. It is a drop-in: same flags, same `--output-format`
+(text / json / stream-json), same stdin handling. It adds the two guards bare
+`claude -p` lacks:
+
+- **A hard deadline.** `timeout -k` in its own process group, so a wedged child
+  cannot outlive the call. `CLAUDE_P_TIMEOUT` (default 180s) to adjust.
+- **Real error detection.** It asks for JSON underneath and checks `.is_error`.
+  A retired or unavailable `--model` returns `is_error: true` while `subtype`
+  still reads `"success"` — so **`.is_error` is the only trustworthy signal**.
+  An unvalidated caller otherwise treats the error text as a real answer.
+
+Exit codes: `0` ok · `1` claude errored or returned nothing · `124` timed out.
+
+**Never pipe a raw `claude -p` into `head`/`sed -n`.** The reader exiting does not
+stop the writer — on 2026-07-28 a probe outlived its `| head -5` and sat at ~98%
+CPU past 2.7GB RSS. (`claude-p` buffers to a file, so that SIGPIPE lands on its
+own `cat`.)
+
+**The roleplay bookends leak into headless output** — they apply to `claude -p`
+too, roughly two runs in three, and `--append-system-prompt` does not reliably
+suppress them. Any caller parsing a strict format (JSON, a bare token) must
+validate the shape it got back rather than trusting the text.
+
 ## Background processes: `service` vs `svc`
 
 Two **unrelated** systems, both on PATH from `~/dotfiles/bin/`. Pick by lifetime:
@@ -120,9 +146,10 @@ service log <name> --grep 'Error|Traceback|Exception' -p
 ```
 
 `service log` auto-detects a non-TTY and prints a bounded snapshot instead of
-hanging in `less +GF`; `-q` strips known polling noise (Telegram `getUpdates` /
-httpx lines). Unlike `svc`, **starting is allowed** here — launchd owns these, not
-my terminal.
+hanging in `less +GF`; `-q` strips known polling noise — **only successful**
+Telegram `getUpdates` responses, so failed polls (502 / 429 / 409, and the
+"terminated by other getUpdates request" duplicate-instance alarm) still show.
+Unlike `svc`, **starting is allowed** here — launchd owns these, not my terminal.
 
 Full docs: `~/dotfiles/wiki/pages/service.md`
 

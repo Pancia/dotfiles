@@ -45,11 +45,20 @@ def time_ago(time)
 end
 
 # Lines that are almost always noise in a polling-bot log (Telegram long-poll, etc.).
-# Hidden by `service log <name> --quiet`.
+# Hidden by `service log <name> --quiet`. Treated as REGEXES (grep -E), not
+# fixed strings.
+#
+# Each pattern must match ONLY the successful idle poll. Anything broader is a
+# trap: matching bare "getUpdates" also swallows 280 × 502 Bad Gateway, 56 × 429
+# Too Many Requests, 11 × 409 Conflict and — worst — 15 × "terminated by other
+# getUpdates request", which is the alarm for two bot instances polling one
+# token. Those are measured counts from a single 139-day log, i.e. exactly the
+# lines someone reaches for `-q` to go find.
+#
+# (This also once matched every "HTTP Request: … api.telegram.org" line, hiding
+# the 4xx/5xx of every send and download too.)
 LOG_NOISE = [
-  "HTTP Request: POST https://api.telegram.org",
-  "HTTP Request: GET https://api.telegram.org",
-  "getUpdates",
+  'getUpdates.* 200 OK',
 ].freeze
 
 # Pull the value out of trailing args for `--flag value` or `--flag=value`.
@@ -124,7 +133,7 @@ def view_log!(name, args)
   # grep filters (line-buffered when following so output isn't stuck in a buffer).
   lb = o[:snapshot] ? "" : "--line-buffered "
   greps = []
-  LOG_NOISE.each { |p| greps << "grep #{lb}-v -F -e #{p.shellescape}" } if o[:quiet]
+  LOG_NOISE.each { |p| greps << "grep #{lb}-v -E -e #{p.shellescape}" } if o[:quiet]
   greps << "grep #{lb}-v -E -e #{o[:exclude].shellescape}" if o[:exclude]
   greps << "grep #{lb}-E -e #{o[:grep].shellescape}" if o[:grep]
 

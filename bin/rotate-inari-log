@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Rotate ~/.log/services/inari.log: redact + compress into an archive, then
+# truncate the live log in place.
+#
+# Copytruncate, NOT rename: launchd holds an open fd on the plist's
+# StandardOutPath, so `mv` would leave launchd writing into the renamed inode
+# and the new file would never appear until the service restarted. The fd is
+# opened O_APPEND (verify with `lsof +fg -p <pid>` — look for AP), so writes
+# after a truncate resume at offset 0 with no sparse hole and no restart.
+#
+# Size-triggered rather than daily so the live log keeps ~a month of greppable
+# content. Override the threshold with INARI_LOG_ROTATE_MB.
+set -euo pipefail
+
+LOG="$HOME/.log/services/inari.log"
+ARCHIVE_DIR="$HOME/.log/services/archive"
+THRESHOLD_MB="${INARI_LOG_ROTATE_MB:-26}"
+
+[ -f "$LOG" ] || { echo "no log at $LOG"; exit 0; }
+
+size_mb=$(( $(stat -f%z "$LOG") / 1024 / 1024 ))
+if [ "$size_mb" -lt "$THRESHOLD_MB" ]; then
+    echo "inari.log is ${size_mb}MB (< ${THRESHOLD_MB}MB) — skipping"
+    exit 0
+fi
+
+mkdir -p "$ARCHIVE_DIR"
+chmod 700 "$ARCHIVE_DIR"
+
+# Name by the range the content covers, not the rotation date — a rotation-date
+# filename says nothing about what's inside a ~30-day archive.
+first=$(grep -m1 -oE '^[0-9]{4}-[0-9]{2}-[0-9]{2}' "$LOG" || true)
+last=$(tail -n 20000 "$LOG" | grep -oE '^[0-9]{4}-[0-9]{2}-[0-9]{2}' | tail -1 || true)
+[ -n "$first" ] || first=$(date +%F)
+[ -n "$last" ]  || last=$(date +%F)
+
+out="$ARCHIVE_DIR/inari-${first}_${last}.log.gz"
+n=1
+while [ -e "$out" ]; do
+    out="$ARCHIVE_DIR/inari-${first}_${last}-$n.log.gz"
+    n=$((n + 1))
+done
+
+echo "rotating ${size_mb}MB (${first} → ${last}) -> $out"
+
+# Redaction is mandatory, not hygiene: these archives are permanent, unencrypted
+# and covered by no backup, and Telegram bot tokens are long-lived credentials.
+#
+# The rule is SHAPE-based (<6-12 digit id><sep><30+ char secret>), not anchored
+# on "/bot", because tokens reach the log in at least four different shapes and
+# an anchored rule silently misses most of them:
+#
+#   /bot<id>:<secret>/getUpdates        API calls   — httpx keeps ':' literal
+#   /file/bot<id>%3A<secret>/voice/…    downloads   — PTB's File._get_encoded_url()
+#                                       runs urllib quote() with safe='/', so the
+#                                       ':' becomes %3A. A ':'-anchored rule missed
+#                                       every voice-note and photo fetch; 39 lines
+#                                       with 3 live tokens reached the first archive.
+#   ExtBot[token=<id>:<secret>]         Bot.__repr__ in any logged exception
+#   GUIDE_BOT_TOKEN=<id>:<secret>       a .env line echoed on a config error
+#
+# The id is kept (it says *which* bot, and isn't secret); only the secret dies.
+# Fail-safe by design: it redacts anything token-shaped, including shapes that
+# don't exist yet.
+#
+# Write to a unique temp then rename (same directory, so atomic) — an interrupted
+# run must not leave a truncated .gz that looks valid, and mktemp keeps two
+# concurrent runs from writing the same .part and corrupting a forever-archive.
+# The truncate must stay AFTER the rename: `set -euo pipefail` then guarantees a
+# failed sed/gzip aborts before the live log is cleared.
+part=$(mktemp "$ARCHIVE_DIR/.rotate.XXXXXX")
+LC_ALL=C sed -E 's#([0-9]{6,12})(:|%3[Aa])[A-Za-z0-9_-]{30,}#\1<REDACTED>#g' "$LOG" \
+    | gzip -9 > "$part"
+mv "$part" "$out"
+chmod 600 "$out"
+# Accepted loss: lines written between sed reaching EOF and this truncate are
+# dropped. Writes are single O_APPEND write() calls, so a line is never split —
+# whole lines are simply missed. Sub-second at current volume.
+: > "$LOG"
+
+echo "done: $(du -h "$out" | cut -f1) archived, live log truncated"
