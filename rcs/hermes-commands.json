@@ -16,7 +16,14 @@
     },
     "d": {
         "_desc": "+dotfiles",
-        "e": ["Edit dotfiles", {"shell": "cd ~/dotfiles && v"}]
+        "e": ["Edit dotfiles", {"shell": "cd ~/dotfiles && v"}],
+        "h": {
+            "_desc": "+hammerspoon",
+            "_note": "No reload entry on purpose - hs.reload() must not be called programmatically. Reload with Cmd+Ctrl+R.",
+            "c": ["HS Console", "hs -c 'hs.openConsole()'"],
+            "s": ["Edit Seeds", {"shell": "nvim ~/dotfiles/lib/lua/seeds/"}],
+            "i": ["Edit init.lua", {"shell": "nvim ~/dotfiles/lib/lua/init.lua"}]
+        }
     },
     "e": {
         "_desc": "+exo",
@@ -69,10 +76,9 @@
     },
     "h": {
         "_desc": "+hermes",
+        "_note": "Hermes is a standalone Swift app (~/projects/hermes), not a Hammerspoon seed. Hammerspoon lives under d -> h.",
         "r": ["Rebuild & Restart", "rebuild-hermes"],
-        "c": ["HS Console", "hs -c 'hs.openConsole()'"],
-        "e": ["Edit Config", {"shell": "nvim ~/dotfiles/rcs/hermes-commands.json"}],
-        "s": ["Edit HS Seeds", {"shell": "nvim ~/dotfiles/lib/lua/seeds/"}]
+        "e": ["Edit Config", {"shell": "nvim ~/dotfiles/rcs/hermes-commands.json"}]
     },
     "k": {
         "_desc": "+karabiner",
