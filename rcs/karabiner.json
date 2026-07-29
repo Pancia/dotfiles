@@ -149,7 +149,7 @@
                         ]
                     },
                     {
-                        "description": "alt-space -> live-transcribe (BOYA mic)",
+                        "description": "alt-space -> live-transcribe plain (no timestamps, full text); cmd+alt-space -> reference (timestamps, read <path>)",
                         "manipulators": [
                             {
                                 "from": {
@@ -314,7 +314,7 @@
                         "key_code": "caps_lock"
                     },
                     "to": {
-                        "key_code": "left_control"
+                        "key_code": "right_control"
                     }
                 },
                 {

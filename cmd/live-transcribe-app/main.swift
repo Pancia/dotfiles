@@ -29,6 +29,44 @@ func argValue(_ name: String) -> String? {
 }
 
 let micDevice = argValue("--mic") ?? "BOYA"
+
+// Which hotkey drives this session. The mode — not a persisted preference — is the
+// authority on the two output settings, so each key means exactly one thing:
+//   plain (Alt+Space)      -> no timestamps, full transcript
+//   ref   (Cmd+Alt+Space)  -> timestamps, `read <path>` reference
+// It's seeded at launch (so the panel renders right from the first line) and
+// re-asserted by the stop signal, so a session started with one key and stopped with
+// the other still obeys the key that stopped it.
+enum OutputMode {
+    case plain, reference
+    var wantsTimestamps: Bool { self == .reference }
+    var wantsReference: Bool { self == .reference }
+}
+
+let launchMode: OutputMode? = argValue("--mode").flatMap {
+    switch $0 {
+    case "plain": return OutputMode.plain
+    case "ref":   return OutputMode.reference
+    default:      return nil
+    }
+}
+
+// The Brave PWA for Telegram Web (~/Applications/Brave Browser Apps.localized/Telegram Web.app).
+// Telegram caps a single message at 4096 UTF-16 units, so an auto-paste aimed here
+// degrades to the reference rather than dropping text the far end will reject.
+let telegramBundleID = "com.brave.Browser.app.ibblmnobmgdmpoeblocemifbpglakpoi"
+
+// Telegram's real cap is 4096 UTF-16 units. Overridable at runtime solely so the
+// overflow path can be exercised with a 5-second recording instead of ~5 minutes of
+// talking — the genuine limit would otherwise be untestable by hand:
+//   defaults write org.pancia.live-transcribe-app debug.telegramLimit 20
+//   defaults delete org.pancia.live-transcribe-app debug.telegramLimit
+// Non-positive or absent (integer(forKey:) returns 0 for both) falls back to the real cap.
+func telegramMessageLimit() -> Int {
+    let n = UserDefaults.standard.integer(forKey: "debug.telegramLimit")
+    return n > 0 ? n : 4096
+}
+
 let enginePath = "/Users/anthony/dotfiles/bin/live-transcribe"
 let stateDir = ("~/.local/state/live-transcribe" as NSString).expandingTildeInPath
 let logFilePath = stateDir + "/last.log"
@@ -211,11 +249,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var signalSources: [DispatchSourceSignal] = []
 
     // Stop/copy state (was `enum CopyMode`). `cancelled` = Escape/Cancel → no copy;
-    // `forceReference` = Cmd+Alt+Space (SIGUSR1) → force `read <path>` regardless of
-    // the checkbox. `pasteEligible` = an explicit user stop (Complete/Alt+Space/
-    // Cmd+Alt+Space) — the only routes allowed to auto-paste.
+    // `overflowReference` = this paste target can't take the full text (see
+    // applyPasteTargetOverride) → send the reference instead. `pasteEligible` = an
+    // explicit user stop (Complete/Alt+Space/Cmd+Alt+Space) — the only routes allowed
+    // to auto-paste.
     private var cancelled = false
-    private var forceReference = false
+    private var overflowReference = false
     private var pasteEligible = false
     private var finishing = false          // guards the shutdown funnel (first caller wins)
     // True once the transcript has been placed on the clipboard this session. Guards the
@@ -224,8 +263,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     // before afterEngineStopped() got to copy (there `finishing` is already true).
     private var clipboardWritten = false
 
-    // Cached hot-path pref (avoid a UserDefaults hit per rendered line).
+    // Session output settings — owned by the launch/stop mode, not UserDefaults (the
+    // checkboxes stay live overrides for the session). `showTimestamps` is also the
+    // hot-path render flag, read once per line.
     private var showTimestamps = true
+    private var copyAsReference = false
+    // Set when the user hand-toggles a checkbox mid-session. Their choice then outranks
+    // the stop hotkey's mode, which would otherwise silently discard it.
+    private var tsTouched = false
+    private var refTouched = false
+    // Display-only filter for the engine's startup chatter. A real preference (it has
+    // nothing to do with the hotkey mode), so it persists.
+    private var showDebug = false
     // Flow state for the scroll when Timestamps is off: what the last appended line
     // was, so a transcript line continuing the same source joins it with a space
     // instead of starting a new one. Any other line ends the paragraph.
@@ -239,6 +288,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var tsCheck: NSButton!
     private var refCheck: NSButton!
     private var pasteCheck: NSButton!
+    private var debugCheck: NSButton!
     private var completeButton: NSButton!
     private var cancelButton: NSButton!
 
@@ -248,12 +298,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var revealItem: NSMenuItem!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Non-persisted fallback layer — makes the checkbox defaults (Timestamps ON,
-        // the other two OFF) correct on a fresh machine without a first-launch write.
+        // Non-persisted fallback layer. Only pref.autoPaste is still read/written as a
+        // real preference; the other two are seeded by --mode on every hotkey launch and
+        // matter solely when the .app is opened directly with no mode.
         UserDefaults.standard.register(defaults: [
             "pref.timestamps": true,
             "pref.copyAsReference": false,
             "pref.autoPaste": false,
+            "pref.showDebug": false,
         ])
 
         // Single-instance: a second launch just reveals the first.
@@ -352,8 +404,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         sep.autoresizingMask = [.width, .maxYMargin]
         content.addSubview(sep)
 
+        // The Debug toggle rides at the right end of this bar rather than in the top
+        // control row: at the default 586pt window that row is already full, and a
+        // fourth checkbox there would clip Cancel/Complete.
+        let dbgW: CGFloat = 86
         let sfH: CGFloat = 24
-        let sf = NSTextField(frame: NSRect(x: 8, y: (barH - sfH) / 2, width: content.bounds.width - 16, height: sfH))
+        let sf = NSTextField(frame: NSRect(x: 8, y: (barH - sfH) / 2, width: content.bounds.width - 16 - dbgW, height: sfH))
         sf.isEditable = false
         sf.isSelectable = false
         sf.isBordered = false
@@ -366,6 +422,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         sf.autoresizingMask = [.width, .maxYMargin]
         content.addSubview(sf)
         statusField = sf
+
+        // Pinned to the right edge (minXMargin), so the status field keeps all the
+        // slack as the window widens.
+        showDebug = UserDefaults.standard.bool(forKey: "pref.showDebug")
+        let dbgH: CGFloat = 20
+        let dbg = NSButton(checkboxWithTitle: "Debug", target: self, action: #selector(toggleDebug(_:)))
+        dbg.font = NSFont.systemFont(ofSize: 12)
+        dbg.state = showDebug ? .on : .off
+        dbg.frame = NSRect(x: content.bounds.width - dbgW - 6, y: (barH - dbgH) / 2, width: dbgW, height: dbgH)
+        dbg.autoresizingMask = [.minXMargin, .maxYMargin]
+        content.addSubview(dbg)
+        debugCheck = dbg
 
         // Top control bar: 3 checkboxes (left) + Cancel/Complete (right).
         buildControlBar(in: content, topH: topH)
@@ -407,11 +475,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             b.state = on ? .on : .off
             return b
         }
+        // The hotkey's mode wins; the registered defaults only cover a bare launch with
+        // no --mode (opening the .app straight from Finder).
         let d = UserDefaults.standard
-        showTimestamps = d.bool(forKey: "pref.timestamps")
-        tsCheck    = check("Timestamps",             showTimestamps,                        #selector(toggleTimestamps(_:)))
-        refCheck   = check("Copy as file reference", d.bool(forKey: "pref.copyAsReference"), #selector(togglePrefRef(_:)))
-        pasteCheck = check("Auto-paste (⌘V)",        d.bool(forKey: "pref.autoPaste"),       #selector(togglePrefPaste(_:)))
+        showTimestamps  = launchMode?.wantsTimestamps ?? d.bool(forKey: "pref.timestamps")
+        copyAsReference = launchMode?.wantsReference  ?? d.bool(forKey: "pref.copyAsReference")
+        tsCheck    = check("Timestamps",             showTimestamps,                  #selector(toggleTimestamps(_:)))
+        refCheck   = check("Copy as file reference", copyAsReference,                 #selector(togglePrefRef(_:)))
+        pasteCheck = check("Auto-paste (⌘V)",        d.bool(forKey: "pref.autoPaste"), #selector(togglePrefPaste(_:)))
 
         completeButton = NSButton(title: "Complete", target: self, action: #selector(completeAction))
         completeButton.bezelStyle = .rounded
@@ -435,17 +506,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     private func setControlsEnabled(_ on: Bool) {
-        [tsCheck, refCheck, pasteCheck, completeButton, cancelButton].forEach { $0?.isEnabled = on }
+        [tsCheck, refCheck, pasteCheck, debugCheck, completeButton, cancelButton].forEach { $0?.isEnabled = on }
     }
 
+    // Neither of these persists any more: the launch mode reseeds them every session, so
+    // a stored value could only ever be stale. They are session overrides, and the
+    // `touched` flag is what protects them from the stop hotkey re-asserting its mode.
     @objc private func toggleTimestamps(_ s: NSButton) {
         showTimestamps = (s.state == .on)
-        UserDefaults.standard.set(showTimestamps, forKey: "pref.timestamps")
+        tsTouched = true
         rerenderTranscript()
     }
 
     @objc private func togglePrefRef(_ s: NSButton) {
-        UserDefaults.standard.set(s.state == .on, forKey: "pref.copyAsReference")
+        copyAsReference = (s.state == .on)
+        refTouched = true
+    }
+
+    @objc private func toggleDebug(_ s: NSButton) {
+        showDebug = (s.state == .on)
+        UserDefaults.standard.set(showDebug, forKey: "pref.showDebug")
+        rerenderTranscript()
     }
 
     @objc private func togglePrefPaste(_ s: NSButton) {
@@ -588,13 +669,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     // Called on the pipe's serial reader thread.
     private func ingest(_ data: Data) {
-        logHandle?.write(data)
         lineBuffer.append(data)
         while let nl = lineBuffer.firstIndex(of: 0x0A) {
             let lineData = lineBuffer.subdata(in: lineBuffer.startIndex..<nl)
             lineBuffer.removeSubrange(lineBuffer.startIndex...nl)
             var line = String(decoding: lineData, as: UTF8.self)
             if line.hasSuffix("\r") { line.removeLast() }
+            // Tee to last.log per LINE rather than per chunk, so the meter can be left
+            // out: at 10 Hz it was ~90% of the file, burying the startup/error lines you
+            // actually open the log to read. Nothing is lost — the footer renders it live
+            // and it's pure instantaneous state, worthless after the fact.
+            // Tradeoff of per-line: a trailing unterminated fragment is no longer logged.
+            // That needs the engine to be SIGKILLed mid-write, since it only ever prints
+            // whole lines.
+            if !stripANSI(line).hasPrefix("[mic] [") {
+                logHandle?.write(Data((line + "\n").utf8))
+            }
             DispatchQueue.main.async { [weak self] in self?.handle(line) }
         }
     }
@@ -675,7 +765,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     // Timestamps off, a transcript line continuing the same source is joined onto the
     // previous one with a space (and re-rendered without its now-redundant source
     // label); everything else starts a new line.
+    // What the Debug checkbox hides: the engine's startup chatter (device probe, ports,
+    // output paths, "Press Ctrl+C to stop"). Deliberately NOT hidden — transcript text,
+    // the green "Recording started" banner, and anything reading like a real failure, so
+    // a display filter can never swallow the reason a session produced nothing.
+    //
+    // "[mic] ⚠ no signal for ~9s …" IS hidden: the footer meter already reports exactly
+    // that condition as "silent · sent 0", live and in place, so the scrolled copy is
+    // pure duplication. (Plain "[mic] [" meter lines never reach here — handle() routes
+    // them to the footer before this point.)
+    private func isDebugChatter(_ styled: StyledLine, raw: String) -> Bool {
+        if styled.isTranscript { return false }
+        if raw.contains("\u{1B}[42m") { return false }
+        let s = styled.plain.trimmingCharacters(in: .whitespaces)
+        if s.isEmpty { return true }
+        if s.hasPrefix("[mic]") { return true }
+        let lower = s.lowercased()
+        for token in ["error", "traceback", "exception", "failed", "fatal"] where lower.contains(token) {
+            return false
+        }
+        return true
+    }
+
     private func appendStyled(_ styled: StyledLine, raw: String, to storage: NSTextStorage) {
+        // Skipping without touching the flow state is intentional: a hidden line between
+        // two transcript lines lets them join as one paragraph, which is what you'd want
+        // if it had never been printed.
+        if !showDebug, isDebugChatter(styled, raw: raw) { return }
         let joins = !showTimestamps && styled.isTranscript
             && lastLineWasTranscript && styled.source == lastLineSource
         if storage.length > 0 {
@@ -714,10 +830,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     private func installSignalHandlers() {
-        // SIGTERM (launcher Alt+Space stop) = explicit user stop → copy per prefs + paste.
+        // SIGTERM (launcher Alt+Space stop) = explicit user stop → force plain mode
+        // (no timestamps, full transcript) + paste.
         signal(SIGTERM, SIG_IGN)
         let termSrc = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-        termSrc.setEventHandler { [weak self] in self?.finish(cancelled: false, userInitiated: true) }
+        termSrc.setEventHandler { [weak self] in self?.finish(cancelled: false, userInitiated: true, mode: .plain) }
         termSrc.resume()
         signalSources.append(termSrc)
 
@@ -729,11 +846,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         signalSources.append(intSrc)
 
         // SIGUSR1 (Cmd+Alt+Space → live-transcribe-launch --ref) = explicit user stop
-        // that forces a `read <path>` reference regardless of the checkbox. Its default
+        // that forces reference mode (timestamps + `read <path>`). Its default
         // disposition is *terminate*, so SIG_IGN MUST come first.
         signal(SIGUSR1, SIG_IGN)
         let refSrc = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
-        refSrc.setEventHandler { [weak self] in self?.finish(cancelled: false, userInitiated: true, forceReference: true) }
+        refSrc.setEventHandler { [weak self] in self?.finish(cancelled: false, userInitiated: true, mode: .reference) }
         refSrc.resume()
         signalSources.append(refSrc)
     }
@@ -765,12 +882,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     // Single async shutdown path for every stop route; first caller wins (sets the
     // intent). The ≤10s engine-flush wait runs OFF the main thread so the runloop stays
     // live for the async auto-paste; we only terminate at the very end.
-    private func finish(cancelled: Bool, userInitiated: Bool, forceReference: Bool = false) {
+    private func finish(cancelled: Bool, userInitiated: Bool, mode: OutputMode? = nil) {
         if finishing { return }
         finishing = true
         self.cancelled = cancelled
         self.pasteEligible = userInitiated
-        self.forceReference = forceReference
+        // The stop hotkey re-asserts its mode over the launch seed, so the key you stop
+        // with decides the output even if the other key started the session. A checkbox
+        // the user hand-toggled is exempt — an explicit choice outranks the default.
+        if let mode {
+            if !tsTouched { showTimestamps = mode.wantsTimestamps }
+            if !refTouched { copyAsReference = mode.wantsReference }
+        }
         updateIcon(running: false)
         statusField?.stringValue = "🎙 stopped"
         setControlsEnabled(false)
@@ -794,6 +917,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     // what's displayed and copied, both of which are re-derivable from the archive.
     private func afterEngineStopped() {
         enginePipe?.fileHandleForReading.readabilityHandler = nil
+        applyPasteTargetOverride()
         let didWrite = deliver()
         clipboardWritten = didWrite
 
@@ -841,18 +965,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         NSApp.terminate(nil)
     }
 
-    // Puts the transcript on the clipboard per the checkboxes; returns whether it
-    // actually wrote. Reference (Cmd+Alt+Space or the checkbox) needs a known path.
+    // A full transcript can exceed what the app we're about to ⌘V into will accept. When
+    // we know where the paste lands — i.e. auto-paste is on and we have a live target —
+    // and the text won't fit, downgrade to the `read <path>` reference: it's short, and
+    // ~/Cloud/transcripts syncs via ProtonDrive so the path resolves on the other device
+    // you'll actually read it on.
+    //
+    // Only Telegram Web is special-cased, because it's the only target whose ceiling we
+    // know (4096 UTF-16 units per message — Telegram counts UTF-16, not graphemes).
+    // Skipped when we're already sending a reference, and when there's no path to point
+    // at. Deliberately NOT applied in applicationWillTerminate: that route never pastes,
+    // so nothing is known about a destination.
+    private func applyPasteTargetOverride() {
+        guard !cancelled, pasteEligible, !copyAsReference, transcriptPath != nil,
+              UserDefaults.standard.bool(forKey: "pref.autoPaste"),
+              let target = targetApp, !target.isTerminated,
+              target.bundleIdentifier == telegramBundleID,
+              let text = fullTranscriptText(), text.utf16.count > telegramMessageLimit()
+        else { return }
+        overflowReference = true
+    }
+
+    // Puts the transcript on the clipboard per the session mode; returns whether it
+    // actually wrote. Either flavour of reference needs a known path.
     @discardableResult
     private func deliver() -> Bool {
         if cancelled { return false }   // Escape/Cancel/close: leave the clipboard alone
-        let useRef = forceReference || UserDefaults.standard.bool(forKey: "pref.copyAsReference")
+        let useRef = copyAsReference || overflowReference
         if useRef, transcriptPath != nil { return copyReferenceToPasteboard() }
         return copyFullToPasteboard()   // full, or reference with an unknown path
     }
 
-    @discardableResult
-    private func copyFullToPasteboard() -> Bool {
+    // The text a full copy would place on the clipboard — the saved .txt when it's
+    // readable, else the in-memory accumulation, flowed into prose when Timestamps is
+    // off. nil when there's nothing worth writing, so no caller can clobber the
+    // clipboard with empty. Read twice per stop at most (the override probe, then the
+    // copy); a once-per-session file read isn't worth caching around.
+    private func fullTranscriptText() -> String? {
         var text: String?
         if let p = transcriptPath, let s = try? String(contentsOfFile: p, encoding: .utf8),
            !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -861,11 +1010,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if text == nil, !accumulated.isEmpty {
             text = accumulated.joined(separator: "\n") + "\n"
         }
-        guard var out = text, !out.isEmpty else { return false }   // never clobber with empty
+        guard var out = text, !out.isEmpty else { return nil }
         if !showTimestamps { out = flowTranscript(out) }           // flows file OR accumulated
         // Re-check AFTER flowing: a transcript of nothing but empty entries reduces to
         // whitespace, and a blank clipboard would still satisfy deliver()'s auto-paste gate.
-        guard !out.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        guard !out.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return out
+    }
+
+    @discardableResult
+    private func copyFullToPasteboard() -> Bool {
+        guard let out = fullTranscriptText() else { return false }
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(out, forType: .string)

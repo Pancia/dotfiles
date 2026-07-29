@@ -33,8 +33,13 @@ SILENCE_DURATION = 1.0  # seconds of silence before chunking
 MIN_CHUNK_DURATION = 2.0  # minimum chunk duration in seconds
 MAX_CHUNK_DURATION = 10.0  # maximum chunk duration in seconds
 NOISE_GATE = 0.01  # frames with peak below this are treated as silence
-METER_INTERVAL = 1  # seconds between mic signal-level reports
-SILENT_WARN_AFTER = 9  # consecutive gated reports (~9s) before the "no signal" warning
+METER_INTERVAL = 0.1  # seconds between mic signal-level reports (10 Hz footer meter)
+# Warning thresholds are declared in SECONDS and converted to interval counts, so
+# retuning METER_INTERVAL can't silently rescale how fast a warning fires.
+SILENT_WARN_SECONDS = 9  # gated signal this long before the "no signal" warning
+STALL_WARN_SECONDS = 2   # no callbacks at all this long before the "stalled" warning
+SILENT_WARN_AFTER = max(1, round(SILENT_WARN_SECONDS / METER_INTERVAL))
+STALL_WARN_AFTER = max(1, round(STALL_WARN_SECONDS / METER_INTERVAL))
 
 class LiveTranscriber:
     def __init__(self, model_size="base", output_dir=None, mic_device=None, computer_device=None,
@@ -188,6 +193,7 @@ class LiveTranscriber:
         self._mic_speech_frames = 0    # VAD-positive frames this interval
         self._chunks_sent = 0          # cumulative chunks queued for transcription
         self._silent_reports = 0       # consecutive intervals below the noise gate
+        self._stall_reports = 0        # consecutive intervals with no callbacks at all
 
     def _get_device_channels(self, device_info):
         """Get the appropriate number of channels for a device"""
@@ -607,10 +613,18 @@ class LiveTranscriber:
                 self._mic_level_count = 0
                 self._mic_speech_frames = 0
 
+            # A window with no callbacks is expected noise at 10 Hz — the meter tick can
+            # simply land between two audio callbacks. So don't bail out of the render
+            # (peak=0 draws an accurate silent bar) and don't warn until the stream has
+            # actually been dead for STALL_WARN_SECONDS. Warning per empty window would
+            # emit ~10 lines/sec the moment the device hiccuped.
             if count == 0:
-                print("[mic] ⚠ no audio frames from the input stream "
-                      "(stream stalled or device delivering nothing)", file=sys.stderr)
-                continue
+                self._stall_reports += 1
+                if self._stall_reports == STALL_WARN_AFTER:
+                    print(f"[mic] ⚠ no audio frames from the input stream for ~{STALL_WARN_SECONDS}s "
+                          "(stream stalled or device delivering nothing)", file=sys.stderr)
+            else:
+                self._stall_reports = 0
 
             filled = int(min(1.0, peak / 0.3) * 20)
             bar = "[" + "#" * filled + "-" * (20 - filled) + "]"
@@ -627,7 +641,7 @@ class LiveTranscriber:
             if gated:
                 self._silent_reports += 1
                 if self._silent_reports == SILENT_WARN_AFTER:
-                    print(f"[mic] ⚠ no signal for ~{SILENT_WARN_AFTER * METER_INTERVAL}s — the mic may be muted, "
+                    print(f"[mic] ⚠ no signal for ~{SILENT_WARN_SECONDS}s — the mic may be muted, "
                           "or this process lacks Microphone permission "
                           "(System Settings ▸ Privacy & Security ▸ Microphone).", file=sys.stderr)
             else:

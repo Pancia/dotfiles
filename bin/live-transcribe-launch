@@ -1,5 +1,6 @@
 #!/opt/homebrew/bin/fish
-# live-transcribe-launch — toggle LiveTranscribe.app. Bound to Alt+Space.
+# live-transcribe-launch — toggle LiveTranscribe.app. Bound to Alt+Space (plain)
+# and Cmd+Alt+Space (--ref); see the mode block below.
 #
 #   idle    -> open LiveTranscribe.app (the app spawns the live-transcribe
 #              engine itself)
@@ -27,11 +28,17 @@ function __lt_notify -a title msg
     end
 end
 
-# Mode: default toggles the app. --ref makes a stop copy a `read <path>` reference
-# instead of the full transcript. --copy / --copy-ref recover the newest saved
-# transcript to the clipboard WITHOUT starting a session (the "I forgot / used the
-# wrong shortcut after it already closed" fix).
-set -l mode toggle
+# Mode: which of the two hotkeys called us, and therefore what the session outputs.
+#   (none)  Alt+Space      -> plain: no timestamps, full transcript
+#   --ref   Cmd+Alt+Space  -> ref:   timestamps, `read <path>` reference
+# The mode is passed to the app at launch (so the panel renders right away) AND
+# re-asserted by the stop signal, so the key you stop with decides the output even if
+# the other key started the session.
+#
+# --copy / --copy-ref recover the newest saved transcript to the clipboard WITHOUT
+# starting a session (the "I forgot / used the wrong shortcut after it already closed"
+# fix).
+set -l mode plain
 switch "$argv[1]"
     case --ref
         set mode ref
@@ -89,7 +96,7 @@ end
 
 # --- TOGGLE OFF: app already running -> stop it cleanly --------------------
 # plain → SIGTERM: the app SIGINTs the engine (flush + save), copies the full
-#         transcript to the clipboard, then exits.
+#         transcript (timestamps stripped, flowed to prose) to the clipboard, then exits.
 # --ref → SIGUSR1: same stop, but copies a `read <path>` reference instead.
 # (Escape / the window's close button cancel *in-app*: stop, keep files, no copy.)
 if pgrep -f $appbin >/dev/null 2>&1
@@ -103,5 +110,5 @@ if pgrep -f $appbin >/dev/null 2>&1
 end
 
 # --- TOGGLE ON ------------------------------------------------------------
-/usr/bin/open $app --args --mic $mic
+/usr/bin/open $app --args --mic $mic --mode $mode
 rmdir $lockdir 2>/dev/null
