@@ -388,7 +388,9 @@ function obj:queryEventsAsync(callback)
     obj._queryTask = hs.task.new(obj.pythonPath, function(exitCode, stdout, stderr)
         -- Log how long the Python task took
         local taskElapsed = (hs.timer.absoluteTime() - taskStartTime) / 1e6
-        if taskElapsed > 500 then  -- Log if Python took > 100ms
+        -- Python interpreter startup alone runs ~600-1000ms, so 500ms fired every
+        -- single query. Only complain when it's genuinely stalled.
+        if taskElapsed > 3000 then
             hs.printf("[PERFMON SLOW] async calendar.pythonTask: %.2fms", taskElapsed)
         end
 

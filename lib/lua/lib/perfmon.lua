@@ -4,7 +4,10 @@
 local obj = {}
 
 -- Configuration
-obj.threshold_ms = 16  -- Log anything slower than 16ms (one frame at 60fps)
+-- 16ms (one frame at 60fps) was too tight for anything touching disk — routine
+-- file I/O tripped it constantly and drowned the console. 100ms is where a hitch
+-- is actually perceptible.
+obj.threshold_ms = 100
 obj.eventtap_threshold_ms = 5  -- Eventtaps should be very fast
 obj.log_all = false  -- Set to true to log all operations, not just slow ones
 obj.enabled = true
