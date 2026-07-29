@@ -18,6 +18,31 @@ $messages_text"
         echo "    Merging "(grep -c '\-\-\-CHUNK\-\-\-' $messages_file)" chunk messages..." >&2
     end
 
-    set -l result (claude -p --model claude-sonnet-4-20250514 "$prompt")
+    # See ai-chunk-files.fish for why the exit status alone can't be trusted here.
+    set -l model claude-sonnet-5
+
+    set -l rawfile (mktemp)
+    claude -p --model $model "$prompt" >$rawfile
+    set -l status_code $status
+    set -l result (cat $rawfile | string collect)
+    rm -f $rawfile
+
+    if test $status_code -ne 0
+        echo "ai-merge-commit-messages: claude exited $status_code" >&2
+        echo "  $result" >&2
+        return 1
+    end
+    # A retired model prints its warning to stdout and exits 0, so an unvalidated
+    # result would be committed as the message body.
+    if not string match -qr '\S' -- "$result"
+        echo "ai-merge-commit-messages: claude returned empty output (model '$model' retired or unavailable?)" >&2
+        return 1
+    end
+    if string match -qr 'was retired on|may not exist' -- "$result"
+        echo "ai-merge-commit-messages: claude reported a model problem for '$model'" >&2
+        echo "  "(string sub -l 200 "$result") >&2
+        return 1
+    end
+
     printf '%s\n' $result
 end

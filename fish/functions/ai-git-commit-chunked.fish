@@ -1,5 +1,5 @@
 function ai-git-commit-chunked --description 'Generate commit message via chunking for large diffs (git or jj)'
-    argparse 'v/verbose' 'vcs=' -- $argv
+    argparse 'v/verbose' 'vcs=' 'paths=+' -- $argv
     or return 1
 
     set -l vcs git
@@ -15,9 +15,16 @@ function ai-git-commit-chunked --description 'Generate commit message via chunki
     if set -q _flag_verbose
         echo "[1/4] Building file manifest ($vcs)..." >&2
     end
+    # --paths scopes the manifest to a fileset expression (jj only). Without it,
+    # a caller that scoped its own diff would still get a message describing
+    # every file in the working copy, including paths it deliberately held back.
     set -l file_list
     if test "$vcs" = jj
-        set file_list (jj diff --name-only)
+        if set -q _flag_paths
+            set file_list (jj diff --name-only -- $_flag_paths)
+        else
+            set file_list (jj diff --name-only)
+        end
     else
         set file_list (git diff --staged --name-only)
     end

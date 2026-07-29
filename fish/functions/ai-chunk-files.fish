@@ -34,12 +34,38 @@ $input_text"
         echo "    Calling claude CLI..." >&2
     end
 
-    set -l result (claude -p --model claude-sonnet-4-20250514 "$prompt" | string collect)
+    # Model IDs also live in ai-merge-commit-messages.fish and dotfiles/bin/ai-commit-msg.
+    # `claude-sonnet-4-20250514` sat here until 2026-07-28, six weeks after it was
+    # retired (2026-06-15) -- see the exit-status warning below for why nothing noticed.
+    set -l model claude-sonnet-5
+
+    # Capture claude's OWN status. `set -l x ($cmd)` records the status of the `set`
+    # builtin, not of $cmd, so the old `set -l status_code $status` on the following
+    # line always read 0. Redirect to a file and read $status immediately instead.
+    set -l rawfile (mktemp)
+    claude -p --model $model "$prompt" >$rawfile
     set -l status_code $status
+    set -l result (cat $rawfile | string collect)
+    rm -f $rawfile
 
     if set -q _flag_verbose
         echo "    Claude returned (status: $status_code)" >&2
         echo "    Raw JSON: "(string sub -l 100 "$result")"..." >&2
+    end
+
+    # The exit status is NOT sufficient on its own: `claude -p --model <retired-id>`
+    # prints "⚠ ... was retired on ..." to stdout and still exits 0. Validate the
+    # shape of the output, or a dead model looks exactly like a successful call and
+    # the caller silently produces no chunks.
+    if test $status_code -ne 0
+        echo "ai-chunk-files: claude exited $status_code" >&2
+        echo "  $result" >&2
+        return 1
+    end
+    if not printf '%s' "$result" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1
+        echo "ai-chunk-files: claude did not return a non-empty JSON array (model '$model' retired or unavailable?)" >&2
+        echo "  "(string sub -l 200 "$result") >&2
+        return 1
     end
 
     # Parse JSON: convert each chunk array to comma-separated filenames
