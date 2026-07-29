@@ -1,10 +1,19 @@
 {
+    "_note": [
+        "Keys starting with _ are ignored by the parser, so this block is a comment.",
+        "RESERVED ROOT KEYS — do not use, they are hardcoded in Hermes and silently win over anything here:",
+        "  a  -> +apps mode      (HermesViewController.swift builtinRoot + keyDown)",
+        "  w  -> +windows mode   (same)",
+        "  :  -> search mode     (intercepted at every level, not just root)",
+        "Also taken by the entries below: b d e f h i j k m p q r s t u v x y z = -",
+        "Free at root: c g l n o, digits, and most punctuation.",
+        "'x' is the +utils grab bag — one-off scripts land there rather than eating a root letter."
+    ],
     "b": {
         "_desc": "+browser",
         "s": ["browser sync state", {"interactive": "nvim ~/Vaults/the-akashic-records/browser-sync/current.md"}],
         "o": ["tab-organize plan (prefill)", {"interactive": "fish -iC 'function __pre --on-event fish_prompt; commandline -r \"tab-organize plan \"; functions -e __pre; end'"}]
     },
-    "c": ["calendar", {"interactive": "agenda 24"}],
     "d": {
         "_desc": "+dotfiles",
         "e": ["Edit dotfiles", {"shell": "cd ~/dotfiles && v"}]
@@ -13,19 +22,17 @@
         "_desc": "+exo",
         "e": ["Fetch (home)", {"interactive": "exo fetch --home"}]
     },
-    "l": ["LOCK IT DOWN", "launch-lock-screen-dialog"],
     "i": ["inbox", {"interactive": "ai_inbox"}],
     "j": ["Emoji Picker", {"shell": "emoji-pick"}],
-    "n": ["Save to Pinterest", {"interactive": "cd ~/private/pancia && _bin/pinterest_save"}],
     "f": {
         "_desc": "+finder",
-        "_": ["View spirituality", "finder-here $HOME/ProtonDrive/_spirituality"],
+        "z": ["View spirituality", "finder-here \"$HOME/Cloud/_spirituality\""],
         "b": ["View MediaBoard", "finder-here $HOME/MediaBoard"],
         "d": ["View Dotfiles", "finder-here $HOME/dotfiles"],
         "h": ["View Home", "finder-here $HOME"],
-        "i": ["View inbox", "finder-here $HOME/ProtonDrive/_inbox/"],
+        "i": ["View inbox", "finder-here $HOME/Cloud/_inbox/"],
         "m": ["View Media", "finder-here $HOME/Media"],
-        "o": ["View ProtonDrive", "finder-here $HOME/ProtonDrive"],
+        "o": ["View Cloud (ProtonDrive)", "finder-here $HOME/Cloud"],
         "p": ["View Projects", "finder-here $HOME/projects"],
         "s": ["View Screenshots", "finder-here $HOME/Screenshots"],
         "t": ["View transcripts", "finder-here $HOME/transcripts"],
@@ -38,7 +45,7 @@
         "p": ["scratch note (paste clipboard)", "$HOME/dotfiles/bin/akr-scratch --paste --no-edit"]
     },
     "q": {
-        "_desc": "+apps",
+        "_desc": "+launch app",
         "b": ["Brave", "open -a 'Brave Browser'"],
         "c": ["Claude", "open -a Claude"],
         "d": ["Discord", "open -a Discord"],
@@ -105,14 +112,24 @@
         "k": ["Volume Up", "cmus-remote --volume +5"]
     },
     "x": {
-        "_desc": "+disk",
+        "_desc": "+utils",
         "d": ["Disk cleanup (report + Claude)", "open-iterm-with 'disk-cleanup; exec fish'"],
         "r": ["Disk report only", "open-iterm-with 'disk-cleanup --no-ai; exec fish'"],
-        "s": ["Fresh scan, then cleanup", "open-iterm-with 'disk-cleanup --scan; exec fish'"]
+        "s": ["Fresh scan, then cleanup", "open-iterm-with 'disk-cleanup --scan; exec fish'"],
+        "p": ["Save to Pinterest", {"interactive": "cd ~/private/pancia && _bin/pinterest_save"}],
+        "c": ["calendar", {"interactive": "agenda 24"}],
+        "l": ["LOCK IT DOWN", "launch-lock-screen-dialog"]
     },
     "t": {
         "_desc": "+macOS settings",
         "a": ["Aerial (screen saver)", "open ~/Library/Screen\\ Savers/Aerial.saver"]
+    },
+    "z": {
+        "_desc": "+spirituality",
+        "n": ["Natal chart (Anthony)", "open \"$HOME/Cloud/_spirituality/astrology charts/ANTHONY_horoscope_natal_20-10-1993_16-14_astroseek_v4.png\""],
+        "c": ["Charts folder", "finder-here \"$HOME/Cloud/_spirituality/astrology charts\""],
+        "s": ["Spirituality folder", "finder-here \"$HOME/Cloud/_spirituality\""],
+        "t": ["Transits now", {"interactive": "astro now"}]
     },
     "=": ["edit Hermes config", {"shell": "nvim ~/dotfiles/rcs/hermes-commands.json"}],
     "-": [{"shell:fish": "~/private/bin/superwhisper_status"}, "~/private/bin/superwhisper_reset"]
