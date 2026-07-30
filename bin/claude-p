@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# claude-p — `claude -p` that cannot wedge and cannot fail silently.
+#
+# Two failure modes this exists to close, both seen in production:
+#
+#   1. A headless claude can wedge and never exit — 2026-07-28: ~98% CPU, RSS
+#      climbing past 2.7GB, no output, killed by hand. The trigger is unknown.
+#      The retired-model theory was tested and disproved (a retired `--model`
+#      exits rc=1 in ~2s), and neither candidate spawner reproduces it. So the
+#      defence is a deadline rather than a fix. Nothing upstream noticed, and
+#      nothing would have: a departed pipe reader does not kill the writer.
+#   2. `claude -p` reports some failures with exit code 0. A retired or
+#      unavailable `--model` comes back `is_error: true` while `subtype` still
+#      reads "success", so an unvalidated caller treats the error text as an
+#      answer.
+#
+# The fix for (1) is `timeout -k`: GNU timeout runs the child in its own process
+# group and signals the group, so nothing survives the deadline. The fix for (2)
+# is to always ask claude for `--output-format json` and check the envelope,
+# then hand the caller back exactly the shape it asked for.
+#
+# Drop-in: replace `claude -p` with `claude-p`. Whatever --output-format the
+# caller passes (text / json / stream-json / none) is what it gets back.
+#
+#   claude-p 'prompt'                              -> result text
+#   echo prompt | claude-p --system-prompt "$sys"  -> result text
+#   claude-p --output-format json 'prompt'         -> full JSON envelope
+#   claude-p --output-format stream-json --verbose -> passthrough stream
+#
+# Env: CLAUDE_P_TIMEOUT (default 180s), CLAUDE_P_KILL_AFTER (default 5s).
+# Exit: 0 ok · 1 claude reported an error / returned nothing · 124 timed out.
+
+set -uo pipefail
+
+TIMEOUT=${CLAUDE_P_TIMEOUT:-180}
+KILL_AFTER=${CLAUDE_P_KILL_AFTER:-5}
+
+# Pull --output-format out of the arguments: it decides the shape of OUR output,
+# and we always ask claude for json underneath (except in stream mode, where
+# streaming is the entire point). Every other argument passes through untouched.
+mode=text
+args=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --output-format)
+            case "${2:-}" in
+                json) mode=json ;;
+                stream-json) mode=stream ;;
+                *) mode=text ;;
+            esac
+            shift 2 || shift
+            ;;
+        --output-format=*)
+            case "${1#*=}" in
+                json) mode=json ;;
+                stream-json) mode=stream ;;
+                *) mode=text ;;
+            esac
+            shift
+            ;;
+        *)
+            args+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# Streaming callers read events as they arrive, so there is no envelope to
+# validate and no file to buffer into — only the deadline applies.
+if [ "$mode" = stream ]; then
+    timeout -k "$KILL_AFTER" "$TIMEOUT" \
+        claude -p --output-format stream-json "${args[@]+"${args[@]}"}"
+    rc=$?
+    [ "$rc" -eq 124 ] && echo "claude-p: timed out after ${TIMEOUT}s (killed)" >&2
+    exit "$rc"
+fi
+
+out=$(mktemp) || exit 1
+err=$(mktemp) || exit 1
+trap 'rm -f "$out" "$err"' EXIT
+
+# claude writes to a file, never to the caller's pipe. If the caller pipes us
+# into `head`, the SIGPIPE lands on our `cat` at the end — not on claude, which
+# is the exact way the 2026-07-28 runaway escaped its reader.
+timeout -k "$KILL_AFTER" "$TIMEOUT" \
+    claude -p --output-format json "${args[@]+"${args[@]}"}" >"$out" 2>"$err"
+rc=$?
+
+if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+    echo "claude-p: timed out after ${TIMEOUT}s (killed)" >&2
+    head -c 500 "$err" >&2
+    exit 124
+fi
+
+# A non-JSON body means claude bailed before it produced a result envelope —
+# the retired-model warning arrives this way. Surface it instead of passing an
+# empty string up to a caller that will treat it as a real answer.
+if ! jq -e 'type == "object"' "$out" >/dev/null 2>&1; then
+    echo "claude-p: claude did not return a JSON envelope (exit $rc)" >&2
+    head -c 500 "$out" >&2
+    head -c 500 "$err" >&2
+    exit 1
+fi
+
+if jq -e '.is_error == true' "$out" >/dev/null 2>&1; then
+    echo "claude-p: claude reported an error: $(jq -r '.subtype // "unknown"' "$out")" >&2
+    jq -r '.result // empty' "$out" | head -c 500 >&2
+    exit 1
+fi
+
+if [ "$mode" = json ]; then
+    cat "$out"
+    exit 0
+fi
+
+result=$(jq -r '.result // empty' "$out")
+if [ -z "$result" ]; then
+    echo "claude-p: claude returned an empty result" >&2
+    exit 1
+fi
+printf '%s\n' "$result"

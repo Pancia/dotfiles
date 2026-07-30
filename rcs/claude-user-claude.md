@@ -104,10 +104,13 @@ and in ad-hoc commands alike. It is a drop-in: same flags, same `--output-format
 
 Exit codes: `0` ok · `1` claude errored or returned nothing · `124` timed out.
 
-**Never pipe a raw `claude -p` into `head`/`sed -n`.** The reader exiting does not
-stop the writer — on 2026-07-28 a probe outlived its `| head -5` and sat at ~98%
-CPU past 2.7GB RSS. (`claude-p` buffers to a file, so that SIGPIPE lands on its
-own `cat`.)
+**Never pipe a raw `claude -p` into `head`/`sed -n`.** A reader exiting does not stop
+the writer, so the claude process keeps running with nothing watching it. (`claude-p`
+buffers to a file, so that SIGPIPE lands on its own `cat`.)
+
+On 2026-07-28 a headless claude wedged at ~98% CPU past 2.7GB RSS with no output and
+had to be killed by hand. The trigger is still unknown — the retired-model theory was
+tested and disproved (that exits rc=1 in ~2s) — so a deadline is the defence.
 
 **The roleplay bookends leak into headless output** — they apply to `claude -p`
 too, roughly two runs in three, and `--append-system-prompt` does not reliably

@@ -270,11 +270,56 @@ open after an edit may show the cached menu and the next one is current. `rebuil
 | `ccsave [title]` | Save current Claude Code session to `~/Cloud/cc-sessions/` (autogenerates title if omitted) |
 | `ccs list` / `ccs resume` | List/pick sessions, including crashed ones (titled — see below) |
 | `ccs prune [--dry-run]` | Archive crashed entries with no surviving transcript, backup, or saved record |
+| `claude-p [flags] [prompt]` | Guarded `claude -p` — hard timeout in its own process group, plus `.is_error` checking. Drop-in for text/json/stream-json. See below |
 | `disk-cleanup` | Report on the latest disk snapshot (biggest consumers + growth vs a ~30-day-old baseline), then offer a Claude session to help free space. `--no-ai` report only, `--ai` skip the prompt, `--scan` fresh snapshot first. Hermes: `Cmd+Space` → `x` → `d` |
 | `service` | LaunchAgent manager (list/start/stop/restart/log/status) |
 | `tab-organize windows` | List open browser windows with tab counts |
 | `tab-organize plan [--window ID]` | Generate AI organization plan (editable before execute) |
+| `tab-organize check [plan-file]` | Validate a plan and show what it will do, with tab titles |
 | `tab-organize execute <plan-file>` | Apply tab organization commands via browser extension |
+
+### Headless Claude calls (`claude-p`)
+
+`bin/claude-p` wraps `claude -p` with the two guards it lacks. Use it everywhere a
+script or an ad-hoc command needs a headless answer.
+
+```bash
+claude-p 'prompt'                                   # -> result text
+echo prompt | claude-p --system-prompt "$sys"       # -> result text
+claude-p --model haiku --output-format json 'x'     # -> full JSON envelope
+claude-p --output-format stream-json --verbose      # -> passthrough stream
+CLAUDE_P_TIMEOUT=60 claude-p 'prompt'               # default is 180s
+```
+
+Exit `0` ok · `1` claude errored or returned nothing · `124` timed out.
+
+Two failure modes it closes, both observed in production:
+
+- **A wedged child outliving its caller.** GNU `timeout -k` runs claude in its own
+  process group and signals the group. On 2026-07-28 a headless claude sat at ~98%
+  CPU past 2.7GB RSS with no output until it was killed by hand; the trigger is
+  still unknown (the retired-model theory was tested and disproved — that exits
+  rc=1 in ~2s), so a deadline is the defence rather than a fix. Separately, piping
+  claude into `head`/`sed -n` does not bound it either: a reader exiting never kills
+  the writer. `claude-p` buffers to a file, so a departing reader SIGPIPEs its own
+  `cat` instead.
+- **Errors that look like answers.** A retired or unavailable `--model` sets
+  `is_error: true` while `subtype` still reads `"success"` and text mode just
+  prints the warning. **Check `.is_error`, never `.subtype` or the exit code.**
+
+**Bookends leak into headless output.** The global CLAUDE.md roleplay applies to
+`claude -p` too (~2 runs in 3), and `--append-system-prompt` does not reliably
+suppress it — so strict-format callers must validate the shape they get back.
+`ai-chunk-files` and `ai-merge-commit-messages` already do; that check is load-bearing.
+
+Model pins: prefer floating aliases (`haiku`, `sonnet`) or a current id
+(`claude-sonnet-5`). Dated ids like `claude-sonnet-4-20250514` are the retirement
+trap — they were removed from `ai-chunk-files`, `ai-merge-commit-messages`, and
+`bin/ai-commit-msg` on 2026-07-28.
+
+Still calling bare `claude -p` (migrate when touched): `bin/tab-organize` (Python
+`subprocess`, streams `stream-json` and has its own error handling) and
+`~/projects/ereshkigal/bin/import-audio.fish` (different repo).
 
 ### Neovim Prefixes
 | Prefix | Commands |
