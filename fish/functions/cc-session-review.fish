@@ -68,12 +68,35 @@ If changes are needed, respond with ONLY:
 1. One line saying what was added/changed
 2. The specific edit: show the CLAUDE.md section to modify and the replacement text"
 
-    printf '%s\n\n<claude-md>\n%s\n</claude-md>\n\n<session-log>\n%s\n</session-log>\n' \
-        "$system_block" "$claude_md_content" "$summary" > "$prompt_file"
+    # One printf per block, and the two multi-line ones unquoted: `"$list"` joins its
+    # elements with spaces, which flattened the whole CLAUDE.md and the whole session
+    # log onto a single line each. `printf '%s\n' $list` reproduces the file, blank
+    # lines included, so the reviewer can see the markdown structure it is editing.
+    printf '%s\n\n<claude-md>\n' "$system_block" > "$prompt_file"
+    printf '%s\n' $claude_md_content >> "$prompt_file"
+    printf '</claude-md>\n\n<session-log>\n' >> "$prompt_file"
+    printf '%s\n' $summary >> "$prompt_file"
+    printf '</session-log>\n' >> "$prompt_file"
 
+    # The prompt is a whole session summary (up to 150k chars) plus the CLAUDE.md, so
+    # claude-p gets longer than its 180s default. Stderr is deliberately not
+    # suppressed: this runs unattended, and the wrapper's diagnostics are the only
+    # sign a review failed rather than found nothing.
     set -l response_file (mktemp)
-    claude -p --model haiku --output-format text < "$prompt_file" > "$response_file" 2>/dev/null
+    CLAUDE_P_TIMEOUT=300 claude-p --model haiku --output-format text < "$prompt_file" > "$response_file"
+    set -l status_code $status
     rm -f "$prompt_file"
+
+    if test $status_code -eq 124
+        echo "cc-session-review: claude timed out after 300s" >&2
+        rm -f "$response_file"
+        return 1
+    end
+    if test $status_code -ne 0
+        echo "cc-session-review: claude exited $status_code" >&2
+        rm -f "$response_file"
+        return 1
+    end
 
     if not test -s "$response_file"
         rm -f "$response_file"

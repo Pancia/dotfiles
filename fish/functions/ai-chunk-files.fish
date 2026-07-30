@@ -6,7 +6,9 @@ function ai-chunk-files --description 'AI groups files into optimal chunks for c
     set -l manifest_file $argv[2]
     set -l input (cat $manifest_file)
 
-    set -l file_count (printf '%s\n' "$input" | wc -l | string trim)
+    # count, not `wc -l`: quoting $input joined the manifest into one line, so the
+    # verbose output claimed "1 files" for every manifest.
+    set -l file_count (count $input)
 
     if set -q _flag_verbose
         echo "    Reading manifest from $manifest_file ($file_count files)" >&2
@@ -39,11 +41,15 @@ $input_text"
     # retired (2026-06-15) -- see the exit-status warning below for why nothing noticed.
     set -l model claude-sonnet-5
 
+    # A whole-repo manifest is a few hundred lines of prompt, so give claude-p more
+    # room than its 180s default before it kills the child.
+    set -l timeout 300
+
     # Capture claude's OWN status. `set -l x ($cmd)` records the status of the `set`
     # builtin, not of $cmd, so the old `set -l status_code $status` on the following
     # line always read 0. Redirect to a file and read $status immediately instead.
     set -l rawfile (mktemp)
-    claude -p --model $model "$prompt" >$rawfile
+    CLAUDE_P_TIMEOUT=$timeout claude-p --model $model "$prompt" >$rawfile
     set -l status_code $status
     set -l result (cat $rawfile | string collect)
     rm -f $rawfile
@@ -53,17 +59,22 @@ $input_text"
         echo "    Raw JSON: "(string sub -l 100 "$result")"..." >&2
     end
 
-    # The exit status is NOT sufficient on its own: `claude -p --model <retired-id>`
-    # prints "⚠ ... was retired on ..." to stdout and still exits 0. Validate the
-    # shape of the output, or a dead model looks exactly like a successful call and
-    # the caller silently produces no chunks.
+    # claude-p turns the errors claude reports with exit code 0 (a retired --model
+    # among them) into a nonzero exit, so the status is now worth checking -- but it
+    # still isn't sufficient. The roleplay bookends from ~/.claude/CLAUDE.md leak into
+    # headless output roughly two runs in three, and that arrives as a clean exit 0,
+    # so the shape of the output is what actually has to be validated.
+    if test $status_code -eq 124
+        echo "ai-chunk-files: claude timed out after "$timeout"s" >&2
+        return 1
+    end
     if test $status_code -ne 0
         echo "ai-chunk-files: claude exited $status_code" >&2
         echo "  $result" >&2
         return 1
     end
     if not printf '%s' "$result" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1
-        echo "ai-chunk-files: claude did not return a non-empty JSON array (model '$model' retired or unavailable?)" >&2
+        echo "ai-chunk-files: claude did not return a non-empty JSON array (roleplay bookends in the output?)" >&2
         echo "  "(string sub -l 200 "$result") >&2
         return 1
     end

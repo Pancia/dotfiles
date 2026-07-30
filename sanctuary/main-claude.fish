@@ -262,7 +262,14 @@ function _sanctuary_template
 
 Output ONLY the markdown template, nothing else."
 
-    set -g g_journal_template (echo "$template_request" | claude -p --system-prompt "$template_prompt" 2>/dev/null | string collect)
+    # Through a file, not a command substitution: `set x (...)` reports the status of
+    # `set`, and the fallback below reads better when it can name the reason. claude-p
+    # is quiet unless it fails, so its stderr is left alone.
+    set -l rawfile (mktemp)
+    echo "$template_request" | claude-p --system-prompt "$template_prompt" >$rawfile
+    set -l status_code $status
+    set -g g_journal_template (cat $rawfile | string collect)
+    rm -f $rawfile
 
     # Fallback if Claude fails
     if test -z "$g_journal_template"
@@ -279,7 +286,11 @@ Output ONLY the markdown template, nothing else."
 ---"
         echo
         set_color yellow
-        echo "(Using default template)"
+        if test $status_code -eq 124
+            echo "(Claude timed out — using default template)"
+        else
+            echo "(Using default template)"
+        end
         set_color normal
     else
         echo

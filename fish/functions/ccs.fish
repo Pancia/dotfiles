@@ -425,9 +425,26 @@ function _ccs_autotitle --description 'Auto-generate a title for a session using
 
     echo "Generating title..."
     set -l conversation (printf '<conversation>\n%s\n</conversation>' (string join -- \n $messages))
-    set -l raw (printf '%s' "$conversation" | claude -p --model haiku --output-format json \
+    # Route the envelope through a file: a command substitution reports the status of
+    # `set`, not of the pipeline, and a timeout has to be distinguishable from a claude
+    # error. claude-p only writes to stderr when it fails, so it is left unsuppressed.
+    set -l rawfile (mktemp)
+    printf '%s' "$conversation" | claude-p --model haiku --output-format json \
         --system-prompt 'You generate short titles for conversations. Output ONLY valid JSON: {"title":"<3-8 word title>"}. No markdown, no fences, no explanation.' \
-        "Generate a short 3-8 word title summarizing the above conversation." 2>/dev/null)
+        "Generate a short 3-8 word title summarizing the above conversation." >$rawfile
+    set -l status_code $status
+    set -l raw (cat $rawfile | string collect)
+    rm -f $rawfile
+
+    if test $status_code -eq 124
+        echo "Title generation timed out"
+        return 1
+    end
+    if test $status_code -ne 0
+        echo "Title generation failed (claude exited $status_code)"
+        return 1
+    end
+
     # Extract .result, strip markdown fences, parse .title
     set -l result (echo "$raw" | jq -r '.result' 2>/dev/null)
     # Strip markdown code fences if present

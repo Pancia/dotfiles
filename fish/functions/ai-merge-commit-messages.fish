@@ -21,21 +21,27 @@ $messages_text"
     # See ai-chunk-files.fish for why the exit status alone can't be trusted here.
     set -l model claude-sonnet-5
 
+    # The prompt here is only the chunk messages, so claude-p's 180s default is plenty.
     set -l rawfile (mktemp)
-    claude -p --model $model "$prompt" >$rawfile
+    claude-p --model $model "$prompt" >$rawfile
     set -l status_code $status
     set -l result (cat $rawfile | string collect)
     rm -f $rawfile
 
+    if test $status_code -eq 124
+        echo "ai-merge-commit-messages: claude timed out" >&2
+        return 1
+    end
     if test $status_code -ne 0
         echo "ai-merge-commit-messages: claude exited $status_code" >&2
         echo "  $result" >&2
         return 1
     end
-    # A retired model prints its warning to stdout and exits 0, so an unvalidated
-    # result would be committed as the message body.
+    # claude-p already rejects an empty result and a model claude itself errors on, but
+    # both checks stay: what it cannot catch is output claude was happy with and we are
+    # not -- a leaked roleplay bookend arrives as a perfectly successful call.
     if not string match -qr '\S' -- "$result"
-        echo "ai-merge-commit-messages: claude returned empty output (model '$model' retired or unavailable?)" >&2
+        echo "ai-merge-commit-messages: claude returned empty output" >&2
         return 1
     end
     if string match -qr 'was retired on|may not exist' -- "$result"

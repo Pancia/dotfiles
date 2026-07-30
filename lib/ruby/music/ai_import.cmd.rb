@@ -151,7 +151,17 @@ module MusicCMD
       #{descriptions.map { |d| "- #{d}" }.join("\n")}
     PROMPT
 
-    json_str = `claude -p --model haiku --output-format json #{Shellwords.escape(prompt)} 2>/dev/null`
+    # claude-p bounds the call and exits nonzero on the errors claude reports with
+    # exit 0. Its stderr is left visible so a failed parse says why; without it the
+    # table below would just quietly fall back to the raw YouTube titles.
+    json_str = `claude-p --model haiku --output-format json #{Shellwords.escape(prompt)}`
+    exit_status = $?.exitstatus
+
+    if exit_status != 0
+      reason = exit_status == 124 ? "claude timed out" : "claude exited #{exit_status}"
+      puts "\e[31mWarning: #{reason} — falling back to raw filenames\e[0m"
+      return []
+    end
 
     begin
       result = JSON.parse(json_str)

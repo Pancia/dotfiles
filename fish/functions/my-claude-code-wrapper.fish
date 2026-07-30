@@ -96,7 +96,17 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
         set -l post_latest (find "$sessions_dir" -maxdepth 1 -name '*.jsonl' -type f -exec stat -f '%m %N' {} + 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
         if test -n "$post_latest"
             echo "📋 Reviewing session for CLAUDE.md updates (background)..."
-            fish -c "cc-session-review '$post_latest'" &>/dev/null &
+            # This used to be `&>/dev/null`, which threw away the one signal that a
+            # review had failed rather than found nothing (claude-p reports timeouts
+            # and errors on stderr). Append instead — a run writes a line or two, and
+            # history matters because the failures worth catching are intermittent —
+            # but trim first: nothing rotates ~/.log, where services/ has reached 54MB.
+            set -l review_log "$HOME/.log/cc-session-review.log"
+            if test -f "$review_log"; and test (wc -c < "$review_log" | string trim) -gt 102400
+                tail -n 500 "$review_log" > "$review_log.trim"; and mv "$review_log.trim" "$review_log"
+            end
+            printf '=== %s %s\n' (date '+%Y-%m-%d %H:%M:%S') "$post_latest" >> "$review_log"
+            fish -c "cc-session-review '$post_latest'" >>"$review_log" 2>&1 &
             disown
 
             # Back up session if it's a saved one
