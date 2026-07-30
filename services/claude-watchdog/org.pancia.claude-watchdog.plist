@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>org.pancia.claude-watchdog</string>
+        <key>ProgramArguments</key>
+        <array>
+            <string>/Users/anthony/dotfiles/services/claude-watchdog/dotfiles-services-claude-watchdog.sh</string>
+        </array>
+        <key>RunAtLoad</key>
+        <true/>
+
+        <!-- Periodic, ~50s per run. Deliberately NOT KeepAlive: `service create`'s
+             template sets KeepAlive true with a `while true` loop, which for a
+             short-lived job means launchd relaunches it in a tight spin. -->
+        <key>StartInterval</key>
+        <integer>60</integer>
+
+        <!-- Nice + LowPriorityIO so a `sample` call never competes with real work.
+             ProcessType is deliberately absent: setting it to Background invites
+             App Nap throttling, and this is a timing-sensitive sampler whose CPU
+             figures come from deltas across an 8-second interval. -->
+        <key>Nice</key>
+        <integer>5</integer>
+        <key>LowPriorityIO</key>
+        <true/>
+
+        <key>StandardOutPath</key>
+        <string>/Users/anthony/.log/services/claude-watchdog.log</string>
+        <key>StandardErrorPath</key>
+        <string>/Users/anthony/.log/services/claude-watchdog.log</string>
+    </dict>
+</plist>

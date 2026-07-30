@@ -1,0 +1,644 @@
+#!/usr/bin/env bash
+# claude-watchdog — a launchd backstop for a headless `claude` that has wedged.
+#
+# WHY THIS EXISTS
+#   2026-07-28: a headless claude sat at ~98% CPU with its footprint climbing
+#   past 2.7 GB, produced no output, and had to be killed by hand. Nothing
+#   upstream noticed, and nothing would have — a departed pipe reader does not
+#   kill the writer. The trigger is still unknown and not reproducible (the
+#   retired-model theory was tested and disproved: that exits rc=1 in ~2s), so
+#   this is a backstop, not a fix.
+#
+# WHAT IT IS A BACKSTOP *TO*
+#   Every spawner we control now carries its own deadline — bin/claude-p for
+#   shell callers, asyncio.wait_for / CommandContext for the SDK and subprocess
+#   callers. Those fire first, by design (see CW_MIN_AGE). This exists for the
+#   two things a deadline cannot cover: an orphan whose spawner already exited,
+#   and a call site added later that forgets to set one.
+#
+# SHAPE
+#   Not a resident daemon. launchd runs it once a minute (StartInterval 60); it
+#   samples 6 times over 40 s and exits. A ~50 s process cannot accumulate a
+#   leak, and script.sh wraps it in `timeout -k 5 55` so it cannot wedge the way
+#   the thing it watches did. launchd will not overlap runs of the same job.
+#
+# PHASES — see services/claude-watchdog/config.sh. Shipped at 2: log every
+#   headless claude (building the distribution the thresholds will be re-derived
+#   from) plus forensics and a notification at the candidate bar. It CANNOT
+#   signal below phase 3, structurally: the kill path is behind a phase test.
+#
+# Run by hand any time — it is read-only at phases 1-2:
+#   CW_PHASE=1 ~/dotfiles/bin/claude-watchdog
+#   CW_RSS_MB=200 CW_CPU_PCT=5 CW_MIN_AGE=5 ~/dotfiles/bin/claude-watchdog
+#
+# Full design, and the measurements every number descends from:
+#   .cc/PLAN-claude-watchdog.md   docs/claude-watchdog.md
+
+# Not `set -e`: a failed `lsof` or `sample` on one pathological process must not
+# abandon the other candidates in the same run.
+set -uo pipefail
+
+CONFIG="${CW_CONFIG:-$HOME/dotfiles/services/claude-watchdog/config.sh}"
+# shellcheck source=/dev/null
+[ -r "$CONFIG" ] && . "$CONFIG"
+
+# Defaults duplicated so the script still runs standalone if config.sh is absent.
+CW_PHASE="${CW_PHASE:-2}"
+CW_SAMPLES="${CW_SAMPLES:-6}"
+CW_SAMPLE_INTERVAL="${CW_SAMPLE_INTERVAL:-8}"
+CW_LOG_RSS_MB="${CW_LOG_RSS_MB:-500}"
+CW_LOG_CPU_PCT="${CW_LOG_CPU_PCT:-40}"
+CW_MIN_AGE="${CW_MIN_AGE:-90}"
+CW_RSS_MB="${CW_RSS_MB:-1400}"
+CW_CPU_PCT="${CW_CPU_PCT:-70}"
+CW_ORPHAN_MIN_AGE="${CW_ORPHAN_MIN_AGE:-420}"
+CW_ORPHAN_RSS_MB="${CW_ORPHAN_RSS_MB:-900}"
+CW_ORPHAN_CPU_PCT="${CW_ORPHAN_CPU_PCT:-50}"
+CW_ORPHAN_IDLE_AGE="${CW_ORPHAN_IDLE_AGE:-1800}"
+CW_ORPHAN_IDLE_CPU_PCT="${CW_ORPHAN_IDLE_CPU_PCT:-5}"
+CW_MAX_BUNDLES_PER_RUN="${CW_MAX_BUNDLES_PER_RUN:-3}"
+CW_KEEP_INCIDENTS="${CW_KEEP_INCIDENTS:-20}"
+CW_SAMPLE_SECONDS="${CW_SAMPLE_SECONDS:-2}"
+CW_NOTIFY="${CW_NOTIFY:-1}"
+CW_LOG_ROTATE_MB="${CW_LOG_ROTATE_MB:-20}"
+CW_DRY_RUN="${CW_DRY_RUN:-0}"
+CW_ARG_MAXLEN="${CW_ARG_MAXLEN:-400}"
+CW_EXTRA_UCOMM="${CW_EXTRA_UCOMM:-}"
+CW_EXEMPT_PIDS="${CW_EXEMPT_PIDS:-}"
+
+STATE_DIR="${CW_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/claude-watchdog}"
+INCIDENTS="$STATE_DIR/incidents"
+STATE_FILE="$STATE_DIR/state.tsv"
+LOGWARN_FILE="$STATE_DIR/logwarn"
+SERVICE_LOG="$HOME/.log/services/claude-watchdog.log"
+
+NOTIFIER=/opt/homebrew/bin/terminal-notifier
+SAMPLE_BIN=/usr/bin/sample
+LSOF_BIN=/usr/sbin/lsof
+
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/claude-watchdog.XXXXXX") || exit 1
+trap 'rm -rf "$TMP"' EXIT
+
+mkdir -p "$STATE_DIR" "$INCIDENTS" 2>/dev/null
+chmod 700 "$STATE_DIR" "$INCIDENTS" 2>/dev/null
+
+# service-wrapper pipes us through `ts`, which supplies the timestamp prefix that
+# any future rotator keys its archive naming off. So log bare lines here.
+say() { printf 'cw: %s\n' "$*"; }
+
+# ---------------------------------------------------------------------------
+# Identity — "is this actually claude?"
+#
+# Derived every run, never hardcoded: ~/.local/bin/claude is a direct symlink to
+# ~/.local/share/claude/versions/<ver>, and <ver> IS the executable basename that
+# `ps -o ucomm` reports (today 2.1.220). Hardcoding it would silently stop
+# watching at the next update — the worst outcome in this design.
+#
+# The literal `claude` is always included: the SDK ships its own bundled 192 MB
+# Mach-O at .../site-packages/claude_agent_sdk/_bundled/claude, and the inari
+# service genuinely runs one.
+resolve_identity() {
+    local link target ver set_out=""
+    link="$HOME/.local/bin/claude"
+    target=$(readlink "$link" 2>/dev/null)
+    if [ -n "$target" ]; then
+        case "$target" in
+            /*) : ;;
+            *) target="$(dirname "$link")/$target" ;;
+        esac
+        if [ -e "$target" ]; then
+            ver=$(basename "$target")
+            [ -n "$ver" ] && set_out="$ver"
+        fi
+    fi
+    if [ -z "$set_out" ]; then
+        # Loud, per plan §13.6 — a watchdog that has quietly stopped watching is
+        # worse than one that is obviously broken. But we continue on the literal
+        # `claude` rather than skipping the run outright: a reduced identity set
+        # still watches the SDK copies, and watching some of them beats none.
+        say "WARN IDENTITY-UNRESOLVED readlink($link) gave '${target:-<empty>}' — continuing with 'claude' only"
+    fi
+    printf '%s\n' "$set_out claude $CW_EXTRA_UCOMM"
+}
+
+# tr -s squeezes the gap left by an empty CW_EXTRA_UCOMM; the sed trims the
+# trailing space it leaves behind, which otherwise shows up in the log as
+# "ids=2.1.220,claude,".
+IDSET=$(resolve_identity | tr -s ' ' | sed -e 's/^ *//' -e 's/ *$//')
+
+# ---------------------------------------------------------------------------
+# One sweep. Cost: ~48 ms for the full `ps`, plus ~5 ms per headless claude for
+# the thread count (macOS has no `thcount`/`nlwp` keyword — `ps -M` is the only
+# way, and it needs a pid, so it cannot ride along in the sweep).
+#
+# `comm` (argv[0], where proc-label writes its title) goes last because it can
+# contain spaces. `ucomm` (the kernel accounting name, <=16 chars, immune to
+# setproctitle) is a separate column and the two cannot contaminate each other.
+sweep() {
+    local idx=$1 now raw filt pid rest th
+    now=$(date +%s)
+    raw="$TMP/raw.$idx"
+    filt="$TMP/filt.$idx"
+
+    ps -axo pid=,ppid=,pgid=,sess=,rss=,vsz=,pcpu=,time=,etime=,tty=,stat=,ucomm=,comm= \
+        >"$raw" 2>/dev/null
+
+    awk -v idx="$idx" -v now="$now" -v idset="$IDSET" -v exempt="$CW_EXEMPT_PIDS" '
+        # etime is [[DD-]HH:]MM:SS and cputime is [HH:]MM:SS[.ss] — same shape read
+        # right to left, so one parser does both. (No `etimes` keyword on macOS.)
+        # Written as a while loop, not a comma-expression for: BSD awk rejects
+        # `for (i = n, k = 1; ...)`.
+        function tosec(t,   n, a, i, k, s, m) {
+            gsub(/-/, ":", t)
+            n = split(t, a, ":")
+            m[1] = 1; m[2] = 60; m[3] = 3600; m[4] = 86400
+            s = 0; i = n; k = 1
+            while (i >= 1 && k <= 4) { s += a[i] * m[k]; i--; k++ }
+            return s
+        }
+        BEGIN {
+            nid = split(idset, idv, " ")
+            for (i = 1; i <= nid; i++) if (idv[i] != "") ids[idv[i]] = 1
+            ne = split(exempt, ev, " ")
+            for (i = 1; i <= ne; i++) if (ev[i] != "") ex[ev[i]] = 1
+        }
+        {
+            pid = $1; ppid = $2; pgid = $3; sess = $4
+            rss = $5; vsz = $6; pcpu = $7
+            cput = tosec($8); et = tosec($9)
+            tty = $10; stat = $11; ucomm = $12
+
+            comm = ""
+            for (i = 13; i <= NF; i++) comm = comm (comm == "" ? "" : " ") $i
+
+            if (pid in ex) next
+
+            # G3 — the accounting name must be a claude executable.
+            if (!(ucomm in ids)) next
+
+            # G4 — a parenthesised argv[0] is a zombie / mid-exec state with
+            # unreadable argv. Not a candidate, and not worth a log line.
+            if (comm ~ /^\(/) next
+
+            # G5 — argv[0] basename must ALSO be a claude executable. Added after
+            # measuring a claude-spawned `ugrep` transiently reporting the
+            # parent`s ucomm (2.1.220) during its fork/exec window: `ucomm` alone
+            # is not sufficient identity. This is free and catches it instantly.
+            split(comm, cf, " ")
+            a0 = cf[1]
+            sub(/.*\//, "", a0)
+            if (!(a0 in ids)) next
+
+            # G1 — a controlling tty means a terminal session. Exempt
+            # unconditionally, whether or not it carries a proc-label: `claude`
+            # typed at a prompt is NOT labelled (no fish function shadows it),
+            # so the label cannot be the primary guard.
+            # G2 — label-shaped argv[0] exempts a wrapper session that somehow
+            # lost its tty. Secondary, independent signal.
+            if (tty != "??")               cls = "EXEMPT-TTY"
+            else if (comm ~ /^claude \[/)  cls = "EXEMPT-LABEL"
+            else if (ppid == 1)            cls = "ORPHAN"
+            else                           cls = "HEADLESS"
+
+            printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+                pid, idx, now, ppid, pgid, sess, rss, vsz, pcpu, cput, et, tty, stat, cls, comm
+        }
+    ' "$raw" >"$filt"
+
+    # Thread count only for the classes we might act on — §4(a): 2 threads is NOT
+    # a wedge signature (a healthy headless claude shows 2 at t=0.25 s and settles
+    # to 11), so this is recorded as a corroborating field and never thresholded.
+    while IFS=$'\t' read -r pid rest; do
+        case "$rest" in
+            *$'\t'HEADLESS$'\t'*|*$'\t'ORPHAN$'\t'*)
+                th=$(ps -M -p "$pid" 2>/dev/null | tail -n +2 | grep -c . )
+                ;;
+            *) th=- ;;
+        esac
+        printf '%s\t%s\t%s\n' "$pid" "$rest" "${th:--}"
+    done <"$filt" >>"$TMP/samples.raw"
+}
+
+# ---------------------------------------------------------------------------
+: >"$TMP/samples.raw"
+i=0
+while [ "$i" -lt "$CW_SAMPLES" ]; do
+    sweep "$i"
+    i=$((i + 1))
+    [ "$i" -lt "$CW_SAMPLES" ] && sleep "$CW_SAMPLE_INTERVAL"
+done
+
+# ---------------------------------------------------------------------------
+# Analysis. One pass, grouped by pid.
+#
+# %CPU comes from `time` deltas across samples, never from `pcpu` — pcpu is a
+# decayed estimate, not an interval average. The wall clock for each delta is the
+# `etime` delta rather than our own timestamps, so the figure stays self-consistent
+# even if the run is descheduled mid-window.
+awk -F'\t' \
+    -v ns="$CW_SAMPLES" \
+    -v log_rss="$CW_LOG_RSS_MB" -v log_cpu="$CW_LOG_CPU_PCT" \
+    -v min_age="$CW_MIN_AGE" -v rss_t="$CW_RSS_MB" -v cpu_t="$CW_CPU_PCT" \
+    -v o_age="$CW_ORPHAN_MIN_AGE" -v o_rss="$CW_ORPHAN_RSS_MB" -v o_cpu="$CW_ORPHAN_CPU_PCT" \
+    -v oi_age="$CW_ORPHAN_IDLE_AGE" -v oi_cpu="$CW_ORPHAN_IDLE_CPU_PCT" '
+{
+    pid = $1; idx = $2 + 0
+    seen[pid]++
+    rss[pid, idx] = $7 + 0
+    cput[pid, idx] = $10 + 0
+    et[pid, idx] = $11 + 0
+    # Last sample wins for the static fields, so a reparent (ppid -> 1) inside the
+    # window is reflected rather than masked by first-sample data.
+    ppid[pid] = $4; pgid[pid] = $5; sess[pid] = $6
+    vsz[pid] = $8; pcpu[pid] = $9; tty[pid] = $12; stat[pid] = $13
+    cls[pid] = $14; comm[pid] = $15; th[pid] = $16
+    if (!(pid in firstcls)) firstcls[pid] = $14
+    if (!(pid in firstet)) firstet[pid] = $11 + 0
+    # Process start time, taken from the FIRST sample: its own clock reading minus
+    # its own etime. Must NOT be derived from a `date` read after the sampling
+    # loop -- that drifts by the window length, so two consecutive runs computed
+    # different start times for one process and the bundle-once dedup never
+    # matched. (Also: no apostrophes in this awk program. It is single-quoted.)
+    if (!(pid in firstnow)) firstnow[pid] = $3 + 0
+}
+END {
+    for (pid in seen) {
+        # Must be present in EVERY sample. This is what makes the fork/exec race
+        # harmless and what makes "sustained" true within one run.
+        if (seen[pid] != ns) { partial[cls[pid]]++; continue }
+
+        n = 0; rmin = -1; rmax = 0
+        for (k = 0; k < ns; k++) {
+            v = rss[pid, k]
+            if (rmin < 0 || v < rmin) rmin = v
+            if (v > rmax) rmax = v
+        }
+        rfirst = rss[pid, 0]; rlast = rss[pid, ns - 1]
+
+        cmin = -1; cmax = 0; maxdrop = 0
+        for (k = 1; k < ns; k++) {
+            dw = et[pid, k] - et[pid, k - 1]
+            dc = cput[pid, k] - cput[pid, k - 1]
+            if (dw > 0) {
+                p = dc / dw * 100
+                if (cmin < 0 || p < cmin) cmin = p
+                if (p > cmax) cmax = p
+            }
+            pr = rss[pid, k - 1]
+            if (pr > 0 && rss[pid, k] < pr) {
+                d = (pr - rss[pid, k]) / pr * 100
+                if (d > maxdrop) maxdrop = d
+            }
+        }
+        if (cmin < 0) cmin = 0
+
+        age = firstet[pid]
+        rmin_mb = rmin / 1024; rmax_mb = rmax / 1024
+        rfirst_mb = rfirst / 1024; rlast_mb = rlast / 1024
+
+        c = cls[pid]
+        if (c == "EXEMPT-TTY" || c == "EXEMPT-LABEL") {
+            nex[c]++
+            if (rmax_mb > ex_rss_max) ex_rss_max = rmax_mb
+            continue
+        }
+
+        nhl[c]++
+        if (rmax_mb > hl_rss_max) hl_rss_max = rmax_mb
+        if (cmax > hl_cpu_max) hl_cpu_max = cmax
+
+        # "Still climbing after a minute" is what separated the runaway from a
+        # legitimately heavy one-shot. Implemented as end-to-end growth plus a
+        # bounded intra-window dip, not strict monotonicity: a wedge can give back
+        # a page without ceasing to be a wedge, and phase 2 records maxdrop so the
+        # tolerance can be tightened from data instead of taste.
+        trend_ok = (rlast >= rfirst && maxdrop <= 2)
+        trend = (rlast > rfirst ? "up" : (rlast < rfirst ? "down" : "flat"))
+
+        if (c == "ORPHAN") {
+            cand = (age >= o_age && rmin_mb >= o_rss && cmin >= o_cpu && trend_ok)
+            verdict = cand ? "ORPHAN-CANDIDATE" : \
+                      ((age >= oi_age && cmax < oi_cpu) ? "ORPHAN-IDLE" : "OBS")
+        } else {
+            cand = (age >= min_age && rmin_mb >= rss_t && cmin >= cpu_t && trend_ok)
+            verdict = cand ? "CANDIDATE" : "OBS"
+        }
+
+        detail = (rmax_mb >= log_rss || cmax >= log_cpu) ? 1 : 0
+
+        # verdict pid ppid pgid sess tty stat cls age start rmin rmax rfirst rlast
+        # cmin cmax maxdrop trend th detail clschanged comm
+        printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%.0f\t%.0f\t%.0f\t%.0f\t%.1f\t%.1f\t%.1f\t%s\t%s\t%d\t%s\t%s\n",
+            verdict, pid, ppid[pid], pgid[pid], sess[pid], tty[pid], stat[pid], c,
+            age, firstnow[pid] - firstet[pid],
+            rmin_mb, rmax_mb, rfirst_mb, rlast_mb, cmin, cmax, maxdrop, trend,
+            th[pid], detail, (firstcls[pid] == c ? "-" : firstcls[pid] "->" c), comm[pid] \
+            > "/dev/stderr"
+    }
+    printf "exempt_tty=%d exempt_label=%d headless=%d orphan=%d partial=%d exempt_rss_max=%.0fMB headless_rss_max=%.0fMB headless_cpu_max=%.1f%%\n",
+        nex["EXEMPT-TTY"], nex["EXEMPT-LABEL"], nhl["HEADLESS"], nhl["ORPHAN"],
+        partial["HEADLESS"] + partial["ORPHAN"] + partial["EXEMPT-TTY"] + partial["EXEMPT-LABEL"],
+        ex_rss_max, hl_rss_max, hl_cpu_max
+}
+' "$TMP/samples.raw" >"$TMP/summary" 2>"$TMP/verdicts"
+
+# ---------------------------------------------------------------------------
+# Forensic bundle. Collected BEFORE any signal, so even a race with a spawner
+# that is already tearing down still leaves evidence.
+redact() {
+    # Two rules, both fail-safe:
+    #  1. NAME-based: drop the value of anything whose name contains KEY, TOKEN,
+    #     SECRET, PASSWORD, CREDENTIAL or AUTH. Name-based so it also covers
+    #     secret shapes that do not exist yet. `ps -E` emits one space-separated
+    #     line, and a value MAY contain spaces, so once a sensitive name is hit we
+    #     keep dropping tokens until the next NAME= boundary.
+    #  2. SHAPE-based: rotate-inari-log's telegram-token pattern, applied to the
+    #     whole stream, because a token can reach argv by routes no name matches.
+    awk '
+    function bulkflag(t) {
+        # Flags whose VALUE is free-form content rather than a parameter. The
+        # payload after one of these is never needed to identify a process or its
+        # owner, and in the observed case it was thousands of words of private
+        # personal content.
+        return (t == "--system-prompt" || t == "--append-system-prompt" ||
+                t == "--system-prompt-file" || t == "--prompt" || t == "-p" ||
+                t == "--print" || t == "--mcp-config" || t == "--settings" ||
+                t == "--allowedTools" || t == "--disallowedTools")
+    }
+    {
+        out = ""; drop = 0
+        for (i = 1; i <= NF; i++) {
+            tok = $i
+
+            # Once a bulk-content flag appears, drop the ENTIRE remainder of the
+            # line. Ending the value at "the next thing that looks like a flag" is
+            # not safe: a prompt is free text and can contain `--days` or any other
+            # flag-shaped token, which re-opens capture mid-prompt. Observed exactly
+            # that on a real system prompt. Trailing flags (--model,
+            # --permission-mode) are lost with it; that is the correct trade, since
+            # exe.txt already carries authoritative identity and samples.tsv carries
+            # the behaviour, while a re-opened prompt carries private content.
+            if (bulkflag(tok)) {
+                rest = NF - i
+                printf "%s %s <REDACTED: %d further args dropped>\n",
+                    (out == "" ? $1 : substr(out, 2)), tok, rest
+                next
+            }
+
+            isassign = (tok ~ /^[A-Za-z_][A-Za-z0-9_]*=/)
+            if (isassign) {
+                nm = tok; sub(/=.*/, "", nm)
+                if (toupper(nm) ~ /KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH/) {
+                    out = out " " nm "=<REDACTED>"; drop = 1; continue
+                }
+                drop = 0
+            }
+            if (drop) continue
+            out = out " " tok
+        }
+        sub(/^ /, "", out); print out
+    }' | LC_ALL=C sed -E 's#([0-9]{6,12})(:|%3[Aa])[A-Za-z0-9_-]{30,}#\1<REDACTED>#g' \
+       | awk -v maxlen="$CW_ARG_MAXLEN" '
+        # THIRD rule, and the one that matters most in practice: hard-truncate every
+        # line.
+        #
+        # Credentials are not the worst thing argv carries. The first bundle written
+        # during testing traced a headless claude to a long-running local service —
+        # correctly — and in doing so captured its entire --system-prompt: 33 KB of
+        # free-form private personal content, in a permanent, unencrypted,
+        # unbacked-up file. Not one byte of it matched any credential pattern,
+        # because the sensitive part is the VALUE of an innocuous flag.
+        #
+        # Truncation is the right shape of defence rather than a blocklist of bulk
+        # flags: the next thing to carry a payload in argv will have a name we have
+        # not thought of. Owner identification needs the head of the line (the
+        # executable path, the early flags), never the tail.
+        #
+        # CLAUDE_SESSION_ID is lifted out and re-appended when it falls beyond the
+        # cut, because it is the one field in here worth keeping and it can sit deep
+        # in a Bash-tool shell command line.
+        {
+            line = $0; sid = ""
+            if (match(line, /CLAUDE_SESSION_ID=[A-Za-z0-9-]+/)) sid = substr(line, RSTART, RLENGTH)
+            if (length(line) <= maxlen) { print line; next }
+            out = substr(line, 1, maxlen)
+            if (sid != "" && index(out, sid) == 0) out = out " " sid
+            printf "%s ...[+%d chars truncated: bulk argv/env deliberately not captured]\n",
+                out, length(line) - maxlen
+        }'
+}
+
+write_bundle() {
+    local pid=$1 verdict=$2 dir
+    dir="$INCIDENTS/$(date +%Y-%m-%dT%H%M%S)-pid${pid}"
+    mkdir -p "$dir" || return 1
+    chmod 700 "$dir"
+
+    {
+        echo "verdict:        $verdict"
+        echo "pid:            $pid"
+        echo "detected:       $(date '+%Y-%m-%d %H:%M:%S %z')"
+        echo "phase:          $CW_PHASE (signalling begins at 3)"
+        echo "identity set:   $IDSET"
+        echo "window:         $CW_SAMPLES samples x ${CW_SAMPLE_INTERVAL}s"
+        echo "thresholds:     headless age>=${CW_MIN_AGE}s rss>=${CW_RSS_MB}MB cpu>=${CW_CPU_PCT}%"
+        echo "                orphan   age>=${CW_ORPHAN_MIN_AGE}s rss>=${CW_ORPHAN_RSS_MB}MB cpu>=${CW_ORPHAN_CPU_PCT}%"
+        echo "signal sent:    none (phase $CW_PHASE cannot signal)"
+        echo
+        echo "verdict row (see docs/claude-watchdog.md for the columns):"
+        awk -F'\t' -v p="$pid" '$2 == p' "$TMP/verdicts"
+    } >"$dir/summary.txt" 2>/dev/null
+
+    # The RSS/CPU curve — the single most diagnostic artefact, and the thing the
+    # 2026-07-28 reconstruction never had.
+    {
+        printf 't\trss_kb\tvsz_kb\tpcpu\tcputime_s\tage_s\tthreads\tpgid\tsess\tstat\tppid\n'
+        awk -F'\t' -v p="$pid" -v iv="$CW_SAMPLE_INTERVAL" \
+            '$1 == p { printf "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+                $2 * iv, $7, $8, $9, $10, $11, $16, $5, $6, $13, $4 }' "$TMP/samples.raw"
+    } >"$dir/samples.tsv"
+
+    # Through redact() like everything else that touches argv — `args` carries the
+    # full command line, and that is where a system prompt lives.
+    ps -o pid,ppid,pgid,sess,stat,tty,ucomm,args -ww -p "$pid" 2>&1 | redact >"$dir/proc.txt"
+
+    # Ancestry is where the owning session appears: the Bash-tool shell carries
+    # `export CLAUDE_SESSION_ID=<uuid>` literally in its argv.
+    {
+        p=$pid
+        while [ -n "$p" ] && [ "$p" != "0" ] && [ "$p" != "1" ]; do
+            ps -o pid=,ppid=,ucomm=,args= -ww -p "$p" 2>/dev/null | redact
+            p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')
+        done
+    } >"$dir/ancestry.txt" 2>&1
+
+    ps -Eww -p "$pid" 2>/dev/null | redact >"$dir/env.txt"
+
+    # The open-fd list is the ONLY owner evidence left once ancestry is gone
+    # (ppid 1): on 2026-07-28 the tasks/*.output fd is what traced the owner.
+    "$LSOF_BIN" -p "$pid" >"$dir/openfiles.txt" 2>&1
+    # Authoritative executable path. ucomm is a 16-char truncation and, as the
+    # transient `ugrep` showed, not authoritative enough to act on.
+    "$LSOF_BIN" -p "$pid" -a -d txt >"$dir/exe.txt" 2>&1
+
+    # Per-thread call graph — for a startup hang this names the function. Also
+    # reports Physical footprint and peak footprint, which is how we learn what
+    # the incident's 2.76 GB corresponds to in `ps` RSS terms.
+    if [ -x "$SAMPLE_BIN" ]; then
+        "$SAMPLE_BIN" "$pid" "$CW_SAMPLE_SECONDS" -f "$dir/sample.txt" >/dev/null 2>&1
+        [ -f "$dir/sample.txt" ] && gzip -9 "$dir/sample.txt" 2>/dev/null
+    fi
+
+    {
+        vm_stat 2>/dev/null
+        echo
+        echo "load: $(sysctl -n vm.loadavg 2>/dev/null)"
+        echo
+        echo "all claude processes:"
+        ps -axo pid=,ppid=,rss=,pcpu=,etime=,tty=,ucomm=,comm= 2>/dev/null \
+            | awk -v idset="$IDSET" 'BEGIN{n=split(idset,v," ");for(i=1;i<=n;i++)if(v[i]!="")ids[v[i]]=1} $7 in ids'
+    } >"$dir/system.txt" 2>&1
+
+    chmod 600 "$dir"/* 2>/dev/null
+    printf '%s\n' "$dir"
+}
+
+notify() {
+    local pid=$1 verdict=$2 msg=$3
+    [ "$CW_NOTIFY" = 1 ] || return 0
+    # Guarded, and never fatal — a missing notifier must not abort the run.
+    [ -x "$NOTIFIER" ] || return 0
+    "$NOTIFIER" -title "claude-watchdog: $verdict" \
+        -subtitle "pid $pid" -message "$msg" \
+        -group "claude-watchdog-$pid" >/dev/null 2>&1 || true
+}
+
+# ---------------------------------------------------------------------------
+# State — pid plus process start time, so a recycled pid is never mistaken for the
+# original. Phases 1-2 use it for exactly one thing: bundle and notify ONCE per
+# incident rather than once a minute for as long as the process lives.
+#
+# Matched on pid with a tolerance on start time, not on an exact composite key: a
+# key built from a rounded start time straddles bucket boundaries between runs,
+# and etime has 1-second granularity, so equality is the wrong test.
+: >"$TMP/state.new"
+touch "$STATE_FILE" 2>/dev/null
+
+state_lookup() {
+    awk -F'\t' -v p="$1" -v s="$2" '
+        $1 == p { d = $2 - s; if (d < 0) d = -d; if (d <= 5) { print $3; exit } }
+    ' "$STATE_FILE" 2>/dev/null
+}
+
+# ---------------------------------------------------------------------------
+n_bundles=0
+n_deferred=0
+n_cand=0
+while IFS=$'\t' read -r verdict pid ppid pgid sess tty stat cls age start rmin rmax rfirst rlast \
+        cmin cmax maxdrop trend th detail clschanged comm; do
+    [ -n "${pid:-}" ] || continue
+
+    prev=$(state_lookup "$pid" "$start")
+
+    line="pid=$pid class=$cls tty=$tty age=${age}s rss=${rmin}-${rmax}MB(${rfirst}->${rlast} ${trend} drop${maxdrop}%)"
+    line="$line cpu=${cmin}-${cmax}% th=$th ppid=$ppid pgid=$pgid sess=$sess"
+    [ "$clschanged" != "-" ] && line="$line reclass=$clschanged"
+
+    case "$verdict" in
+        CANDIDATE|ORPHAN-CANDIDATE|ORPHAN-IDLE)
+            n_cand=$((n_cand + 1))
+            if [ -n "$prev" ]; then
+                say "$verdict $line still-present (already bundled at $prev)"
+                printf '%s\t%s\t%s\n' "$pid" "$start" "$prev" >>"$TMP/state.new"
+                continue
+            fi
+            say "$verdict $line"
+            if [ "$CW_PHASE" -ge 2 ]; then
+                if [ "$n_bundles" -lt "$CW_MAX_BUNDLES_PER_RUN" ]; then
+                    dir=$(write_bundle "$pid" "$verdict")
+                    if [ -n "$dir" ]; then
+                        n_bundles=$((n_bundles + 1))
+                        say "bundle $dir"
+                        notify "$pid" "$verdict" \
+                            "${rmax}MB, ${cmax}% CPU, ${age}s old. Forensics captured; NOT killed (phase $CW_PHASE)."
+                        printf '%s\t%s\t%s\n' "$pid" "$start" "$(date +%Y-%m-%dT%H:%M:%S)" >>"$TMP/state.new"
+                    else
+                        say "WARN bundle failed for pid=$pid"
+                    fi
+                else
+                    # Never a silent cap.
+                    n_deferred=$((n_deferred + 1))
+                    say "DEFERRED pid=$pid — per-run bundle cap ($CW_MAX_BUNDLES_PER_RUN) reached; will bundle next run"
+                fi
+            fi
+            # Phases 3-4 would signal here. Structurally absent below phase 3.
+            if [ "$CW_PHASE" -ge 3 ]; then
+                say "WARN phase $CW_PHASE requested a signal, but the kill path is not implemented in this build"
+            fi
+            ;;
+        OBS)
+            # Logged unconditionally, not gated on the observation bar: the whole
+            # point of this phase is the healthy distribution, and healthy headless
+            # claude sits at ~400 MB — below any bar worth alerting on.
+            say "obs $line"
+            if [ "$detail" = 1 ]; then
+                awk -F'\t' -v p="$pid" -v iv="$CW_SAMPLE_INTERVAL" \
+                    '$1 == p { printf "cw:   smp pid=%s t=%ds rss=%.0fMB cpu_acc=%ss age=%ss th=%s stat=%s\n",
+                        $1, $2 * iv, $7 / 1024, $10, $11, $16, $13 }' "$TMP/samples.raw"
+            fi
+            [ -n "$prev" ] && printf '%s\t%s\t%s\n' "$pid" "$start" "$prev" >>"$TMP/state.new"
+            ;;
+    esac
+done <"$TMP/verdicts"
+
+# Carry forward only the keys whose pid still exists — the state file cannot grow.
+if [ -s "$STATE_FILE" ]; then
+    while IFS=$'\t' read -r p s v; do
+        [ -n "${p:-}" ] || continue
+        kill -0 "$p" 2>/dev/null || continue
+        awk -F'\t' -v p="$p" 'BEGIN { r = 1 } $1 == p { r = 0; exit } END { exit r }' \
+            "$TMP/state.new" 2>/dev/null && continue
+        printf '%s\t%s\t%s\n' "$p" "$s" "$v" >>"$TMP/state.new"
+    done <"$STATE_FILE"
+fi
+sort -u "$TMP/state.new" >"$STATE_FILE.tmp" 2>/dev/null && mv "$STATE_FILE.tmp" "$STATE_FILE"
+chmod 600 "$STATE_FILE" 2>/dev/null
+
+# ---------------------------------------------------------------------------
+# Retention. A runaway loop must not be able to fill the disk overnight; and if
+# there are more than CW_KEEP_INCIDENTS incidents, the oldest is not the
+# interesting one.
+if [ -d "$INCIDENTS" ]; then
+    # shellcheck disable=SC2012
+    ls -1dt "$INCIDENTS"/*-pid* 2>/dev/null | tail -n "+$((CW_KEEP_INCIDENTS + 1))" \
+        | while read -r old; do rm -rf "$old"; done
+fi
+
+# ---------------------------------------------------------------------------
+summary=$(cat "$TMP/summary" 2>/dev/null)
+n_any=$(awk 'END { print NR + 0 }' "$TMP/verdicts" 2>/dev/null)
+case ${n_any:-} in ''|*[!0-9]*) n_any=0 ;; esac
+if [ "$n_cand" -gt 0 ] || [ "$n_any" -gt 0 ]; then
+    say "run phase=$CW_PHASE ids=$(echo "$IDSET" | tr ' ' ',') $summary candidates=$n_cand bundles=$n_bundles deferred=$n_deferred"
+elif [ "$(( $(date +%M) ))" -eq 7 ]; then
+    # Hourly heartbeat, so a long silence is distinguishable from a dead watchdog.
+    say "heartbeat phase=$CW_PHASE ids=$(echo "$IDSET" | tr ' ' ',') no claude processes"
+fi
+
+# ~/.log/services/ is rotated by nothing (54 MB and climbing; ziplog only covers
+# ~/.local/share/monitor/*.log.json). A generic rotate-service-log is the fix and
+# is deliberately out of this build's scope — so warn, and only when the size has
+# grown since the last warning, or the warning itself becomes the noise.
+if [ -f "$SERVICE_LOG" ]; then
+    mb=$(( $(stat -f%z "$SERVICE_LOG" 2>/dev/null || echo 0) / 1024 / 1024 ))
+    if [ "$mb" -ge "$CW_LOG_ROTATE_MB" ]; then
+        last=$(cat "$LOGWARN_FILE" 2>/dev/null || echo 0)
+        case $last in ''|*[!0-9]*) last=0 ;; esac
+        if [ "$mb" -ge "$((last + 5))" ]; then
+            say "WARN claude-watchdog.log is ${mb}MB (>= ${CW_LOG_ROTATE_MB}MB) and ~/.log/services has no rotator"
+            printf '%s\n' "$mb" >"$LOGWARN_FILE"
+        fi
+    fi
+fi
+
+exit 0
