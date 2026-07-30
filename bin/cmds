@@ -197,6 +197,16 @@ end
 $old_methods = CMDS.methods
 begin require $cmds_file if File.file? $cmds_file; rescue Exception => e; p e end
 
+# A missing cmds.rb otherwise falls through to CLI.parse!'s generic usage
+# banner, which says nothing about *why* the command is unknown. The exit
+# status is non-zero either way; this just names the cause and the fix.
+if ARGV[0] && !ARGV[0].start_with?("-") && !CMDS.respond_to?(ARGV[0]) && !File.file?($cmds_file)
+  STDERR.puts "cmds: no cmds.rb for #{$pwd}"
+  STDERR.puts "      expected at #{$cmds_file}"
+  STDERR.puts "      run `cmds init` to create one."
+  exit 1
+end
+
 dir_name = File.basename(Dir.pwd)
 cmd_name = ARGV.first || "cmds"
 if !ENV['CMDS_LABELED']

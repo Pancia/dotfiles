@@ -25,7 +25,10 @@ class TestPreMode:
     """PreToolUse: block edits to MANIFEST destination files."""
 
     def test_blocks_destination_file(self):
-        rc, stderr = run_hook("pre", Path.home() / ".tmux.conf")
+        # MANIFEST maps tmux.conf to the XDG path, not ~/.tmux.conf. This test
+        # asserted the pre-XDG destination for months without failing, because
+        # tests/hooks was never registered in run_tests.py and so never ran.
+        rc, stderr = run_hook("pre", Path.home() / ".config/tmux/tmux.conf")
         assert rc == 2
         assert "rcs/MANIFEST" in stderr
         assert "dotfiles/rcs/tmux.conf" in stderr
