@@ -94,9 +94,37 @@ Honor those instructions over the defaults below when they conflict.
    - **git**: stage specific files by path, then `git commit -m "<message>"`
      via heredoc
 
-6. **Verify**: run `jj st` or `git status` after the commit to confirm success.
+6. **Verify, and report what actually landed.** Two separate things — what went
+   in, and what is left behind:
 
-7. **Do not push** unless the user explicitly asked.
+   ```
+   # jj
+   jj diff -r @- --stat      # files + line counts in the new commit
+   jj status                 # what remains in the working copy
+
+   # git
+   git show HEAD --stat --format=
+   git status
+   ```
+
+   Use `--summary` in place of `--stat` for a bare file list with no line
+   counts (`jj diff -r @- --summary` / `git show HEAD --name-status --format=`).
+
+   **Do not reach for `--no-patch`.** In jj it is rejected outright —
+   `--no-patch` cannot be combined with `--summary` or `--stat` — and
+   `jj show -r @- --summary` does work but replays the entire commit message
+   before the file list, which is noise when the body is long. `jj diff -r @-`
+   is the one that answers "which files landed" directly.
+
+   Then **tell the user the file list**, not just "committed successfully".
+   This matters most when step 2 scoped the commit to a subset: the useful
+   report is which paths went in *and* which deliberately stayed behind, so a
+   mis-scoped commit is visible immediately rather than at the next `jj status`.
+
+7. **Do not push** unless the user explicitly asked. If the repo advances a
+   `master`/`main` bookmark manually and you did not touch it, say so — a
+   commit that is not on the bookmark will not be pushed, and silence reads as
+   "done".
 
 ## Heredoc format for multi-line messages
 
