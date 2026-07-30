@@ -235,6 +235,21 @@ local calendar = engage("seeds.calendar.init", {
 })
 ```
 
+### Live Tags
+
+Put one of these in a calendar event's **title or notes** to arm it. The literal
+`#{anthony/autocal:<tag>}` form is required — a bare `#focus` matches nothing.
+
+| Tag | Lead | Action |
+|-----|------|--------|
+| `#{anthony/autocal:focus}` | 5 min | "Focus Time Starting Soon" notification |
+| `#{anthony/autocal:notify}` | 15 min | Generic "Starting in 15 minutes" notification |
+
+`leadMinutes` must stay under `queryWindow` (3h) — the poller never sees an event
+further out than that, so a longer lead can never fire. The window is
+`leadMinutes ± pollInterval` with no catch-up: if the Mac is asleep across that
+minute, the event silently never fires.
+
 ### Features
 
 - **Tag Triggers**: Extract tags from event titles/notes using regex pattern

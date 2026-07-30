@@ -71,6 +71,20 @@ local calendar = engage("seeds.calendar.init", {
                     }):send()
                 end
             },
+            -- Generic 15-minute heads-up for any event tagged
+            -- "#{anthony/autocal:notify}" in its title or notes.
+            ["notify"] = {
+                leadMinutes = 15,
+                action = function(event)
+                    hs.notify.new({
+                        title = "Starting in 15 minutes",
+                        informativeText = event.title,
+                        withdrawAfter = 0,
+                        hasActionButton = true,
+                        actionButtonTitle = "Dismiss"
+                    }):send()
+                end
+            },
         },
         titles = {
             ["Productivity & Accountability with Damian"] = {
