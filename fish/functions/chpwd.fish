@@ -83,6 +83,16 @@ function showPlans --description 'List PLAN-* files in .cc directory'
     end
 end
 
+function showFixmes --description 'List FIXME* files in .cc directory'
+    set -l fixmes (find .cc -maxdepth 1 -name 'FIXME*' 2>/dev/null)
+    if test -n "$fixmes"
+        echo (set_color --bold d75f5f)"&> FIXMEs:"(set_color normal)
+        for fixme in $fixmes
+            echo "  $fixme"
+        end
+    end
+end
+
 function _recordCWD --description 'Record current working directory'
     echo (pwd) >> ~/.config/dir_history
     echo (cat ~/.config/dir_history | sort | uniq) > ~/.config/dir_history
@@ -107,10 +117,12 @@ function chpwd_hook --on-variable PWD
     cache 5 listVims
     cache 5 listClaudeSessions
     cache 5 showPlans
+    cache 5 showFixmes
     cache 5 showPendingUpdates
 end
 
 # Show plans on shell startup (this file is sourced from config.fish)
 if status is-interactive; and isatty stdout
     showPlans
+    showFixmes
 end

@@ -18,6 +18,10 @@ function dashboard-parts --description 'Collect dashboard indicator parts for th
     set -l plan_count (find .cc -maxdepth 1 -name 'PLAN-*' 2>/dev/null | count)
     test $plan_count -gt 0; and set -a parts "P"
 
+    # ⚑ = FIXME* files in .cc/
+    set -l fixme_count (find .cc -maxdepth 1 -name 'FIXME*' 2>/dev/null | count)
+    test $fixme_count -gt 0; and set -a parts "⚑"
+
     # Claude Code sessions to resume
     set -l cc_file "$HOME/Cloud/cc-sessions"(pwd)"/sessions.json"
     if test -f "$cc_file"
