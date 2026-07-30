@@ -18,6 +18,7 @@
 
 import AppKit
 import CoreGraphics   // CGEvent + CGPreflight/RequestPostEventAccess (auto-linked via AppKit)
+import Carbon.HIToolbox   // RegisterEventHotKey — the global Escape grab (see registerEscapeHotKey)
 import Foundation
 
 // MARK: - Config / args
@@ -228,6 +229,28 @@ func styleLine(_ raw: String, showTimestamps: Bool, continuing: Bool = false) ->
     return StyledLine(attr: a, plain: plain, isTranscript: false, source: nil)
 }
 
+// MARK: - Panel
+
+// The transcript panel, which must NEVER take keyboard focus: it floats over whatever
+// you're dictating into, and a keystroke landing here instead of there is the bug this
+// window is designed around.
+//
+// `becomesKeyOnlyIfNeeded` alone does NOT get you that. It's a conditional — AppKit asks
+// the clicked view's `needsPanelToBecomeKey`, and NSTextView answers true whenever it is
+// *selectable*, not merely when it's editable (measured: selectable=true → true,
+// selectable=false → false, NSButton → false). So buttons and checkboxes were safe but
+// drag-selecting transcript text would quietly make the panel key — the exact gesture
+// this was meant to protect, and a worse version of the original bug, since the app you
+// were typing into keeps its solid caret and gives no sign the keys stopped arriving.
+//
+// Overriding canBecomeKey is the guarantee. Clicks, buttons, the close button, window
+// dragging and text selection all still work (selection just draws in the inactive
+// colour); ⌘C on a selection does not, since a never-key app receives no key
+// equivalents — the status menu's "Copy Transcript" is the route for that.
+final class NonKeyPanel: NSPanel {
+    override var canBecomeKey: Bool { false }
+}
+
 // MARK: - App delegate
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate {
@@ -247,6 +270,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     // order — replayed by rerenderTranscript() when the Timestamps checkbox toggles.
     private var displayedRawLines: [String] = []
     private var signalSources: [DispatchSourceSignal] = []
+    // Global bare-Escape grab; released at the top of finish(). See registerEscapeHotKey.
+    private var escapeHotKey: EventHotKeyRef?
+    private var escapeEventHandler: EventHandlerRef?
 
     // Stop/copy state (was `enum CopyMode`). `cancelled` = Escape/Cancel → no copy;
     // `overflowReference` = this paste target can't take the full text (see
@@ -293,6 +319,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var cancelButton: NSButton!
 
     // Menu items whose actions need a known transcript path; disabled until then.
+    private var cancelItem: NSMenuItem!
     private var copyTranscriptItem: NSMenuItem!
     private var copyRefItem: NSMenuItem!
     private var revealItem: NSMenuItem!
@@ -321,7 +348,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
         // Track the app to paste into on an auto-paste stop. Subscribe FIRST (on the
         // WORKSPACE center — the default NotificationCenter never gets this), then seed
-        // from the current frontmost (self-filtered) BEFORE our own NSApp.activate below.
+        // from the current frontmost (self-filtered). We no longer activate at all, so the
+        // seed can't be polluted by our own activation the way it once could.
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(appActivated(_:)),
             name: NSWorkspace.didActivateApplicationNotification, object: nil)
@@ -334,8 +362,98 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         installSignalHandlers()
         startEngine()
 
-        NSApp.activate(ignoringOtherApps: true)
-        panel.makeKeyAndOrderFront(nil)
+        // Show WITHOUT taking focus. We used to NSApp.activate + makeKeyAndOrderFront,
+        // which made us the active app: the window you were dictating into lost key
+        // status and its caret went hollow, while the menu bar kept naming that app
+        // (.accessory apps never take the menu bar). A confusing split state — and a real
+        // hazard, since a key panel meant Return = Complete and Escape = Cancel could
+        // swallow keystrokes aimed at the terminal.
+        //
+        // orderFrontRegardless() + .nonactivatingPanel, over a panel whose canBecomeKey is
+        // false (see NonKeyPanel), means it cannot capture a keystroke even after you click
+        // it. Escape-to-cancel survives as a real global hotkey instead — see
+        // registerEscapeHotKey.
+        panel.orderFrontRegardless()
+        registerEscapeHotKey()
+    }
+
+    // MARK: Global Escape
+
+    // Escape cancels the session from anywhere. The panel can no longer receive it (it
+    // never becomes key), so we grab the key itself.
+    //
+    // Carbon's RegisterEventHotKey rather than the alternatives, deliberately:
+    //   - It needs no TCC grant. A CGEventTap or an NSEvent global monitor both want
+    //     Accessibility, which this bundle doesn't hold on a clean machine and which a
+    //     background .accessory app can't prompt for cleanly.
+    //   - Its lifetime is exactly this process's: the system drops the registration when
+    //     we die, so a crash cannot leave Escape swallowed system-wide. Every
+    //     external-state design (a Karabiner variable, a tap someone else owns) has a
+    //     stale-state failure whose symptom is "my Escape key stopped working".
+    //   - It sees the REMAPPED Escape. This machine's Escape is Caps Lock →
+    //     right_control → to_if_alone escape, i.e. produced BY a Karabiner complex
+    //     modification. Karabiner posts that through its virtual keyboard upstream of
+    //     hotkey dispatch, so we get it — confirmed by hand on this machine, and the
+    //     load-bearing assumption of this whole approach. A Karabiner rule matching on
+    //     `escape` would NOT have seen it: complex modifications are a single pass, so
+    //     one rule's output is never re-fed into another
+    //     (pqrs-org/Karabiner-Elements#2742).
+    //
+    // The cost, accepted knowingly: while a session runs, Escape is consumed everywhere,
+    // so it won't leave vim's insert mode or dismiss a dialog in the app you're dictating
+    // into. Released at the top of finish(), so the grab ends with the recording rather
+    // than lingering through the ~10s engine drain that follows it.
+    private static let hotKeySignature: OSType = 0x4C54_4358   // 'LTCX'
+
+    private func registerEscapeHotKey() {
+        // Idempotent. A second call would leak the first handler (unremovable, and it
+        // would double-fire) and then overwrite escapeHotKey with the nil that
+        // eventHotKeyExistsErr leaves behind — stranding the live grab with no way to
+        // release it, i.e. Escape dead for the rest of the process.
+        guard escapeHotKey == nil, escapeEventHandler == nil else { return }
+
+        var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
+                                 eventKind: UInt32(kEventHotKeyPressed))
+        let installed = InstallEventHandler(GetApplicationEventTarget(), { _, event, userData in
+            guard let event, let userData else { return OSStatus(eventNotHandledErr) }
+            var id = EventHotKeyID()
+            let err = GetEventParameter(event, EventParamName(kEventParamDirectObject),
+                                        EventParamType(typeEventHotKeyID), nil,
+                                        MemoryLayout<EventHotKeyID>.size, nil, &id)
+            guard err == noErr, id.signature == AppDelegate.hotKeySignature else {
+                return OSStatus(eventNotHandledErr)
+            }
+            // Hop to main rather than tearing down UI and the engine on the Carbon
+            // callback's own frame.
+            let me = Unmanaged<AppDelegate>.fromOpaque(userData).takeUnretainedValue()
+            DispatchQueue.main.async { me.cancelSession() }
+            return noErr
+        }, 1, &spec, Unmanaged.passUnretained(self).toOpaque(), &escapeEventHandler)
+
+        // Order matters, and so does bailing out here. Registering the hotkey with no
+        // handler installed is the worst reachable state: bare Escape is grabbed
+        // system-wide for the whole session with nothing listening, so it neither cancels
+        // nor reaches the app you're typing into.
+        guard installed == noErr else {
+            escapeEventHandler = nil
+            appendError("⚠︎ Escape-to-cancel unavailable (InstallEventHandler \(installed)) — use the menu bar item.")
+            return
+        }
+
+        // modifiers: 0 — bare Escape. Unusual for a hotkey, and the reason releasing it
+        // promptly at stop matters.
+        let registered = RegisterEventHotKey(UInt32(kVK_Escape), 0,
+                                             EventHotKeyID(signature: AppDelegate.hotKeySignature, id: 1),
+                                             GetApplicationEventTarget(), 0, &escapeHotKey)
+        if registered != noErr {
+            escapeHotKey = nil
+            appendError("⚠︎ Escape-to-cancel unavailable (RegisterEventHotKey \(registered)) — use the menu bar item.")
+        }
+    }
+
+    private func unregisterEscapeHotKey() {
+        if let k = escapeHotKey { UnregisterEventHotKey(k); escapeHotKey = nil }
+        if let h = escapeEventHandler { RemoveEventHandler(h); escapeEventHandler = nil }
     }
 
     // Keep `targetApp` on the latest non-self foreground app so auto-paste follows
@@ -351,13 +469,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     private func buildPanel() {
         let w: CGFloat = 660, h: CGFloat = 740
-        panel = NSPanel(
+        // NonKeyPanel, not NSPanel: canBecomeKey is overridden to false, which is what
+        // actually keeps the keyboard with the app you're dictating into. See the type.
+        panel = NonKeyPanel(
             contentRect: NSRect(x: 0, y: 0, width: w, height: h),
-            styleMask: [.titled, .closable, .resizable, .utilityWindow],
+            styleMask: [.titled, .closable, .resizable, .utilityWindow, .nonactivatingPanel],
             backing: .buffered, defer: false)
         panel.title = "Live Transcribe"
         panel.level = .floating
         panel.isFloatingPanel = true
+        // Redundant next to the canBecomeKey override, kept as a second line of defence:
+        // it also stops AppKit even *asking* for key on a button or checkbox click.
+        panel.becomesKeyOnlyIfNeeded = true
+        // Load-bearing: .utilityWindow defaults this to true, and we are essentially never
+        // the active app any more, so leaving it would hide the panel for the whole session.
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -486,7 +611,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
         completeButton = NSButton(title: "Complete", target: self, action: #selector(completeAction))
         completeButton.bezelStyle = .rounded
-        completeButton.keyEquivalent = "\r"            // default button; Return = Complete
+        // No keyEquivalent = "\r". Removing it — not the focus change — is what actually
+        // kills the Return-ends-your-session hazard, and Alt+Space already completes from
+        // anywhere. It also cost the default button's accent fill, so restore the primary/
+        // secondary hierarchy by hand (a default button only draws accented while its
+        // window is key, which this one never is, so nothing is lost by doing it here).
+        if #available(macOS 10.14, *) { completeButton.bezelColor = .controlAccentColor }
         cancelButton = NSButton(title: "Cancel", target: self, action: #selector(cancelSession))
         cancelButton.bezelStyle = .rounded
 
@@ -568,6 +698,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
         menu.addItem(.separator())
 
+        // Cancel needs a home outside the panel: Quit below stops and COPIES, so without
+        // this the menu had no way to end a session without touching the clipboard. Also
+        // the fallback if the global Escape hotkey is ever unavailable.
+        cancelItem = NSMenuItem(title: "Cancel Session (no copy)", action: #selector(cancelSession), keyEquivalent: "")
+        cancelItem.target = self
+        menu.addItem(cancelItem)
+
         let quit = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
@@ -592,6 +729,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         copyTranscriptItem?.isEnabled = hasPath
         copyRefItem?.isEnabled = hasPath
         revealItem?.isEnabled = hasPath
+        // Cancel is meaningless once we're already stopping (finish() is guarded), so grey
+        // it out rather than leave a visible no-op.
+        cancelItem?.isEnabled = !finishing
     }
 
     @objc private func copyTranscriptAction() { copyFullToPasteboard() }
@@ -608,14 +748,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if panel.isVisible {
             panel.orderOut(nil)
         } else {
-            NSApp.activate(ignoringOtherApps: true)
-            panel.makeKeyAndOrderFront(nil)
+            // Same no-focus-theft rule as launch — never activate, never take key.
+            panel.orderFrontRegardless()
         }
     }
 
     @objc private func quit() { finish(cancelled: false, userInitiated: false) }
 
-    // Closing the window — the red button OR Escape (both route here) — cancels
+    // Closing the window — the red button; Escape now arrives via the global hotkey and
+    // calls cancelSession() directly, never through here — cancels
     // the session: stop recording, keep the saved .txt/.m4a, but don't copy
     // anything to the clipboard. (Use the menu's "Hide Panel" to hide while
     // recording continues.)
@@ -859,6 +1000,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     // all of this asynchronously). Guarantees no orphan engine + a best-effort copy;
     // never pastes — there's no runloop left once this returns.
     func applicationWillTerminate(_ notification: Notification) {
+        // First, as in finish(). This path blocks the MAIN thread for up to 10s below, so
+        // a still-registered grab would eat every Escape in that window and deliver it
+        // nowhere — we can't dispatch the Carbon event, and the focused app never sees it.
+        unregisterEscapeHotKey()
         enginePipe?.fileHandleForReading.readabilityHandler = nil
         if let p = engine, p.isRunning {
             kill(p.processIdentifier, SIGINT)
@@ -885,6 +1030,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private func finish(cancelled: Bool, userInitiated: Bool, mode: OutputMode? = nil) {
         if finishing { return }
         finishing = true
+        // FIRST: give Escape back. Everything below this can take ~10s (the engine drain,
+        // then auto-paste), and during that window you're already back in your editor.
+        unregisterEscapeHotKey()
         self.cancelled = cancelled
         self.pasteEligible = userInitiated
         // The stop hotkey re-asserts its mode over the launch seed, so the key you stop

@@ -98,7 +98,14 @@ end
 # plain → SIGTERM: the app SIGINTs the engine (flush + save), copies the full
 #         transcript (timestamps stripped, flowed to prose) to the clipboard, then exits.
 # --ref → SIGUSR1: same stop, but copies a `read <path>` reference instead.
-# (Escape / the window's close button cancel *in-app*: stop, keep files, no copy.)
+# (Cancel — stop, keep files, no copy — is Escape from anywhere while a session runs:
+#  the app grabs the key with RegisterEventHotKey, since its panel no longer takes focus.
+#  Also the window's close button, its Cancel button, and the menu bar item.
+#
+#  Note the cost, if you ever come here wondering why Escape "stopped working": the grab
+#  is exclusive, so for the duration of a session Escape is consumed everywhere and won't
+#  leave vim's insert mode or dismiss a dialog. It's released the moment the session
+#  stops — and it dies with the process, so nothing can leave it stuck.)
 if pgrep -f $appbin >/dev/null 2>&1
     if test "$mode" = ref
         pkill -USR1 -f $appbin 2>/dev/null

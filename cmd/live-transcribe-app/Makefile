@@ -1,6 +1,6 @@
 APP = ../../bin/LiveTranscribe.app
 BIN = $(APP)/Contents/MacOS/live-transcribe-app
-FRAMEWORKS = -framework AppKit -framework Foundation
+FRAMEWORKS = -framework AppKit -framework Foundation -framework Carbon
 
 # Code-signing identity for the bundle. macOS keys the microphone (TCC) grant to
 # the signature's designated requirement. A stable self-signed identity keeps the
