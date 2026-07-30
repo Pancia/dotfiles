@@ -141,10 +141,19 @@ disjoint files.
   that is what lets the replay position an edit by context instead of by
   first-occurrence matching. Subagents share the parent's session id, so `Task`
   work is included.
-- **Bash blind spot:** `rm`/`mv`/`sed -i`/`>` are journaled nowhere. Declare
-  deletions and renames with `--also <path>` (safe only for whole-path changes,
-  never for content). `ccjj audit` lists working-copy changes no session claims —
-  run it when something seems to have gone uncommitted.
+- **Bash blind spot:** `rm`/`mv`/`sed -i`/`>` are journaled nowhere by the
+  Edit/Write hook. Declare deletions and renames with `--also <path>` (safe only
+  for whole-path changes, never for content). `ccjj audit` lists working-copy
+  changes no session claims — run it when something seems to have gone
+  uncommitted.
+- **Bash content changes, in an opted-in checkout** (`ccjj bash-windows on`): a
+  `PostToolUse` hook records the working-copy commit ids either side of each Bash
+  call, `ccjj audit` annotates unclaimed paths with what covers them, and
+  `ccjj claim <path>` prints the diff and turns it into an ordinary record.
+  Deliberately an **offer, not an attribution** — a window's delta is a
+  whole-copy diff, so it carries every write that landed inside it, including
+  another session's `Edit` and the 103 tracked files hardlinked outside this
+  repo. Reading the diff is the only detector that works.
 - **`claude-p` disables hooks** (`--safe-mode`), so a headless agent produces no
   journal at all unless `CLAUDE_P_SAFE=0`.
 - **You do not have to remember.** `g run ci` / `ai_jj_commit` / `/cc:commit` call
@@ -304,6 +313,8 @@ open after an edit may show the cached menu and the next one is current. `rebuil
 | `ccs prune [--dry-run]` | Archive crashed entries with no surviving transcript, backup, or saved record |
 | `commit-mine -m MSG` | Commit only *this* Claude session's edits when sessions share the working copy; `--diff` to preview, `--also PATH` for a Bash-made delete/rename |
 | `ccjj audit` | List working-copy changes no session claims (the Bash blind spot) |
+| `ccjj bash-windows on\|off\|status` | Opt this checkout into recording Bash windows |
+| `ccjj claim PATH` | Accept a Bash-made change as your own, after reading the diff it prints; `-n` to preview |
 | `claude-p [flags] [prompt]` | Guarded `claude -p` — hard timeout in its own process group, `.is_error` checking, and `--safe-mode` by default. Drop-in for text/json/stream-json. See below |
 | `llm-output [--json]` | Extract the `<output>` envelope body from an LLM reply on stdin; nonzero exit rather than raw text when there isn't one. See below |
 | `disk-cleanup` | Report on the latest disk snapshot (biggest consumers + growth vs a ~30-day-old baseline), then offer a Claude session to help free space. `--no-ai` report only, `--ai` skip the prompt, `--scan` fresh snapshot first. Hermes: `Cmd+Space` → `x` → `d` |
@@ -438,9 +449,11 @@ every legitimate preamble case. Related: **indenting a lone tag does not escape 
 both regexes begin `^[ \t]*` — so the contract tells the model to keep a quoted tag
 inline in a sentence instead.
 
-Tests live in `tests/lib/python/test_llm_output.py` — **under `lib/python`, which
-`cmds test` actually runs**; `tests/fish/`, `tests/hooks/` and
-`tests/bin/exocortex-id/` are orphaned and never execute. They are mutation-checked:
+Tests live in `tests/lib/python/test_llm_output.py`, under the `lib/python`
+component. (`tests/fish/`, `tests/hooks/`, `tests/bin/ytdl/` and
+`tests/bin/exocortex-id/` used to be orphaned — unregistered in `run_tests.py` and
+therefore never run by `cmds test`. All four are registered now; see **Testing**.)
+They are mutation-checked:
 30 mutations of the regexes, the balance check, the exit-code constants, the
 `--contract` path and the SIGPIPE handling are each killed. Four lessons worth keeping
 if you add cases:
@@ -497,7 +510,35 @@ cmds test yt -v                # Verbose output
 cmds test yt --cov             # With coverage report
 cmds test yt -k "cache"        # Run tests matching pattern
 cmds test bin/ytdl/test_ytdl.py  # Target a specific file
+cmds test bin                  # Run every bin/* component
 ```
+
+**Every test tree must be registered in `COMPONENTS`** (`lib/python/run_tests.py`).
+`run_all()` iterates that dict, so a directory under `tests/` that isn't listed is
+not "not yet wired up" — it never runs at all, and rots silently. Four trees sat
+unregistered for months; when they were finally registered, `tests/hooks` failed
+immediately because it still asserted the pre-XDG `~/.tmux.conf` destination.
+
+| Component | Alias | Runner | Notes |
+|---|---|---|---|
+| `services/youtube_transcribe` | `yt` | pytest | needs fastapi/httpx/etc. |
+| `lib/python` | `python`, `cjson` | pytest | |
+| `bin/astro` | `astro` | pytest | needs kerykeion/pyswisseph |
+| `bin/ytdl` | `ytdl` | pytest | stubs yt-dlp via PATH |
+| `bin/exocortex-id` | `exocortex` | pytest | |
+| `fish` | `trash` | pytest | **pytest, not fishtape** — drives `fish -c` and asserts on output; needs the `fish` binary |
+| `hooks` | `ensure-rcs` | pytest | runs `rcs/claude-ensure-rcs-hook.sh` |
+
+`busted` and `fishtape` runners exist in `RUNNERS` but no component uses them.
+
+Each component runs as its own `pytest` subprocess, so the run ends with an
+**aggregate summary** naming every component, its counts, and one overall
+PASSED/FAILED verdict. Without it the output just ends in the last component's
+tally and reads as though nothing else ran — a real reader once saw astro's `107
+passed` and concluded the other 300 tests hadn't executed.
+
+`DOTFILES` is derived from `__file__`, not `$HOME/dotfiles`, so a clone or worktree
+elsewhere tests itself; the resolved root is printed at the top of every run.
 
 ### Claude Code Config (cc-config)
 

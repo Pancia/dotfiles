@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Shell entry point for lib/python/ccjj.py — session-scoped jj commits, so
+# concurrent Claude Code sessions sharing one working copy each commit only
+# their own edits.
+#
+#   ccjj commit -m "msg"        # commit this session's work only
+#   ccjj commit --diff          # show what that would be
+#   ccjj audit                  # changes no session claims
+#   ccjj prune [-n]             # retire archived journals
+#
+# `ccjj record-edit` is the PostToolUse (Edit|Write) hook; it reads the payload
+# on stdin and always exits 0.
+#
+# Exit: 0 ok · 1 refused · 2 nothing to do · 4 locked or base moved.
+#
+# Own file rather than `python3 ~/dotfiles/lib/python/ccjj.py` at each callsite,
+# so the hook config and fish callers get a name and the path lives in one place.
+exec python3 "$(dirname "$(dirname "$(readlink -f "$0")")")/lib/python/ccjj.py" "$@"

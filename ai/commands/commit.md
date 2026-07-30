@@ -20,6 +20,75 @@ user for this specific commit (e.g. "squash into previous", "mark as WIP",
 "scope to just the nvim changes", "use conventional commit prefix", etc.).
 Honor those instructions over the defaults below when they conflict.
 
+## Concurrent sessions — check this first
+
+In a jj repo, run `ccjj should-scope` before anything else. If it **exits 0**,
+another live Claude session is working in this same working copy, and a plain
+`jj commit` would capture its half-written files. Commit with:
+
+```bash
+commit-mine -m "<message>"
+```
+
+That replays only *this* session's recorded edits onto `@-`, leaving the other
+session's work untouched and on disk. It splits a file both sessions edited, not
+just disjoint files. Use `commit-mine --diff` to preview, and
+`commit-mine -m "<msg>" --also <path>` for a delete or rename made with Bash.
+
+Exit `4` means locked, the base moved, or the working copy is a merge — wait and
+retry, it is not an error. Exit `1` is a refusal that re-running will reproduce;
+read the message rather than retrying. Full details: `docs/cc-jj-sessions.md`.
+
+`commit-mine` **stops with exit `5`** if this session has Bash-window changes
+nobody has claimed, and names the exact `ccjj claim` commands. Claim the ones
+that are yours and re-run, and it all lands in **one** commit. If some of them
+are not yours (a build artifact, another program's rewrite), re-run with
+`--no-claim` to commit without them. Same for `ai_jj_commit` / `g run ci`.
+
+### Before committing, run `ccjj audit`
+
+It lists working-copy paths no session claims. Changes you made through **Bash**
+(`sed -i`, `>`, a heredoc, a script that rewrites a file) are invisible to the
+Edit/Write hook, so they are unclaimed and `commit-mine` will silently leave them
+behind. `audit` is what makes that loud.
+
+If this checkout has Bash windows enabled, `audit` annotates the ones it can
+recover:
+
+```
+    services/disk-snapshot/script.sh
+        changed inside your Bash window (modified) -- recoverable:
+        ccjj claim services/disk-snapshot/script.sh   # after reading the diff it prints
+```
+
+**You are the reader.** `ccjj claim` prints the diff and then records it — there
+is no confirmation prompt, by design. So actually read the diff before deciding,
+and claim only what you know you did:
+
+- Recognise the change as yours → claim it, then commit.
+- The diff contains anything you did not do — another session's edit, a config
+  file rewritten by some other program, an unrelated build artifact → **do not
+  claim it**. Say so in your report instead. A window is a snapshot difference,
+  so it catches everything that happened in that interval, not only your work.
+- `claim` refuses outright for symlinks, deletions, renames, a path another
+  session has a stake in, and a path that appeared in `@-` meanwhile. Those
+  refusals are not obstacles to work around — take the suggested route
+  (`--also`) or leave the change uncommitted.
+
+For a deletion or rename made with Bash, skip `claim` and use
+`commit-mine -m "msg" --also <old> --also <new>`. `--also` takes a path
+**wholesale** and is never byte-verified, so use it only for whole-path changes,
+never for a content edit to a file someone else may be working on.
+
+If `@- has moved` appears, something outside `ccjj` committed — `audit` names the
+exact `jj op restore <id>` to undo it. Report that to the user before doing
+anything else; do not run the restore unprompted, it rewinds the whole repo.
+
+If `ccjj should-scope` exits non-zero (the usual case — you are the only session
+here), ignore all of the above and follow the normal procedure below. A
+whole-working-copy commit is *better* then, because it also captures changes made
+via Bash.
+
 ## Procedure
 
 1. **Survey the changes** by running exactly this one command:

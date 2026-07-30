@@ -1,0 +1,40 @@
+#!/bin/bash
+# PostToolUse(Bash) gate for `ccjj bash-window`.
+#
+# This runs on EVERY Bash tool call in EVERY project, so it has to decide in a
+# few milliseconds and without starting Python (~130ms). Two `test -f` do it:
+#
+#   .jj/ccjj-bash        this checkout opted in   (`ccjj bash-windows on`)
+#   .jj/ccjj-contended   another live session is here (maintained by `ccjj nudge`)
+#
+# The second gate is the important one. With a single session there is nothing
+# to attribute -- a whole-working-copy commit is strictly better, because it
+# also captures the Bash-made changes this tool cannot see -- so the ~70ms
+# snapshot is pure waste during the ~78% of active minutes that are uncontended.
+#
+# Same stdin-scraping shape as ~/.claude/hooks/jj-snapshot.sh. Always exits 0:
+# a recorder that fails an agent's tool call is worse than one that misses.
+INPUT=$(cat)
+
+CWD=$(printf '%s' "$INPUT" \
+    | grep -o '"cwd"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 \
+    | sed 's/.*"cwd"[[:space:]]*:[[:space:]]*"//;s/"$//')
+[ -z "$CWD" ] && exit 0
+
+# Resolve symlinks the way find_repo() does. Without this a cwd that reaches the
+# repo through a link never finds .jj and the hook silently no-ops, while Python
+# would have found it -- and ~/.config/fish/functions is exactly such a link into
+# this checkout.
+CWD=$(cd "$CWD" 2>/dev/null && pwd -P) || exit 0
+[ -z "$CWD" ] && exit 0
+
+while [ "$CWD" != "/" ] && [ -n "$CWD" ]; do
+    if [ -d "$CWD/.jj" ]; then
+        [ -f "$CWD/.jj/ccjj-bash" ] || exit 0
+        [ -f "$CWD/.jj/ccjj-contended" ] || exit 0
+        printf '%s' "$INPUT" | ccjj bash-window
+        exit 0
+    fi
+    CWD=$(dirname "$CWD")
+done
+exit 0

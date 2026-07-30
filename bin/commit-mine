@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# `ccjj commit` under a shorter, agent-facing name.
+#
+#   commit-mine -m "msg"                  # commit only this session's edits
+#   commit-mine --diff                    # preview, commit nothing
+#   commit-mine -m "msg" --also old --also new   # a Bash-made rename or delete
+#
+# Session comes from $CLAUDE_SESSION_ID, which Claude Code sets for the agent's
+# own Bash calls, so the normal invocation takes no session argument.
+exec "$(dirname "$(readlink -f "$0")")/ccjj" commit "$@"

@@ -17,6 +17,10 @@
 #   2  nothing       -- no changes in scope; NOT an error, do not retry
 #   3  misconfigured -- allowlist missing/unreadable/empty; do not retry
 #   4  locked        -- another commit is in progress; do not retry immediately
+#   5  unclaimed     -- this session has Bash-window changes nobody has claimed;
+#                       `ccjj claim` them and re-run for ONE commit, or pass
+#                       --no-claim to commit without them. Agent-only: the
+#                       session-scoped path requires CLAUDE_SESSION_ID.
 #
 # SAFETY INVARIANT: `--paths-from` must never degrade into committing everything.
 # An allowlist that resolves to zero entries is a hard error (3), not a fallback.
@@ -29,6 +33,22 @@ function ai_jj_commit --description 'Commit jj change with AI-generated message 
     if contains -- --dry-run $argv; or contains -- -n $argv
         __ai_jj_commit_run $argv
         return $status
+    end
+
+    # Route to a session-scoped commit when another live Claude session is
+    # working in this repo: a whole-working-copy commit would capture its
+    # half-written files. `ccjj should-scope` owns the decision so the rule lives
+    # in one place, and it declines when this is the only session -- a whole-copy
+    # commit is better then, because it also catches Bash-made changes that ccjj
+    # cannot see.
+    #
+    # Deliberately BEFORE the lock: ccjj takes this same lockdir, so delegating
+    # while holding it would make the tool deadlock against itself and return 4.
+    if set -q CLAUDE_SESSION_ID; and not string match -q -- '--paths-from*' $argv
+        if ccjj should-scope -q 2>/dev/null
+            __ai_jj_commit_run --session $argv
+            return $status
+        end
     end
 
     set -l repo_root (jj root 2>/dev/null)
@@ -98,7 +118,7 @@ function ai_jj_commit --description 'Commit jj change with AI-generated message 
 end
 
 function __ai_jj_commit_run --description 'ai_jj_commit implementation (assumes lock is held)'
-    argparse 'n/dry-run' 'v/verbose' 'no-edit' 'paths-from=' -- $argv
+    argparse 'n/dry-run' 'v/verbose' 'no-edit' 'paths-from=' 'session' 'no-claim' -- $argv
     or return 1
 
     # Declared at function level: `set -l` is function-scoped, not block-scoped,
@@ -107,6 +127,10 @@ function __ai_jj_commit_run --description 'ai_jj_commit implementation (assumes 
     set -l scoped 0
     set -l selector ""
     set -l entries
+    set -l session 0
+    if set -q _flag_session
+        set session 1
+    end
 
     if set -q _flag_paths_from
         set scoped 1
@@ -174,7 +198,16 @@ function __ai_jj_commit_run --description 'ai_jj_commit implementation (assumes 
     # `snapshot.auto-update-stale = false` in this repo deliberately enables that
     # error path. Redirect to a file so $status is jj's.
     set -l difffile (mktemp)
-    if test $scoped -eq 1
+    if test $session -eq 1
+        # The RECONSTRUCTED diff, not `jj diff`. For a file two sessions both
+        # touched, `jj diff` carries the other session's hunks too, so the
+        # generated message would describe work that is not being committed.
+        if set -q _flag_no_claim
+            ccjj commit --diff --no-claim >$difffile
+        else
+            ccjj commit --diff >$difffile
+        end
+    else if test $scoped -eq 1
         jj diff -- "$selector" >$difffile
     else
         jj diff >$difffile
@@ -182,6 +215,18 @@ function __ai_jj_commit_run --description 'ai_jj_commit implementation (assumes 
     set -l jj_status $status
     set -l diff (cat $difffile | string collect)
     rm -f $difffile
+
+    # 5 means this session has Bash-window changes nobody has claimed. ccjj has
+    # already printed them and the exact `ccjj claim` lines. Stop HERE, before
+    # spending a model call on a message and before committing: claiming then
+    # re-running yields one commit instead of two. Only reachable under an
+    # agent -- the routing above requires CLAUDE_SESSION_ID -- so a human's
+    # `g run ci` never sees this.
+    if test $jj_status -eq 5
+        echo "ai_jj_commit: stopped before committing; claim the paths above and re-run" >&2
+        echo "              (or: ai_jj_commit --no-claim ... to commit without them)" >&2
+        return 5
+    end
 
     if test $jj_status -ne 0
         echo "ai_jj_commit: jj diff failed (exit $jj_status); working copy stale or repo busy" >&2
@@ -201,6 +246,9 @@ function __ai_jj_commit_run --description 'ai_jj_commit implementation (assumes 
     if test $diff_len -eq 0
         if test $scoped -eq 1
             echo "ai_jj_commit: no changes in allowlisted paths" >&2
+        else if test $session -eq 1
+            echo "ai_jj_commit: this session recorded no committable changes" >&2
+            echo "ai_jj_commit: (other sessions' work is still in the working copy; `ccjj audit`)" >&2
         else
             echo "ai_jj_commit: no changes in working copy" >&2
         end
@@ -266,6 +314,18 @@ function __ai_jj_commit_run --description 'ai_jj_commit implementation (assumes 
             echo "ai_jj_commit: jj split failed" >&2
             return 1
         end
+    else if test $session -eq 1
+        # ccjj takes the shared lock itself, verifies the commit landed, and
+        # reports any working-copy paths no session claimed.
+        if set -q _flag_no_claim
+            ccjj commit -m "$message" --no-claim
+        else
+            ccjj commit -m "$message"
+        end
+        set -l rc $status
+        if test $rc -ne 0
+            return $rc
+        end
     else
         jj describe -m "$message"; or return 1
         if set -q _flag_no_edit
@@ -273,6 +333,9 @@ function __ai_jj_commit_run --description 'ai_jj_commit implementation (assumes 
         else
             jj commit; or return 1
         end
+        # Every session's claims are now in history. Leaving the journals live
+        # would make their paths look permanently claimed and wedge the nudge on.
+        ccjj retire-all -q 2>/dev/null
     end
 
     printf '%s\n' "$message"
