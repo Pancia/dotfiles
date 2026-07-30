@@ -17,6 +17,9 @@ from claude_agent_sdk import (
 _COMMIT_RE = re.compile(r"<commit>\s*(.*?)\s*</commit>", re.DOTALL)
 _INCLUDE_RE = re.compile(r"^@(\S+)\s*$", re.MULTILINE)
 
+# One toolless call on a diff; minutes only for a very large one.
+_TIMEOUT = float(os.environ.get("AI_COMMIT_MSG_TIMEOUT", 300))
+
 
 def load_template(path: str, _seen: set[str] | None = None) -> str:
     """Read a prompt template, expanding `@<path>` lines as includes.
@@ -50,9 +53,19 @@ def extract_commit(text: str) -> str:
     return m.group(1) if m else text.strip()
 
 
+async def _receive_commit(client: ClaudeSDKClient) -> str:
+    async for msg in client.receive_response():
+        if isinstance(msg, ResultMessage):
+            if msg.is_error or msg.result is None:
+                detail = msg.result or (msg.errors and "; ".join(msg.errors))
+                raise RuntimeError(detail or f"generation failed ({msg.subtype})")
+            return extract_commit(msg.result)
+    raise RuntimeError("no result returned from model")
+
+
 async def generate(system_prompt: str, diff: str) -> str:
     options = ClaudeAgentOptions(
-        model="claude-sonnet-4-6",
+        model="claude-sonnet-5",
         system_prompt=system_prompt,
         allowed_tools=[],
         permission_mode="default",
@@ -60,13 +73,17 @@ async def generate(system_prompt: str, diff: str) -> str:
     client = ClaudeSDKClient(options=options)
     async with client:
         await client.query(diff)
-        async for msg in client.receive_response():
-            if isinstance(msg, ResultMessage):
-                if msg.is_error or msg.result is None:
-                    detail = msg.result or (msg.errors and "; ".join(msg.errors))
-                    raise RuntimeError(detail or f"generation failed ({msg.subtype})")
-                return extract_commit(msg.result)
-    raise RuntimeError("no result returned from model")
+        # A headless claude can wedge and never exit (seen 2026-07-28: ~98% CPU,
+        # RSS past 2.7GB, no output), and the SDK would wait on it for ever. The
+        # deadline sits *inside* `async with` so the timeout surfaces here rather
+        # than as a cancellation: the SDK's close() then runs on a live task and
+        # escalates stdin-EOF → SIGTERM → SIGKILL, so the child dies with us.
+        try:
+            return await asyncio.wait_for(_receive_commit(client), _TIMEOUT)
+        except asyncio.TimeoutError:
+            raise RuntimeError(
+                f"timed out after {_TIMEOUT:g}s; raise AI_COMMIT_MSG_TIMEOUT to allow longer"
+            ) from None
 
 
 def main():

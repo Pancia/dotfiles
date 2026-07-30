@@ -2,12 +2,15 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -380,6 +383,19 @@ func formatAuditSummary(name string, entry ManifestEntry, findings []scanFinding
 	return b.String()
 }
 
+// claudeReviewTimeout is the ceiling on one claude review. A review reads across
+// a whole vendored tree, so many minutes is normal; the ceiling exists only
+// because a headless claude has been seen to wedge and never exit (2026-07-28:
+// ~98% CPU, RSS past 2.7GB, no output). VENDOR_AUDIT_TIMEOUT overrides, seconds.
+func claudeReviewTimeout() time.Duration {
+	if s := os.Getenv("VENDOR_AUDIT_TIMEOUT"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			return time.Duration(n) * time.Second
+		}
+	}
+	return 30 * time.Minute
+}
+
 // runClaudeReview shells out to the claude CLI for AI review.
 // When stream is true, tool call summaries are printed to stderr as they happen.
 func runClaudeReview(root, vendorDir, auditSummary string, stream bool) auditReview {
@@ -412,13 +428,20 @@ func runClaudeReview(root, vendorDir, auditSummary string, stream bool) auditRev
 	}
 	defer input.Close()
 
-	cmd := exec.Command("env", "-u", "CLAUDECODE", claudePath, "-p",
+	timeout := claudeReviewTimeout()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "env", "-u", "CLAUDECODE", claudePath, "-p",
 		"--verbose", "--output-format", "stream-json",
 		"--allowedTools", "Read,Grep,Glob,Bash(read-only)",
 		"--add-dir", vendorDir,
 		"--system-prompt", string(promptData))
 	cmd.Stdin = input
 	cmd.Stderr = os.Stderr
+	// The deadline kills claude; WaitDelay then stops Wait from blocking on a
+	// stdout pipe that some surviving grandchild still holds open.
+	cmd.WaitDelay = 10 * time.Second
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -457,9 +480,25 @@ func runClaudeReview(root, vendorDir, auditSummary string, stream bool) auditRev
 		}
 	}
 
-	if err := cmd.Wait(); err != nil {
+	waitErr := cmd.Wait()
+
+	// A review cut off at the deadline is not a verdict, so say so in the report
+	// itself — a caller reading Text must never mistake it for a finished review.
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		note := fmt.Sprintf("claude review timed out after %s and was killed "+
+			"(set VENDOR_AUDIT_TIMEOUT=<seconds> to allow longer)", timeout)
+		fmt.Fprintf(os.Stderr, "vendor: %s\n", note)
 		if review.Text == "" {
-			review.Text = fmt.Sprintf("error: %v", err)
+			review.Text = "error: " + note
+		} else {
+			review.Text += fmt.Sprintf("\n\n[incomplete: %s]", note)
+		}
+		return review
+	}
+
+	if waitErr != nil {
+		if review.Text == "" {
+			review.Text = fmt.Sprintf("error: %v", waitErr)
 		}
 	}
 

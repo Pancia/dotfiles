@@ -237,6 +237,9 @@ shutdown_event = asyncio.Event()
 VIDEO_INFO_TIMEOUT = 30
 DOWNLOAD_TIMEOUT = 600  # 10 minutes
 FFMPEG_TIMEOUT = 120    # 2 minutes
+# Summarizing a feature-length transcript takes minutes; the ceiling is only
+# there because a wedged claude never exits at all (see run_claude_summary).
+CLAUDE_TIMEOUT = int(os.environ.get("YT_CLAUDE_TIMEOUT", 900))  # 15 minutes
 
 # Logging
 def log(msg: str):
@@ -1168,7 +1171,25 @@ async def run_claude_summary(transcript: str, prompt: str, job: Job | None = Non
             job.logger.info(f"Spawned claude (PID {proc.pid})")
 
     try:
-        stdout, stderr = await proc.communicate(input=user_message.encode())
+        # A wedged claude neither exits nor closes its pipes, so communicate()
+        # would wait for ever and the job would sit in SUMMARIZING until the
+        # server restarted (2026-07-28: ~98% CPU, RSS past 2.7GB, no output).
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(input=user_message.encode()), timeout=CLAUDE_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            await proc.wait()
+            error_msg = (f"Claude summarization timed out after {CLAUDE_TIMEOUT}s and was "
+                         f"killed (raise YT_CLAUDE_TIMEOUT to allow longer)")
+            log(error_msg)
+            if job and job.logger:
+                job.logger.error(error_msg)
+            raise Exception(error_msg) from None
     finally:
         if job:
             await process_registry.unregister(proc)
