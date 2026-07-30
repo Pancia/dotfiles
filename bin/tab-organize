@@ -4,9 +4,14 @@
 Reads browser tab state, uses AI to suggest organization,
 writes a human-editable plan file, then executes it via FIFO.
 
+Plans contain only headings and JSON commands — tab titles are rendered from
+state.json by `check` / `execute --dry-run`, so what you review is the ids that
+will actually run rather than prose the model wrote alongside them.
+
 Usage:
     tab-organize plan [--dry-run] [--goal "..."] [--window ID]
-    tab-organize execute <plan-file> [--dry-run]
+    tab-organize check [plan-file]
+    tab-organize execute <plan-file> [--dry-run] [--force]
     tab-organize resync
     tab-organize windows
 """
@@ -18,6 +23,7 @@ import re
 import signal
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from collections import defaultdict
@@ -35,6 +41,10 @@ LOGS_DIR = BROWSER_SYNC / "logs"
 
 VALID_COMMANDS = {"close_tab", "group_tabs", "ungroup_tabs", "move_tab"}
 COMMAND_ORDER = {"close_tab": 0, "ungroup_tabs": 1, "move_tab": 2, "group_tabs": 3}
+
+# Ceiling on the plan call. A big plan legitimately runs for minutes, so this
+# only has to be shorter than "for ever" — see call_claude.
+CLAUDE_TIMEOUT = float(os.environ.get("TAB_ORGANIZE_TIMEOUT", 900))
 
 CONSOLIDATE_RULES = """\
 - Consolidate related tabs ACROSS windows into a single window when it \
@@ -66,34 +76,44 @@ zero newtabs, do nothing special.
 - Pick thematic colors: purple=anime/manga, cyan=tech/ai, blue=reference, \
 green=music, red=gaming, yellow=learning, pink=wellness, orange=entertainment
 - Available colors: grey, blue, red, yellow, green, pink, purple, cyan, orange
-- Preserve existing groups that already make sense
+- The EXISTING GROUPS block is BINDING PRECEDENT. If a group already holds tabs \
+of a content type, every further tab of that type goes to THAT group. Never \
+create or reuse a second group as a competing home for a type that already has \
+one. Check the existing groups before you invent a destination.
+- You MAY re-file tabs that are already grouped. If existing members contradict \
+the precedent above, emit group_tabs moving them to the one correct group — \
+that is a fix, not churn. Otherwise leave settled groups alone.
+- Classify by SUBJECT MATTER, not by media format. What a tab is *about* beats \
+the form it takes: an animated video about a religious song belongs with \
+religion, not with animation; a song from a film score belongs with music.
 {window_rules}
 - Use real tabIds from the input
+- Every ungrouped tab in the input must appear in exactly one command. Do not \
+silently drop tabs.
 
 OUTPUT FORMAT:
 Produce a markdown document with this structure:
 
 # Tab Organization Plan
 
-## <description of action>
-
-<list tab titles with IDs so the human can verify>
+## <description of action, naming the group and window>
 
 ```json
 {"command":"...", ...}
 ```
 
-Each action gets a ## heading, a list of affected tab titles with their IDs \
-in parentheses, then a single ```json fenced block with one command object.
+Each action gets a ## heading and a single ```json fenced block.
 
-For close_tab, you may list all tabs under one heading but emit one ```json \
-block per tab.
+Do NOT list the affected tab titles. The review tooling renders titles from the \
+tab ids, so a title list is wasted output that nobody reads.
 
-For group_tabs, list all tabs being grouped with their titles and IDs, then \
-one ```json block with the tabIds array.
+For close_tab, emit ONE block per action with every id in the tabIds array. \
+Never emit one block per tab.
+
+For group_tabs, emit one block with the tabIds array.
 
 Valid commands:
-- {"command":"close_tab","tabId":NUMBER}
+- {"command":"close_tab","tabIds":[NUMBERS]}
 - {"command":"group_tabs","tabIds":[NUMBERS],"title":"name","color":"COLOR","windowId":NUMBER}
 - {"command":"ungroup_tabs","tabIds":[NUMBERS]}
 - {"command":"move_tab","tabId":NUMBER,"index":NUMBER,"windowId":NUMBER}
@@ -128,6 +148,17 @@ def list_windows(state):
             print(f"    {s}")
 
 
+def flatten(text):
+    """Collapse whitespace in a tab title.
+
+    Titles are arbitrary page-controlled strings and may contain newlines. The
+    summary's structure is indentation-based and parse_input_candidates reads it
+    back, so an embedded newline could forge a tab entry. Flattening here makes
+    that invariant true instead of assumed.
+    """
+    return " ".join(str(text).split())
+
+
 def build_summary(state, goal=None):
     """Build a compact text summary of browser state for the AI."""
     tabs = state["tabs"]
@@ -154,10 +185,11 @@ def build_summary(state, goal=None):
         lines.append("\nEXISTING GROUPS:")
         for g in groups.values():
             members = [t for t in tabs.values() if t["groupId"] == g["groupId"]]
-            lines.append(f'  "{g["title"]}" ({g["color"]}) window={g["windowId"]} — {len(members)} tabs')
+            lines.append(f'  "{flatten(g["title"])}" ({g["color"]}) '
+                         f'window={g["windowId"]} — {len(members)} tabs')
             for t in sorted(members, key=lambda x: x["index"]):
-                lines.append(f"    [{t['tabId']}] {t['title']}")
-                lines.append(f"      {t['url']}")
+                lines.append(f"    [{t['tabId']}] {flatten(t['title'])}")
+                lines.append(f"      {flatten(t['url'])}")
 
     # Tabs by window
     for wid in sorted(windows.keys()):
@@ -172,8 +204,8 @@ def build_summary(state, goal=None):
         empty = [t for t in ungrouped if "newtab" in t.get("url", "")]
 
         for t in real:
-            lines.append(f"  [{t['tabId']}] {t['title']}")
-            lines.append(f"    {t['url']}")
+            lines.append(f"  [{t['tabId']}] {flatten(t['title'])}")
+            lines.append(f"    {flatten(t['url'])}")
 
         if empty:
             empty_sorted = sorted(empty, key=lambda t: t["index"])
@@ -185,26 +217,213 @@ def build_summary(state, goal=None):
     return "\n".join(lines)
 
 
+def fmt_duration(seconds):
+    m, s = divmod(int(seconds), 60)
+    return f"{m}m{s:02d}s" if m else f"{s}s"
+
+
+def progress_ticker(progress, stop_event):
+    """Repaint a one-line status on stderr until stop_event is set.
+
+    A big plan takes minutes and `claude -p` prints nothing until it is done,
+    so without this the command looks hung.
+    """
+    tty = sys.stderr.isatty()
+    start = time.monotonic()
+    width = 0
+    next_untty = 30
+    while not stop_event.wait(1.0):
+        elapsed = time.monotonic() - start
+        if progress["chars"]:
+            msg = (f"  analyzing… {fmt_duration(elapsed)} · "
+                   f"{progress['chars'] // 1024}KB · {progress['commands']} commands")
+        else:
+            msg = f"  analyzing… {fmt_duration(elapsed)} · waiting for first token"
+        if tty:
+            sys.stderr.write("\r" + msg.ljust(width))
+            sys.stderr.flush()
+            width = max(width, len(msg))
+        elif elapsed >= next_untty:
+            print(msg, file=sys.stderr, flush=True)
+            next_untty += 30
+    if tty and width:
+        sys.stderr.write("\r" + " " * width + "\r")
+        sys.stderr.flush()
+
+
+def kill_group(proc):
+    """SIGKILL the child's whole process group.
+
+    claude spawns helpers of its own; killing only the pid we hold leaves them
+    running and holding the pipes open, so the loop that gave up on the child
+    would still block reading from it.
+    """
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        proc.kill()
+
+
 def call_claude(summary, system_prompt):
-    """Call claude -p and return raw stdout."""
-    result = subprocess.run(
-        ["claude", "-p", "--system-prompt", system_prompt],
-        input=summary,
-        capture_output=True,
+    """Call claude -p and return the plan markdown, reporting progress as it streams."""
+    started = time.monotonic()
+    proc = subprocess.Popen(
+        ["claude", "-p", "--system-prompt", system_prompt,
+         "--output-format", "stream-json", "--verbose", "--include-partial-messages"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
+        start_new_session=True,  # own process group, so kill_group can reach it all
     )
-    if result.returncode != 0:
-        print(f"Error: claude exited with code {result.returncode}", file=sys.stderr)
-        if result.stderr:
-            print(result.stderr, file=sys.stderr)
+
+    # stdin and stderr get their own threads: the summary is far bigger than a
+    # pipe buffer, and stderr must be drained or a chatty claude would deadlock.
+    def feed_stdin():
+        try:
+            proc.stdin.write(summary)
+            proc.stdin.close()
+        except BrokenPipeError:
+            pass
+
+    stderr_out = []
+    threading.Thread(target=feed_stdin, daemon=True).start()
+    err_thread = threading.Thread(target=lambda: stderr_out.append(proc.stderr.read()),
+                                  daemon=True)
+    err_thread.start()
+
+    progress = {"chars": 0, "commands": 0}
+    stop_event = threading.Event()
+    ticker = threading.Thread(target=progress_ticker, args=(progress, stop_event),
+                              daemon=True)
+    ticker.start()
+
+    # A wedged claude writes nothing at all, and the stdout loop below would then
+    # block until the machine is rebooted (2026-07-28: ~98% CPU, RSS past 2.7GB,
+    # no output, no exit). Killing it closes stdout, which ends the loop.
+    timed_out = threading.Event()
+
+    def watchdog():
+        if not stop_event.wait(CLAUDE_TIMEOUT):
+            timed_out.set()
+            kill_group(proc)
+
+    threading.Thread(target=watchdog, daemon=True).start()
+
+    deltas = []
+    final = None
+    stream_error = None
+    needle = '"command"'
+    carry = ""  # tail of the last delta, so a needle split across chunks still counts
+    try:
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                ev = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            # Every field below is treated as optional: an unexpected shape must
+            # not raise here. If it did, nothing would be draining stdout and
+            # the child would block on a full pipe while the ticker kept
+            # painting progress — a hang that looks exactly like a slow model.
+            if not isinstance(ev, dict):
+                continue
+            if ev.get("type") == "stream_event":
+                inner = ev.get("event")
+                if not isinstance(inner, dict):
+                    continue
+                if inner.get("type") == "content_block_delta":
+                    delta = inner.get("delta")
+                    text = delta.get("text") if isinstance(delta, dict) else None
+                    if isinstance(text, str) and text:
+                        deltas.append(text)
+                        progress["chars"] += len(text)
+                        progress["commands"] += (carry + text).count(needle)
+                        carry = (carry + text)[-(len(needle) - 1):]
+            elif ev.get("type") == "result":
+                if ev.get("is_error"):
+                    stream_error = ev.get("result") or "claude reported an error"
+                elif isinstance(ev.get("result"), str):
+                    final = ev["result"]
+    except BaseException:
+        kill_group(proc)  # never wait on a child we've stopped reading from
+        raise
+    finally:
+        # Retire the watchdog FIRST. If it were still armed while we reap the
+        # child, a run finishing just under CLAUDE_TIMEOUT could have the
+        # watchdog wake microseconds later, flag a timeout on a successful run
+        # and killpg a pid that has already been reaped.
+        stop_event.set()
+        try:
+            proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            kill_group(proc)
+            proc.wait()
+        ticker.join(timeout=2)
+
+    # Only a watchdog kill that lost the plan is fatal. If the result event
+    # already arrived, the model finished and the process merely failed to
+    # exit — discarding that costs a full re-run and the tokens twice. A
+    # mid-stream kill leaves final None and still errors out, rather than
+    # executing a truncated plan.
+    if timed_out.is_set() and final is None:
+        print(f"Error: claude produced no plan within {CLAUDE_TIMEOUT:g}s and was killed; "
+              "raise TAB_ORGANIZE_TIMEOUT to allow longer", file=sys.stderr)
         sys.exit(1)
-    return result.stdout
+    if timed_out.is_set():
+        print(f"  note: claude had to be killed after {CLAUDE_TIMEOUT:g}s but the "
+              f"plan was already complete", file=sys.stderr)
+
+    # A watchdog kill leaves returncode at -SIGKILL. That is our own doing, so
+    # don't re-report it as a claude failure once the plan has already arrived.
+    if (proc.returncode != 0 and not timed_out.is_set()) or stream_error:
+        reason = stream_error or f"claude exited with code {proc.returncode}"
+        print(f"Error: {reason}", file=sys.stderr)
+        err_thread.join(timeout=2)
+        err = "".join(stderr_out)
+        if err:
+            print(err, file=sys.stderr)
+        sys.exit(1)
+
+    plan = final if final is not None else "".join(deltas)
+    if not plan.strip():
+        print("Error: claude returned an empty plan", file=sys.stderr)
+        sys.exit(1)
+    print(f"  done in {fmt_duration(time.monotonic() - started)} · "
+          f"{progress['commands']} commands", file=sys.stderr)
+    return plan
+
+
+def coerce_ids(value):
+    """Normalise a tab id or list of them to ints, dropping anything else.
+
+    The model sometimes quotes ids. A string id silently passes the state.json
+    check (its keys are strings too) but breaks chrome.tabs.remove and inverts
+    the coverage arithmetic, so ids are made canonical at the boundary.
+    """
+    raw = value if isinstance(value, list) else [value]
+    out = []
+    for v in raw:
+        try:
+            out.append(int(v))
+        except (TypeError, ValueError):
+            print(f"Warning: ignoring non-numeric tab id {v!r}", file=sys.stderr)
+    return out
 
 
 def extract_commands(plan_text):
-    """Extract JSON command objects from markdown fenced blocks."""
+    """Extract JSON command objects from markdown fenced blocks.
+
+    Returns (commands, skipped). A skipped block usually means the response was
+    truncated, and one bad group_tabs block can silently drop a hundred tabs —
+    so the count is returned rather than only warned about, and callers treat it
+    as an error.
+    """
     pattern = re.compile(r"```json\s*\n(.*?)\n```", re.DOTALL)
     commands = []
+    skipped = []
     for match in pattern.finditer(plan_text):
         raw = match.group(1).strip()
         try:
@@ -212,14 +431,162 @@ def extract_commands(plan_text):
         except json.JSONDecodeError as e:
             print(f"Warning: skipping malformed JSON block: {e}", file=sys.stderr)
             print(f"  Content: {raw[:100]}...", file=sys.stderr)
+            skipped.append(raw[:100])
             continue
-        if "command" not in obj:
+        if not isinstance(obj, dict) or "command" not in obj:
             continue
+        if obj["command"] == "close_tabs":  # plural alias, same thing
+            obj["command"] = "close_tab"
         if obj["command"] not in VALID_COMMANDS:
             print(f"Warning: skipping unknown command: {obj['command']}", file=sys.stderr)
             continue
+        if obj["command"] == "close_tab":
+            # The extension closes one tab per command, so expand the list form
+            # here. Keeping them separate on the wire also keeps per-tab error
+            # reporting: one dead tab id fails alone instead of killing the batch.
+            tab_ids = coerce_ids(obj["tabIds"]) if "tabIds" in obj else []
+            if "tabId" in obj:
+                tab_ids += coerce_ids(obj["tabId"])
+            if not tab_ids:
+                print(f"Warning: skipping close_tab with no usable tab id: {raw[:80]}",
+                      file=sys.stderr)
+                continue
+            commands.extend({"command": "close_tab", "tabId": tid} for tid in tab_ids)
+            continue
+        if "tabIds" in obj:
+            obj["tabIds"] = coerce_ids(obj["tabIds"])
+        if "tabId" in obj:
+            ids = coerce_ids(obj["tabId"])
+            if not ids:
+                print(f"Warning: skipping {obj['command']} with unusable tabId",
+                      file=sys.stderr)
+                continue
+            obj["tabId"] = ids[0]
         commands.append(obj)
-    return commands
+    return commands, skipped
+
+
+def input_path_for(plan_path):
+    """Sidecar holding the exact summary that was sent to the model."""
+    return plan_path.with_suffix(".input.txt")
+
+
+def archive_plan(plan_path):
+    """Move a plan and its input sidecar into the archive. Returns the new path.
+
+    The sidecar has to travel with the plan — leaving it behind silently
+    disables the coverage check for every archived plan.
+    """
+    PLANS_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+    dest = PLANS_ARCHIVE_DIR / plan_path.name
+    plan_path.rename(dest)
+    sidecar = input_path_for(plan_path)
+    if sidecar.exists():
+        sidecar.rename(input_path_for(dest))
+    return dest
+
+
+def parse_input_candidates(input_text):
+    """Tab ids the model was asked to organize (ungrouped, non-newtab).
+
+    build_summary indents existing-group members by four spaces and ungrouped
+    tabs by exactly two, so the anchor is unambiguous.
+    """
+    return {int(m) for m in re.findall(r"^ {2}\[(\d+)\] ", input_text, re.M)}
+
+
+def malformed_errors(skipped):
+    """A skipped block is an error, not a warning.
+
+    It almost always means a truncated response, and one unparsed group_tabs
+    block can drop a hundred tabs while the plan still looks complete.
+    """
+    return [f"malformed JSON block (not executed): {raw}" for raw in skipped]
+
+
+def validate_plan(commands, state, candidates=None):
+    """Check a plan against live state. Returns (errors, warnings)."""
+    tabs = state.get("tabs", {})
+    errors, warnings = [], []
+
+    seen = {}
+    for cmd in commands:
+        ids = list(cmd.get("tabIds", []))
+        if "tabId" in cmd:
+            ids.append(cmd["tabId"])
+        for tid in ids:
+            if tabs and str(tid) not in tabs:
+                errors.append(f"tab {tid} is not in state.json "
+                              f"({describe_command(cmd, tabs)})")
+            prev = seen.get(tid)
+            if prev is not None and not (prev == "close_tab" == cmd["command"]):
+                errors.append(f"tab {tid} appears in two commands: "
+                              f"{prev} and {cmd['command']}")
+            seen[tid] = cmd["command"]
+
+    homes = defaultdict(set)
+    for cmd in commands:
+        if cmd["command"] != "group_tabs":
+            continue
+        if cmd.get("windowId") is None:
+            warnings.append(f'group "{cmd.get("title", "?")}" has no windowId — '
+                            f"Chrome will pick the destination window itself")
+        homes[cmd.get("title", "?")].add(cmd.get("windowId"))
+    for title, windows in homes.items():
+        if len(windows) > 1:
+            shown = ", ".join("none" if w is None else str(w) for w in sorted(
+                windows, key=lambda w: (w is None, w)))
+            warnings.append(f'group "{title}" is created in {len(windows)} '
+                            f"windows ({shown}) — expected with --no-consolidate, "
+                            f"otherwise a split theme")
+
+    if candidates is not None:
+        missed = candidates - set(seen)
+        if missed:
+            warnings.append(f"{len(missed)} of {len(candidates)} tabs in the "
+                            f"input got no command (dropped by the model)")
+            for tid in sorted(missed)[:15]:
+                title = tabs.get(str(tid), {}).get("title", "?")
+                warnings.append(f"    [{tid}] {title[:60]}")
+            if len(missed) > 15:
+                warnings.append(f"    … and {len(missed) - 15} more")
+
+    return errors, warnings
+
+
+def render_plan_review(commands, state):
+    """Print what a plan will do, with titles looked up from state.json.
+
+    Plans no longer echo tab titles — this is where they come back, rendered
+    from the ids that will actually execute rather than from model prose.
+    """
+    tabs = state.get("tabs", {})
+
+    def title_of(tid):
+        return tabs.get(str(tid), {}).get("title", "(unknown tab)")
+
+    closes = [t for c in commands if c["command"] == "close_tab"
+              for t in ([c["tabId"]] if "tabId" in c else c.get("tabIds", []))]
+    if closes:
+        print(f"\nCLOSE ({len(closes)} tabs)")
+        for tid in closes[:20]:
+            print(f"  [{tid}] {title_of(tid)[:70]}")
+        if len(closes) > 20:
+            print(f"  … and {len(closes) - 20} more")
+
+    for cmd in commands:
+        if cmd["command"] != "group_tabs":
+            continue
+        ids = cmd.get("tabIds", [])
+        print(f'\nGROUP "{cmd.get("title", "?")}" ({cmd.get("color", "?")}) '
+              f"window={cmd.get('windowId', '?')} — {len(ids)} tabs")
+        for tid in ids:
+            print(f"  [{tid}] {title_of(tid)[:70]}")
+
+    for cmd in commands:
+        if cmd["command"] in ("close_tab", "group_tabs"):
+            continue
+        print(f"\n{describe_command(cmd, tabs)}")
 
 
 def inject_window_ids(commands, state):
@@ -241,10 +608,13 @@ def sort_commands(commands):
     return sorted(commands, key=lambda c: COMMAND_ORDER.get(c["command"], 99))
 
 
-def describe_command(cmd):
+def describe_command(cmd, tabs=None):
     """Human-readable one-liner for a command."""
     c = cmd["command"]
     if c == "close_tab":
+        if tabs:
+            title = tabs.get(str(cmd["tabId"]), {}).get("title", "?")
+            return f"close tab {cmd['tabId']} — {title[:55]}"
         return f"close tab {cmd['tabId']}"
     elif c == "group_tabs":
         n = len(cmd.get("tabIds", []))
@@ -274,24 +644,87 @@ def write_recovery_file(close_commands, state):
     print(f"Recovery file: {path}")
 
 
-def write_all_to_fifo(commands):
+class FifoWriteTimeout(TimeoutError):
+    """Raised when the FIFO write stalls. Carries how many lines got out.
+
+    Subclasses TimeoutError so callers written against the old behaviour keep
+    catching it.
+    """
+
+    def __init__(self, message, written, phase):
+        super().__init__(message)
+        self.written = written
+        self.phase = phase  # "open" (no reader) or "write" (reader not draining)
+
+
+def write_all_to_fifo(commands, open_timeout=10, write_timeout=120):
     """Write all commands to the FIFO in a single open (one JSON per line).
 
     The native host reads until EOF then re-opens. The extension queues
     commands and executes them sequentially, so no race conditions.
+
+    The two phases get different deadlines. `open()` blocks until a reader
+    attaches, so a timeout there means the extension really is not running —
+    that is what the original 10s alarm was for. Once open succeeds a reader
+    exists, and slow writes just mean it is draining slowly (the host rewrites a
+    ~300KB state.json per event, and payloads exceed the 16KB pipe buffer). A
+    single alarm across both phases turned that normal slowness into a
+    half-applied batch reported as "extension not running".
+
+    Writes go to the raw fd rather than a buffered file object. A buffered
+    close() flushes, and flushing into a pipe nobody is draining blocks for
+    ever — so the timeout path would hang in the very case it exists to report.
+    Raw writes also make the returned count exact: every counted line is in the
+    pipe and will be executed.
+
+    Main-thread only: signal.alarm and signal.signal raise ValueError elsewhere.
     """
+    written = 0
+    phase = "open"
+
     def timeout_handler(signum, frame):
-        raise TimeoutError("FIFO write timed out (no reader?)")
+        raise FifoWriteTimeout("FIFO write timed out", written, phase)
 
     old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(10)
+    signal.alarm(open_timeout)
+    fd = None
     try:
-        with open(FIFO_PATH, "w") as f:
-            for cmd in commands:
-                f.write(json.dumps(cmd) + "\n")
+        fd = os.open(FIFO_PATH, os.O_WRONLY)
+        phase = "write"
+        signal.alarm(write_timeout)
+        for cmd in commands:
+            buf = (json.dumps(cmd) + "\n").encode()
+            while buf:
+                buf = buf[os.write(fd, buf):]
+            written += 1
     finally:
         signal.alarm(0)
         signal.signal(signal.SIGALRM, old_handler)
+        if fd is not None:
+            os.close(fd)
+    return written
+
+
+def write_remaining_plan(commands, source_plan):
+    """Save unsent commands as a new plan so a stalled batch can be finished.
+
+    Re-running the original is not an option: its already-applied close_tab
+    commands reference tabs that no longer exist, so validation rejects the
+    whole file.
+    """
+    for cmd in commands:
+        cmd.pop("cmdId", None)
+    lines = [f"# Tab Organization Plan (remaining after {source_plan.name})", ""]
+    for cmd in commands:
+        lines += [f"## {describe_command(cmd)}", "", "```json",
+                  json.dumps(cmd), "```", ""]
+    # A fresh timestamp, not source_plan.stem: "-" (0x2D) sorts before "."
+    # (0x2E), so plan-X-remaining.md would sort BEFORE plan-X.md and
+    # resolve_plan's "latest" would hand you back the unrunnable original.
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    path = PLANS_DIR / f"plan-{ts}-remaining.md"
+    path.write_text("\n".join(lines))
+    return path
 
 
 def today_log_path():
@@ -376,16 +809,32 @@ def cmd_plan(args):
 
     print("Analyzing tabs with AI...", file=sys.stderr)
     plan_md = call_claude(summary, prompt)
+    parsed, skipped = extract_commands(plan_md)
+    if not parsed:
+        print("Error: the model returned no usable commands. First 300 chars:",
+              file=sys.stderr)
+        print(plan_md[:300], file=sys.stderr)
+        sys.exit(1)
 
     PLANS_DIR.mkdir(exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     plan_path = PLANS_DIR / f"plan-{ts}.md"
     plan_path.write_text(plan_md)
+    # Keep the exact prompt input: it is the only record of what the model was
+    # shown, and `check` needs it to tell a dropped tab from one never offered.
+    input_path_for(plan_path).write_text(summary)
 
     print(f"Plan written to: {plan_path}")
-    print(f"Review/edit:  vim {plan_path}")
+    if skipped:
+        # Almost always truncation. The plan is still worth reading, but it is
+        # incomplete and `check` will refuse to let it execute.
+        print(f"\n!! {len(skipped)} JSON block(s) were malformed and are NOT in "
+              f"this plan — the response was probably truncated.", file=sys.stderr)
+        print(f"!! Run `tab-organize check {plan_path}` before doing anything "
+              f"with it.\n", file=sys.stderr)
+    print(f"Review:       tab-organize check {plan_path}")
+    print(f"Edit:         vim {plan_path}")
     print(f"Execute:      tab-organize execute {plan_path}")
-    print(f"Dry run:      tab-organize execute --dry-run {plan_path}")
 
 
 def resolve_plan(arg):
@@ -441,98 +890,175 @@ def cmd_resync(args):
             sys.exit(1)
 
 
+def load_plan_for_review(plan_file):
+    """Resolve a plan, parse it, and load state + the saved model input."""
+    plan_path = resolve_plan(plan_file)
+    commands, skipped = extract_commands(plan_path.read_text())
+    state = json.loads(STATE_PATH.read_text()) if STATE_PATH.exists() else {}
+    if state:
+        commands = inject_window_ids(commands, state)
+    ipath = input_path_for(plan_path)
+    candidates = parse_input_candidates(ipath.read_text()) if ipath.exists() else None
+    return plan_path, commands, state, candidates, skipped
+
+
+def cmd_check(args):
+    plan_path, commands, state, candidates, skipped = load_plan_for_review(args.plan_file)
+    print(f"Checking {plan_path}")
+    if not commands:
+        print("No commands found in plan file.", file=sys.stderr)
+        sys.exit(1)
+
+    commands = sort_commands(commands)
+    if candidates is None:
+        print("  note: no saved input alongside this plan — skipping the "
+              "coverage check", file=sys.stderr)
+
+    errors, warnings = validate_plan(commands, state, candidates)
+    errors = malformed_errors(skipped) + errors
+    render_plan_review(commands, state)
+
+    print()
+    for w in warnings:
+        print(f"  warn  {w}", file=sys.stderr)
+    for e in errors:
+        print(f"  ERROR {e}", file=sys.stderr)
+
+    total = len(commands)
+    if errors:
+        print(f"\n{len(errors)} error(s) in {total} commands.", file=sys.stderr)
+        print("Tip: run `tab-organize resync` if tabs are missing from state.json",
+              file=sys.stderr)
+        sys.exit(1)
+    print(f"\n{total} commands, no errors"
+          f"{f' ({len(warnings)} warning(s))' if warnings else ''}.")
+
+
 def cmd_archive(args):
     plan_path = resolve_plan(args.plan_file)
     if PLANS_ARCHIVE_DIR in plan_path.parents:
         print(f"Already archived: {plan_path}")
         return
-    PLANS_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
-    dest = PLANS_ARCHIVE_DIR / plan_path.name
-    plan_path.rename(dest)
+    dest = archive_plan(plan_path)
     print(f"Archived: {dest}")
 
 
 def cmd_execute(args):
-    plan_path = resolve_plan(args.plan_file)
-
-    plan_text = plan_path.read_text()
-    commands = extract_commands(plan_text)
+    plan_path, commands, state, candidates, skipped = load_plan_for_review(args.plan_file)
     if not commands:
-        print("No commands found in plan file.")
-        return
+        print("No commands found in plan file.", file=sys.stderr)
+        sys.exit(1)
 
     commands = sort_commands(commands)
 
-    # Load state for windowId injection and recovery file
-    state = json.loads(STATE_PATH.read_text()) if STATE_PATH.exists() else {}
+    # A stale tab id means the plan is describing tabs that no longer exist, so
+    # this aborts rather than warns. (The old mtime comparison was useless:
+    # state.json is rewritten on every browser event, so it always fired.)
+    errors, warnings = validate_plan(commands, state, candidates)
+    errors = malformed_errors(skipped) + errors
+    if not state:
+        # Without state there is no id check and no recovery file, so closing
+        # tabs would be unverified and unrecoverable.
+        errors.insert(0, f"{STATE_PATH} is missing or empty — cannot verify tab "
+                         f"ids or write a recovery file")
+    for w in warnings:
+        print(f"Warning: {w}", file=sys.stderr)
+    if errors:
+        for e in errors:
+            print(f"Error: {e}", file=sys.stderr)
+        print(f"\n{len(errors)} error(s). Run `tab-organize resync` if tabs are "
+              f"missing from state.json, or re-plan.", file=sys.stderr)
+        if not args.force:
+            print("Refusing to execute. Pass --force to override.", file=sys.stderr)
+            sys.exit(1)
+        print("Continuing anyway (--force).", file=sys.stderr)
 
-    # Inject windowId into group_tabs commands missing it
-    if state:
-        commands = inject_window_ids(commands, state)
+    total = len(commands)
+    if args.dry_run:
+        print(f"[dry-run] {total} commands:")
+        render_plan_review(commands, state)
+        return
 
-    # Staleness warning
-    if STATE_PATH.exists() and STATE_PATH.stat().st_mtime > plan_path.stat().st_mtime:
-        print("Warning: state.json is newer than plan file. Tabs may have changed.",
-              file=sys.stderr)
+    if not FIFO_PATH.exists():
+        print(f"Error: FIFO not found at {FIFO_PATH}", file=sys.stderr)
+        print("Is the browser extension running?", file=sys.stderr)
+        sys.exit(1)
 
-    # Recovery file for closes
+    # Recovery file for closes — after the FIFO check, so a run that never
+    # starts doesn't leave a recovery file for tabs that were never closed.
     close_cmds = [c for c in commands if c["command"] == "close_tab"]
     if close_cmds and state:
         write_recovery_file(close_cmds, state)
 
-    if not args.dry_run:
-        if not FIFO_PATH.exists():
-            print(f"Error: FIFO not found at {FIFO_PATH}", file=sys.stderr)
-            print("Is the browser extension running?", file=sys.stderr)
-            sys.exit(1)
-
-    total = len(commands)
-    print(f"{'[dry-run] ' if args.dry_run else ''}Executing {total} commands...")
-
+    print(f"Executing {total} commands...")
+    tabs = state.get("tabs", {})
     for i, cmd in enumerate(commands, 1):
-        print(f"  [{i}/{total}] {describe_command(cmd)}")
-
-    if args.dry_run:
-        return
+        print(f"  [{i}/{total}] {describe_command(cmd, tabs)}")
 
     # Tag each command with a unique id so we can correlate results from the log.
     batch = uuid.uuid4().hex[:8]
     for i, cmd in enumerate(commands):
         cmd["cmdId"] = f"to-{batch}-{i}"
-    id_to_cmd = {c["cmdId"]: c for c in commands}
 
     start = log_position()
+    stalled = None
     try:
-        write_all_to_fifo(commands)
-    except TimeoutError:
-        print("Error: FIFO write timed out (is the browser extension running?)",
-              file=sys.stderr)
-        sys.exit(1)
+        written = write_all_to_fifo(commands)
+    except FifoWriteTimeout as e:
+        written = e.written
+        stalled = e
 
-    print(f"Waiting for {total} results...")
+    sent, unsent = commands[:written], commands[written:]
+    if stalled:
+        if not sent:
+            if stalled.phase == "open":
+                print("Error: nothing sent — no reader attached to the FIFO. "
+                      "Is the browser extension running?", file=sys.stderr)
+            else:
+                print("Error: nothing sent — the extension is attached but is "
+                      "not draining the FIFO.", file=sys.stderr)
+            sys.exit(1)
+        print(f"\nError: FIFO write stalled after {written} of {total} commands. "
+              f"Those {written} were sent and are being applied.", file=sys.stderr)
+
+    remaining_path = None
+    if unsent:
+        remaining_path = write_remaining_plan(unsent, plan_path)
+
+    print(f"Waiting for {len(sent)} results...")
     failures = []
     seen = 0
-    for cid, ok, ev in wait_for_results(start, id_to_cmd.keys(), timeout_s=max(15, total * 3)):
+    id_to_cmd = {c["cmdId"]: c for c in sent}
+    for cid, ok, ev in wait_for_results(start, id_to_cmd.keys(),
+                                        timeout_s=max(15, len(sent) * 3)):
         seen += 1
         cmd = id_to_cmd[cid]
-        label = describe_command(cmd)
+        label = describe_command(cmd, tabs)
         if ok:
-            print(f"  ok    [{seen}/{total}] {label}")
+            print(f"  ok    [{seen}/{len(sent)}] {label}")
         else:
             err = ev.get("error", "unknown error")
-            print(f"  FAIL  [{seen}/{total}] {label}  ← {err}", file=sys.stderr)
+            print(f"  FAIL  [{seen}/{len(sent)}] {label}  ← {err}", file=sys.stderr)
             failures.append((cmd, err))
 
+    if remaining_path:
+        print(f"\n{len(unsent)} commands were never sent. Wrote: {remaining_path}",
+              file=sys.stderr)
+        print("Re-running the original plan would fail validation (its applied "
+              "closes reference tabs that no longer exist) — execute the "
+              "remaining plan instead.", file=sys.stderr)
+
     if failures:
-        print(f"\n{len(failures)} of {total} commands FAILED.", file=sys.stderr)
+        print(f"\n{len(failures)} of {len(sent)} sent commands FAILED.",
+              file=sys.stderr)
         print("Tip: run `tab-organize resync` if errors say 'No tab with id: N'",
               file=sys.stderr)
         sys.exit(2)
+    if stalled:
+        sys.exit(1)
 
     try:
-        PLANS_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
-        archived = PLANS_ARCHIVE_DIR / plan_path.name
-        plan_path.rename(archived)
+        archived = archive_plan(plan_path)
         print(f"Archived plan to: {archived}")
     except OSError as e:
         print(f"Warning: failed to archive plan: {e}", file=sys.stderr)
@@ -546,6 +1072,7 @@ def main():
                "  tab-organize windows\n"
                "  tab-organize plan --window 2105126510\n"
                "  tab-organize plan --goal 'separate work from entertainment'\n"
+               "  tab-organize check\n"
                "  tab-organize execute plan.md\n"
                "  tab-organize execute --dry-run plan.md",
     )
@@ -563,11 +1090,18 @@ def main():
     p_plan.add_argument("--no-consolidate", action="store_true",
                         help="Don't move tabs across windows; group each theme locally")
 
+    p_check = sub.add_parser("check",
+                             help="Validate a plan and show what it will do")
+    p_check.add_argument("plan_file", nargs="?", default=None,
+                         help="Path to plan markdown file (defaults to latest)")
+
     p_exec = sub.add_parser("execute", help="Execute a plan file")
     p_exec.add_argument("plan_file", nargs="?", default=None,
                         help="Path to plan markdown file (defaults to latest)")
     p_exec.add_argument("--dry-run", action="store_true",
                         help="Print commands without sending to FIFO")
+    p_exec.add_argument("--force", action="store_true",
+                        help="Execute even if validation found errors")
 
     p_edit = sub.add_parser("edit", help="Open a plan file in $EDITOR")
     p_edit.add_argument("plan_file", nargs="?", default=None,
@@ -586,6 +1120,8 @@ def main():
         list_windows(state)
     elif args.cmd == "plan":
         cmd_plan(args)
+    elif args.cmd == "check":
+        cmd_check(args)
     elif args.cmd == "execute":
         cmd_execute(args)
     elif args.cmd == "edit":
