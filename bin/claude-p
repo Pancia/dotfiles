@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # claude-p — `claude -p` that cannot wedge and cannot fail silently.
 #
-# Two failure modes this exists to close, both seen in production:
+# Three failure modes this exists to close, all seen in production:
 #
 #   1. A headless claude can wedge and never exit — 2026-07-28: ~98% CPU, RSS
 #      climbing past 2.7GB, no output, killed by hand. The trigger is unknown.
@@ -13,11 +13,15 @@
 #      unavailable `--model` comes back `is_error: true` while `subtype` still
 #      reads "success", so an unvalidated caller treats the error text as an
 #      answer.
+#   3. LLM chatter arrives where a payload is expected. The roleplay bookends
+#      from ~/.claude/CLAUDE.md leak into headless output roughly two runs in
+#      three, and no prompt-side instruction reliably suppresses them.
 #
 # The fix for (1) is `timeout -k`: GNU timeout runs the child in its own process
 # group and signals the group, so nothing survives the deadline. The fix for (2)
 # is to always ask claude for `--output-format json` and check the envelope,
-# then hand the caller back exactly the shape it asked for.
+# then hand the caller back exactly the shape it asked for. The fix for (3) is
+# `--safe-mode`, passed by default — see CLAUDE_P_SAFE below.
 #
 # Drop-in: replace `claude -p` with `claude-p`. Whatever --output-format the
 # caller passes (text / json / stream-json / none) is what it gets back.
@@ -27,7 +31,18 @@
 #   claude-p --output-format json 'prompt'         -> full JSON envelope
 #   claude-p --output-format stream-json --verbose -> passthrough stream
 #
-# Env: CLAUDE_P_TIMEOUT (default 180s), CLAUDE_P_KILL_AFTER (default 5s).
+# HAZARD — variadic flags swallow a positional prompt. `--tools`,
+# `--allowed-tools`, `--disallowed-tools`, `--add-dir`, `--mcp-config` and
+# `--betas` are all declared variadic in claude's own argument parser, so
+# `claude-p --tools '' 'my prompt'` consumes the prompt as a second value of
+# --tools and then dies with "Input must be provided either through stdin or as
+# a prompt argument". Existing callers escape only by accident, via stdin or the
+# equals form. **Prefer the equals form everywhere**: `--tools=''`. This wrapper
+# passes such flags through untouched and cannot fix it for you; what it does do
+# is show you the real error instead of an empty one (see the -s guard below).
+#
+# Env: CLAUDE_P_TIMEOUT (default 180s), CLAUDE_P_KILL_AFTER (default 5s),
+#      CLAUDE_P_SAFE (default 1 — set 0 to keep CLAUDE.md, hooks and MCP).
 # Exit: 0 ok · 1 claude reported an error / returned nothing · 124 timed out.
 
 set -uo pipefail
@@ -40,8 +55,14 @@ KILL_AFTER=${CLAUDE_P_KILL_AFTER:-5}
 # streaming is the entire point). Every other argument passes through untouched.
 mode=text
 args=()
+have_safe=0
 while [ $# -gt 0 ]; do
     case "$1" in
+        --safe-mode)
+            have_safe=1
+            args+=("$1")
+            shift
+            ;;
         --output-format)
             case "${2:-}" in
                 json) mode=json ;;
@@ -64,6 +85,25 @@ while [ $# -gt 0 ]; do
             ;;
     esac
 done
+
+# A headless call wants a clean room, not my interactive setup. `--safe-mode`
+# disables CLAUDE.md discovery, skills, plugins, hooks, custom commands/agents
+# and MCP config, while leaving auth, model selection, built-in tools and
+# permissions normal. Measured on a realistic "summarize this diff" prompt: 2/2
+# runs leaked roleplay bookends without it, 3/3 clean with it.
+#
+# Default-on because every current caller wants that; CLAUDE_P_SAFE=0 to opt out,
+# because this is documented as a drop-in for `claude -p`. Losing hooks headless
+# is a feature: ccs-title-hook and ccsave-hook already gate on identity and no-op
+# for nested sessions, and the Edit/Write hooks never fire on a toolless call.
+#
+# Honest limit: this kills the *roleplay* leak, not generic preamble. Safe-mode
+# runs still volunteer unrequested alternatives ("Or if you want it more
+# granular:"), so a caller whose output must be exactly one thing still needs the
+# `<output>` envelope (ai/templates/output_contract.md) or --json-schema on top.
+if [ "${CLAUDE_P_SAFE:-1}" != 0 ] && [ "$have_safe" -eq 0 ]; then
+    args+=(--safe-mode)
+fi
 
 # Streaming callers read events as they arrive, so there is no envelope to
 # validate and no file to buffer into — only the deadline applies.
@@ -90,6 +130,22 @@ if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
     echo "claude-p: timed out after ${TIMEOUT}s (killed)" >&2
     head -c 500 "$err" >&2
     exit 124
+fi
+
+# No output at all has to be caught *before* jq, because jq 1.6 reads an empty
+# input as a successful no-op: `jq -e 'type == "object"'` AND `jq -e '.is_error
+# == true'` both exit 0 on an empty file, so the .is_error branch below used to
+# fire with an empty subtype and an empty result — and that branch is the one
+# place that never dumps $err, which is where the real cause lives.
+#
+# Seen live: `claude-p --tools '' 'Reply with OK only.'` printed exactly
+# "claude-p: claude reported an error: " and hid the actual failure ("Input must
+# be provided either through stdin or as a prompt argument" — see the variadic
+# flag hazard in the header).
+if [ ! -s "$out" ]; then
+    echo "claude-p: claude produced no output (exit $rc)" >&2
+    head -c 500 "$err" >&2
+    exit 1
 fi
 
 # A non-JSON body means claude bailed before it produced a result envelope —

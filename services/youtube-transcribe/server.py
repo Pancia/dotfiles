@@ -18,6 +18,7 @@ import json
 import os
 import re
 import signal
+import sys
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -25,6 +26,17 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import AsyncGenerator
+
+# ~/dotfiles/lib/python is normally on PYTHONPATH via fish/conf.d/python.fish, and
+# the fish launcher gives us that even under launchd's minimal environment (verified:
+# a bare `env -i PATH=/opt/homebrew/bin:… fish` still exports it). This runs anyway,
+# because the plist hard-codes PATH and a summarize job silently losing its extractor
+# is not a failure worth discovering in production.
+_DOTFILES_LIB = Path.home() / "dotfiles" / "lib" / "python"
+if str(_DOTFILES_LIB) not in sys.path:
+    sys.path.insert(0, str(_DOTFILES_LIB))
+
+from llm_output import LLMOutputError, contract, extract  # noqa: E402
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -1150,16 +1162,44 @@ async def transcribe_stream(
 
 
 async def run_claude_summary(transcript: str, prompt: str, job: Job | None = None) -> str:
-    """Run Claude CLI to summarize transcript."""
-    # Combine prompt and transcript into single message for stdin
-    user_message = f"{prompt}\n\n---\n\nTranscript:\n\n{transcript}"
+    """Run Claude CLI to summarize transcript.
+
+    The summary is returned to the client as the summary, so it has to be exactly
+    that. `--safe-mode` below stops the roleplay bookends; the output contract stops
+    the preamble that safe-mode does not touch ("Or if you want it more granular:").
+    """
+    # Combine prompt and transcript into single message for stdin.
+    # contract() raises LLMOutputError if the template is unreadable; surfaced as a
+    # job error with a reason rather than left to the broad except in summarize_stream,
+    # which would report it as an opaque failure.
+    try:
+        envelope_contract = contract()
+    except LLMOutputError as e:
+        log(f"Cannot read the output contract: {e}")
+        if job and job.logger:
+            job.logger.error(f"Cannot read the output contract: {e}")
+        raise Exception(f"Claude summarization unavailable: {e}") from None
+    user_message = (
+        f"{prompt}\n\n---\n\nTranscript:\n\n{transcript}\n\n---\n\n{envelope_contract}"
+    )
 
     if job and job.logger:
         job.logger.info("Starting Claude summarization")
 
+    # --safe-mode: a summarization job wants a clean room. It disables CLAUDE.md
+    # discovery (whose roleplay bookends leak into headless output roughly two runs
+    # in three), skills, plugins, hooks and MCP config, while leaving auth, model
+    # selection and built-in tools normal.
+    #
+    # Deliberately NOT migrated to claude-p: the timeout path below kills this child
+    # by pid, and claude-p runs claude under `timeout -k` in a *new process group*,
+    # so killing the claude-p pid would orphan both timeout and claude — exactly the
+    # runaway that wrapper exists to prevent. (It also defaults to 180s, well under
+    # this job's CLAUDE_TIMEOUT.)
     proc = await asyncio.create_subprocess_exec(
         "claude",
         "-p",
+        "--safe-mode",
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -1201,13 +1241,25 @@ async def run_claude_summary(transcript: str, prompt: str, job: Job | None = Non
             job.logger.error(f"Claude failed: {error_msg}")
         raise Exception(f"Claude summarization failed: {stderr.decode()}")
 
-    result = stdout.decode().strip()
-    if not result:
+    raw = stdout.decode().strip()
+    if not raw:
         error_msg = stderr.decode()[:500]
         log(f"Claude returned empty response. stderr: {error_msg}")
         if job and job.logger:
             job.logger.error(f"Claude returned empty: {error_msg}")
         raise Exception("Claude returned empty response - possible API timeout or rate limit")
+
+    # Unwrap the envelope. A reply that is chatter, or a document truncated at the
+    # token limit, raises rather than being handed to the client as a summary — the
+    # job goes to ERROR with a reason, which is recoverable, instead of quietly
+    # delivering the wrong thing.
+    try:
+        result = extract(raw)
+    except LLMOutputError as e:
+        log(f"Claude reply had no usable <output> envelope: {e}")
+        if job and job.logger:
+            job.logger.error(f"No usable <output> envelope: {e}. Raw head: {raw[:300]}")
+        raise Exception(f"Claude summarization returned no usable output: {e}") from None
 
     if job and job.logger:
         job.logger.info("Claude summarization complete")

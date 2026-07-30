@@ -1,8 +1,6 @@
 @~/dotfiles/ai/templates/git_commit_style.md
 
 OUTPUT:
-Wrap your commit message in <commit> tags. Output NOTHING outside the tags.
-
-<commit>
-Your commit message here
-</commit>
+The reply is constrained to a JSON schema server-side, so the shape is not your
+concern: put the whole commit message in the `message` field and nothing else.
+No preamble, no commentary, no code fence, no tags.

@@ -245,7 +245,11 @@ function _sanctuary_template
     echo "Generating your journal template..."
     set_color normal
 
-    set -l template_prompt (cat "$script_dir/prompts/journal-template.md")
+    # `string collect`: without it the capture is one element per line and
+    # `--system-prompt "$template_prompt"` space-joins them, so this 75-line prompt was
+    # arriving as a single 1900-character line with its fences and worked examples run
+    # together into one paragraph.
+    set -l template_prompt (cat "$script_dir/prompts/journal-template.md" | string collect)
     set -l hour (date +"%H")
     set -l time_of_day "morning"
     if test $hour -ge 12 -a $hour -lt 17
@@ -254,13 +258,19 @@ function _sanctuary_template
         set time_of_day "evening"
     end
 
+    # The template is markdown that goes straight into the journal, so it has to be
+    # exactly the template — no "here's a template for you". The contract is a shared
+    # file so every caller states it identically; "Output ONLY the markdown template"
+    # was the polite version of it that a bookended reply ignored.
+    set -l contract (llm-output --contract | string collect)
+
     set -l template_request "Generate a journal template for:
 - **Mood:** $g_mood
 - **Focus:** $g_focus_name
 - **Intention:** $g_intention
 - **Time of day:** $time_of_day
 
-Output ONLY the markdown template, nothing else."
+$contract"
 
     # Through a file, not a command substitution: `set x (...)` reports the status of
     # `set`, and the fallback below reads better when it can name the reason. claude-p
@@ -268,7 +278,25 @@ Output ONLY the markdown template, nothing else."
     set -l rawfile (mktemp)
     echo "$template_request" | claude-p --system-prompt "$template_prompt" >$rawfile
     set -l status_code $status
-    set -g g_journal_template (cat $rawfile | string collect)
+
+    # Unwrap the envelope. On any failure g_journal_template is left empty, which is
+    # exactly what the existing fallback below already branches on — so a reply that
+    # is chatter rather than a template now lands on the default template instead of
+    # being pasted into the journal.
+    #
+    # Only attempted when claude actually succeeded: running llm-output unconditionally
+    # made a timeout print "no <output> envelope" on stderr ahead of the real reason.
+    set -l extract_code 0
+    set -g g_journal_template ""
+    if test $status_code -eq 0
+        set -l bodyfile (mktemp)
+        llm-output <$rawfile >$bodyfile
+        set extract_code $status
+        if test $extract_code -eq 0
+            set -g g_journal_template (cat $bodyfile | string collect)
+        end
+        rm -f $bodyfile
+    end
     rm -f $rawfile
 
     # Fallback if Claude fails
@@ -288,6 +316,8 @@ Output ONLY the markdown template, nothing else."
         set_color yellow
         if test $status_code -eq 124
             echo "(Claude timed out — using default template)"
+        else if test $extract_code -ne 0 -a $status_code -eq 0
+            echo "(Claude replied without an <output> envelope — using default template)"
         else
             echo "(Using default template)"
         end

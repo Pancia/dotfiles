@@ -22,6 +22,18 @@ set prompt (cat $prompt_file | string collect)
 set expanded (string replace -a -- '{file}' "$filename" "$prompt" | string collect)
 set expanded (string replace -a -- '{content}' "$content" "$expanded" | string collect)
 
+# The output becomes a file on disk, so it has to be exactly the answer and nothing
+# else. Appended after expansion so it is the last thing in the prompt regardless of
+# what the caller's prompt file says.
+#
+# Caveat worth knowing: {content} interpolates arbitrary file bodies, so a source
+# file that itself contains a bare `</output>` line will make extraction refuse the
+# reply as unbalanced. That fails loud into the retry path below, which is the right
+# side to err on -- but it is why a prompt over files full of XML may need
+# CLAUDE_P_SAFE and a hand-rolled prompt instead.
+set contract (llm-output --contract | string collect)
+set expanded (printf '%s\n\n%s' "$expanded" "$contract" | string collect)
+
 if test -n "$status_file"
     echo "START: $filename" >> $status_file
 end
@@ -30,17 +42,43 @@ end
 # the 180s default. Stderr stays visible -- a failing worker was otherwise indistinguishable
 # from one that produced an empty file. Status comes from a file because `set x (...)`
 # reports the status of `set`, not of the pipeline.
+#
+# `--tools=''` in the equals form deliberately: the space form is variadic in claude's
+# argument parser and swallows a following positional prompt. This call is safe either
+# way because the prompt arrives on stdin, but the equals form is the habit to keep.
 set rawfile (mktemp)
-printf '%s' "$expanded" | CLAUDE_P_TIMEOUT=300 claude-p --tools '' >$rawfile
+printf '%s' "$expanded" | CLAUDE_P_TIMEOUT=300 claude-p --tools='' >$rawfile
 set status_code $status
-set result (cat $rawfile | string collect)
+
+# Unwrap the envelope before anything can be written. A nonzero exit here means the
+# reply was chatter, a truncated document, or empty -- all of which take the same
+# path as a claude failure, so $outfile stays absent and claude-batch can retry.
+#
+# It catches more than chatter. Measured while adding this: a prompt that names the
+# file by path makes the model reach for Read, which `--tools=''` denies, and the
+# serialized tool-call block comes back as the reply *text*. That used to be written
+# to $outfile verbatim. Prompts that say "everything you need is inline" avoid it;
+# either way the envelope now stands between it and the output file.
+# Guarded on claude having succeeded: running llm-output unconditionally printed
+# "no <output> envelope" on stderr ahead of the real reason on every timeout.
+set extract_code 0
+set result ''
+if test $status_code -eq 0
+    set bodyfile (mktemp)
+    llm-output <$rawfile >$bodyfile
+    set extract_code $status
+    set result (cat $bodyfile | string collect)
+    rm -f $bodyfile
+end
 rm -f $rawfile
 
-if test $status_code -ne 0
+if test $status_code -ne 0 -o $extract_code -ne 0
     if test $status_code -eq 124
         echo "claude-batch-worker: $filename timed out after 300s" >&2
-    else
+    else if test $status_code -ne 0
         echo "claude-batch-worker: $filename failed (claude exited $status_code)" >&2
+    else
+        echo "claude-batch-worker: $filename failed (no usable <output> envelope)" >&2
     end
     if test -n "$status_file"
         echo "FAIL: $filename" >> $status_file

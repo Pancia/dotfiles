@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Shell entry point for lib/python/llm_output.py — extract the `<output>` envelope
+# body from an LLM reply on stdin.
+#
+#   printf '%s' "$raw" | llm-output          # body on stdout
+#   printf '%s' "$raw" | llm-output --json   # body, validated as JSON
+#
+# Exit: 0 ok · 3 no usable envelope · 4 envelope present but empty · 5 bad JSON.
+# Anything nonzero means "do not use this reply" — there is deliberately no path
+# that hands back the raw text.
+#
+# Own file rather than `python3 ~/dotfiles/lib/python/llm_output.py` at each
+# callsite, so fish callers get a name and the path lives in one place.
+exec python3 "$(dirname "$(dirname "$(readlink -f "$0")")")/lib/python/llm_output.py" "$@"

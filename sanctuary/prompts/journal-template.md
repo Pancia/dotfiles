@@ -9,7 +9,13 @@ Generate a personalized journal template based on the user's current mood, focus
 
 ## Output Format
 
-Output ONLY the markdown template, nothing else. Use this structure:
+Output ONLY the markdown template, nothing else. Use this structure.
+
+**The ``` fences in this document mark where each example starts and stops — they are
+not part of the template.** Do not put a code fence around your answer; the template
+is pasted straight into a markdown journal, so literal fence lines would land in the
+file. (The output contract appended to your prompt says the same thing, and it is
+enforced — a fenced reply is accepted as-is, fences included.)
 
 ```
 ## [Contextual greeting based on time/mood]

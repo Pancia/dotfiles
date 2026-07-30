@@ -2,7 +2,9 @@
 
 Each response is **bookended** with in-character flavor from the same archetype — an **opener** and a **closer**. The technical content between them is written normally.
 
-**Selection:** A `UserPromptSubmit` hook injects a `[🎲 Character Roll: N]` tag into each prompt. Use that number (1-13) to select the matching archetype below. If no roll is present, pick based on the first letter of the user's message mapped to 1-13.
+**Selection:** A `UserPromptSubmit` hook injects a `[🎲 Character Roll: N]` tag into each prompt. Use that number (1-13) to select the matching archetype below.
+
+**If no roll is present, omit the bookends entirely.** The roll comes from an interactive-session hook, so its absence means this is not an interactive session — a headless `claude -p`, an Agent SDK call, or a nested helper, where the bookends are chatter arriving in a payload slot rather than flavour. Answer with the technical content alone. (Most headless callers now pass `--safe-mode`, which never loads this file at all; this rule is the fallback for the ones that can't.)
 
 ### 📖 Format
 
@@ -92,7 +94,7 @@ Projects can have a `cmds.rb` file with shell command shortcuts for human use.
 
 Use **`claude-p`** (`~/dotfiles/bin/claude-p`), never bare `claude -p` — in scripts
 and in ad-hoc commands alike. It is a drop-in: same flags, same `--output-format`
-(text / json / stream-json), same stdin handling. It adds the two guards bare
+(text / json / stream-json), same stdin handling. It adds the three guards bare
 `claude -p` lacks:
 
 - **A hard deadline.** `timeout -k` in its own process group, so a wedged child
@@ -101,6 +103,9 @@ and in ad-hoc commands alike. It is a drop-in: same flags, same `--output-format
   A retired or unavailable `--model` returns `is_error: true` while `subtype`
   still reads `"success"` — so **`.is_error` is the only trustworthy signal**.
   An unvalidated caller otherwise treats the error text as a real answer.
+- **A clean room.** `--safe-mode` by default (`CLAUDE_P_SAFE=0` to opt out), which
+  disables CLAUDE.md discovery, hooks, skills, plugins and MCP config while leaving
+  auth, model selection, built-in tools and permissions normal.
 
 Exit codes: `0` ok · `1` claude errored or returned nothing · `124` timed out.
 
@@ -108,14 +113,23 @@ Exit codes: `0` ok · `1` claude errored or returned nothing · `124` timed out.
 the writer, so the claude process keeps running with nothing watching it. (`claude-p`
 buffers to a file, so that SIGPIPE lands on its own `cat`.)
 
+**Prefer the equals form for variadic flags:** `--tools=''`, not `--tools ''`.
+`--tools`, `--allowed-tools`, `--disallowed-tools`, `--add-dir`, `--mcp-config` and
+`--betas` all swallow a following positional prompt and then die with "Input must be
+provided either through stdin or as a prompt argument".
+
 On 2026-07-28 a headless claude wedged at ~98% CPU past 2.7GB RSS with no output and
 had to be killed by hand. The trigger is still unknown — the retired-model theory was
 tested and disproved (that exits rc=1 in ~2s) — so a deadline is the defence.
 
-**The roleplay bookends leak into headless output** — they apply to `claude -p`
-too, roughly two runs in three, and `--append-system-prompt` does not reliably
-suppress them. Any caller parsing a strict format (JSON, a bare token) must
-validate the shape it got back rather than trusting the text.
+**The roleplay bookends used to leak into headless output** — roughly two runs in
+three, and `--append-system-prompt` never reliably suppressed them. `--safe-mode`
+does (measured 3/3 clean on a prompt that leaked 2/2), so `claude-p` passes it by
+default and the fallback rule at the top of this file tells a rollless session to omit
+the bookends anyway. What safe-mode does *not* suppress is ordinary preamble, so a
+caller whose output must be exactly one thing still needs `--json-schema` (for data)
+or the `<output>` envelope (for prose) — see `~/dotfiles/CLAUDE.md`,
+"Constraining headless output", and `llm-output`.
 
 ## Background processes: `service` vs `svc`
 

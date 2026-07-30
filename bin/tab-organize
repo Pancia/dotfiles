@@ -31,6 +31,12 @@ from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
+# fish/conf.d/python.fish puts ~/dotfiles/lib/python on PYTHONPATH; the explicit
+# insert means this also works when launched from Hermes or any other minimal env.
+sys.path.insert(0, str(Path.home() / "dotfiles" / "lib" / "python"))
+
+from llm_output import LLMOutputError, contract, extract  # noqa: E402
+
 BROWSER_SYNC = Path.home() / "Vaults/the-akashic-records/browser-sync"
 STATE_PATH = BROWSER_SYNC / "state.json"
 FIFO_PATH = BROWSER_SYNC / "cmd.fifo"
@@ -265,10 +271,26 @@ def kill_group(proc):
 
 
 def call_claude(summary, system_prompt):
-    """Call claude -p and return the plan markdown, reporting progress as it streams."""
+    """Call claude -p and return the plan markdown, reporting progress as it streams.
+
+    `--safe-mode` gives the call a clean room: no CLAUDE.md (whose roleplay bookends
+    leak into headless output roughly two runs in three), no hooks, no skills, no MCP
+    config. The plan is written to a file a human then reviews and executes, so the
+    output contract is appended too — safe-mode does not suppress plain preamble, and
+    a plan file that opens with "Here's how I'd organize these:" is a plan file the
+    reviewer has to edit before it is usable.
+    """
     started = time.monotonic()
+    # contract() raises LLMOutputError if the template is unreadable, and this call sits
+    # outside the try below — an unhandled traceback where every other error path here
+    # prints a message and exits 1.
+    try:
+        system_prompt = f"{system_prompt}\n\n{contract()}"
+    except LLMOutputError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
     proc = subprocess.Popen(
-        ["claude", "-p", "--system-prompt", system_prompt,
+        ["claude", "-p", "--safe-mode", "--system-prompt", system_prompt,
          "--output-format", "stream-json", "--verbose", "--include-partial-messages"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -391,6 +413,19 @@ def call_claude(summary, system_prompt):
     if not plan.strip():
         print("Error: claude returned an empty plan", file=sys.stderr)
         sys.exit(1)
+
+    # Unwrap the envelope from the accumulated final text, before the caller writes it
+    # to a plan file. Fenced ```json blocks live *inside* the envelope and are
+    # untouched, so extract_commands sees exactly what it did before — minus any prose
+    # the model wrapped around the plan.
+    try:
+        plan = extract(plan)
+    except LLMOutputError as e:
+        print(f"Error: claude's plan had no usable <output> envelope: {e}",
+              file=sys.stderr)
+        print(f"  First 300 chars: {plan[:300]}", file=sys.stderr)
+        sys.exit(1)
+
     print(f"  done in {fmt_duration(time.monotonic() - started)} · "
           f"{progress['commands']} commands", file=sys.stderr)
     return plan

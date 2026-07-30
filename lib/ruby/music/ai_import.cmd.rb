@@ -144,17 +144,47 @@ module MusicCMD
       Keep "(slowed + reverb)" or "(remix)" etc. in the title if present — those are intentional variants.
       Strip things like "(Official Video)", "(Official Audio)", "(Lyrics)", "(Audio)", "ft." → "feat." normalization is fine.
 
-      Return ONLY a JSON array (no markdown fences) with one object per file, in order:
-      [{"artist": "...", "title": "..."}, ...]
+      Give one entry per file, in the same order as the list below.
 
       Filenames:
       #{descriptions.map { |d| "- #{d}" }.join("\n")}
     PROMPT
 
+    # The reply is constrained by this schema server-side, so the prompt no longer
+    # has to ask for "ONLY a JSON array (no markdown fences)" and nothing downstream
+    # has to strip fences. It must be an OBJECT with a `files` key rather than the
+    # bare array we want: the API rejects a top-level array with
+    # `input_schema.type: Input should be 'object'` (400).
+    schema = {
+      type: "object",
+      properties: {
+        files: {
+          type: "array",
+          # Pinned to the input length, both bounds. The caller zips the reply back
+          # onto the filenames positionally (`suggestions[i]`), so a short reply would
+          # shift artist/title onto the wrong files. The review table catches it before
+          # import, but the API can refuse it outright for free.
+          minItems: descriptions.length,
+          maxItems: descriptions.length,
+          items: {
+            type: "object",
+            properties: {
+              artist: { type: "string" },
+              title: { type: "string" }
+            },
+            required: %w[artist title],
+            additionalProperties: false
+          }
+        }
+      },
+      required: %w[files],
+      additionalProperties: false
+    }.to_json
+
     # claude-p bounds the call and exits nonzero on the errors claude reports with
     # exit 0. Its stderr is left visible so a failed parse says why; without it the
     # table below would just quietly fall back to the raw YouTube titles.
-    json_str = `claude-p --model haiku --output-format json #{Shellwords.escape(prompt)}`
+    json_str = `claude-p --model haiku --output-format json --json-schema #{Shellwords.escape(schema)} #{Shellwords.escape(prompt)}`
     exit_status = $?.exitstatus
 
     if exit_status != 0
@@ -165,15 +195,21 @@ module MusicCMD
 
     begin
       result = JSON.parse(json_str)
-      # --output-format json wraps in {"type":"result","result":"..."}
-      if result.is_a?(Hash) && result["result"]
-        inner = result["result"]
-        # The inner result might be a JSON string or might have markdown fences
-        inner = inner.gsub(/```json\s*/, '').gsub(/```\s*/, '').strip
-        parsed = JSON.parse(inner)
-        return parsed if parsed.is_a?(Array)
-      end
-      return result if result.is_a?(Array)
+      # The schema-validated object arrives already decoded on structured_output —
+      # no second JSON.parse of a string, no fence gsub.
+      #
+      # `is_a?(Hash)` on the inner value too, not just `dig`: Hash#dig raises
+      # `TypeError: String does not have #dig method` when an intermediate value is a
+      # string, and the rescue below only catches JSON::ParserError — so a
+      # structured_output that arrived as a JSON string killed `music import` with a
+      # traceback instead of taking the warn-and-fall-back path. (nil is fine; only a
+      # non-diggable value raises.)
+      structured = result.is_a?(Hash) ? result["structured_output"] : nil
+      files = structured.is_a?(Hash) ? structured["files"] : nil
+      return files if files.is_a?(Array)
+
+      puts "\e[31mWarning: Claude returned no schema-constrained output\e[0m"
+      puts "Raw response: #{json_str[0..200]}" if $options[:verbose]
       []
     rescue JSON::ParserError => e
       puts "\e[31mWarning: Could not parse Claude response: #{e.message}\e[0m"

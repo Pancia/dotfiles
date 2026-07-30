@@ -59,6 +59,7 @@ service edit <name>       # Edit a service's script and plist
 |---------|----------|---------|
 | `ziplog` | Thursday 12:00 | Compress monitor logs >6 days old, archive by month, backup to `~/Cloud/_inbox/monitor/minimac/` |
 | `disk-snapshot` | Sun & Wed 3:00 | Create disk usage snapshot to `~/.local/share/disk-snapshots/` |
+| `claude-watchdog` | Every 60s | Watch for a headless `claude` growing without bound. **Observe-only (phase 2): records, bundles forensics, notifies — cannot kill.** See [docs/claude-watchdog.md](docs/claude-watchdog.md) |
 | `bookmark-manager` | Daily 2:00 | Sync browser bookmarks |
 | `music-backup` | Daily 3:00 | Backup music library via `music backup` |
 | `sanctuary` | On demand | Rotate encrypted backup directories |
@@ -125,6 +126,37 @@ if test $big
 end
 echo $msg  # works
 ```
+
+### Session-scoped jj commits (`commit-mine`)
+
+When two Claude sessions share this working copy, **`jj commit` captures the other
+session's half-written files too** — jj snapshots the whole working copy on every
+command. Commit with `commit-mine -m "msg"` instead: it replays only *this*
+session's recorded edits onto `@-` and commits that, so the other session's work
+stays untouched and on disk. It splits a file both sessions edited, not just
+disjoint files.
+
+- A `PostToolUse` hook on `Edit|Write` (`ccjj record-edit`, registered in
+  `rcs/claude-settings.json`) journals each edit with the file's pre-edit content;
+  that is what lets the replay position an edit by context instead of by
+  first-occurrence matching. Subagents share the parent's session id, so `Task`
+  work is included.
+- **Bash blind spot:** `rm`/`mv`/`sed -i`/`>` are journaled nowhere. Declare
+  deletions and renames with `--also <path>` (safe only for whole-path changes,
+  never for content). `ccjj audit` lists working-copy changes no session claims —
+  run it when something seems to have gone uncommitted.
+- **`claude-p` disables hooks** (`--safe-mode`), so a headless agent produces no
+  journal at all unless `CLAUDE_P_SAFE=0`.
+- **You do not have to remember.** `g run ci` / `ai_jj_commit` / `/cc:commit` call
+  `ccjj should-scope` and route to `commit-mine` themselves when another live
+  session is here; otherwise they commit the whole working copy as before.
+- A `UserPromptSubmit` hook injects a one-line reminder when another **live**
+  session is working in this repo — so "commit stuff" gets steered without you
+  invoking anything. Liveness is owner pid + start time, with a 12h staleness
+  fallback; `ccjj prune` retires orphaned journals, `ccjj disown <sid>` by hand.
+
+Exit `4` means locked or the base moved — retry, it is not an error. Full
+mechanism, and why each guard exists, in [docs/cc-jj-sessions.md](docs/cc-jj-sessions.md).
 
 ### Crashed Session Titles (ccs)
 
@@ -270,8 +302,12 @@ open after an edit may show the cached menu and the next one is current. `rebuil
 | `ccsave [title]` | Save current Claude Code session to `~/Cloud/cc-sessions/` (autogenerates title if omitted) |
 | `ccs list` / `ccs resume` | List/pick sessions, including crashed ones (titled — see below) |
 | `ccs prune [--dry-run]` | Archive crashed entries with no surviving transcript, backup, or saved record |
-| `claude-p [flags] [prompt]` | Guarded `claude -p` — hard timeout in its own process group, plus `.is_error` checking. Drop-in for text/json/stream-json. See below |
+| `commit-mine -m MSG` | Commit only *this* Claude session's edits when sessions share the working copy; `--diff` to preview, `--also PATH` for a Bash-made delete/rename |
+| `ccjj audit` | List working-copy changes no session claims (the Bash blind spot) |
+| `claude-p [flags] [prompt]` | Guarded `claude -p` — hard timeout in its own process group, `.is_error` checking, and `--safe-mode` by default. Drop-in for text/json/stream-json. See below |
+| `llm-output [--json]` | Extract the `<output>` envelope body from an LLM reply on stdin; nonzero exit rather than raw text when there isn't one. See below |
 | `disk-cleanup` | Report on the latest disk snapshot (biggest consumers + growth vs a ~30-day-old baseline), then offer a Claude session to help free space. `--no-ai` report only, `--ai` skip the prompt, `--scan` fresh snapshot first. Hermes: `Cmd+Space` → `x` → `d` |
+| `claude-watchdog` | Run the runaway-claude watchdog by hand (read-only at phase 2). `CW_PHASE=1` log only; `CW_RSS_MB=200 CW_CPU_PCT=5 CW_MIN_AGE=5` to force detection. Normally launchd runs it every 60s |
 | `service` | LaunchAgent manager (list/start/stop/restart/log/status) |
 | `tab-organize windows` | List open browser windows with tab counts |
 | `tab-organize plan [--window ID]` | Generate AI organization plan (editable before execute) |
@@ -280,7 +316,7 @@ open after an edit may show the cached menu and the next one is current. `rebuil
 
 ### Headless Claude calls (`claude-p`)
 
-`bin/claude-p` wraps `claude -p` with the two guards it lacks. Use it everywhere a
+`bin/claude-p` wraps `claude -p` with the three guards it lacks. Use it everywhere a
 script or an ad-hoc command needs a headless answer.
 
 ```bash
@@ -289,11 +325,19 @@ echo prompt | claude-p --system-prompt "$sys"       # -> result text
 claude-p --model haiku --output-format json 'x'     # -> full JSON envelope
 claude-p --output-format stream-json --verbose      # -> passthrough stream
 CLAUDE_P_TIMEOUT=60 claude-p 'prompt'               # default is 180s
+CLAUDE_P_SAFE=0 claude-p 'prompt'                   # keep CLAUDE.md/hooks/MCP
 ```
 
 Exit `0` ok · `1` claude errored or returned nothing · `124` timed out.
 
-Two failure modes it closes, both observed in production:
+**Variadic flags swallow a positional prompt.** `--tools`, `--allowed-tools`,
+`--disallowed-tools`, `--add-dir`, `--mcp-config` and `--betas` are all variadic in
+claude's argument parser, so `claude-p --tools '' 'my prompt'` eats the prompt as a
+second `--tools` value and dies with *"Input must be provided either through stdin or
+as a prompt argument"*. **Prefer the equals form everywhere:** `--tools=''`. Callers
+that pass the prompt on stdin escape it by accident.
+
+Three failure modes it closes, all observed in production:
 
 - **A wedged child outliving its caller.** GNU `timeout -k` runs claude in its own
   process group and signals the group. On 2026-07-28 a headless claude sat at ~98%
@@ -306,20 +350,134 @@ Two failure modes it closes, both observed in production:
 - **Errors that look like answers.** A retired or unavailable `--model` sets
   `is_error: true` while `subtype` still reads `"success"` and text mode just
   prints the warning. **Check `.is_error`, never `.subtype` or the exit code.**
-
-**Bookends leak into headless output.** The global CLAUDE.md roleplay applies to
-`claude -p` too (~2 runs in 3), and `--append-system-prompt` does not reliably
-suppress it — so strict-format callers must validate the shape they get back.
-`ai-chunk-files` and `ai-merge-commit-messages` already do; that check is load-bearing.
+  An *empty* body used to misroute into this branch, which is the one branch that
+  never dumps stderr — jq 1.6 reads an empty file as a successful no-op, so both
+  `type == "object"` and `.is_error == true` exit 0. A `-s` guard now runs first.
+- **LLM chatter where a payload is expected.** `--safe-mode` is passed **by
+  default** (`CLAUDE_P_SAFE=0` opts out). It disables CLAUDE.md discovery, hooks,
+  skills, plugins, custom commands/agents and MCP config, while leaving auth, model
+  selection, built-in tools and permissions normal. Measured on a realistic
+  "summarize this diff" prompt: **2/2 leaked roleplay bookends without it, 3/3 clean
+  with it.**
 
 Model pins: prefer floating aliases (`haiku`, `sonnet`) or a current id
 (`claude-sonnet-5`). Dated ids like `claude-sonnet-4-20250514` are the retirement
 trap — they were removed from `ai-chunk-files`, `ai-merge-commit-messages`, and
 `bin/ai-commit-msg` on 2026-07-28.
 
-Still calling bare `claude -p` (migrate when touched): `bin/tab-organize` (Python
-`subprocess`, streams `stream-json` and has its own error handling) and
-`~/projects/ereshkigal/bin/import-audio.fish` (different repo).
+Still calling bare `claude -p` (deliberately, not pending migration):
+`services/youtube-transcribe/server.py`, `bin/tab-organize` and AKR's
+`scripts/score-day.py` / `scripts/invoice-from-worklog.py` all kill claude by pid,
+and `claude-p` runs it under `timeout -k` in a **new process group** — so killing the
+`claude-p` pid would orphan both `timeout` and `claude`, exactly the runaway the
+wrapper exists to prevent. They pass `--safe-mode` on their own argv instead.
+(`~/projects/ereshkigal/bin/import-audio.fish` is a different repo and still unbounded.)
+
+### Constraining headless output
+
+Three layers, cheapest and strongest first. `--safe-mode` kills the *roleplay* leak
+but **not generic preamble** — safe-mode runs still volunteer unrequested
+alternatives ("Or if you want it more granular:") — so anywhere the output must be
+exactly one thing needs a layer on top.
+
+| Layer | Use when | Where |
+|---|---|---|
+| `--safe-mode` | always | `claude-p` default; hand-added to the direct-subprocess callers above |
+| `--json-schema` / SDK `output_format` | the output is data | `ccs autotitle`, `ai-chunk-files`, `ai-commit-msg`, `music ai_import`, AKR `invoice-from-worklog` |
+| `<output>` envelope | the output is long prose or markdown | `claude-batch-worker`, `sanctuary` template, `tab-organize`, youtube-transcribe summaries, AKR `score-day` / `reading_engine` / inari chat |
+
+**Schema-constrained output is validated server-side**, so compliance is not a
+request the model can decline. The decoded object arrives on `.structured_output`
+(CLI JSON envelope) or `ResultMessage.structured_output` (SDK) — never re-parse
+`.result`. A **top-level array 400s** (`input_schema.type: Input should be 'object'`),
+so wrap it: `{"chunks": [[…]]}`.
+
+**The `<output>` envelope** is `ai/templates/output_contract.md` (canonical text,
+includable via the `@<path>` mechanism `bin/ai-commit-msg`'s `load_template()`
+implements) plus `lib/python/llm_output.py` and its `bin/llm-output` CLI:
+
+```bash
+printf '%s' "$raw" | llm-output          # body on stdout
+printf '%s' "$raw" | llm-output --json   # body, validated as JSON
+llm-output --contract                    # the contract text, for building a prompt
+```
+
+Exit `0` ok · `1` contract unavailable · `2` bad usage · `3` no usable envelope ·
+`4` envelope present but empty · `5` bad JSON. **There is deliberately no path that
+returns the raw text** — falling back is how chatter became a commit message in the
+first place. Shell callers use `--contract` rather than reading the template by path,
+so they resolve it the same way Python does and a worktree can't prompt with one
+contract while enforcing another.
+
+Matching is **line-anchored**: a tag only counts when it owns its line, which is what
+survives the commonest preamble shape, *"I'll put my answer in `<output>` tags:"*
+followed by the real envelope. Opens and closes must then **balance**, and the close
+is the last line-anchored `</output>` with its partner found by walking back with a
+depth counter — so an answer that legitimately quotes a *complete* envelope
+(`cc-session-review` feeds the model a CLAUDE.md documenting this contract) comes back
+whole, while a lone tag of either kind is rejected.
+
+That symmetry is load-bearing and was a bug for one afternoon. The walk raised on an
+unmatched *close* but silently returned the innermost body on an unmatched *open*, so a
+reply quoting a bare `<output>` line — which the contract permitted at the time — came
+back as a truncated fragment with exit 0. The count check also subsumes the truncation
+guard, and has to run *before* the one-line-form fallback: a document cut off at the
+token limit whose body contained `<output>PONG</output>` was otherwise silently
+replaced by `PONG`. The contract now demands balance in both directions and forbids
+anything after the closing tag; the accepted cost is that a stray `</output>` in a
+sign-off fails the whole reply rather than being ignored.
+
+**Known limitation, pinned by a test rather than fixed.** A stray line-anchored
+`<output>` in the preamble and a stray `</output>` in the postamble *cancel out* in the
+count, so the balance check passes and the depth walk latches onto the preamble's open,
+over-capturing. Nothing is lost, but the body carries tags and trailing chatter. It is
+close to irreducible: the captured region is a locally well-formed nested envelope, so
+no local rule separates "outer envelope quoting an inner one" from "narration, real
+envelope, narration". Rejecting text outside the outermost envelope fixes it and breaks
+every legitimate preamble case. Related: **indenting a lone tag does not escape it** —
+both regexes begin `^[ \t]*` — so the contract tells the model to keep a quoted tag
+inline in a sentence instead.
+
+Tests live in `tests/lib/python/test_llm_output.py` — **under `lib/python`, which
+`cmds test` actually runs**; `tests/fish/`, `tests/hooks/` and
+`tests/bin/exocortex-id/` are orphaned and never execute. They are mutation-checked:
+30 mutations of the regexes, the balance check, the exit-code constants, the
+`--contract` path and the SIGPIPE handling are each killed. Four lessons worth keeping
+if you add cases:
+
+- An anchoring test needs an input the *unanchored* regex matches **differently** — a
+  mid-line tag with trailing prose pins nothing, because `$` already rejects it.
+- A SIGPIPE test needs a body larger than the OS pipe buffer (~64KB), or `print()`
+  finishes before the reader exits and `BrokenPipeError` never fires. It also needs
+  `${PIPESTATUS[0]}`: `subprocess.run("cli | head -1")` reports *head's* exit code, so
+  asserting on it can never fail.
+- A test that locates a file **via the value under test** is circular. The
+  `CONTRACT_PATH` test copied the module to a temp tree using `CONTRACT_PATH.parents[2]`
+  — so the `Path.home()` regression made it copy the real module and pass.
+- Whole features can be invisible. `--contract` had no test at all, and printing it to
+  stderr instead of stdout would have silently emptied the contract out of every fish
+  caller's prompt with the suite green.
+
+**SDK callers need `cli_path`, not just `extra_args`.** The SDK's `_find_cli` returns
+its *bundled* CLI unconditionally, and those copies predate `--safe-mode` (2.1.92 in
+the system site-packages, **2.1.71** in inari's venv, against 2.1.220 on PATH), so
+without it the flag dies as `unknown option '--safe-mode'`:
+
+```python
+ClaudeAgentOptions(..., cli_path=shutil.which("claude"), extra_args={"safe-mode": None})
+```
+
+SDK MCP servers (`create_sdk_mcp_server`) **survive safe-mode** — they travel over
+the control protocol, not MCP *config* — verified by driving `reading_engine`'s
+interactive `ask_user` tool through a full pass under safe-mode.
+
+Two callsites stay lenient on purpose: inari's `generate_reply` (a hard failure means
+the phone gets nothing, so it strips bookends and warns) and `_emit_narration` (which
+forwards intermediate text live, before any `ResultMessage`). `ai_briefing`'s weekly
+review and dream consolidation get **safe-mode only, no envelope** — the agent writes
+the document itself and `msg.result` there is just a truthiness gate guarding the jj
+commit and `_run_backup_hook()`. `cc-session-review`'s `grep -q NO_UPDATES_NEEDED`
+is also left alone; its false-positive fails safe.
 
 ### Neovim Prefixes
 | Prefix | Commands |
@@ -454,6 +612,8 @@ vendor approve <name>                  # Approve current state after review
 | [docs/vpc-schema.md](docs/vpc-schema.md) | VPC file format specification |
 | [docs/astro.md](docs/astro.md) | Astrological transit tracker CLI |
 | [docs/proc-label.md](docs/proc-label.md) | Process labeling for Activity Monitor |
+| [docs/cc-jj-sessions.md](docs/cc-jj-sessions.md) | Session-scoped jj commits for concurrent Claude sessions |
+| [docs/claude-watchdog.md](docs/claude-watchdog.md) | Runaway-headless-`claude` watchdog: phases, classification, bundle redaction, tests |
 | [docs/claude-roleplay.md](docs/claude-roleplay.md) | Claude Code character roleplay (personas + randomizer hook) |
 
 ## File Locations

@@ -424,16 +424,28 @@ function _ccs_autotitle --description 'Auto-generate a title for a session using
     end
 
     echo "Generating title..."
-    set -l conversation (printf '<conversation>\n%s\n</conversation>' (string join -- \n $messages))
+    # Both `string collect` calls are load-bearing. Without the inner one, the command
+    # substitution re-splits the joined string on newlines, so printf cycles its format
+    # once PER LINE and haiku receives one fake <conversation> block per line rather
+    # than one block containing the conversation. Without the outer one, the capture
+    # splits again and the interpolation below space-joins what is left.
+    set -l conversation (printf '<conversation>\n%s\n</conversation>' (string join -- \n $messages | string collect) | string collect)
     # Route the envelope through a file: a command substitution reports the status of
     # `set`, not of the pipeline, and a timeout has to be distinguishable from a claude
     # error. claude-p only writes to stderr when it fails, so it is left unsuppressed.
+    # --json-schema constrains the reply server-side, so the shape is not a request
+    # the model can decline. That replaced a "no markdown, no fences, no explanation"
+    # plea in the system prompt plus two fence-stripping `string replace` calls and a
+    # double jq hop downstream; the schema-validated object arrives on
+    # .structured_output, one jq away.
+    set -l title_schema '{"type":"object","properties":{"title":{"type":"string","description":"A 3-8 word title summarizing the conversation"}},"required":["title"],"additionalProperties":false}'
     set -l rawfile (mktemp)
     printf '%s' "$conversation" | claude-p --model haiku --output-format json \
-        --system-prompt 'You generate short titles for conversations. Output ONLY valid JSON: {"title":"<3-8 word title>"}. No markdown, no fences, no explanation.' \
+        --json-schema "$title_schema" \
+        --system-prompt 'You generate short titles for conversations.' \
         "Generate a short 3-8 word title summarizing the above conversation." >$rawfile
     set -l status_code $status
-    set -l raw (cat $rawfile | string collect)
+    set -l title (jq -r '.structured_output.title // empty' $rawfile 2>/dev/null)
     rm -f $rawfile
 
     if test $status_code -eq 124
@@ -444,12 +456,6 @@ function _ccs_autotitle --description 'Auto-generate a title for a session using
         echo "Title generation failed (claude exited $status_code)"
         return 1
     end
-
-    # Extract .result, strip markdown fences, parse .title
-    set -l result (echo "$raw" | jq -r '.result' 2>/dev/null)
-    # Strip markdown code fences if present
-    set result (echo "$result" | string replace -r '^\s*```json?\s*' '' | string replace -r '\s*```\s*$' '')
-    set -l title (echo "$result" | jq -r '.title' 2>/dev/null)
 
     if test -z "$title" -o "$title" = null
         echo "Failed to generate title"

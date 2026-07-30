@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import sys
 
 from claude_agent_sdk import (
@@ -14,8 +15,23 @@ from claude_agent_sdk import (
     ClaudeSDKError,
 )
 
-_COMMIT_RE = re.compile(r"<commit>\s*(.*?)\s*</commit>", re.DOTALL)
 _INCLUDE_RE = re.compile(r"^@(\S+)\s*$", re.MULTILINE)
+
+# Constrain the reply server-side instead of parsing prose out of it. The old
+# `<commit>` tag scrape had a real bug: on no match it returned `text.strip()`,
+# so a reply carrying the roleplay bookends from ~/.claude/CLAUDE.md (which leak
+# into headless output roughly two runs in three) became the commit message.
+_MESSAGE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "message": {
+            "type": "string",
+            "description": "The complete commit message: summary line, blank line, body.",
+        }
+    },
+    "required": ["message"],
+    "additionalProperties": False,
+}
 
 # One toolless call on a diff; minutes only for a very large one.
 _TIMEOUT = float(os.environ.get("AI_COMMIT_MSG_TIMEOUT", 300))
@@ -47,19 +63,44 @@ def load_template(path: str, _seen: set[str] | None = None) -> str:
     return _INCLUDE_RE.sub(_replace, text)
 
 
-def extract_commit(text: str) -> str:
-    """Extract commit message from <commit> tags."""
-    m = _COMMIT_RE.search(text)
-    return m.group(1) if m else text.strip()
+def safe_mode_kwargs() -> dict:
+    """`cli_path` + `--safe-mode`, or nothing at all if the CLI can't be found.
+
+    `--safe-mode` disables CLAUDE.md discovery, skills, plugins, hooks, custom
+    commands/agents and MCP config, leaving auth, model selection, built-in tools
+    and permissions normal. It is what stops the roleplay bookends leaking in.
+
+    `cli_path` is not optional: the SDK's `_find_cli` returns its *bundled* CLI
+    unconditionally, and that copy predates `--safe-mode`, so without pointing at
+    the PATH binary the flag dies as `unknown option '--safe-mode'`.
+
+    A missing PATH `claude` degrades to plain options rather than raising —
+    the JSON schema below is the load-bearing guard here, safe-mode is the belt.
+    """
+    cli = shutil.which("claude")
+    if cli is None:
+        print("ai-commit-msg: claude not on PATH; running without --safe-mode",
+              file=sys.stderr)
+        return {}
+    return {"cli_path": cli, "extra_args": {"safe-mode": None}}
 
 
 async def _receive_commit(client: ClaudeSDKClient) -> str:
     async for msg in client.receive_response():
         if isinstance(msg, ResultMessage):
-            if msg.is_error or msg.result is None:
+            if msg.is_error:
                 detail = msg.result or (msg.errors and "; ".join(msg.errors))
                 raise RuntimeError(detail or f"generation failed ({msg.subtype})")
-            return extract_commit(msg.result)
+            # The schema is enforced server-side, so this is the message itself
+            # and never prose wrapped around it. Absent structured_output means
+            # the CLI never applied the schema — fail rather than fall back to
+            # `.result`, which is exactly the prose we are refusing to accept.
+            out = msg.structured_output
+            if not isinstance(out, dict) or "message" not in out:
+                raise RuntimeError(
+                    f"model returned no schema-constrained output (got {type(out).__name__})"
+                )
+            return str(out["message"]).strip()
     raise RuntimeError("no result returned from model")
 
 
@@ -69,6 +110,8 @@ async def generate(system_prompt: str, diff: str) -> str:
         system_prompt=system_prompt,
         allowed_tools=[],
         permission_mode="default",
+        output_format={"type": "json_schema", "schema": _MESSAGE_SCHEMA},
+        **safe_mode_kwargs(),
     )
     client = ClaudeSDKClient(options=options)
     async with client:
