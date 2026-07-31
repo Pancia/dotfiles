@@ -1520,3 +1520,24 @@ def test_no_claim_commits_without_the_window_paths(repo):
     assert r.returncode == 0, r.stderr
     assert repo.show("edited.txt") == b"A\n"
     assert repo.show("artifact.log") == b"x\n"
+
+
+def test_also_overrides_conflicting_records_for_that_path(repo):
+    """`--also` takes a path wholesale, so its journal records must not ALSO be
+    replayed. Without this the conflict message's own recommended remedy
+    (`--also <path>`) hit the identical conflict and was useless -- found by
+    using the tool on its own source tree."""
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    # a record that cannot be replayed: its anchor text is not in @-
+    repo.write("f.txt", "rewritten wholesale by a script\n")
+    repo.record("S1", "f.txt", old="NOT-IN-BASE", new="X",
+                original="NOT-IN-BASE\n")
+
+    bad = repo.run("commit", "-m", "x", sid="S1")
+    assert bad.returncode != 0
+    assert "conflict" in bad.stderr
+
+    ok = repo.run("commit", "-m", "wholesale", "--also", "f.txt", sid="S1")
+    assert ok.returncode == 0, ok.stderr
+    assert repo.show("f.txt") == b"rewritten wholesale by a script\n"

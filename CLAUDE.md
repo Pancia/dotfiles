@@ -313,6 +313,7 @@ open after an edit may show the cached menu and the next one is current. `rebuil
 | `ccs prune [--dry-run]` | Archive crashed entries with no surviving transcript, backup, or saved record |
 | `commit-mine -m MSG` | Commit only *this* Claude session's edits when sessions share the working copy; `--diff` to preview, `--also PATH` for a Bash-made delete/rename |
 | `ccjj audit` | List working-copy changes no session claims (the Bash blind spot) |
+| `cc-worktree on\|status\|off` | Opt a repo in to per-session worktree isolation, so two Claude sessions get their own checkouts. `land w-NN` / `release w-NN --land\|--discard` for a held slot; `reap --all` to tidy up. Refuses in `~/dotfiles` — that is what `ccjj` is for. See [docs/cc-worktree.md](docs/cc-worktree.md) |
 | `ccjj bash-windows on\|off\|status` | Opt this checkout into recording Bash windows |
 | `ccjj claim PATH` | Accept a Bash-made change as your own, after reading the diff it prints; `-n` to preview |
 | `claude-p [flags] [prompt]` | Guarded `claude -p` — hard timeout in its own process group, `.is_error` checking, and `--safe-mode` by default. Drop-in for text/json/stream-json. See below |
@@ -654,6 +655,7 @@ vendor approve <name>                  # Approve current state after review
 | [docs/astro.md](docs/astro.md) | Astrological transit tracker CLI |
 | [docs/proc-label.md](docs/proc-label.md) | Process labeling for Activity Monitor |
 | [docs/cc-jj-sessions.md](docs/cc-jj-sessions.md) | Session-scoped jj commits for concurrent Claude sessions |
+| [docs/cc-worktree.md](docs/cc-worktree.md) | Per-session worktree isolation: opt-in marker, link list, slots, holds, slot-aware resume |
 | [docs/claude-watchdog.md](docs/claude-watchdog.md) | Runaway-headless-`claude` watchdog: phases, classification, bundle redaction, tests |
 | [docs/claude-roleplay.md](docs/claude-roleplay.md) | Claude Code character roleplay (personas + randomizer hook) |
 

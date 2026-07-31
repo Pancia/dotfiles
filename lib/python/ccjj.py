@@ -979,7 +979,23 @@ def cmd_commit(args):
                     "  Re-run with --force only if you are sure."
                     % ", ".join(contested), 1)
 
-        mine = build(records, present, pinned)
+        # --also takes a path WHOLESALE, so its journal records must NOT also be
+        # replayed. Without this, `--also <path>` could never rescue a path whose
+        # records conflict -- which is precisely what the conflict message
+        # recommends it for, so the advice was useless. Found by using the tool.
+        also_set = set(also)
+        scoped = []
+        for r in records:
+            p = r.get("path")
+            if p:
+                try:
+                    if rel(p) in also_set:
+                        continue
+                except SystemExit:
+                    pass
+            scoped.append(r)
+
+        mine = build(scoped, present, pinned)
         if not mine and not also:
             die("nothing to commit", 2)
 

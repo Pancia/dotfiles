@@ -73,6 +73,20 @@ function showPendingUpdates --description 'Show pending CLAUDE.md update suggest
     end
 end
 
+function showHeldWorktrees --description 'Show cc-worktree slots holding unlanded work'
+    # Pure fish, no subprocess: this runs on every cd. A held slot is work the
+    # exit path deliberately preserved and nothing will ever reap — so if it is
+    # not surfaced here, it is invisible until the pool runs out.
+    # `count` alone is enough: unlike bash, fish expands an unmatched glob in
+    # `set` to an EMPTY list rather than the literal pattern, so there is no
+    # "does $held[1] actually exist" case to guard against.
+    set -l held .claude/worktrees/*.hold
+    if test (count $held) -gt 0
+        set -l n (count $held)
+        echo (set_color --bold d7871f)"&> $n cc-worktree slot"(test $n -gt 1; and echo "s"; or echo "")" holding unlanded work — `cc-worktree status`"(set_color normal)
+    end
+end
+
 function showPlans --description 'List PLAN-* files in .cc directory'
     set -l plans (find .cc -maxdepth 1 -name 'PLAN-*' 2>/dev/null)
     if test -n "$plans"
@@ -119,6 +133,7 @@ function chpwd_hook --on-variable PWD
     cache 5 showPlans
     cache 5 showFixmes
     cache 5 showPendingUpdates
+    cache 5 showHeldWorktrees
 end
 
 # Show plans on shell startup (this file is sourced from config.fish)

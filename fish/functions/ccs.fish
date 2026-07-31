@@ -1,5 +1,9 @@
 function _ccs_file
-    echo "$HOME/Cloud/cc-sessions"(pwd)"/sessions.json"
+    # _cc_worktree_key, not pwd: an isolated session runs in
+    # <repo>/.claude/worktrees/w-NN, and keying on that would give ~/Cloud one
+    # cc-sessions tree per slot per repo, forever. Outside a worktree it IS pwd,
+    # so this is a no-op everywhere else.
+    echo "$HOME/Cloud/cc-sessions"(_cc_worktree_key)"/sessions.json"
 end
 
 # All session data goes through jq. File is a JSON array of {id, ts, title} objects.
@@ -589,7 +593,9 @@ function _ccs_backup_session --description 'Back up a single session JSONL as zs
         return 1
     end
 
-    set -l backup_dir "$HOME/Cloud/cc-sessions"(pwd)"/session-backups"
+    # Keyed like _ccs_file, and like _ccs_restore_transcript's fallback lookup —
+    # all three must agree or a restore looks in a directory no backup reaches.
+    set -l backup_dir "$HOME/Cloud/cc-sessions"(_cc_worktree_key)"/session-backups"
     set -l backup "$backup_dir/$id.jsonl.zst"
     mkdir -p "$backup_dir"
 
@@ -710,7 +716,12 @@ function _ccs_open_register --description 'Register a new open session entry'
 
     set -l now (date +%s)
     set -l lstart (ps -o lstart= -p $pid 2>/dev/null | string trim)
-    set -l cwd (pwd)
+    # The PARENT repo path, so `ccs list` at the repo root sees sessions running
+    # in a worktree. The slot is recorded alongside it because `claude --resume`
+    # is scoped to the project directory: a session that ran in w-03 can only be
+    # resumed from w-03, and cwd alone no longer says which one that was.
+    set -l cwd (_cc_worktree_key)
+    set -l slot (_cc_worktree_slot)
     set -l tty_path (tty 2>/dev/null)
     set -l program $TERM_PROGRAM
 
@@ -734,6 +745,7 @@ function _ccs_open_register --description 'Register a new open session entry'
         --argjson pid "$pid" \
         --arg lstart "$lstart" \
         --arg cwd "$cwd" \
+        --arg slot "$slot" \
         --argjson started_at "$now" \
         --arg program "$program" \
         --arg tmux_socket "$tmux_socket" \
@@ -747,6 +759,7 @@ function _ccs_open_register --description 'Register a new open session entry'
             pid: $pid,
             pid_lstart: $lstart,
             cwd: $cwd,
+            slot: $slot,
             started_at: $started_at,
             ended_at: null,
             session_id: "",
@@ -990,7 +1003,7 @@ for started, klass, sid, path, summary, title in sorted(
     # Tabs and newlines would break the TSV contract downstream
     print("\t".join(clean(x, 400) if i < 4 else clean(x) for i, x in
                     enumerate([klass, sid, path, str(started), summary, title])))
-' "$dir" (pwd)
+' "$dir" (_cc_worktree_key)
 end
 
 function _ccs_switch_to --description 'Best-effort focus the terminal running a session'
@@ -1164,7 +1177,7 @@ function _ccs_old --description 'List archived (resumed) session entries for cur
     end
     # Case-insensitive, like the scan: some entries recorded Vaults/, others
     # vaults/, and an exact compare hides whichever case you aren't standing in.
-    set -l cwd (string lower (pwd))
+    set -l cwd (string lower (_cc_worktree_key))
     # Build epoch-prefixed sortable list, newest first. One jq per entry reading
     # every field at once — and the title comes from the entry only, never from
     # the transcript: grepping one per archived row cost seconds per call.

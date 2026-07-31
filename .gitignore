@@ -25,6 +25,14 @@ fish/functions/_*
 # First-party, not a plugin internal: tracked `ccu.fish` calls it, so a fresh
 # clone without it has a broken `ccu`.
 !fish/functions/_claude_release_notes.fish
+# Same: cc-worktree isolation. These MUST be their own files because fish
+# autoloads by filename, and `_cc_worktree_key` runs on every `cd` (chpwd ->
+# _ccs_open_scan) and inside `fish -c` subshells, so it cannot live inside
+# ccs.fish. Without these lines a fresh clone gets a ccs that keys every
+# isolated session to the worktree, and a wrapper that cannot resolve a slot.
+!fish/functions/_cc_worktree_key.fish
+!fish/functions/_cc_worktree_slot.fish
+!fish/functions/__cc_resume_id.fish
 fish/functions/tide.fish
 fish/functions/tide/
 fish/functions/fisher.fish

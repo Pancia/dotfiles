@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Shell entry point for lib/python/cc_worktree.py — per-session worktree
+# isolation, so two Claude Code sessions in one repo do not tread on each other.
+#
+#   cc-worktree on|off|status        opt this checkout in or out
+#   cc-worktree create --pid $fish_pid   claim a slot, print the target dir
+#   cc-worktree reap [--all]         release finished slots (trash, never delete)
+#   cc-worktree release w-NN --land|--discard
+#   cc-worktree land w-NN            land the work in the parent, then release
+#
+# The target directory goes to STDOUT and every warning to STDERR, because the
+# fish wrapper captures stdout and cd's into it.
+#
+# Exit: 0 ok · 1 refused or failed · 2 not opted in.
+#
+# Own file rather than `python3 ~/dotfiles/lib/python/cc_worktree.py` at each
+# callsite, so the fish callers get a name and the path lives in one place.
+exec python3 "$(dirname "$(dirname "$(readlink -f "$0")")")/lib/python/cc_worktree.py" "$@"
