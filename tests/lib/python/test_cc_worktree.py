@@ -1023,3 +1023,83 @@ def test_status_does_not_suggest_on_where_on_refuses(git_repo):
     assert r.returncode == 2
     assert "`cc-worktree on`" not in r.stdout
     assert "ccjj" in r.stdout
+
+
+# ------------------------------------------- link_one: the only unlink() here
+#
+# The design promise is "nothing is ever deleted, only trashed". link_one is the
+# single place that calls os.unlink on user content, so the promise lives or dies
+# here. All three were reproduced destroying data with no copy anywhere.
+
+def test_linking_does_not_destroy_a_file_in_the_parent(git_repo):
+    """An entry for a directory, followed by one underneath it: the second dst
+    resolves THROUGH the link just made, so it unlinked the parent's real file
+    and left a self-referential symlink in its place."""
+    git_repo.write(".claude/settings.local.json", "REAL PARENT CONTENT\n")
+    git_repo.cc("on")
+    git_repo.marker(".claude\n.claude/settings.local.json\n")
+
+    r = git_repo.cc("create", "--pid", str(os.getpid()))
+
+    p = os.path.join(git_repo.root, ".claude", "settings.local.json")
+    assert not os.path.islink(p), "the parent's real file became a symlink"
+    with open(p) as fh:
+        assert fh.read() == "REAL PARENT CONTENT\n"
+    # The islink guard below already makes this safe, so this asserts the
+    # containment check specifically -- it is what says WHY, and a "not a link,
+    # leaving it alone" message about a file in the parent would send you
+    # looking in the wrong repo.
+    assert "resolves outside the worktree" in r.stderr
+
+
+def test_linking_does_not_destroy_an_absolute_path_entry(git_repo, tmp_path):
+    """os.path.join(root, "/abs/x") returns "/abs/x", so src == dst and the
+    source was unlinked to make way for a link to itself."""
+    outside = tmp_path / "outside.txt"
+    outside.write_text("OUTSIDE THE REPO\n")
+    git_repo.cc("on")
+    git_repo.marker("%s\n" % outside)
+
+    r = git_repo.cc("create", "--pid", str(os.getpid()))
+
+    assert outside.exists(), "an absolute entry destroyed its own target"
+    assert outside.read_text() == "OUTSIDE THE REPO\n"
+    # Again the islink guard makes it safe; this pins the containment check,
+    # which is what stops an absolute entry being treated as a repo path at all.
+    assert "resolves outside the worktree" in r.stderr
+
+
+def test_relinking_does_not_destroy_work_made_inside_the_slot(git_repo):
+    """On `--slot --reuse` the surviving tree is adopted as-is. A real file there
+    is work the session created in the slot -- ignored, so not on the branch, not
+    stashable, not in the trash. The only copy."""
+    git_repo.cc("on")
+    git_repo.marker(".env\n")
+    target = git_repo.cc("create", "--pid", str(os.getpid())).stdout.strip()
+
+    # the session writes its own .env inside the slot; the parent later gains one
+    with open(os.path.join(target, ".env"), "w") as fh:
+        fh.write("WRITTEN-BY-THE-SESSION\n")
+    git_repo.write(".env", "PARENT\n")
+
+    git_repo.cc("create", "--pid", str(os.getpid()), "--slot", "w-01", "--reuse")
+
+    with open(os.path.join(target, ".env")) as fh:
+        assert fh.read() == "WRITTEN-BY-THE-SESSION\n"
+
+
+def test_owner_alive_fails_safe_when_ps_is_indeterminate(git_repo):
+    """ps_lstart returns "" on any error or timeout, and "" != a real timestamp
+    read as DEAD -- so a transient ps failure let the next launch's piggybacked
+    reap trash a RUNNING session's worktree and free its slot."""
+    git_repo.cc("on")
+    target = git_repo.cc("create", "--pid", str(os.getpid())).stdout.strip()
+    rec = json.load(open(git_repo.owner("w-01")))
+    rec["pid_lstart"] = ""                     # indeterminate, owner still alive
+    with open(git_repo.owner("w-01"), "w") as fh:
+        json.dump(rec, fh)
+
+    git_repo.cc("reap")
+
+    assert os.path.isdir(target), "reaped a live session's worktree"
+    assert os.path.exists(git_repo.owner("w-01"))

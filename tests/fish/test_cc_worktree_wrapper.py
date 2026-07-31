@@ -422,9 +422,21 @@ class TestSlotAwareResume:
         to the parent, so the parent is exactly where it must resume."""
         r = wrapped.run("--resume", "NO-SUCH-SESSION")
         assert r.returncode == 0, r.stderr
-        # A fresh slot is still allocated (that is `create`'s normal path); what
-        # must NOT happen is a failure or a wrong-slot landing.
-        assert wrapped.claude_ran_in() == [str(wrapped.slot_dir("w-01"))]
+        # In the PARENT. The previous assertion here accepted a fresh slot and
+        # called it correct, which contradicted this test's own name, the docs,
+        # and slot-for-session's contract -- and meant claude ran in a directory
+        # the transcript is not keyed to, so the resume could not work.
+        assert wrapped.claude_ran_in() == [str(wrapped.root)]
+        assert not wrapped.slot_dir("w-01").exists(), "claimed a slot anyway"
+
+
+    def test_continue_without_a_session_id_runs_unisolated(self, wrapped):
+        """`-c` carries no id, so no slot can be looked up. Claiming one silently
+        continued whatever conversation last occupied that slot's directory."""
+        r = wrapped.run("-c")
+        assert r.returncode == 0, r.stderr
+        assert wrapped.claude_ran_in() == [str(wrapped.root)]
+        assert not wrapped.slot_dir("w-01").exists()
 
 
 class TestChpwdSurfacing:

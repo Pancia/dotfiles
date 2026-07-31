@@ -33,6 +33,7 @@ fish/functions/_*
 !fish/functions/_cc_worktree_key.fish
 !fish/functions/_cc_worktree_slot.fish
 !fish/functions/__cc_resume_id.fish
+!fish/functions/__cc_resume_requested.fish
 fish/functions/tide.fish
 fish/functions/tide/
 fish/functions/fisher.fish

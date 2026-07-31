@@ -46,6 +46,9 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
     set -l _cc_slot
     set -l _cc_target
     set -l _cc_rc 0
+    # Declared at function level: `set -l` inside a branch is function-scoped but
+    # UNDEFINED when the branch is not taken, so `test $x -eq 0` would error.
+    set -l _cc_skip_isolation 0
     if test $skip_extras -eq 0
         # Slot-aware resume: `claude --resume` is scoped to the project
         # directory (Claude Code keys transcripts by mangled cwd), so a session
@@ -58,13 +61,27 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
                 set _cc_resume_slot --slot $_cc_slot --reuse
             end
         end
+        # A resume we cannot place must run in the PARENT, not in a fresh slot.
+        # Claiming one put claude in a directory the transcript is not keyed to:
+        # `--resume <unknown>` then failed outright, and bare `-c` silently
+        # continued whatever conversation last occupied that slot -- a different
+        # one than was asked for. Both the docs and slot-for-session's contract
+        # already said "un-isolated"; only the wrapper did not implement it.
+        if test -z "$_cc_slot"; and __cc_resume_requested $pass_argv
+            set _cc_skip_isolation 1
+            echo "cc-worktree: no recorded slot for this resume; running in $_cc_orig_pwd" >&2
+        end
         # NO 2>&1: `create` prints warnings on the SUCCESS path (dirty parent,
         # subdir fallback, submodules). Folding them into the capture makes
         # $_cc_target a multi-element list, `cd` fails with "Too many args", and
         # $status is STILL 0 — so the wrapper would run un-isolated with a slot
         # claimed. Path on stdout, warnings on stderr, and index defensively.
-        set _cc_target (cc-worktree create --pid $fish_pid $_cc_resume_slot)
-        set _cc_rc $status
+        if test $_cc_skip_isolation -eq 1
+            set _cc_rc 2
+        else
+            set _cc_target (cc-worktree create --pid $fish_pid $_cc_resume_slot)
+            set _cc_rc $status
+        end
         switch $_cc_rc
             case 0
                 if cd $_cc_target[-1]

@@ -455,7 +455,17 @@ def owner_alive(rec):
         os.kill(int(pid), 0)
     except OSError:
         return False
-    return ps_lstart(pid) == (rec.get("pid_lstart") or "")
+    # Indeterminate counts as ALIVE. ps_lstart returns "" on any OSError or a 5s
+    # timeout, and a recorded "" compared equal to a real timestamp is False --
+    # so a transient ps failure said "dead" about a running session and the next
+    # launch's piggybacked reap trashed its worktree and freed the slot.
+    # Reproduced. ccjj's owner_alive states the rule this one inverted: a slot we
+    # cannot attribute must not be swept away. The pid is still alive here
+    # (os.kill succeeded); only the recycled-pid refinement is unavailable.
+    now, was = ps_lstart(pid), (rec.get("pid_lstart") or "")
+    if not now or not was:
+        return True
+    return now == was
 
 
 # --------------------------------------------------------------------- locking
@@ -633,10 +643,42 @@ def link_one(root, dest_root, mode, rel, quiet=False):
         return False                       # missing entries are the normal case
     try:
         os.makedirs(os.path.dirname(dst), exist_ok=True)
+
+        # THE ONLY os.unlink on user content in this tool, so the "nothing is
+        # ever deleted, only trashed" promise lives or dies here. Two ways it
+        # used to reach into the PARENT and destroy a real file with no copy
+        # anywhere, both reproduced:
+        #
+        #   .claude                        <- links w-01/.claude at the parent
+        #   .claude/settings.local.json    <- dst now RESOLVES THROUGH that link,
+        #                                     so this unlinked the parent's file
+        #                                     and left a self-referential symlink
+        #
+        # and an absolute entry, where os.path.join returns the entry itself so
+        # src == dst and the source was unlinked to make way for a link to
+        # itself.
+        real_dst_dir = os.path.realpath(os.path.dirname(dst))
+        real_dest_root = os.path.realpath(dest_root)
+        if real_dst_dir != real_dest_root \
+                and not real_dst_dir.startswith(real_dest_root + os.sep):
+            warn("refusing to link %s: it resolves outside the worktree (%s).\n"
+                 "  An earlier entry probably linked one of its parent"
+                 " directories." % (rel, real_dst_dir))
+            return False
+        if os.path.lexists(dst) and os.path.realpath(dst) == os.path.realpath(src):
+            return False                   # already the same file; nothing to do
+
         if os.path.lexists(dst):
-            if os.path.islink(dst) or os.path.isfile(dst):
+            # Replace a link we own; never a real file. On `--slot --reuse` the
+            # surviving tree is adopted as-is, and a real file there is work the
+            # session created inside the slot -- ignored, so not on the branch,
+            # not stashable, and not in the trash. The only copy.
+            if os.path.islink(dst):
                 os.unlink(dst)
             else:
+                if not quiet:
+                    warn("%s already exists in the worktree and is not a link;"
+                         " leaving it alone." % rel)
                 return False
         if mode == "copy":
             subprocess.run(["cp", "-R" if os.path.isdir(src) else "-p", src, dst],

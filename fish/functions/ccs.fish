@@ -800,7 +800,7 @@ function _ccs_open_entry_for_pid --description 'Find the open file for a pid+lst
     return 1
 end
 
-function _ccs_open_finalize --description 'Delete the open entry for this pid (clean exit)'
+function _ccs_open_finalize --description 'Retire the open entry for this pid (clean exit)'
     set -l pid $argv[1]
     set -l entry_file (_ccs_open_entry_for_pid $pid)
     test -n "$entry_file"; or return 0
@@ -825,6 +825,16 @@ function _ccs_open_finalize --description 'Delete the open entry for this pid (c
         end
     end
 
+    # An isolated session's entry is the ONLY record of which worktree slot it
+    # ran in, and `claude --resume` is scoped to the project directory -- so
+    # deleting it here made resume land in a fresh slot with a different cwd and
+    # fail with "No conversation found". Every isolated session that exited
+    # cleanly was affected, i.e. nearly all of them. Archive instead; the
+    # archive is already where `cc-worktree slot-for-session` looks.
+    set -l slot (jq -r '.slot // ""' "$entry_file" 2>/dev/null)
+    if test -n "$slot"
+        _ccs_archive_entry "$entry_file"; and return 0
+    end
     rm -f "$entry_file"
 end
 
