@@ -127,6 +127,21 @@ end
 echo $msg  # works
 ```
 
+### Concurrent Claude sessions — which tool
+
+Two tools, one decision. They solve the same problem from opposite ends and the
+right one depends on whether the repo can be *copied*:
+
+| Situation | Tool | Why |
+|---|---|---|
+| **This repo** (`~/dotfiles`) | `ccjj` / `commit-mine` — [docs/cc-jj-sessions.md](docs/cc-jj-sessions.md) | It cannot be isolated: about half its tracked files load by absolute path from `~/dotfiles` (all 35 `rcs/MANIFEST` entries are hardlinks, `~/.config/fish/functions` is a symlink into the checkout), so a second checkout can author changes it cannot run. The working copy has to stay shared, so the *commit* is what gets split. |
+| **Any other repo** | `cc-worktree` — [docs/cc-worktree.md](docs/cc-worktree.md) | Nothing stops a second checkout, so each session gets its own and the collision never happens. Opt in per checkout with `cc-worktree on`; it refuses in `~/dotfiles` by name. |
+
+They compose without knowing about each other: inside a worktree, `jj root` is the
+*workspace*, so `ccjj` sees a repo where this session is the only one, declines to
+scope, and lets an ordinary whole-copy commit happen — which is better there,
+because it also catches Bash-made changes. Nothing needs configuring for that.
+
 ### Session-scoped jj commits (`commit-mine`)
 
 When two Claude sessions share this working copy, **`jj commit` captures the other

@@ -1,5 +1,12 @@
 # Session-scoped jj commits (`ccjj` / `commit-mine`)
 
+> **Is this the right tool?** This is the answer for a repo that **cannot be
+> isolated** — `~/dotfiles`, where about half the tracked files load by absolute
+> path so a second checkout can author changes it cannot run. For any other repo,
+> give each session its own working copy instead:
+> **[docs/cc-worktree.md](cc-worktree.md)**. The two compose — see "Inside a
+> worktree" below.
+
 ## The problem
 
 Several Claude Code sessions can share one jj working copy. jj snapshots the

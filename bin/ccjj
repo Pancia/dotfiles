@@ -6,12 +6,19 @@
 #   ccjj commit -m "msg"        # commit this session's work only
 #   ccjj commit --diff          # show what that would be
 #   ccjj audit                  # changes no session claims
+#   ccjj claim <path>           # accept a Bash-made change as your own
+#   ccjj bash-windows on        # opt this checkout in to recording them
 #   ccjj prune [-n]             # retire archived journals
 #
-# `ccjj record-edit` is the PostToolUse (Edit|Write) hook; it reads the payload
-# on stdin and always exits 0.
+# `ccjj record-edit` (Edit|Write) and `ccjj bash-window` (Bash, via the
+# bin/ccjj-bash-window gate) are PostToolUse hooks; `ccjj nudge` is
+# UserPromptSubmit. All read their payload on stdin and always exit 0.
 #
-# Exit: 0 ok · 1 refused · 2 nothing to do · 4 locked or base moved.
+# Exit: 0 ok · 1 refused · 2 nothing to do · 4 locked or base moved ·
+#       5 unclaimed Bash-window paths.
+#
+# Docs: docs/cc-jj-sessions.md. This is the answer for ~/dotfiles, which cannot
+# be isolated; any other repo should use cc-worktree — docs/cc-worktree.md.
 #
 # Own file rather than `python3 ~/dotfiles/lib/python/ccjj.py` at each callsite,
 # so the hook config and fish callers get a name and the path lives in one place.

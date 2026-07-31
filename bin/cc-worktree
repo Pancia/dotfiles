@@ -11,7 +11,10 @@
 # The target directory goes to STDOUT and every warning to STDERR, because the
 # fish wrapper captures stdout and cd's into it.
 #
-# Exit: 0 ok · 1 refused or failed · 2 not opted in.
+# Exit: 0 ok · 1 refused or failed · 2 not opted in · 5 unclaimed Bash windows.
+#
+# Docs: docs/cc-worktree.md. For ~/dotfiles, which cannot be isolated, the
+# answer is ccjj / commit-mine instead — docs/cc-jj-sessions.md.
 #
 # Own file rather than `python3 ~/dotfiles/lib/python/cc_worktree.py` at each
 # callsite, so the fish callers get a name and the path lives in one place.

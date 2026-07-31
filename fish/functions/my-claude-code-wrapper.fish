@@ -35,6 +35,10 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
     # skip_extras gating is load-bearing: ai.fish, ai_health, ai_inbox, ccpu and
     # sanctuary/main-claude all route through this wrapper with -p, and would
     # otherwise leak a worktree per run AND get an empty checkout to inspect.
+    #
+    # Full mechanism, and why each guard exists: docs/cc-worktree.md.
+    # ~/dotfiles cannot be isolated and is refused by name — there the answer is
+    # ccjj / commit-mine, docs/cc-jj-sessions.md.
     set -l _cc_orig_pwd $PWD
     set -l _cc_wt_slot ""
     set -l _cc_resume_slot

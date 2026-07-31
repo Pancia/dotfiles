@@ -6,8 +6,8 @@ Two Claude Code sessions in one checkout tread on each other: they edit the same
 files, run the same build, and each `jj commit` sweeps up whatever the other has
 half-written.
 
-`ccjj` / `commit-mine` solves that for `~/dotfiles`, which **cannot** be
-isolated — about 46% of its tracked files load by absolute path (every
+[`ccjj` / `commit-mine`](cc-jj-sessions.md) solves that for `~/dotfiles`, which
+**cannot** be isolated — about 46% of its tracked files load by absolute path (every
 `rcs/MANIFEST` hardlink, `~/.config/fish/functions`, `PATH`, `PYTHONPATH`,
 Hammerspoon's `package.path`), so a second checkout can author changes it cannot
 run. Every *other* repo can be isolated, and there the ordinary answer works:
@@ -16,6 +16,15 @@ give each session its own git worktree / jj workspace.
 `cc-worktree on` opts a checkout in. After that the `cc` wrapper creates a
 worktree and `cd`s into it before launching claude, and merges or holds the work
 when the session ends.
+
+**The two compose without knowing about each other.** Inside a workspace `jj root`
+returns the *workspace*, so `ccjj` sees a repo where this session is the only one:
+`should-scope` declines, the nudge stays silent, and an ordinary whole-copy commit
+happens — which is the better outcome there, because it also captures Bash-made
+changes `commit-mine` cannot see. Nothing needs configuring for that, and
+`ccjj` deliberately has no worktree-awareness: it already declines for the right
+reason, and teaching a correctness tool to detect its environment only adds a way
+for it to be wrong.
 
 ## Usage
 
