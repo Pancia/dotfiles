@@ -45,6 +45,27 @@ WT_REL = os.path.join(".claude", "worktrees")
 DEFAULT_ENTRIES = [".cc-config", ".claude/settings.json",
                    ".claude/settings.local.json", ".envrc"]
 
+# Candidates `on` probes for. Only ones that EXIST and are NOT tracked are
+# proposed: a tracked file already comes across in the checkout, and linking it
+# would silently make every worktree edit bypass the VCS.
+#
+# A static default list was wrong in the direction that matters -- it shipped
+# .envrc (which no project here has) and omitted node_modules and .env, so a
+# real Node or Python session started with no dependencies and no secrets. What
+# a repo needs is a property of the repo, so ask the repo.
+PROBE_ENTRIES = [
+    # Claude Code's own per-project state; without these a session starts with
+    # no skills, no agents and no granted permissions, and re-prompts for each.
+    ".cc-config", ".claude/settings.json", ".claude/settings.local.json",
+    ".claude/skills", ".claude/agents", ".claude/commands", ".mcp.json",
+    # environment and toolchain: wrong or missing means silently wrong runtime
+    ".env", ".env.local", ".envrc", ".direnv",
+    ".tool-versions", ".nvmrc", ".python-version", ".ruby-version",
+    # installed dependencies and build state: expensive to rebuild per session
+    "node_modules", ".venv", "venv", "vendor/bundle", ".bundle",
+    "target", ".next", ".nuxt", ".gradle", ".terraform", "_build", "deps",
+]
+
 # A slot directory name. Anchored, `w-` + digits only: `_cc_worktree_key` in
 # fish uses the same shape, and the two must agree or a path rewritten by one is
 # not recognised by the other.
@@ -759,6 +780,39 @@ def opted_in(root, backend):
     return entries, max_slots
 
 
+def tracked_paths(root, backend):
+    """Repo-relative paths the VCS tracks. Empty set on failure (probe then
+    proposes nothing rather than proposing something wrong)."""
+    if backend == "git":
+        r = run(["git", "ls-files", "-z"], cwd=root)
+    else:
+        r = run(["jj", "file", "list", "-r", "@"], cwd=root)
+    if r is None or r.returncode != 0:
+        return set()
+    out = r.stdout                     # run() is text mode, not bytes
+    parts = out.split("\0") if backend == "git" else out.splitlines()
+    return {p.strip().strip('"') for p in parts if p.strip()}
+
+
+def probe_entries(root, backend):
+    """(proposed, skipped_because_tracked) — what this repo actually needs.
+
+    Existence AND untrackedness are both required. Tracked paths arrive in the
+    checkout by themselves, and linking one would route every worktree edit
+    around the VCS.
+    """
+    tracked = tracked_paths(root, backend)
+    proposed, skipped = [], []
+    for rel in PROBE_ENTRIES:
+        if not os.path.lexists(os.path.join(root, rel)):
+            continue
+        if rel in tracked or any(t.startswith(rel + "/") for t in tracked):
+            skipped.append(rel)
+        else:
+            proposed.append(rel)
+    return proposed, skipped
+
+
 def cmd_on(args):
     root, backend = resolve()
 
@@ -775,9 +829,30 @@ def cmd_on(args):
     path = marker_path(root, backend)
     fresh = not os.path.exists(path)
     if fresh:
+        # Probe rather than defaulting. What a worktree must borrow from its
+        # parent is a property of THIS repo, and a static list got it wrong in
+        # the direction that matters -- see PROBE_ENTRIES.
+        proposed, skipped = probe_entries(root, backend)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as fh:
             fh.write(MARKER_HEADER)
+            if proposed:
+                fh.write("\n# detected in this repo when it was opted in:\n")
+                fh.write("".join(p + "\n" for p in proposed))
+        if proposed:
+            print("cc-worktree: detected %d path(s) to share with each worktree:"
+                  % len(proposed))
+            for p in proposed:
+                print("    %s" % p)
+        else:
+            print("cc-worktree: nothing local to share; using defaults.")
+        if skipped:
+            print("  (tracked, so already in every checkout: %s)"
+                  % ", ".join(skipped))
+        if os.path.exists(os.path.join(root, ".gitmodules")):
+            warn("this repo has submodules; a fresh worktree leaves them EMPTY.\n"
+                 "  `create` runs `git submodule update --init --recursive`, which\n"
+                 "  is slow on first launch. Consider whether isolation is worth it.")
     entries, max_slots = read_marker(root, backend)
 
     # jj auto-tracks. A symlinked node_modules in a workspace is snapshotted as
@@ -847,7 +922,15 @@ def cmd_status(args):
     entries, max_slots = read_marker(root, backend)
     if entries is None:
         print("cc-worktree: %s is not opted in (%s)." % (root, backend))
-        print("  `cc-worktree on` to enable per-session isolation here.")
+        # Do NOT suggest `on` where `on` refuses -- pointing at a command that
+        # cannot work reads as a bug in the tool rather than a property of the
+        # repo, and this is the one repo the author is standing in most often.
+        if root == dotfiles_root():
+            print("  ...and cannot be: about half its tracked files load by absolute\n"
+                  "  path, so a worktree copy is not the live configuration.\n"
+                  "  Use `ccjj` / `commit-mine` here — docs/cc-jj-sessions.md.")
+        else:
+            print("  `cc-worktree on` to enable per-session isolation here.")
         return 2
     print("cc-worktree: %s (%s), %d slots" % (root, backend, max_slots))
     print("  marker: %s" % marker_path(root, backend))

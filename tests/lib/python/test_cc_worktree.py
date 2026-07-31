@@ -959,3 +959,67 @@ def test_no_marker_runs_no_vcs_command(git_repo):
                        capture_output=True, text=True, env=env)
     assert r.returncode == 2
     assert not os.path.exists(log), open(log).read()
+
+
+# ------------------------------------------------ probing the repo on opt-in
+#
+# A static default list was wrong in the direction that matters: it shipped
+# `.envrc` (which no project here has) and omitted node_modules and .env, so a
+# real Node or Python session began with no dependencies and no secrets. What a
+# worktree must borrow is a property of the repo, so `on` asks the repo.
+
+def test_on_detects_local_state_and_links_it(git_repo):
+    git_repo.write(".env", "SECRET=1\n")
+    git_repo.write("node_modules/dep.js", "x\n")
+    git_repo.write(".claude/settings.local.json", "{}\n")
+
+    r = git_repo.cc("on")
+    assert r.returncode == 0, r.stderr
+    for want in (".env", "node_modules", ".claude/settings.local.json"):
+        assert want in r.stdout, r.stdout
+
+    target = git_repo.cc("create", "--pid", str(os.getpid())).stdout.strip()
+    for want in (".env", "node_modules", ".claude/settings.local.json"):
+        p = os.path.join(target, want)
+        assert os.path.islink(p), "%s is not linked into the worktree" % want
+        assert os.path.realpath(p) == os.path.realpath(
+            os.path.join(git_repo.root, want))
+
+
+def test_on_does_not_link_a_tracked_path(git_repo):
+    """A tracked path arrives in the checkout by itself; linking it would route
+    every worktree edit around the VCS."""
+    # .claude/settings.json IS a probe candidate, so this reaches the guard.
+    # (Tracking a non-candidate proves nothing — the probe never considers it,
+    # and the mutation survived.)
+    git_repo.write(".claude/settings.json", "{}\n")
+    git_repo.write("node_modules/dep.js", "x\n")
+    git_repo._run(["git", "add", "-f", ".claude/settings.json"])
+    git_repo._run(["git", "commit", "-qm", "track settings"])
+
+    r = git_repo.cc("on")
+    assert r.returncode == 0, r.stderr
+    assert "node_modules" in r.stdout
+    assert "tracked, so already in every checkout" in r.stdout
+    assert ".claude/settings.json" in r.stdout.split("tracked, so already")[1]
+
+    target = git_repo.cc("create", "--pid", str(os.getpid())).stdout.strip()
+    assert os.path.islink(os.path.join(target, "node_modules"))
+    settings = os.path.join(target, ".claude", "settings.json")
+    assert not os.path.islink(settings), "a tracked path must not be linked"
+    assert os.path.isfile(settings)
+
+
+def test_on_says_so_when_there_is_nothing_local(git_repo):
+    r = git_repo.cc("on")
+    assert r.returncode == 0, r.stderr
+    assert "nothing local to share" in r.stdout
+
+
+def test_status_does_not_suggest_on_where_on_refuses(git_repo):
+    """Pointing at a command that cannot work reads as a bug in the tool rather
+    than a property of the repo."""
+    r = git_repo.cc("status", CC_WORKTREE_DOTFILES=git_repo.root)
+    assert r.returncode == 2
+    assert "`cc-worktree on`" not in r.stdout
+    assert "ccjj" in r.stdout

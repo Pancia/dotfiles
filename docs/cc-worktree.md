@@ -63,6 +63,37 @@ copy:.tool-versions
 max-slots: 4
 ```
 
+**`cc-worktree on` writes that list by probing the repo**, rather than applying a
+fixed default. It proposes every candidate that both **exists** and is **not
+tracked**, and says what it found:
+
+```
+$ cc-worktree on
+cc-worktree: detected 3 path(s) to share with each worktree:
+    .claude/settings.local.json
+    .env
+    node_modules
+  (tracked, so already in every checkout: .claude/settings.json)
+```
+
+Both halves of that test matter. A tracked path arrives in the checkout by
+itself, and linking it would route every worktree edit around the VCS. An absent
+one is just noise.
+
+A static default was wrong in the direction that costs you: it shipped `.envrc`,
+which no project here has, and omitted `node_modules` and `.env` — so a real Node
+or Python session started with no dependencies and no secrets, which is precisely
+the "unusable, switched off within a week" failure the link list exists to
+prevent. What a worktree must borrow is a property of the repo, so ask the repo.
+
+Candidates are in `PROBE_ENTRIES`: Claude Code's own per-project state
+(`.cc-config`, `.claude/settings*.json`, `.claude/skills|agents|commands`,
+`.mcp.json`), environment and toolchain (`.env*`, `.envrc`, `.direnv`,
+`.tool-versions`, `.nvmrc`, `.python-version`, `.ruby-version`), and installed
+dependencies (`node_modules`, `.venv`, `vendor/bundle`, `target`, `.next`,
+`.gradle`, `.terraform`, `_build`, `deps`). Edit the marker afterwards for
+anything it missed — it is a plain file and it is only written on first opt-in.
+
 Every entry is **symlinked** into each worktree, absolute and parent-pointing.
 Edits through the link land in the parent — which is what you want for `.envrc`,
 `node_modules`, `.venv`, and for permission grants accruing to
