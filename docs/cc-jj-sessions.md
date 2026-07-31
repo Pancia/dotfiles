@@ -7,6 +7,21 @@
 > **[docs/cc-worktree.md](cc-worktree.md)**. The two compose — see "Inside a
 > worktree" below.
 
+## Setup
+
+**Nothing to run.** The hooks are registered in `rcs/claude-settings.json` and
+the routing decides for itself, so `commit-mine` and the nudge work as soon as a
+second session appears.
+
+One optional extra, once per checkout, if you want changes made through `Bash`
+(`sed -i`, `>`, a heredoc) to be recoverable rather than merely reported:
+
+```bash
+ccjj bash-windows on        # already on in ~/dotfiles
+```
+
+See "Bash windows" below for what that buys and what it deliberately does not.
+
 ## The problem
 
 Several Claude Code sessions can share one jj working copy. jj snapshots the

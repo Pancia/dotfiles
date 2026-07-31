@@ -1,5 +1,20 @@
 # Per-session worktree isolation (`cc-worktree`)
 
+## Setup: one command, once per checkout
+
+```bash
+cd ~/projects/whatever
+cc-worktree on          # probes the repo, writes the marker, prints what it found
+```
+
+That is the whole setup. It is permanent — a file in the repo's VCS directory —
+so it survives reboots, new terminals and new sessions, and it does not travel to
+other machines. From then on `cc` in that repo puts each session in its own
+worktree. `cc-worktree off` undoes it.
+
+**Not in `~/dotfiles`** — it refuses there by name, because that checkout cannot
+be isolated. Use [`ccjj` / `commit-mine`](cc-jj-sessions.md) instead.
+
 ## The problem
 
 Two Claude Code sessions in one checkout tread on each other: they edit the same

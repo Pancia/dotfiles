@@ -137,6 +137,11 @@ right one depends on whether the repo can be *copied*:
 | **This repo** (`~/dotfiles`) | `ccjj` / `commit-mine` — [docs/cc-jj-sessions.md](docs/cc-jj-sessions.md) | It cannot be isolated: about half its tracked files load by absolute path from `~/dotfiles` (all 35 `rcs/MANIFEST` entries are hardlinks, `~/.config/fish/functions` is a symlink into the checkout), so a second checkout can author changes it cannot run. The working copy has to stay shared, so the *commit* is what gets split. |
 | **Any other repo** | `cc-worktree` — [docs/cc-worktree.md](docs/cc-worktree.md) | Nothing stops a second checkout, so each session gets its own and the collision never happens. Opt in per checkout with `cc-worktree on`; it refuses in `~/dotfiles` by name. |
 
+**Setup, in full:** `ccjj` needs nothing — its hooks are registered and the
+routing decides for itself. `cc-worktree` needs `cc-worktree on` once per
+checkout, permanent. Optionally `ccjj bash-windows on` once per checkout (already
+on here) to make Bash-made changes recoverable rather than merely reported.
+
 They compose without knowing about each other: inside a worktree, `jj root` is the
 *workspace*, so `ccjj` sees a repo where this session is the only one, declines to
 scope, and lets an ordinary whole-copy commit happen — which is better there,
@@ -328,7 +333,7 @@ open after an edit may show the cached menu and the next one is current. `rebuil
 | `ccs prune [--dry-run]` | Archive crashed entries with no surviving transcript, backup, or saved record |
 | `commit-mine -m MSG` | Commit only *this* Claude session's edits when sessions share the working copy; `--diff` to preview, `--also PATH` for a Bash-made delete/rename |
 | `ccjj audit` | List working-copy changes no session claims (the Bash blind spot) |
-| `cc-worktree on\|status\|off` | Opt a repo in to per-session worktree isolation, so two Claude sessions get their own checkouts. `land w-NN` / `release w-NN --land\|--discard` for a held slot; `reap --all` to tidy up. Refuses in `~/dotfiles` — that is what `ccjj` is for. See [docs/cc-worktree.md](docs/cc-worktree.md) |
+| `cc-worktree on\|status\|off` | Opt a repo in to per-session worktree isolation, so two Claude sessions get their own checkouts. **`on` is the whole setup** — once per checkout, permanent; it probes the repo and links whatever local state exists but is untracked (`.env`, `node_modules`, `.venv`, `.claude/settings*.json`), so a session does not start with no dependencies and no permissions. `land w-NN` / `release w-NN --land\|--discard` for a held slot; `reap --all` to tidy up. Refuses in `~/dotfiles` — that is what `ccjj` is for. See [docs/cc-worktree.md](docs/cc-worktree.md) |
 | `ccjj bash-windows on\|off\|status` | Opt this checkout into recording Bash windows |
 | `ccjj claim PATH` | Accept a Bash-made change as your own, after reading the diff it prints; `-n` to preview |
 | `claude-p [flags] [prompt]` | Guarded `claude -p` — hard timeout in its own process group, `.is_error` checking, and `--safe-mode` by default. Drop-in for text/json/stream-json. See below |
