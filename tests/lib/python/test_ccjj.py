@@ -1541,3 +1541,28 @@ def test_also_overrides_conflicting_records_for_that_path(repo):
     ok = repo.run("commit", "-m", "wholesale", "--also", "f.txt", sid="S1")
     assert ok.returncode == 0, ok.stderr
     assert repo.show("f.txt") == b"rewritten wholesale by a script\n"
+
+
+def test_stop_fires_when_a_journaled_path_also_changed_via_bash(repo):
+    """The check excluded paths already in `mine`, so a file with BOTH journal
+    records and Bash-window changes was committed from the records alone and the
+    Bash half vanished. This cost a partial commit of ccjj's own source tree --
+    the committed plan file was one draft behind the working copy."""
+    _optin(repo)
+    repo.write("doc.md", "line1\n")
+    repo.commit("base")
+    _bash(repo)
+    repo.write("doc.md", "line1-edited\n")                 # the journaled edit
+    repo.record("S1", "doc.md", old="line1", new="line1-edited", original="line1\n")
+    repo.write("doc.md", "line1-edited\nappended-by-bash\n")  # then a Bash append
+    _bash(repo)
+
+    r = repo.run("commit", "-m", "doc", sid="S1")
+    assert r.returncode == 5, r.stdout + r.stderr
+    assert "ccjj claim doc.md" in r.stderr
+    assert repo.show("doc.md") == b"line1\n"               # nothing committed
+
+    # and --no-claim still commits just the journaled half, deliberately
+    ok = repo.run("commit", "-m", "doc", sid="S1", extra=["--no-claim"])
+    assert ok.returncode == 0, ok.stderr
+    assert repo.show("doc.md") == b"line1-edited\n"

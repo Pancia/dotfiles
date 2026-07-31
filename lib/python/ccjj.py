@@ -1005,8 +1005,18 @@ def cmd_commit(args):
         # cover but nobody has claimed is recoverable right now, and silently
         # leaving it behind is the exact blind spot windows exist to close.
         if os.path.isfile(marker(ROOT, MARKER_OPTIN)) and not args.no_claim:
-            loose = sorted(p for p, who in window_coverage().items()
-                           if sid in who and p not in mine and p not in also)
+            # `p not in mine` was WRONG, and it cost a partial commit of this
+            # tool's own source tree. A path with BOTH journal records and
+            # Bash-window changes is in `mine` -- reconstructed from the records
+            # alone -- so it was excluded from this check and the Bash half was
+            # dropped silently. The reconstruction differing from the working
+            # copy is exactly when the warning is most needed.
+            cov = window_coverage()
+            loose = sorted(
+                p for p, who in cov.items()
+                if sid in who and p not in also
+                and (p not in mine
+                     or mine[p] != working_copy_bytes(p)))
             if loose:
                 # STOP, rather than note-and-proceed. Surfacing alone did not
                 # work: ai_jj_commit runs preflight-message-commit in one shot,
@@ -1181,6 +1191,20 @@ def cmd_commit(args):
 
 
 # ----------------------------------------------------------------------- claim
+
+def working_copy_bytes(path):
+    """The path as it is on disk right now, or None if unreadable.
+
+    Used to tell "my reconstruction matches the file" from "the journal has an
+    older version of it" -- the difference between a complete commit and one
+    that silently drops every Bash-made edit to a file the session also Edited.
+    """
+    try:
+        with open(os.path.join(ROOT, path), "rb") as fh:
+            return fh.read()
+    except OSError:
+        return None
+
 
 def file_bytes(rev, path):
     """Content at a revision, or None if absent. Callers MUST have checked the
