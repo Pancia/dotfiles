@@ -329,17 +329,70 @@ def test_on_does_not_propose_a_tracked_path(git_repo):
     assert "tracked" in r.stdout
 
 
-def test_on_does_not_propose_bulky_paths(git_repo):
-    """.worktreeinclude COPIES rather than links (measured), so node_modules or
-    .venv here would be slow and waste disk on every session. Left for the human
-    to add knowingly."""
-    os.makedirs(os.path.join(git_repo.root, "node_modules"))
-    os.makedirs(os.path.join(git_repo.root, ".venv"))
-    git_repo.write(".env", "SECRET=1\n")
-    assert git_repo.cc("on").returncode == 0
-    assert "node_modules" not in git_repo.include_entries()
-    assert ".venv" not in git_repo.include_entries()
-    assert ".env" in git_repo.include_entries()
+class TestDependencyDirectories:
+    """node_modules and friends: wanted by every session, and not carriable.
+
+    `.worktreeinclude` copies AND silently skips symlinks, so a copied
+    node_modules arrives without `.bin` -- measured. That fails as
+    command-not-found while the directory visibly exists, which is harder to
+    diagnose than an empty worktree. So they are excluded, but NAMED.
+    """
+
+    @staticmethod
+    def _node_and_python(repo):
+        os.makedirs(os.path.join(repo.root, "node_modules"))
+        os.makedirs(os.path.join(repo.root, ".venv"))
+        repo.write(".env", "SECRET=1\n")
+
+    def test_not_written_into_the_include_file(self, git_repo):
+        self._node_and_python(git_repo)
+        assert git_repo.cc("on").returncode == 0
+        assert "node_modules" not in git_repo.include_entries()
+        assert ".venv" not in git_repo.include_entries()
+        assert ".env" in git_repo.include_entries()
+
+    def test_named_in_the_output(self, git_repo):
+        """Pins the silent omission. Opting in a Node project produced a tidy
+        result missing exactly what the session needs, and the omission only
+        surfaced when the first worktree could not build."""
+        self._node_and_python(git_repo)
+        r = git_repo.cc("on")
+        assert "node_modules" in r.stdout
+        assert ".venv" in r.stdout
+
+    def test_output_gives_the_reason_and_the_remedy(self, git_repo):
+        """Naming them without saying why invites someone to add them by hand
+        and hit the broken-copy failure this is steering around."""
+        self._node_and_python(git_repo)
+        out = git_repo.cc("on").stdout
+        assert "SYMLINK" in out.upper()
+        assert "installer" in out
+
+    def test_reported_on_stdout_not_stderr(self, git_repo):
+        """stderr is unbuffered and stdout is not, so warn() here surfaced
+        ABOVE the 'wrote .worktreeinclude' summary it qualifies."""
+        self._node_and_python(git_repo)
+        r = git_repo.cc("on")
+        assert "node_modules" in r.stdout
+        assert "node_modules" not in r.stderr
+
+    def test_no_false_nothing_untracked_claim(self, git_repo):
+        """With deps present and nothing small to carry, "nothing untracked"
+        would be flatly untrue -- they ARE untracked, just not carriable."""
+        os.makedirs(os.path.join(git_repo.root, "node_modules"))
+        r = git_repo.cc("on")
+        assert r.returncode == 0
+        assert not os.path.exists(git_repo.include_file())
+        assert "node_modules" in r.stdout
+        assert "nothing untracked" not in r.stdout
+
+    def test_tracked_dependency_dir_is_not_reported(self, git_repo):
+        """A repo that commits its vendored deps already has them in every
+        worktree, so warning about them would be noise."""
+        git_repo.write("deps/thing.txt", "vendored\n")
+        git_repo.commit("track deps")
+        r = git_repo.cc("on")
+        assert "not carriable" not in r.stdout
 
 
 def test_on_never_overwrites_an_existing_include(git_repo):
@@ -354,9 +407,12 @@ def test_on_never_overwrites_an_existing_include(git_repo):
 
 
 def test_on_says_so_when_there_is_nothing_local(git_repo):
+    # "nothing SMALL and untracked": the qualifier is load-bearing, because a
+    # repo can have untracked node_modules and still nothing carriable. See
+    # TestDependencyDirectories.
     r = git_repo.cc("on")
     assert r.returncode == 0
-    assert "nothing untracked" in r.stdout
+    assert "nothing small and untracked" in r.stdout
     assert not os.path.exists(git_repo.include_file())
 
 

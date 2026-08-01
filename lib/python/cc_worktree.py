@@ -55,6 +55,28 @@ INCLUDE_CANDIDATES = [
     ".tool-versions", ".nvmrc", ".python-version", ".ruby-version",
 ]
 
+# Installed dependencies and build state. A session obviously WANTS these --
+# without them it cannot build or test, and the previous symlink-based
+# implementation shared them for exactly that reason.
+#
+# They are still not proposed, because `.worktreeinclude` cannot deliver them.
+# It copies, and it silently SKIPS SYMLINKS -- so what arrives is broken rather
+# than merely large. Measured: a node_modules containing `.bin/mytool` and a
+# pnpm-style package link came across as the plain files only, with `.bin`
+# absent entirely. `npm test` then fails with command-not-found while
+# node_modules visibly sits there, which is harder to diagnose than an empty
+# worktree. `.venv/bin/python` is a symlink to the interpreter and fails the
+# same way.
+#
+# So they are NAMED in `on`'s output, with the remedy, rather than silently
+# omitted: a tool that quietly narrows what it was asked to do should say so,
+# and "your deps are missing, run your installer" is a one-line fix while
+# "why is .bin empty" is an afternoon.
+DEPS_CANDIDATES = [
+    "node_modules", ".venv", "venv", "vendor/bundle", ".bundle",
+    "target", ".next", ".nuxt", ".gradle", ".terraform", "_build", "deps",
+]
+
 INCLUDE_FILE = ".worktreeinclude"
 
 MARKER_HEADER = """\
@@ -274,21 +296,31 @@ def tracked_paths(root, backend):
 
 
 def probe_entries(root, backend):
-    """(proposed, skipped_because_tracked) — what this repo actually needs.
+    """(proposed, skipped_because_tracked, deps) — what this repo actually needs.
 
     Existence AND untrackedness are both required. A tracked path arrives in the
     worktree by itself, so including it would copy a file git already put there.
+
+    `deps` is reported, never proposed — see DEPS_CANDIDATES. One tracked_paths
+    call serves both lists; it is the only VCS call `on` makes for this.
     """
     tracked = tracked_paths(root, backend)
+
+    def is_tracked(rel):
+        return rel in tracked or any(t.startswith(rel + "/") for t in tracked)
+
     proposed, skipped = [], []
     for rel in INCLUDE_CANDIDATES:
         if not os.path.lexists(os.path.join(root, rel)):
             continue
-        if rel in tracked or any(t.startswith(rel + "/") for t in tracked):
+        if is_tracked(rel):
             skipped.append(rel)
         else:
             proposed.append(rel)
-    return proposed, skipped
+
+    deps = [rel for rel in DEPS_CANDIDATES
+            if os.path.lexists(os.path.join(root, rel)) and not is_tracked(rel)]
+    return proposed, skipped, deps
 
 
 def working_copy_dirty(root, backend):
@@ -331,27 +363,48 @@ def cmd_on(args):
     # Offer a starter .worktreeinclude, but never overwrite one: it lives in the
     # working tree and may well be the human's, or the project's.
     inc = os.path.join(root, INCLUDE_FILE)
+    proposed, skipped, deps = probe_entries(root, backend)
     if not os.path.exists(inc):
-        proposed, skipped = probe_entries(root, backend)
         if proposed:
             with open(inc, "w") as fh:
                 fh.write("# Untracked local state copied into each Claude Code\n"
                          "# worktree. Written by `cc-worktree on`; edit freely.\n"
-                         "# NOTE: these are COPIED, so keep the list small --\n"
-                         "# node_modules or .venv here would be slow and large.\n")
+                         "# Gitignore syntax; a directory needs a trailing slash.\n"
+                         "#\n"
+                         "# These are COPIED, and SYMLINKS ARE SKIPPED -- which is\n"
+                         "# why node_modules/.venv are not here: they would arrive\n"
+                         "# without .bin, i.e. broken. Run your installer instead.\n")
                 fh.write("".join(p + "\n" for p in proposed))
             print("cc-worktree: wrote %s with %d detected path(s):"
                   % (INCLUDE_FILE, len(proposed)))
             for p in proposed:
                 print("    %s" % p)
         else:
-            print("cc-worktree: nothing untracked to carry into a worktree; no "
-                  "%s written." % INCLUDE_FILE)
+            # "nothing untracked" would be a lie when deps exist -- they are
+            # untracked, they are just not carriable. Say which is true.
+            print("cc-worktree: nothing small and untracked to carry into a "
+                  "worktree; no %s written." % INCLUDE_FILE)
         if skipped:
             print("  (tracked, so already in every worktree: %s)"
                   % ", ".join(skipped))
     else:
         print("cc-worktree: %s already exists; leaving it alone." % INCLUDE_FILE)
+
+    # Reported whether or not an include file was written: a worktree in this
+    # repo will be missing these either way, and that is what breaks a session.
+    #
+    # stdout, not warn(): this is part of the probe report and belongs next to
+    # the lines above it. stderr is unbuffered while stdout is not, so a warn()
+    # here surfaced ABOVE the "wrote .worktreeinclude" summary it qualifies.
+    if deps:
+        print("  NOT carried into a worktree — untracked, but not carriable: %s"
+              % ", ".join(deps))
+        print("    %s copies and silently SKIPS SYMLINKS, so these would arrive\n"
+              "    broken rather than merely large: node_modules/.bin and\n"
+              "    .venv/bin/python are symlinks, and a copy without them fails\n"
+              "    as command-not-found while the directory visibly exists.\n"
+              "    Run your installer in the first worktree instead\n"
+              "    (npm ci / uv sync / bundle install / ...)." % INCLUDE_FILE)
 
     if os.path.exists(os.path.join(root, ".gitmodules")):
         warn("this repo has submodules; a fresh worktree leaves them EMPTY.\n"
@@ -437,8 +490,10 @@ def cmd_should_isolate(args):
 
 
 def main():
+    # `__doc__ or ""`: python -OO strips docstrings, and a bare .split() there
+    # raises before argparse ever runs.
     ap = argparse.ArgumentParser(prog="cc-worktree",
-                                 description=__doc__.split("\n")[0])
+                                 description=(__doc__ or "").split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("on", help="opt this checkout in to worktree isolation")
     sub.add_parser("off", help="opt this checkout out")

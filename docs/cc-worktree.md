@@ -99,12 +99,38 @@ starts with no permissions granted and no environment. `on` probes the repo and
 proposes only paths that **exist** and are **not tracked** — a tracked path
 arrives in the worktree by itself.
 
-The list is deliberately limited to small config (`.env`, `.cc-config`,
-`.claude/settings*.json`, `.mcp.json`, version pins). **`.worktreeinclude` copies
-rather than links** (measured), so `node_modules` or `.venv` there would be slow
-and waste disk on every session — and a copied `settings.local.json` means
-permission grants stop accruing to the parent. Those are left for you to add
-knowingly. An existing `.worktreeinclude` is never overwritten.
+It is gitignore syntax, and a directory needs a **trailing slash**
+(`node_modules/`); those entries expand via `git ls-files --others --ignored`, so
+only genuinely ignored local state is ever picked up. An existing
+`.worktreeinclude` is never overwritten.
+
+### Why `node_modules` is not in the generated list
+
+Not because it is big. Because **`.worktreeinclude` copies, and silently skips
+symlinks** — so it arrives broken. Measured, in a `node_modules` containing an
+npm-style `.bin/mytool` shim and a pnpm-style package link:
+
+| entry | parent | worktree |
+|---|---|---|
+| `node_modules/mypkg/cli.js` (real file) | yes | yes |
+| `node_modules/.bin/mytool` (symlink) | yes | **gone** |
+| `node_modules/@scope/linked` (symlink) | yes | **gone** |
+
+`.bin/` does not exist in the worktree at all, so `npm test` fails with
+command-not-found *while `node_modules` visibly sits there* — harder to diagnose
+than an empty worktree, where the fix is obvious. `.venv/bin/python` is a symlink
+to the interpreter and fails the same way. pnpm, whose tree is mostly symlinks,
+would be almost entirely lost.
+
+So `cc-worktree on` **names them and says why**, rather than omitting them
+silently — the remedy is to run your installer inside the worktree. That
+reporting is deliberate: the previous symlink-based implementation shared these
+directories precisely because a session without dependencies is useless, and
+dropping them quietly would have re-introduced a bug that had already been fixed
+once.
+
+A copied `settings.local.json` has a milder version of the same problem:
+permission grants accrued in the worktree do not flow back to the parent.
 
 **Refuses where it must.** `~/dotfiles` by name; and a linked git worktree or a
 jj workspace, because from inside one `--git-common-dir` finds the *parent's*
@@ -173,6 +199,13 @@ Each of these was checked because getting it wrong fails silently:
   post-session review in silence.
 - **`.worktreeinclude` copies, and works.** A worktree created before the file
   existed lacked the entries; one created after had them, as regular files.
+  Directory entries need a trailing slash. **Symlinks inside an included
+  directory are dropped**, which is what rules out `node_modules` and `.venv` —
+  see above.
+- **Claude Code's automatic `settings.local.json` copy did not fire**, so listing
+  it in `.worktreeinclude` is necessary, not redundant. There is a separate code
+  path for it, guarded by a check about resolving to the canonical repo root;
+  when that guard trips the file simply is not there.
 - **A tracked `CLAUDE.md` loads inside the worktree.** An untracked one does not
   — it is simply not in the checkout.
 - **fish 4 dropped `?` as a glob wildcard.** `string match -q -- 'x?*' xmine`
