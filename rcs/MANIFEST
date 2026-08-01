@@ -28,6 +28,7 @@ kitty.conf                      -> $HOME/.config/kitty/kitty.conf
 llm-command-extra-models.yaml   -> $HOME/Library/Application Support/io.datasette.llm/extra-openai-models.yaml
 nvim-init.vim                   -> $HOME/.config/nvim/init.vim
 peco.json                       -> $HOME/.config/peco/config.json
+pnpm-config.yaml                -> $HOME/.config/pnpm/config.yaml
 pymodoro-config.yaml            -> $HOME/.config/pymodoro/config.yaml
 shadow-cljs.config.edn          -> $HOME/.config/shadow-cljs/config.edn
 ssh.config                      -> $HOME/.ssh/config

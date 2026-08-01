@@ -1,0 +1,97 @@
+# pnpm global config -> ~/.config/pnpm/config.yaml (via rcs/MANIFEST)
+#
+# ---------------------------------------------------------------------------
+# Supply-chain cooldown
+# ---------------------------------------------------------------------------
+# Refuse to resolve any package version published less than N minutes ago.
+# 20160 = 14 days. (1440 = 1 day, 10080 = 7 days.)
+#
+# The point is not detection. We never inspect anything. We simply arrive
+# after everyone else has, and let the registry have already been cleaned.
+#
+# Applies to the WHOLE TREE, transitively -- verified: under a 1-year setting,
+# vite resolved a different transitive set (fdir 6.4.6 vs 6.5.0, picomatch
+# 4.0.3 vs 4.0.5). That matters, because compromises usually arrive through a
+# transitive dep, not the thing you typed.
+#
+# Only binds when resolving NEW versions. Installs against an existing
+# pnpm-lock.yaml are pinned already and unaffected. Exposure is a discrete
+# event at resolve time, not a state you sit in.
+#
+# ---------------------------------------------------------------------------
+# Why this is prevention, not merely delay
+# ---------------------------------------------------------------------------
+# Because npm EXPUNGES confirmed-malicious versions, permanently and
+# surgically. Checked 2026-08-01 -- ua-parser-js publishes a hole where the
+# Oct 2021 compromise used to be:
+#
+#     0.7.26, 0.7.27, 0.7.28, [0.7.29 GONE], 0.7.30, 0.7.31
+#
+# Same for event-stream@3.3.6, coa@2.0.3, rc@1.2.9, ua-parser-js@1.0.0 -- all
+# 404, all with clean neighbours intact. So when the cooldown expires, the
+# thing it hid is not "old enough now". It no longer exists.
+#
+# ---------------------------------------------------------------------------
+# Why 14 days, and why not more
+# ---------------------------------------------------------------------------
+# Detection latency is bimodal, and 14 sits just past the first mode:
+#
+#   noisy  (popular pkg, exfiltrates, many eyes)  -> HOURS
+#          ua-parser-js 2021, chalk/debug 2025
+#   quiet  (targeted backdoor, low traffic)       -> MONTHS
+#          event-stream: published Sept 2018, found Nov 2018
+#
+# The 14-to-60 day range is the VALLEY between those modes -- extending into
+# it buys thin coverage, because what remains is the quiet class, which
+# outlives any window we would tolerate. A 30-day cooldown would not have
+# caught event-stream either.
+#
+# Caveat worth remembering: that evidence is survivorship-biased. We only know
+# the latency of attacks that were FOUND. The undetected ones are absent from
+# the sample by construction -- and they are exactly what a longer window is
+# supposed to catch. "Just go longer" is not the safe default it looks like.
+#
+# ---------------------------------------------------------------------------
+# What it costs
+# ---------------------------------------------------------------------------
+# It is symmetric: it delays FIXES exactly as much as attacks. It cannot tell
+# them apart, it only knows "new".
+#
+#   safe   malicious v2.0.1 (day 7) + fix v2.0.2 (day 9), install day 10:
+#          BOTH are inside the window, so we fall back to v2.0.0 from before
+#          the attack. The cooldown censors the whole recent window, which is
+#          why it cannot strand us on an exploit it is also hiding.
+#   bad    malicious version published day 0, undetected. Install day 15 ->
+#          it is mature now, we take it. Requires detection latency > window.
+#
+# That cost is near-zero HERE specifically: installs are rare and lockfiles
+# pin everything in between, so being 14 days behind on fixes is rounding
+# error against how stale this machine already is. The cost is paid by people
+# who chase updates. We do not.
+#
+# The nonlinear cost, and the reason not to extend much past 30: when NO
+# version satisfies the range, it is a HARD FAILURE, not a fallback --
+# ERR_PNPM_NO_MATURE_MATCHING_VERSION. A package whose entire existence is
+# newer than the cutoff becomes uninstallable. That lands on new projects
+# first, which is exactly what pnpm is here for.
+#
+# ---------------------------------------------------------------------------
+# What it does NOT cover
+# ---------------------------------------------------------------------------
+# Nothing against a malicious version that sat undetected past the window,
+# nothing against typosquats, no vetting of any kind, and nothing at all for
+# the npm/yarn projects in ~/projects (see CLAUDE.md -- those want
+# ignore-scripts=true in ~/.npmrc instead).
+#
+# ---------------------------------------------------------------------------
+# Traps (each one cost an experiment to find)
+# ---------------------------------------------------------------------------
+#  - Must be config.yaml, in YAML. The ini-format ~/.config/pnpm/rc is
+#    SILENTLY ignored for this setting -- no warning, just no protection.
+#    Same trap for a project-level .npmrc; it needs pnpm-workspace.yaml.
+#  - `pnpm config set --global` rewrites this file and DROPS these comments.
+#    Edit rcs/pnpm-config.yaml directly instead.
+#  - minimumReleaseAgeExclude: exempts a package by name for an urgent fix,
+#    but does NOT cascade to its transitive deps -- excluding `typescript`
+#    still failed on @typescript/typescript-darwin-arm64. List those too.
+minimumReleaseAge: 20160
