@@ -4,7 +4,17 @@ Personal development environment for macOS. Focused on automation, productivity,
 
 ## VCS
 
-This is a **jj (Jujutsu) repository**. Use `jj` for all VCS operations — do not use `git` directly. See the global CLAUDE.md for jj workflow details.
+This is a **jj (Jujutsu) repository**. Use `jj` rather than `git` for inspection
+(`jj st`, `jj log`, `jj diff`) and history editing (`describe`, `squash`, `split`,
+`new`). See the global CLAUDE.md for jj workflow details.
+
+**To commit, use `/cc:commit`** (or `g run ci`) rather than a raw `jj commit`.
+Both detect the VCS themselves and route to `commit-mine` when another live
+session shares this working copy, so they stay correct where a hardcoded rule
+would not — which is why this section no longer says "use jj for *all* VCS
+operations". The global CLAUDE.md carries the one exception, for git worktrees of
+a jj repo; it cannot arise here, because `cc-worktree` refuses this checkout by
+name (see [docs/cc-worktree.md](docs/cc-worktree.md)).
 
 **jj config**: `rcs/jj-config.toml` → `~/.config/jj/config.toml` (managed via MANIFEST).
 
