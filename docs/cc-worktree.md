@@ -1,300 +1,222 @@
 # Per-session worktree isolation (`cc-worktree`)
 
-## Setup: one command, once per checkout
-
-```bash
-cd ~/projects/whatever
-cc-worktree on          # probes the repo, writes the marker, prints what it found
-```
-
-That is the whole setup. It is permanent — a file in the repo's VCS directory —
-so it survives reboots, new terminals and new sessions, and it does not travel to
-other machines. From then on `cc` in that repo puts each session in its own
-worktree. `cc-worktree off` undoes it.
-
-**Not in `~/dotfiles`** — it refuses there by name, because that checkout cannot
-be isolated. Use [`ccjj` / `commit-mine`](cc-jj-sessions.md) instead.
-
-## The problem
-
 Two Claude Code sessions in one checkout tread on each other: they edit the same
 files, run the same build, and each `jj commit` sweeps up whatever the other has
 half-written.
 
 [`ccjj` / `commit-mine`](cc-jj-sessions.md) solves that for `~/dotfiles`, which
-**cannot** be isolated — about 46% of its tracked files load by absolute path (every
-`rcs/MANIFEST` hardlink, `~/.config/fish/functions`, `PATH`, `PYTHONPATH`,
+**cannot** be isolated — about 46% of its tracked files load by absolute path
+(every `rcs/MANIFEST` hardlink, `~/.config/fish/functions`, `PATH`, `PYTHONPATH`,
 Hammerspoon's `package.path`), so a second checkout can author changes it cannot
-run. Every *other* repo can be isolated, and there the ordinary answer works:
-give each session its own git worktree / jj workspace.
+run. **Every other repo can just be copied**, and Claude Code has created git
+worktrees natively since v2.1.49 — so all this tool does is record that a
+checkout wants them.
 
-`cc-worktree on` opts a checkout in. After that the `cc` wrapper creates a
-worktree and `cd`s into it before launching claude, and merges or holds the work
-when the session ends.
-
-**The two compose without knowing about each other.** Inside a workspace `jj root`
-returns the *workspace*, so `ccjj` sees a repo where this session is the only one:
-`should-scope` declines, the nudge stays silent, and an ordinary whole-copy commit
-happens — which is the better outcome there, because it also captures Bash-made
-changes `commit-mine` cannot see. Nothing needs configuring for that, and
-`ccjj` deliberately has no worktree-awareness: it already declines for the right
-reason, and teaching a correctness tool to detect its environment only adds a way
-for it to be wrong.
-
-## Usage
+## Setup: one command, once per checkout
 
 ```bash
-cc-worktree on                     # opt this checkout in (writes the marker)
-cc-worktree status                 # marker, link list, slot state
-cc-worktree off                    # opt out
+cd ~/projects/whatever
+cc-worktree on          # probes the repo, writes the marker, prints what it found
+cc-worktree status
+cc-worktree off         # undo
 
-cc-worktree land w-03              # bring a held slot's work into the parent
-cc-worktree release w-03 --land    # the same, then free the slot
-cc-worktree release w-03 --discard # trash it — the ONLY path that loses work
-cc-worktree reap [--all]           # release finished slots
+cc --no-worktree        # opt out for a single run
 ```
 
-`release` with neither `--land` nor `--discard` refuses and prints both: the old
-`--force` name was ambiguous between "clear the hold" and "throw the work away".
+It is permanent — a file in the repo's VCS directory — so it survives reboots,
+new terminals and new sessions, and it does not travel to other machines. From
+then on `my-claude-code-wrapper` appends `--worktree <name>` and **Claude Code
+does the rest**: it creates the worktree under `.claude/worktrees/<name>`, cd's
+into it, returns you there on `--resume`, and prompts to keep or remove it on
+exit.
 
-Held slots are surfaced by `chpwd` when you `cd` into the repo, in the same
-orange as pending CLAUDE.md updates.
+**Not in `~/dotfiles`** — it refuses there by name. Use
+[`ccjj` / `commit-mine`](cc-jj-sessions.md) instead.
 
-## The marker and the link list
+---
 
-The opt-in marker *is* the config. It lives at `<git-common-dir>/cc-worktree`
-(git) or `<repo>/.jj/cc-worktree` (jj) — **never** `<repo>/.git/cc-worktree`,
-because `.git` is a *file* in a linked worktree and in a submodule.
+## The one thing to know: inside a worktree, use `git`
 
-```
-# <repo>/.git/cc-worktree
-.cc-config
-.claude/settings.json
-.claude/settings.local.json
-.envrc
-node_modules
-.venv
-copy:.tool-versions
-max-slots: 4
-```
+`claude --worktree` in a colocated jj repo **succeeds**, and that is the problem.
+It creates a *git* worktree, which has no `.jj` of its own — so `jj` run inside
+it walks up the tree and resolves to the **parent repo**.
 
-**`cc-worktree on` writes that list by probing the repo**, rather than applying a
-fixed default. It proposes every candidate that both **exists** and is **not
-tracked**, and says what it found:
+An agent that runs `jj commit` in a worktree therefore commits **the parent's
+working copy** — very likely a peer session's in-flight work — while its own
+changes stay uncommitted. Nothing about this is obvious: the worktree's files are
+invisible to the parent's jj too, because `.claude/` is ignored by
+`git/gitignore_global`.
 
-```
-$ cc-worktree on
-cc-worktree: detected 3 path(s) to share with each worktree:
-    .claude/settings.local.json
-    .env
-    node_modules
-  (tracked, so already in every checkout: .claude/settings.json)
-```
+**The hazard is active, not passive.** A repo's `CLAUDE.md` is a tracked file, so
+git checks it out into the worktree and Claude Code loads it there — measured,
+not assumed. In this repo and in AKR that file says *"use jj for all VCS
+operations"*. So the agent is being **instructed** to do the harmful thing, and a
+warning has to *override* a standing instruction rather than fill a silence.
 
-Both halves of that test matter. A tracked path arrives in the checkout by
-itself, and linking it would route every worktree edit around the VCS. An absent
-one is just noise.
+The remedy is not a consolation prize. Commit with git inside the worktree and
+the parent picks the branch up as a **jj bookmark of the same name,
+automatically** — jj auto-imports git refs in a colocated repo. Verified: the
+commit appears in the parent's plain `jj log`, and the parent's working copy is
+untouched.
 
-A static default was wrong in the direction that costs you: it shipped `.envrc`,
-which no project here has, and omitted `node_modules` and `.env` — so a real Node
-or Python session started with no dependencies and no secrets, which is precisely
-the "unusable, switched off within a week" failure the link list exists to
-prevent. What a worktree must borrow is a property of the repo, so ask the repo.
+### `bin/cc-worktree-nudge`
 
-Candidates are in `PROBE_ENTRIES`: Claude Code's own per-project state
-(`.cc-config`, `.claude/settings*.json`, `.claude/skills|agents|commands`,
-`.mcp.json`), environment and toolchain (`.env*`, `.envrc`, `.direnv`,
-`.tool-versions`, `.nvmrc`, `.python-version`, `.ruby-version`), and installed
-dependencies (`node_modules`, `.venv`, `vendor/bundle`, `target`, `.next`,
-`.gradle`, `.terraform`, `_build`, `deps`). Edit the marker afterwards for
-anything it missed — it is a plain file and it is only written on first opt-in.
+A `UserPromptSubmit` hook that injects exactly that, in the one situation where
+it applies. It fires when **`.git` is a file** (a linked worktree) **and** the
+repo it points back at has a `.jj/`.
 
-Every entry is **symlinked** into each worktree, absolute and parent-pointing.
-Edits through the link land in the parent — which is what you want for `.envrc`,
-`node_modules`, `.venv`, and for permission grants accruing to
-`settings.local.json`. It also means removing a worktree destroys none of them.
-`copy:` copies instead, for the rare path that must diverge. Missing entries are
-skipped silently; that is the normal case. With no entries at all, the first four
-lines above are the default.
+- **`UserPromptSubmit`, not `SessionStart`.** The fact barely changes
+  mid-session, but a rule stated once gets forgotten over a long conversation and
+  can be dropped by compaction; a safety rule should re-assert. It is also the
+  only event that fires before an agent whose *first* action is a Bash
+  `jj commit` — the case that loses data.
+- **It contains the answer, not a pointer.** An agent may not follow a link.
+- **The silent path spawns no subprocess** — no `cat`, `grep`, `sed` or `git`,
+  only bash builtins and at most four stat calls. It runs on every prompt in
+  every project. (Pinned by a test that runs it with an empty environment: if it
+  shelled out to anything, it could not find it.)
+- It resolves the parent from the `gitdir:` pointer rather than assuming the
+  worktree sits inside it, so a hand-made `git worktree add /tmp/wt` is covered.
+- On a detached HEAD it says so instead of promising a branch the parent will
+  never see.
 
-The list is **mandatory, not a nicety**: `gitignore_global` line 2 is `.*`, so
-`.claude/`, `.cc-config` and `.envrc` are absent from a fresh worktree — and
-`cc-config sync` would then no-op and the session would run unconfigured, with
-nothing said.
+---
 
-`cc-worktree on` **refuses** when the repo root is `~/dotfiles`, when it is
-already a linked worktree/workspace or inside a slot, and — for jj only — when
-any link-list entry is not ignored. jj auto-tracks, so a symlinked
-`node_modules` in a workspace is snapshotted **as a symlink pointing into the
-parent** and committed into history. jj has no `check-ignore`, so the check is
-done by building a probe workspace, linking the list into it and reading
-`jj st`. It **warns** about non-ignored entries under git, about submodules, and
-about a dirty working copy.
+## What `cc-worktree on` does
 
-## Slots
+**Writes the marker.** `<git-common-dir>/cc-worktree`, or `.jj/cc-worktree`.
+Both are outside the working tree on purpose: opting in is a property of *this
+checkout*, not of the project, so it never shows up as an untracked file or
+travels to anyone else in a commit.
 
-`MAX_SLOTS` is 10, overridable with `max-slots: N`. A slot is claimed by
-hard-linking a fully-written `.owner` record into place: `os.link` is atomic and
-fails `EEXIST`, so two shells racing cannot land in the same worktree, and there
-is no window in which `.owner` exists but is empty.
+Never `<root>/.git` — in a linked worktree and in a submodule that is a **file**,
+so joining a filename onto it gives a path that can never be opened, and the
+marker would silently not be found.
 
-Slots are **reused**, which is what bounds `~/.claude.json` growth (it already
-has ~593 project entries) and disk. The name is derived from the slot, not the
-pid, because `$fish_pid` is stable per terminal and a pid-derived name collides
-on the next launch from the same window.
+**Writes a starter `.worktreeinclude`.** That is Claude Code's own mechanism for
+carrying untracked local state into a new worktree, and without it a session
+starts with no permissions granted and no environment. `on` probes the repo and
+proposes only paths that **exist** and are **not tracked** — a tracked path
+arrives in the worktree by itself.
 
-`.owner` records pid + `ps -o lstart=` — the same identity check `ccs` and `ccjj`
-use, because a recycled pid otherwise makes a dead slot look live forever.
+The list is deliberately limited to small config (`.env`, `.cc-config`,
+`.claude/settings*.json`, `.mcp.json`, version pins). **`.worktreeinclude` copies
+rather than links** (measured), so `node_modules` or `.venv` there would be slow
+and waste disk on every session — and a copied `settings.local.json` means
+permission grants stop accruing to the parent. Those are left for you to add
+knowingly. An existing `.worktreeinclude` is never overwritten.
 
-**Known, accepted:** relaunching from a shell whose previous session crashed sees
-that slot's owner as *alive* (same pid + lstart) and leaves it. That is the
-conservative direction — the crashed session's work stays on disk — and it costs
-one slot until the shell exits.
+**Refuses where it must.** `~/dotfiles` by name; and a linked git worktree or a
+jj workspace, because from inside one `--git-common-dir` finds the *parent's*
+marker and would happily nest a worktree inside a worktree.
 
-## Ending a session
+## When the wrapper appends `--worktree`
 
-A **hold** is the normal ending, not an exception: most sessions stop with
-uncommitted edits (Ctrl-C mid-task, "commit later"). A held slot keeps its tree,
-its branch and its `.owner`, and **nothing in this system ever reaps it**.
+All of these must hold:
 
-| At exit | What happens |
+| condition | why |
 |---|---|
-| worktree dirty | HOLD `uncommitted`; `cc-worktree land w-NN` gets it back |
-| git, merges clean | merge into the parent, then release |
-| git, conflict | `git merge --abort`, HOLD, print `git merge w-NN` to retry |
-| git, "local changes would be overwritten" | HOLD, print `git stash && git merge w-NN && git stash pop`. **No** `--abort` — there is no merge in progress and `--abort` exits 128 |
-| git, parent moved branch | HOLD, naming both branches. Checked *before* the merge |
-| jj, clean | release. Bookmarks are repo-global, so the session's own `jj commit` + `jj bookmark set master -r @-` already advanced master |
+| `cc-worktree should-isolate` exits 0 | the per-checkout marker |
+| not `-p` / `--print` | `ai.fish`, `ai_health`, `ai_inbox`, `ccpu` and `sanctuary/main-claude` all route through this wrapper headless, and would each leak a worktree per run |
+| not a resume (`-r`/`--resume`/`-c`/`--continue`) | Claude Code already returns a resumed session to the worktree it ran in; adding the flag would strand it in a fresh empty one |
+| no `-w` / `--worktree` / `--worktree=x` / `-wname` already present | the user's own choice wins |
+| no `--no-worktree` | the explicit opt-out |
 
-Recovery is ordinary: `git merge w-NN` from the repo root. Different files merge
-clean, same file/different lines merges clean, and only same-line edits conflict.
-The agent *inside* the worktree cannot run it (`fatal: 'master' is already
-checked out`), which is why the wrapper `cd`s back out first.
+`--no-worktree` is consumed by the wrapper and **never forwarded** — claude does
+not know the flag. It is matched *before* the `--process-label` value branch, or
+`cc --process-label --no-worktree` takes it as the label text and the opt-out
+silently does nothing.
 
-## Reaping
+The name is generated (`cc-HHMMSS-$fish_pid`). A stable default would put two
+concurrent sessions in one worktree, which is the opposite of the point.
 
-The reaper runs at every wrapper launch (piggybacked, like `ccjj prune`) and via
-`cc-worktree reap [--all]`, under an `flock` — two launches racing means one's
-`git worktree prune` can drop a registration the other's `git worktree add` is
-mid-way through creating.
+`should-isolate` makes **no git or jj call at all** — the marker is resolved by
+reading `.git` and `commondir` by hand, exactly as git does — so a launch in a
+non-opted-in repo pays nothing for a feature it does not use.
 
-It enumerates the **union** of `w-*.owner` files, `w-*` directories, and backend
-registrations, so no state that exists in only one of the three is invisible.
-`git worktree list --porcelain` is captured **once at the top** and carried
-through: the prune destroys the registration the branch is read from, and an
-orphaned branch makes every later `create` fall back to `w-NN-<stamp>` forever.
+---
 
-A dead owner whose tree is **dirty** gets `.hold "uncommitted (crashed)"` rather
-than a release: SIGKILL, `Cmd+Q` and `tmux kill-session` all skip the exit path,
-so the crash case reaches the reaper, and trashing there loses the only copy.
+## What was deleted, and why
 
-Release order, where each step leaves a state a re-run finishes:
+This tool was 1413 lines. It had slots (`w-01`…`w-10`), `.owner` and `.hold`
+files, a flock, a reaper, `create`/`finish`/`land`/`release`/`current`, a
+symlink-based link list, and slot-aware resume. All of it existed for one reason:
+**the wrapper created the worktree itself and cd'd into it before launching
+claude**, which hid the worktree from Claude Code — so Claude Code could not
+name, resume, list or clean up its own sessions, and every one of those jobs had
+to be reimplemented here.
 
-1. jj only: `jj bookmark set w-NN-<stamp> -r 'w-NN@'`. **Before** forgetting —
-   afterwards the working-copy commit is not in the default revset. Run from the
-   parent; the reaper never enters the workspace.
-2. `trash <wt>`. **Never** `git worktree remove`: without `--force` it returns 0
-   and *deletes ignored files*. A nonzero `trash` **aborts** the release with
-   `.owner` intact — continuing would leave a non-empty directory at the slot
-   path, and `git worktree add` then hard-fails there forever.
-3. unregister (`git worktree prune` / `jj workspace forget`), both idempotent.
-4. git only: `git branch -d`. **Not `-D`** — `-d` refuses an unmerged branch, and
-   that refusal is the recovery handle for the work just preserved.
-5. `rm <wt>/w-NN.owner`, **last**: while it exists the slot is claimed, so an
-   interrupt anywhere above is re-processed rather than orphaned.
-6. trash the `cc-jj-journal/<worktree-path>/` namespace.
+Handing the job back deleted all of it, along with the bugs it carried —
+`link_one` was caught deleting files in the parent repo, resolving a destination
+*through* a symlink it had just created.
 
-Anything skipped is **named on stdout**, never silently — except inside
-`create`, where the same notices go to stderr because stdout is the directory the
-wrapper `cd`s into.
+Also gone: `_cc_worktree_slot.fish`, `__cc_resume_id.fish`, `showHeldWorktrees`
+in `chpwd.fish`, and the `slot` field in ccs entries.
 
-## Resume
+`_cc_worktree_key` survives, and its regex was widened from `w-\d+` to any single
+path segment. Claude Code's generated names (`warm-discovering-metcalfe`) do not
+match the old pattern, which made it a silent no-op for every native worktree —
+filing sessions under the worktree path instead of the repo, exactly what it
+exists to prevent. Filing under the parent is right because **`claude --resume
+<id>` run from the parent reaches a worktree session on its own** (verified), so
+ccs never needs to know which worktree it was.
 
-`claude --resume <id>` is scoped to the project directory: Claude Code keys
-transcripts by mangled cwd (`-Users-anthony-proj` vs
-`-Users-anthony-proj--claude-worktrees-w-01`). A session that ran in `w-01` and
-is resumed from the parent gets *"No conversation found with session ID"*.
+## Things measured, not assumed
 
-So the slot determines the path, and reusing the slot restores resumability. The
-ccs entry records `slot` alongside `cwd`; the wrapper scans argv for
-`--resume <id>` / `-r <id>` / `--resume=<id>`, asks `cc-worktree
-slot-for-session`, and passes `--slot w-NN --reuse`. The transcript lives in
-`~/.claude/projects/`, not in the worktree, so the tree need not have survived —
-only the path has to be the same. A surviving (held) tree is adopted as-is, which
-is what "resume the session I Ctrl-C'd" actually wants.
+Each of these was checked because getting it wrong fails silently:
 
-A bare `-c` / `--continue` carries no session id, so its slot cannot be looked up
-and it runs un-isolated. Same for an entry that predates this feature: its
-transcript is keyed to the parent, so the parent is where it resumes.
+- **`SessionStart` carries the real cwd.** `--worktree` makes claude cd *after*
+  the wrapper has launched it, so the wrapper's `pwd` is the parent while the
+  transcript is keyed to the worktree. `bin/ccsave-hook` records the real cwd
+  into the ccs entry and the wrapper reads it back afterwards; computing it from
+  `pwd` looked in a directory the session never wrote and skipped the
+  post-session review in silence.
+- **`.worktreeinclude` copies, and works.** A worktree created before the file
+  existed lacked the entries; one created after had them, as regular files.
+- **A tracked `CLAUDE.md` loads inside the worktree.** An untracked one does not
+  — it is simply not in the checkout.
+- **fish 4 dropped `?` as a glob wildcard.** `string match -q -- 'x?*' xmine`
+  returns 1. The obvious pattern for "`-w` followed by something", `-w?*`,
+  matches nothing at all, so `-wname` silently got a second `--worktree`
+  appended.
+- **This machine's global gitignore begins `.*`**, so every dotfile is ignored
+  and `git add` silently refuses it. Test repos that need to track one must set
+  `core.excludesFile` themselves.
 
-## `ccs` re-keying
+## An alternative that was measured and not taken
 
-`_cc_worktree_key` maps `<repo>/.claude/worktrees/w-NN[/sub]` back to
-`<repo>[/sub]`. It uses `$PWD` (logical), **not** `pwd -P`: every `ccs` site it
-replaces uses logical pwd, and `/tmp` → `/private/tmp` and `~/Cloud` (a
-ProtonDrive symlink) diverge, which would silently orphan every existing entry.
-It is pure fish with no subprocess, because it runs on every `cd` through
-`chpwd` → `_ccs_open_scan`.
+`.claude/rules/*.md` with a **`paths:`** frontmatter field (not `globs:` — that
+name is Cursor's) loads a rule only when Claude Code touches a matching file. A
+rule with `paths: [".claude/worktrees/**"]` in the *parent* repo does fire inside
+a worktree session and stays silent outside it — reproduced 3/3 with a control,
+and it needs no commit, since `.claude/` is gitignored and the file is read from
+the parent.
 
-Re-keyed sites: `_ccs_file`, `_ccs_backup_session`, `_ccs_open_register`,
-`_ccs_open_scan`, `_ccs_old`. `_ccs_migrate` is left alone (it reads legacy
-in-repo paths), as are `_ccs_prune` and `_ccs_restore_transcript`, which read
-`.cwd` from the entry file — already written with the key, and therefore already
-consistent.
+It was still not used for the warning, for one decisive reason: **it only fires
+when the agent touches a file**, and the case that loses data is a session whose
+first action is a Bash `jj commit`. Secondary: bare `**` does not match (dotfile
+segments), and frontmatter-less rules did not load in worktree sessions at all —
+edges I did not want a safety guarantee resting on. The hook's detection is plain
+filesystem logic with no such surprises.
 
-Outside a worktree the key *is* `pwd`, so the whole change is a no-op everywhere
-else.
+A `WorktreeCreate` hook that made a real **jj workspace** instead of a git
+worktree is the better feature and remains unbuilt: it is a global hook whose
+failure mode is deletion, it rests on undocumented internals the published docs
+get wrong on at least two points, and it would take over `--worktree` in the 45
+git repos as well as the 6 jj ones. The plan survives at `.cc/PLAN-jj-worktree-hook.md`.
 
-## Not covered
+## Tests
 
-- **Entry points other than the `cc` abbr.** Bare `claude`, the IDE extensions,
-  the desktop app and any direct `claude -p` all bypass the wrapper, so a repo
-  can hold one isolated and one non-isolated session at once.
-- **`~/dotfiles`.** `on` refuses; `ccjj` owns that case.
-- **`ccjj` worktree-awareness.** It already self-disables correctly in a
-  workspace (own `.jj` → own repo key → no peers → whole-copy commit, which is
-  *better* there). Only its journal namespace needs cleaning up, which the reaper
-  does.
-- **Pre-trusting new cwds in `~/.claude.json`.** One trust dialog per slot per
-  repo on first use, bounded at `MAX_SLOTS` by reuse.
-- **Submodules beyond `git submodule update --init --recursive`.** jj has no
-  equivalent; `on` warns.
+- `tests/lib/python/test_cc_worktree.py` — refusals, marker location, the
+  `should-isolate` gate (including "makes no VCS call" via a PATH spy), and
+  `.worktreeinclude` generation.
+- `tests/fish/test_cc_worktree_wrapper.py` — argv construction: the flag is
+  appended when opted in, suppressed for `-p`/resume/explicit-`-w`, and
+  `--no-worktree` is honoured and never forwarded.
+- `tests/hooks/test_cc_worktree_nudge.py` — one positive case and eight
+  negatives, plus JSON validity. That check earns its place: backticks were once
+  emitted as `\``, which is not a legal JSON escape, and Claude Code discards a
+  malformed payload **silently** — the hook still exited 0 and still printed
+  ~800 bytes, so every eyeball check passed while the warning never arrived.
 
-## Accepted risks
-
-| Risk | Why it is acceptable |
-|---|---|
-| A `svc` dev server or editor holds files in the worktree | trash-not-delete makes it recoverable |
-| A jj session's post-last-snapshot edits are not in the bookmark | unavoidable — the parent cannot snapshot another workspace. The reaper snapshots first and then *holds*, so nothing is trashed unseen |
-| A crashed shell's slot is not reaped until that shell exits | conservative: the work stays on disk |
-| A repo you stop visiting keeps its worktrees | `reap --all` plus the `chpwd` hold notice |
-| Two sessions share `node_modules` / `.venv` through the links | deliberate — a repo needing divergence uses `copy:` |
-| `trash` moves to `~/.Trash`, so a repo on another volume makes release a cross-device copy | on the critical path of every launch; noticeable only on very large trees |
-
-## Files
-
-| Path | Responsibility |
-|---|---|
-| `lib/python/cc_worktree.py` | all the logic: marker, link list, slots, create/reap/release/land/finish |
-| `bin/cc-worktree` | shell entry point |
-| `fish/functions/_cc_worktree_key.fish` | worktree path → parent repo path |
-| `fish/functions/_cc_worktree_slot.fish` | worktree path → slot name |
-| `fish/functions/__cc_resume_id.fish` | argv scan for `--resume`/`-r` |
-| `fish/functions/my-claude-code-wrapper.fish` | creates the worktree, `cd`s in, runs the exit path |
-| `fish/functions/ccs.fish` | five re-keyed sites; records `slot` in the entry |
-| `fish/functions/chpwd.fish` | `showHeldWorktrees` |
-| `tests/lib/python/test_cc_worktree.py` | logic tests |
-| `tests/fish/test_cc_worktree_wrapper.py` | key/slot functions and the wrapper end to end |
-
-Exit codes: `0` ok · `1` refused or failed · `2` not opted in. Exit 2 keeps the
-common case to one process and zero output — `create` makes **no git or jj call
-at all** in a repo that has not opted in, which is a test.
-
-**Adding another `_`-prefixed fish function here needs a `.gitignore` negation.**
-`.gitignore:14` is `fish/functions/_*` (it keeps plugin internals out), so all
-three functions above are ignored by default — they were untracked and would
-never have shipped. The exceptions sit next to `_claude_release_notes.fish`,
-which is there for the same reason. Autoloading is what forces them to be
-separate files: fish autoloads by filename, and `_cc_worktree_key` runs on every
-`cd` and inside `fish -c` subshells, so it cannot be folded into `ccs.fish` the
-way the `_ccs_*` helpers are.
+Run with `cmds test python`, `cmds test fish`, `cmds test hooks`.

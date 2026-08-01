@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Shell entry point for lib/python/cc_worktree.py — per-session worktree
-# isolation, so two Claude Code sessions in one repo do not tread on each other.
+# Shell entry point for lib/python/cc_worktree.py — the opt-in marker for
+# Claude Code's native per-session worktrees, so two sessions in one repo do not
+# tread on each other.
 #
 #   cc-worktree on|off|status        opt this checkout in or out
-#   cc-worktree create --pid $fish_pid   claim a slot, print the target dir
-#   cc-worktree reap [--all]         release finished slots (trash, never delete)
-#   cc-worktree release w-NN --land|--discard
-#   cc-worktree land w-NN            land the work in the parent, then release
+#   cc-worktree should-isolate       exit 0 when opted in (the wrapper's gate)
 #
-# The target directory goes to STDOUT and every warning to STDERR, because the
-# fish wrapper captures stdout and cd's into it.
+# Creating, resuming and removing worktrees is Claude Code's job, not this
+# tool's; all it decides is whether `cc` appends --worktree here.
 #
-# Exit: 0 ok · 1 refused or failed · 2 not opted in · 5 unclaimed Bash windows.
+# Exit: 0 ok · 1 refused or failed · 2 not opted in.
+# (An exit code 5 was documented here for a while and never existed — it was
+# copied from bin/ccjj, which does have one.)
 #
 # Docs: docs/cc-worktree.md. For ~/dotfiles, which cannot be isolated, the
 # answer is ccjj / commit-mine instead — docs/cc-jj-sessions.md.

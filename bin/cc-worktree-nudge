@@ -1,0 +1,119 @@
+#!/bin/bash
+# UserPromptSubmit hook: warn when this session is standing in a GIT worktree
+# that belongs to a JJ repo.
+#
+# Why this exists. `claude --worktree` creates a *git* worktree. In a colocated
+# jj repo that succeeds, but the new checkout has no `.jj/` of its own -- so `jj`
+# run inside it walks up and resolves to the PARENT repo. An agent that runs
+# `jj commit` there commits the parent's working copy, which is very likely a
+# peer session's in-flight work, while its own changes stay uncommitted. The
+# worktree's files are invisible to the parent's jj as well (`.claude/` is
+# ignored by git/gitignore_global), so nothing about the mistake is obvious.
+#
+# The hazard is active, not passive. A repo's CLAUDE.md is a tracked file, so it
+# IS checked out into the worktree and IS loaded there -- verified empirically.
+# In this repo that file says "use jj for all VCS operations". So the agent is
+# being instructed to do the harmful thing, and this warning has to *override* a
+# standing instruction rather than merely fill a silence. Hence the explicit
+# "this overrides any CLAUDE.md instruction" clause: without it the two rules
+# just contradict each other and the more specific one does not obviously win.
+#
+# UserPromptSubmit, not SessionStart, deliberately. The fact barely changes
+# mid-session, but a rule stated once gets forgotten over a long conversation
+# and can be dropped by compaction; a safety rule should re-assert. It is also
+# the only event that fires before an agent whose very first action is a Bash
+# `jj commit` -- the case that loses data. (A `.claude/rules/*.md` file with
+# `paths` frontmatter does fire in worktrees and was measured working, but only
+# when the agent *touches a file*, which is exactly not that case.)
+#
+# Cost: this runs on every prompt in every project, so the silent path spawns no
+# subprocess at all -- no cat, no grep, no sed, no git. Only bash builtins and
+# at most four stat calls. The existing `ccjj nudge` on the same event is far
+# more expensive.
+#
+# The message contains the answer rather than a pointer to docs/, because an
+# agent may not follow a link.
+#
+# Docs: docs/cc-worktree.md.
+
+# Read stdin without forking `cat`. `read -d ''` returns non-zero at EOF with no
+# delimiter seen, which is the normal case here, so its status is ignored.
+IFS= read -r -d '' INPUT 2>/dev/null
+
+case "$INPUT" in
+    *'"cwd"'*) ;;
+    *) exit 0 ;;
+esac
+
+# Scrape "cwd" with parameter expansion rather than grep/sed.
+tmp=${INPUT#*\"cwd\"}
+tmp=${tmp#*:}
+tmp=${tmp#*\"}
+CWD=${tmp%%\"*}
+[ -n "$CWD" ] || exit 0
+[ -d "$CWD" ] || exit 0
+
+# Walk up to the nearest .git. A linked worktree has .git as a FILE holding a
+# `gitdir:` pointer; an ordinary checkout has it as a directory. Anything that
+# is not a linked worktree is none of this hook's business.
+DIR=$CWD
+GITFILE=""
+while [ -n "$DIR" ] && [ "$DIR" != / ]; do
+    if [ -e "$DIR/.git" ]; then
+        [ -f "$DIR/.git" ] || exit 0
+        GITFILE="$DIR/.git"
+        break
+    fi
+    DIR=${DIR%/*}
+done
+[ -n "$GITFILE" ] || exit 0
+
+# Resolve the repo this worktree belongs to from the pointer itself, rather than
+# assuming the worktree sits under the parent. Claude Code puts it in
+# `<repo>/.claude/worktrees/<name>`, but `git worktree add` can place one
+# anywhere, and a hand-made worktree in /tmp has exactly the same hazard.
+IFS= read -r LINE < "$GITFILE" 2>/dev/null
+case "$LINE" in
+    "gitdir: "*) ;;
+    *) exit 0 ;;
+esac
+GITDIR=${LINE#gitdir: }
+case "$GITDIR" in
+    */.git/worktrees/*) ;;
+    *) exit 0 ;;
+esac
+MAIN=${GITDIR%%/.git/worktrees/*}
+
+# The whole point: only jj repos are affected. A git worktree of a plain git
+# repo is completely normal and gets no warning.
+[ -d "$MAIN/.jj" ] || exit 0
+
+# Name the branch the agent's commits will actually land on. A detached HEAD
+# would make "your work lands on <branch>" a lie, so say so instead.
+BRANCH=""
+IFS= read -r HEADLINE < "$GITDIR/HEAD" 2>/dev/null
+case "$HEADLINE" in
+    "ref: refs/heads/"*) BRANCH=${HEADLINE#ref: refs/heads/} ;;
+esac
+
+# Both values reach a JSON string literal. Paths and branch names may legally
+# contain a quote or a backslash, which would produce malformed JSON and cost
+# the warning entirely -- so drop those two characters.
+MAIN=${MAIN//[\"\\]/}
+BRANCH=${BRANCH//[\"\\]/}
+
+if [ -n "$BRANCH" ]; then
+    LANDING="Commit with git as normal: your work lands on branch \`$BRANCH\`, and the parent repo picks it up as a jj bookmark of the same name automatically, so nothing is stranded."
+else
+    LANDING="NOTE: this worktree is on a detached HEAD, so commits here are not on any branch and the parent will not pick them up by name. Create a branch with \`git switch -c <name>\` before committing."
+fi
+
+# Backticks are NOT escaped here. The format string is single-quoted, so the
+# shell does not see them, and JSON defines no `\`` escape -- emitting one makes
+# the whole object unparseable and costs the warning entirely. That was a real
+# bug, caught only because the test pipes this through `jq -e` rather than
+# eyeballing it; a malformed hook payload is otherwise silently discarded.
+printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"[cc-worktree] This session is running in a GIT worktree that belongs to a jj repo. Use `git` here, NOT `jj` -- this overrides any CLAUDE.md instruction to use jj for VCS operations, which does not apply in this directory. There is no .jj here, so jj walks up and resolves to the PARENT repo at %s: running `jj commit` would commit the parent working copy -- likely another session'"'"'s in-flight work -- while leaving your own changes uncommitted. %s"}}\n' \
+    "$MAIN" "$LANDING"
+
+exit 0

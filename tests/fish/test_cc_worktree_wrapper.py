@@ -2,18 +2,24 @@
 
 pytest driving `fish -c`, not fishtape. Each test names the defect it pins.
 
+The wrapper no longer creates or enters a worktree -- Claude Code does, natively
+-- so everything here is about ARGV: does `--worktree` get appended, and is
+`--no-worktree` honoured and never forwarded. The old suite tested slot
+creation, holds, merge-on-exit and slot-aware resume; all of that machinery is
+gone, along with the tests for it.
+
 PATH is always set INSIDE the fish command: fish/conf.d/path.fish re-prepends
 ~/dotfiles/bin at startup, so a stub placed on the outer PATH is defeated before
 the code under test ever runs.
 """
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
 DOTFILES = Path(__file__).resolve().parents[2]
 KEY_FISH = DOTFILES / "fish" / "functions" / "_cc_worktree_key.fish"
-SLOT_FISH = DOTFILES / "fish" / "functions" / "_cc_worktree_slot.fish"
 
 
 def fish_eval(code: str, *, env: dict | None = None, cwd=None):
@@ -27,18 +33,12 @@ def key(path: str) -> str:
     return r.stdout.strip()
 
 
-def slot(path: str) -> str:
-    r = fish_eval(f"source {SLOT_FISH}\n_cc_worktree_slot {path}")
-    assert r.returncode == 0, r.stderr
-    return r.stdout.strip()
-
-
 class TestWorktreeKey:
     """Pins: `ccs list` showing nothing inside a worktree, and ~/Cloud growing
-    one cc-sessions tree per slot per repo."""
+    one cc-sessions tree per worktree per repo."""
 
-    def test_slot_root_maps_to_repo(self):
-        assert key("/r/proj/.claude/worktrees/w-01") == "/r/proj"
+    def test_worktree_root_maps_to_repo(self):
+        assert key("/r/proj/.claude/worktrees/cc-101530-42") == "/r/proj"
 
     def test_subdir_is_preserved(self):
         # The fish capture gotcha this was written around: with group 2 absent
@@ -48,10 +48,17 @@ class TestWorktreeKey:
     def test_ordinary_path_passes_through(self):
         assert key("/r/proj/src") == "/r/proj/src"
 
-    def test_non_slot_directory_is_not_rewritten(self):
-        """A hand-made .claude/worktrees/foo is not ours and must be left alone;
-        rewriting it would file its sessions under a repo it never ran in."""
-        assert key("/r/proj/.claude/worktrees/foo") == "/r/proj/.claude/worktrees/foo"
+    def test_generated_names_are_matched(self):
+        """Pins the regression that retiring the slot pool introduced.
+
+        The pattern used to be `w-\\d+`, which Claude Code's generated names --
+        `warm-discovering-metcalfe`, `cc-101530-42` -- do not match. That made
+        this function a silent no-op for every native worktree, filing sessions
+        under the worktree path instead of the repo: exactly what it exists to
+        prevent, and invisible because it still returned a plausible path.
+        """
+        assert key("/r/proj/.claude/worktrees/warm-discovering-metcalfe") == "/r/proj"
+        assert key("/r/proj/.claude/worktrees/anything-at-all/deep") == "/r/proj/deep"
 
     def test_defaults_to_logical_pwd(self):
         """$PWD, never `pwd -P`.
@@ -62,16 +69,6 @@ class TestWorktreeKey:
         """
         r = fish_eval(f"source {KEY_FISH}\ncd /tmp; _cc_worktree_key")
         assert r.stdout.strip() == "/tmp"
-
-
-class TestWorktreeSlot:
-    def test_slot_extracted(self):
-        assert slot("/r/proj/.claude/worktrees/w-07/src/app") == "w-07"
-        assert slot("/r/proj/.claude/worktrees/w-01") == "w-01"
-
-    def test_no_slot_outside_a_worktree(self):
-        assert slot("/r/proj/src") == ""
-        assert slot("/r/proj/.claude/worktrees/foo") == ""
 
 
 # ===========================================================================
@@ -90,8 +87,6 @@ class TestWorktreeSlot:
 # PATH have to be set explicitly, which they are (inside the fish command, per
 # the same PATH lesson).
 # ===========================================================================
-
-import json
 
 import pytest
 
@@ -131,7 +126,6 @@ class Wrapped:
         self.home = self.base / "home"
         self.stub = self.base / "stub"
         self.state = self.base / "state"
-        self.trash = self.base / "trash"
         self.xdg = self.base / "xdg"
         self.xdg_config = self.base / "xdg-config"
         self.claude_log = self.base / "claude.log"
@@ -147,12 +141,6 @@ class Wrapped:
             p = self.stub / name
             p.write_text(body)
             p.chmod(0o755)
-        trash_stub = self.stub / "trash"
-        trash_stub.write_text(
-            '#!/bin/bash\nmkdir -p "$CC_TEST_TRASH"\nn=0\n'
-            'for p in "$@"; do n=$((n+1)); mv "$p" "$CC_TEST_TRASH/$(basename "$p").$n" '
-            '|| exit 1; done\n')
-        trash_stub.chmod(0o755)
 
         self.git("init", "-q", "-b", "master", ".")
         self.git("config", "user.email", "t@example.com")
@@ -170,7 +158,6 @@ class Wrapped:
     def env(self, **extra):
         e = {**os.environ,
              "CC_WORKTREE_STATE": str(self.state),
-             "CC_TEST_TRASH": str(self.trash),
              "XDG_STATE_HOME": str(self.xdg),
              "XDG_CONFIG_HOME": str(self.xdg_config),
              "CLAUDE_STUB_LOG": str(self.claude_log),
@@ -190,7 +177,7 @@ class Wrapped:
                               cwd=str(cwd or self.root), capture_output=True,
                               text=True, env=self.env())
 
-    def run(self, *args, cwd=None, script="", extra_path="", **envextra):
+    def run(self, *args, cwd=None, script="", extra_path=""):
         """Run the wrapper once, in its own fish.
 
         PATH is set INSIDE the fish command: fish/conf.d/path.fish re-prepends
@@ -216,6 +203,12 @@ class Wrapped:
         return [ln[4:] for ln in self.claude_log.read_text().splitlines()
                 if ln.startswith("PWD=")]
 
+    def claude_argv(self):
+        if not self.claude_log.exists():
+            return []
+        return [ln[5:] for ln in self.claude_log.read_text().splitlines()
+                if ln.startswith("ARGV=")]
+
     def labels(self):
         if not self.label_log.exists():
             return []
@@ -224,55 +217,45 @@ class Wrapped:
         return [ln for ln in self.label_log.read_text().splitlines()
                 if ln.startswith("claude [")]
 
-    def slot_dir(self, slot="w-01"):
-        return self.root / ".claude" / "worktrees" / slot
-
-    def hold(self, slot="w-01"):
-        return self.root / ".claude" / "worktrees" / (slot + ".hold")
-
-    def owner(self, slot="w-01"):
-        return self.root / ".claude" / "worktrees" / (slot + ".owner")
-
 
 @pytest.fixture
 def wrapped(tmp_path):
     return Wrapped(tmp_path)
 
 
-class TestWrapperIsolation:
+class TestWorktreeFlag:
+    """The whole feature: does claude get --worktree, and with what."""
 
-    def test_session_runs_inside_the_worktree(self, wrapped):
+    def test_opted_in_gets_the_flag(self, wrapped):
         r = wrapped.run()
         assert r.returncode == 0, r.stderr
-        assert wrapped.claude_ran_in() == [str(wrapped.slot_dir())]
+        argv = wrapped.claude_argv()
+        assert argv, "claude was never launched"
+        assert "--worktree" in argv[0], argv[0]
 
-    def test_skip_extras_creates_nothing(self, wrapped):
-        """Pins: headless -p callers leaking a worktree per run.
-
-        ai.fish, ai_health, ai_inbox, ccpu and sanctuary/main-claude all route
-        through this wrapper with -p. Each would otherwise claim a slot AND get
-        an empty checkout to inspect.
-        """
-        r = wrapped.run("-p", "hello")
-        assert r.returncode == 0, r.stderr
-        assert wrapped.claude_ran_in() == [str(wrapped.root)]
-        assert not wrapped.slot_dir().exists()
-        assert not wrapped.owner().exists()
-
-    def test_label_is_parent_basename_plus_slot(self, wrapped):
-        """Pins: every isolated session reading as "w-01" in Activity Monitor."""
+    def test_generated_name_is_passed(self, wrapped):
+        """A stable default name would put two concurrent sessions in ONE
+        worktree, which is the opposite of the point."""
         wrapped.run()
-        assert wrapped.labels(), "proc-label was never called"
-        label = wrapped.labels()[0]
-        assert "myproj w-01" in label, label
+        argv = wrapped.claude_argv()[0].split()
+        name = argv[argv.index("--worktree") + 1]
+        assert name.startswith("cc-"), name
+        assert len(name) > 4, name
 
-    def test_label_has_no_slot_when_not_isolated(self, tmp_path):
+    def test_not_opted_in_gets_no_flag(self, tmp_path):
         w = Wrapped(tmp_path, opt_in=False)
         w.run()
-        assert "myproj" in w.labels()[0]
-        assert "w-01" not in w.labels()[0]
+        assert w.claude_argv(), "claude was never launched"
+        assert "--worktree" not in w.claude_argv()[0]
 
-    def test_no_marker_runs_no_vcs_command(self, tmp_path):
+    def test_wrapper_never_changes_directory(self, wrapped):
+        """Claude Code cd's into the worktree itself. The wrapper doing it too
+        was what hid the worktree from Claude Code and forced the whole
+        slot/hold/reaper apparatus that has now been deleted."""
+        wrapped.run()
+        assert wrapped.claude_ran_in() == [str(wrapped.root)]
+
+    def test_no_vcs_command_when_not_opted_in(self, tmp_path):
         """Pins: a cost and a regression surface on every non-opted-in repo.
 
         A PATH shim ahead of the real binaries records any git/jj invocation.
@@ -287,182 +270,85 @@ class TestWrapperIsolation:
         r = w.run(extra_path=str(spy))
         assert r.returncode == 0, r.stderr
         assert not w.spy_log.exists(), w.spy_log.read_text()
-        assert w.claude_ran_in() == [str(w.root)]
 
-    def test_relaunch_same_shell_gets_a_clean_slot(self, wrapped):
-        """Pins: $fish_pid being stable per terminal.
-
-        A pid-derived worktree name collides on the second launch from the same
-        terminal ("fatal: branch 'cc-111' already exists"). Stable slots plus
-        release-at-exit make the relaunch reuse the slot instead.
-        """
-        code = (
-            f"set -g fish_function_path {DOTFILES}/fish/functions $fish_function_path\n"
-            f"set -gx PATH {wrapped.stub} $PATH\n"
-            f"source {WRAPPER}\n"
-            f"cd {wrapped.root}\n"
-            "my-claude-code-wrapper\n"
-            "my-claude-code-wrapper\n"
-        )
-        r = subprocess.run(["fish", "-c", code], capture_output=True, text=True,
-                           env=wrapped.env(CLAUDE_STUB_SCRIPT=""))
+    def test_no_vcs_command_when_opted_in_either(self, wrapped):
+        """should-isolate resolves the marker by reading files, never by forking
+        git -- so even the opted-in path costs no VCS process."""
+        spy = wrapped.base / "spy"
+        spy.mkdir()
+        for name in ("git", "jj"):
+            p = spy / name
+            p.write_text(SPY_STUB)
+            p.chmod(0o755)
+        r = wrapped.run(extra_path=str(spy))
         assert r.returncode == 0, r.stderr
-        assert wrapped.claude_ran_in() == [str(wrapped.slot_dir())] * 2
-        assert "already exists" not in r.stderr
-        assert not wrapped.owner().exists(), "the slot must be free again"
+        assert not wrapped.spy_log.exists(), wrapped.spy_log.read_text()
 
-    def test_parent_dirty_warns_and_base_is_the_parent_commit(self, wrapped):
-        """Pins: "help me finish this edit" silently starting from HEAD.
-
-        A worktree is based on HEAD, so the parent's in-progress edits are NOT
-        in it. Saying nothing is the failure.
-
-        The file is read DURING the session: a clean exit releases the worktree,
-        so looking afterwards finds nothing at all.
-        """
-        (wrapped.root / "a.txt").write_text("hello\nWORK IN PROGRESS\n")
-        seen = wrapped.base / "seen.txt"
-        r = wrapped.run(script=f"cat a.txt > {seen}")
-        assert "dirty" in r.stderr, r.stderr
-        assert seen.read_text() == "hello\n"
-
-
-class TestWrapperExitPath:
-
-    def test_exit_merges_clean_and_releases(self, wrapped):
-        """The round trip: commit in the slot, exit, the parent has it."""
-        r = wrapped.run(script="echo 'from the slot' > b.txt; "
-                               "git add -A; git commit -qm 'slot work'")
-        assert r.returncode == 0, r.stderr
-        assert (wrapped.root / "b.txt").read_text() == "from the slot\n"
-        assert not wrapped.slot_dir().exists()
-        assert not wrapped.owner().exists()
-        assert "w-01" not in wrapped.git("branch", "--format=%(refname:short)").stdout
-
-    def test_exit_conflict_aborts_and_holds(self, wrapped):
-        """Pins: a conflicted merge left half-applied, or the branch trashed by
-        a later reaper.
-
-        The parent has to move DURING the session for the two sides to diverge.
-        Committing in the parent beforehand just gives the worktree a newer base
-        and the exit merge fast-forwards -- no conflict, and the test would be
-        pinning nothing.
-        """
-        r = wrapped.run(script=(
-            "echo 'slot version' > a.txt; git commit -qam 'slot side'; "
-            f"echo 'parent version' > {wrapped.root}/a.txt; "
-            f"git -C {wrapped.root} commit -qam 'parent side'"))
-        assert r.returncode == 0, r.stderr
-        assert "conflict" in wrapped.hold().read_text()
-        assert not (wrapped.root / ".git" / "MERGE_HEAD").exists()
-        assert (wrapped.root / "a.txt").read_text() == "parent version\n"
-        assert "w-01" in wrapped.git("branch", "--format=%(refname:short)").stdout
-
-    def test_exit_holds_uncommitted_work(self, wrapped):
-        r = wrapped.run(script="echo 'half done' >> a.txt")
-        assert wrapped.hold().read_text().strip() == "uncommitted"
-        assert wrapped.slot_dir().exists()
-        assert "cc-worktree land w-01" in r.stdout
-
-    def test_exit_path_runs_in_the_parent(self, wrapped):
-        """`cc-worktree finish` refuses to run from inside a slot, and the agent
-        in the worktree cannot merge its own branch, so the cd back is not
-        cosmetic."""
-        r = wrapped.run(script="echo 'from the slot' > b.txt; "
-                               "git add -A; git commit -qm 'slot work'")
-        assert "Refusing to nest" not in r.stderr
-        assert "already checked out" not in r.stderr
-        assert (wrapped.root / "b.txt").exists()
-
-
-class TestSlotAwareResume:
-
-    def test_register_records_the_slot(self, wrapped):
-        """Pins: a resume that cannot find the slot its session ran in.
-
-        The ccs entry is the only durable record of which slot a session used,
-        and the entry is keyed to the PARENT — so without this field the slot is
-        unrecoverable and the resume silently lands in the wrong directory.
-        """
+    def test_label_is_the_repo_basename(self, wrapped):
         wrapped.run()
-        entries = list((wrapped.xdg / "claude-sessions" / "open").glob("*.json"))
-        # The entry is deleted on a clean exit, so read the archive of what was
-        # written by re-running with a stub that reads it mid-session.
-        assert not entries
-        r = wrapped.run(script='cat "$CCS_ENTRY_FILE" > ' + str(wrapped.base / "entry.json"))
+        assert wrapped.labels(), "proc-label was never called"
+        assert "myproj" in wrapped.labels()[0]
+
+
+class TestNoWorktreeOptOut:
+
+    def test_suppresses_the_flag(self, wrapped):
+        r = wrapped.run("--no-worktree")
         assert r.returncode == 0, r.stderr
-        rec = json.loads((wrapped.base / "entry.json").read_text())
-        assert rec["slot"] == "w-01"
-        assert rec["cwd"] == str(wrapped.root), "cwd must be the PARENT repo path"
+        assert "--worktree" not in wrapped.claude_argv()[0]
 
-    def test_resume_reuses_the_recorded_slot(self, wrapped):
-        """Pins: the whole point — resume must land in the SAME directory."""
-        # A session in w-02 that ended held, with its ccs entry left behind as a
-        # crash would leave it.
-        wrapped.run()                                   # w-01, released at exit
-        r = wrapped.run(script='cat "$CCS_ENTRY_FILE" > ' + str(wrapped.base / "e.json")
-                        + '; echo half >> a.txt')
+    def test_is_never_forwarded_to_claude(self, wrapped):
+        """claude does not know this flag and would reject it."""
+        wrapped.run("--no-worktree")
+        assert "--no-worktree" not in wrapped.claude_argv()[0]
+
+    def test_survives_after_process_label(self, wrapped):
+        """Pins the ordering bug: --process-label takes the NEXT argument as its
+        value, so matching it before --no-worktree swallows the opt-out as label
+        text and the flag silently does nothing -- the worst outcome for a flag
+        whose entire job is to let the user say no.
+        """
+        r = wrapped.run("--process-label", "--no-worktree")
         assert r.returncode == 0, r.stderr
-        rec = json.loads((wrapped.base / "e.json").read_text())
-        assert rec["slot"] == "w-01"
-        open_dir = wrapped.xdg / "claude-sessions" / "open"
-        open_dir.mkdir(parents=True, exist_ok=True)
-        rec["session_id"] = "SID-123"
-        (open_dir / "recorded.json").write_text(json.dumps(rec))
+        assert "--worktree" not in wrapped.claude_argv()[0]
 
-        wrapped.claude_log.unlink(missing_ok=True)
-        r = wrapped.run("--resume", "SID-123")
+    def test_process_label_still_works_alongside_it(self, wrapped):
+        wrapped.run("--process-label", "mylabel", "--no-worktree")
+        assert "mylabel" in wrapped.labels()[0], wrapped.labels()
+        assert "--worktree" not in wrapped.claude_argv()[0]
+
+
+class TestSuppressionCases:
+    """Situations where a worktree is wrong even in an opted-in repo."""
+
+    def test_print_mode_gets_no_worktree(self, wrapped):
+        """Pins: headless -p callers leaking a worktree per run.
+
+        ai.fish, ai_health, ai_inbox, ccpu and sanctuary/main-claude all route
+        through this wrapper with -p. Each would otherwise leave a worktree
+        behind AND get a checkout without the parent's in-progress work.
+        """
+        r = wrapped.run("-p", "hello")
         assert r.returncode == 0, r.stderr
-        assert wrapped.claude_ran_in() == [str(wrapped.slot_dir("w-01"))]
-        # The held tree, with its half-finished work, is what we came back to.
-        assert "half" in (wrapped.slot_dir("w-01") / "a.txt").read_text()
+        assert "--worktree" not in wrapped.claude_argv()[0]
 
-    def test_resume_without_a_recorded_slot_runs_unisolated(self, wrapped):
-        """An entry predating this feature has no slot. Its transcript is keyed
-        to the parent, so the parent is exactly where it must resume."""
-        r = wrapped.run("--resume", "NO-SUCH-SESSION")
-        assert r.returncode == 0, r.stderr
-        # In the PARENT. The previous assertion here accepted a fresh slot and
-        # called it correct, which contradicted this test's own name, the docs,
-        # and slot-for-session's contract -- and meant claude ran in a directory
-        # the transcript is not keyed to, so the resume could not work.
-        assert wrapped.claude_ran_in() == [str(wrapped.root)]
-        assert not wrapped.slot_dir("w-01").exists(), "claimed a slot anyway"
+    @pytest.mark.parametrize("flag", ["--resume", "-r", "-c", "--continue"])
+    def test_resume_gets_no_worktree(self, wrapped, flag):
+        """Claude Code already returns a resumed session to the worktree it ran
+        in, so appending the flag would strand it in a fresh empty one."""
+        wrapped.run(flag, "SID-123" if flag in ("--resume", "-r") else "")
+        assert "--worktree" not in wrapped.claude_argv()[0]
 
+    @pytest.mark.parametrize("given", ["-w", "--worktree", "--worktree=mine", "-wmine"])
+    def test_explicit_flag_is_not_duplicated(self, wrapped, given):
+        """The user's own choice wins. `contains` cannot see the attached forms
+        (`--worktree=x`, `-wname`), which is why the check globs instead.
 
-    def test_continue_without_a_session_id_runs_unisolated(self, wrapped):
-        """`-c` carries no id, so no slot can be looked up. Claiming one silently
-        continued whatever conversation last occupied that slot's directory."""
-        r = wrapped.run("-c")
-        assert r.returncode == 0, r.stderr
-        assert wrapped.claude_ran_in() == [str(wrapped.root)]
-        assert not wrapped.slot_dir("w-01").exists()
-
-
-class TestChpwdSurfacing:
-    """Pins: a held slot being invisible until the pool runs out.
-
-    A hold is work the exit path deliberately preserved and nothing will ever
-    reap. `cc-worktree status` shows it, but only if you think to run it.
-    """
-
-    def _show(self, cwd):
-        code = (f"source {DOTFILES}/fish/functions/chpwd.fish\n"
-                f"cd {cwd}\nshowHeldWorktrees\n")
-        return fish_eval(code).stdout
-
-    def test_silent_with_no_holds(self, tmp_path):
-        (tmp_path / ".claude" / "worktrees").mkdir(parents=True)
-        assert self._show(tmp_path).strip() == ""
-
-    def test_silent_outside_a_repo(self, tmp_path):
-        assert self._show(tmp_path).strip() == ""
-
-    def test_names_the_count_when_slots_are_held(self, tmp_path):
-        wt = tmp_path / ".claude" / "worktrees"
-        wt.mkdir(parents=True)
-        (wt / "w-01.hold").write_text("uncommitted\n")
-        (wt / "w-03.hold").write_text("merge conflict on w-03\n")
-        out = self._show(tmp_path)
-        assert "2 cc-worktree slots" in out
-        assert "cc-worktree status" in out
+        Asserting on the wrapper's own GENERATED name, not on a substring count:
+        `--worktree` contains `-w`, so counting substrings made this pass and
+        fail for the wrong reasons. `-wmine` was a real escape -- fish 4 dropped
+        `?` as a glob wildcard, so the original `-w?*` pattern matched nothing.
+        """
+        wrapped.run(given)
+        argv = wrapped.claude_argv()[0]
+        assert not re.search(r"--worktree cc-\d{6}-\d+", argv), argv

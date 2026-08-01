@@ -165,6 +165,15 @@
             "command": "ccjj nudge"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cc-worktree-nudge",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "SessionStart": [

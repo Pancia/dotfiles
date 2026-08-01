@@ -3,8 +3,17 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
     set -l process_label
     set -l pass_argv
     set -l skip_next 0
+    # --no-worktree is ours, not claude's, so it is consumed here and never
+    # forwarded (claude would reject it). It is matched BEFORE the
+    # --process-label value branch deliberately: otherwise
+    # `cc --process-label --no-worktree` takes it as the label text and the
+    # opt-out silently does nothing, which is the worst outcome for a flag whose
+    # entire job is to let the user say no.
+    set -l no_worktree 0
     for arg in $argv
-        if test $skip_next -eq 1
+        if test "$arg" = --no-worktree
+            set no_worktree 1
+        else if test $skip_next -eq 1
             set process_label $arg
             set skip_next 0
         else if test "$arg" = --process-label
@@ -27,76 +36,53 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
         end
     end
 
-    # --- per-session worktree isolation -----------------------------------
-    # In a repo opted in with `cc-worktree on`, run this session in its own
-    # git worktree / jj workspace so two sessions in one checkout cannot tread
-    # on each other. Everything below this point therefore runs in the worktree.
+    # --- per-session worktree ---------------------------------------------
+    # In a repo opted in with `cc-worktree on`, hand Claude Code its own
+    # `--worktree` so two sessions in one checkout cannot tread on each other.
+    #
+    # This used to be a bespoke implementation that created the worktree itself
+    # and cd'd into it. Claude Code has done this natively since v2.1.49, and
+    # doing it ourselves was what forced all the machinery that has now gone:
+    # slots, holds, a reaper, and slot-aware resume all existed only because the
+    # wrapper hid the worktree from Claude Code. It no longer does, so the
+    # wrapper only appends a flag and never changes directory.
+    #
+    # NOTE the mode switch this creates: the new checkout is a *git* worktree
+    # with no .jj of its own, so inside it `jj` resolves to the PARENT repo.
+    # bin/cc-worktree-nudge warns the agent about that on every prompt.
     #
     # skip_extras gating is load-bearing: ai.fish, ai_health, ai_inbox, ccpu and
     # sanctuary/main-claude all route through this wrapper with -p, and would
     # otherwise leak a worktree per run AND get an empty checkout to inspect.
     #
-    # Full mechanism, and why each guard exists: docs/cc-worktree.md.
-    # ~/dotfiles cannot be isolated and is refused by name — there the answer is
-    # ccjj / commit-mine, docs/cc-jj-sessions.md.
-    set -l _cc_orig_pwd $PWD
-    set -l _cc_wt_slot ""
-    set -l _cc_resume_slot
-    set -l _cc_resume_sid
-    set -l _cc_slot
-    set -l _cc_target
-    set -l _cc_rc 0
-    # Declared at function level: `set -l` inside a branch is function-scoped but
-    # UNDEFINED when the branch is not taken, so `test $x -eq 0` would error.
-    set -l _cc_skip_isolation 0
-    if test $skip_extras -eq 0
-        # Slot-aware resume: `claude --resume` is scoped to the project
-        # directory (Claude Code keys transcripts by mangled cwd), so a session
-        # that ran in w-03 can only be resumed from w-03. Without this it fails
-        # with "No conversation found with session ID".
-        set _cc_resume_sid (__cc_resume_id $pass_argv)
-        if test -n "$_cc_resume_sid"
-            set _cc_slot (cc-worktree slot-for-session $_cc_resume_sid)
-            if test -n "$_cc_slot"
-                set _cc_resume_slot --slot $_cc_slot --reuse
+    # ~/dotfiles cannot be isolated and is refused by `should-isolate` — there
+    # the answer is ccjj / commit-mine, docs/cc-jj-sessions.md.
+    set -l wt_flag
+    # A resume already returns the session to the worktree it ran in (verified:
+    # `claude --resume <id>` from the parent reaches it), so adding the flag
+    # would strand it in a fresh empty one instead.
+    if test $no_worktree -eq 0; and test $skip_extras -eq 0; and not __cc_resume_requested $pass_argv
+        # An explicit worktree flag is the user's own choice and always wins.
+        # `contains` cannot see the attached forms (`-wname`, `--worktree=x`),
+        # hence the globs. Two separate patterns because they cannot be merged:
+        # `-w*` does not match `--worktree` (that starts `--`), and `--worktree*`
+        # does not match `-wname`.
+        #
+        # NOT '-w?*'. In fish 4 `?` is no longer a glob wildcard, so that pattern
+        # matches nothing at all and `-wname` silently got a SECOND --worktree
+        # appended. Verified: `string match -q -- 'x?*' xmine` returns 1.
+        set -l wt_present 0
+        for arg in $pass_argv
+            if string match -q -- '-w*' $arg; or string match -q -- '--worktree*' $arg
+                set wt_present 1
+                break
             end
         end
-        # A resume we cannot place must run in the PARENT, not in a fresh slot.
-        # Claiming one put claude in a directory the transcript is not keyed to:
-        # `--resume <unknown>` then failed outright, and bare `-c` silently
-        # continued whatever conversation last occupied that slot -- a different
-        # one than was asked for. Both the docs and slot-for-session's contract
-        # already said "un-isolated"; only the wrapper did not implement it.
-        if test -z "$_cc_slot"; and __cc_resume_requested $pass_argv
-            set _cc_skip_isolation 1
-            echo "cc-worktree: no recorded slot for this resume; running in $_cc_orig_pwd" >&2
-        end
-        # NO 2>&1: `create` prints warnings on the SUCCESS path (dirty parent,
-        # subdir fallback, submodules). Folding them into the capture makes
-        # $_cc_target a multi-element list, `cd` fails with "Too many args", and
-        # $status is STILL 0 — so the wrapper would run un-isolated with a slot
-        # claimed. Path on stdout, warnings on stderr, and index defensively.
-        if test $_cc_skip_isolation -eq 1
-            set _cc_rc 2
-        else
-            set _cc_target (cc-worktree create --pid $fish_pid $_cc_resume_slot)
-            set _cc_rc $status
-        end
-        switch $_cc_rc
-            case 0
-                if cd $_cc_target[-1]
-                    set _cc_wt_slot (cc-worktree current --path $_cc_target[-1])
-                else
-                    echo "cc-worktree: cannot cd into $_cc_target[-1]; running un-isolated" >&2
-                end
-            case 2
-                # Not opted in. The common case: one process, no output, and
-                # `create` makes no git/jj call at all on this path.
-            case '*'
-                # Every slot held, or a backend failure. `create` has already
-                # explained on stderr; running un-isolated beats refusing to
-                # start, but it must never be silent.
-                echo "cc-worktree: running WITHOUT isolation in $_cc_orig_pwd" >&2
+        # A generated name, not a stable one: two concurrent sessions sharing a
+        # default name would land in one worktree, which is the opposite of the
+        # point. The pid disambiguates two starts within the same second.
+        if test $wt_present -eq 0; and cc-worktree should-isolate
+            set wt_flag --worktree "cc-"(date +%H%M%S)"-$fish_pid"
         end
     end
 
@@ -137,29 +123,17 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
     end
 
     set -l timestamp (date +%H:%M:%S)
-    # _cc_worktree_key, not pwd: inside a slot every session would otherwise
-    # read as "w-01" in Activity Monitor. The slot is appended instead, so the
-    # label still says which one this is.
-    set -l label (basename (_cc_worktree_key))
-    if test -n "$_cc_wt_slot"
-        set label "$label $_cc_wt_slot"
-    end
+    # Plain pwd again: the wrapper no longer changes directory, so this is
+    # always the repo the human launched from, which is the name worth seeing in
+    # Activity Monitor. (It used to run through _cc_worktree_key because the
+    # wrapper had already cd'd into a slot by this point and every session would
+    # otherwise have read as "w-01".)
+    set -l label (basename (pwd))
     if test -n "$process_label"
         set label "$label @ $process_label $timestamp"
     else
         set label "$label $timestamp"
     end
-
-    # Claude Code mangles '.' and ':' as well as '/' (~/.claude -> --claude), so
-    # replacing only '/' silently pointed at a directory that never exists —
-    # which made the post-session review below a no-op for any dotted path,
-    # including every .alt/worktrees checkout.
-    #
-    # This MUST stay after the isolation cd: Claude Code derives its project
-    # directory from the real cwd, so computing it from the parent would point
-    # at a directory the isolated session never writes — the same silent no-op
-    # the comment above records having been burned by.
-    set -l sessions_dir "$HOME/.claude/projects/"(string replace -a '/' '-' (pwd) | string replace -a '.' '-' | string replace -a ':' '-')
 
     # Register this invocation in the open-sessions registry so the session stays
     # recoverable after a crash. CCS_ENTRY_FILE is exported so the SessionStart
@@ -174,17 +148,32 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
         set CCS_ENTRY_FILE (_ccs_open_register $fish_pid)
     end
 
-    proc-label "claude [$label]" claude --verbose $pass_argv
+    proc-label "claude [$label]" claude --verbose $wt_flag $pass_argv
 
-    # --- isolation exit path ----------------------------------------------
-    # cd back FIRST: `cc-worktree finish` resolves the repo from the cwd and
-    # refuses to operate from inside a slot, and the agent in the worktree
-    # cannot merge its own branch anyway (`fatal: 'master' is already checked
-    # out`). Everything below then runs in the parent again.
-    if test -n "$_cc_wt_slot"
-        cd $_cc_orig_pwd
-        cc-worktree finish --slot $_cc_wt_slot
+    # Claude Code derives its project directory from the cwd it actually ran in,
+    # and --worktree makes it cd there AFTER this wrapper has launched it — so
+    # pwd here is the parent while the transcript is keyed to the worktree.
+    # Computing sessions_dir from pwd would point at a directory the session
+    # never wrote and skip the review in silence: the same silent no-op the
+    # comment below records having been burned by once already. Measured, not
+    # assumed — the transcript lands under the mangled *worktree* path.
+    #
+    # ccsave-hook (SessionStart) records the real cwd into the ccs entry, which
+    # is the only reliable source: the hook sees the cwd claude actually chose.
+    # Fall back to pwd when there is no entry file (skip_extras) or the hook did
+    # not run (--safe-mode disables hooks).
+    set -l real_cwd (pwd)
+    if test -n "$CCS_ENTRY_FILE"; and test -f "$CCS_ENTRY_FILE"
+        set -l recorded (jq -r '.cwd // empty' "$CCS_ENTRY_FILE" 2>/dev/null)
+        if test -n "$recorded"; and test -d "$recorded"
+            set real_cwd $recorded
+        end
     end
+    # Claude Code mangles '.' and ':' as well as '/' (~/.claude -> --claude), so
+    # replacing only '/' silently pointed at a directory that never exists —
+    # which made the post-session review below a no-op for any dotted path,
+    # including every .alt/worktrees checkout.
+    set -l sessions_dir "$HOME/.claude/projects/"(string replace -a '/' '-' $real_cwd | string replace -a '.' '-' | string replace -a ':' '-')
 
     # Post-session review: find the session JSONL and review in background
     if test $skip_extras -eq 0; and test -d "$sessions_dir"

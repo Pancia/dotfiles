@@ -717,11 +717,11 @@ function _ccs_open_register --description 'Register a new open session entry'
     set -l now (date +%s)
     set -l lstart (ps -o lstart= -p $pid 2>/dev/null | string trim)
     # The PARENT repo path, so `ccs list` at the repo root sees sessions running
-    # in a worktree. The slot is recorded alongside it because `claude --resume`
-    # is scoped to the project directory: a session that ran in w-03 can only be
-    # resumed from w-03, and cwd alone no longer says which one that was.
+    # in a worktree. Nothing else needs recording: `claude --resume <id>` run
+    # from the parent reaches a worktree session on its own (verified), so ccs
+    # never has to know which worktree it was. That was not true of the old
+    # hand-rolled slots, which is why a `slot` field used to live here.
     set -l cwd (_cc_worktree_key)
-    set -l slot (_cc_worktree_slot)
     set -l tty_path (tty 2>/dev/null)
     set -l program $TERM_PROGRAM
 
@@ -745,7 +745,6 @@ function _ccs_open_register --description 'Register a new open session entry'
         --argjson pid "$pid" \
         --arg lstart "$lstart" \
         --arg cwd "$cwd" \
-        --arg slot "$slot" \
         --argjson started_at "$now" \
         --arg program "$program" \
         --arg tmux_socket "$tmux_socket" \
@@ -759,7 +758,6 @@ function _ccs_open_register --description 'Register a new open session entry'
             pid: $pid,
             pid_lstart: $lstart,
             cwd: $cwd,
-            slot: $slot,
             started_at: $started_at,
             ended_at: null,
             session_id: "",
@@ -825,16 +823,11 @@ function _ccs_open_finalize --description 'Retire the open entry for this pid (c
         end
     end
 
-    # An isolated session's entry is the ONLY record of which worktree slot it
-    # ran in, and `claude --resume` is scoped to the project directory -- so
-    # deleting it here made resume land in a fresh slot with a different cwd and
-    # fail with "No conversation found". Every isolated session that exited
-    # cleanly was affected, i.e. nearly all of them. Archive instead; the
-    # archive is already where `cc-worktree slot-for-session` looks.
-    set -l slot (jq -r '.slot // ""' "$entry_file" 2>/dev/null)
-    if test -n "$slot"
-        _ccs_archive_entry "$entry_file"; and return 0
-    end
+    # A clean exit drops the entry, isolated or not. This used to archive rather
+    # than delete when a `slot` was recorded, because the entry was the only
+    # record of which worktree a session ran in and `--resume` could not find it
+    # otherwise. Claude Code resolves that itself now, so there is nothing left
+    # here worth keeping past a clean exit.
     rm -f "$entry_file"
 end
 

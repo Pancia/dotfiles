@@ -13,6 +13,12 @@
 INPUT=$(cat 2>/dev/null)
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 SOURCE=$(printf '%s' "$INPUT" | jq -r '.source // empty' 2>/dev/null)
+# The directory claude ACTUALLY started in, which is not necessarily the one the
+# wrapper launched it from: `--worktree` makes claude cd into the worktree after
+# the wrapper has already run. Claude Code keys its transcript directory off the
+# real cwd, so the wrapper's post-session review has to learn it from here or it
+# looks in the parent, finds nothing, and silently skips the review.
+CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
 
 # Guarded: an unset CLAUDE_ENV_FILE would otherwise make this script fail.
 if [ -n "$SESSION_ID" ] && [ -n "${CLAUDE_ENV_FILE:-}" ]; then
@@ -42,11 +48,15 @@ if [ -n "$SESSION_ID" ] && [ -n "${CCS_ENTRY_FILE:-}" ] && [ -f "$CCS_ENTRY_FILE
         TMP="$CCS_ENTRY_FILE.tmp.$$"
         # On a rotation the recorded title describes the previous conversation,
         # so drop it rather than pair an old title with a new id.
-        FILTER='.session_id = $id'
+        FILTER='.session_id = $id | .cwd = $cwd'
         if [ "$RESTAMP" = rotated ]; then
-            FILTER='.session_id = $id | .title = "" | .transcript_path = ""'
+            FILTER='.session_id = $id | .cwd = $cwd | .title = "" | .transcript_path = ""'
         fi
-        if { jq --arg id "$SESSION_ID" "$FILTER" "$CCS_ENTRY_FILE" > "$TMP"; } 2>/dev/null; then
+        # The cwd rides the same identity gate as the session id, deliberately.
+        # CCS_ENTRY_FILE is inherited by every descendant and `claude -p` runs
+        # hooks too, so an unguarded write would let a nested helper session --
+        # running in some other directory -- redirect the parent's review.
+        if { jq --arg id "$SESSION_ID" --arg cwd "$CWD" "$FILTER" "$CCS_ENTRY_FILE" > "$TMP"; } 2>/dev/null; then
             # Re-check before replacing: a clean exit may have deleted the entry
             # while we worked, and we must not resurrect it.
             if [ -f "$CCS_ENTRY_FILE" ]; then

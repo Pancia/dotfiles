@@ -32,10 +32,10 @@ fish/functions/_*
 # autoloads by filename, and `_cc_worktree_key` runs on every `cd` (chpwd ->
 # _ccs_open_scan) and inside `fish -c` subshells, so it cannot live inside
 # ccs.fish. Without these lines a fresh clone gets a ccs that keys every
-# isolated session to the worktree, and a wrapper that cannot resolve a slot.
+# isolated session to the worktree, and a wrapper that adds --worktree to a
+# resume. (_cc_worktree_slot and __cc_resume_id were deleted when Claude Code's
+# native worktrees replaced the hand-rolled slot pool.)
 !fish/functions/_cc_worktree_key.fish
-!fish/functions/_cc_worktree_slot.fish
-!fish/functions/__cc_resume_id.fish
 !fish/functions/__cc_resume_requested.fish
 fish/functions/tide.fish
 fish/functions/tide/
