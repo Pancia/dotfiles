@@ -108,8 +108,13 @@ function showFixmes --description 'List FIXME* files in .cc directory'
 end
 
 function _recordCWD --description 'Record current working directory'
-    echo (pwd) >> ~/.config/dir_history
-    echo (cat ~/.config/dir_history | sort | uniq) > ~/.config/dir_history
+    set -l hist ~/.config/dir_history
+    echo (pwd) >>$hist
+    # `echo (cat $hist | sort | uniq) > $hist` collapsed the whole file onto one
+    # space-separated line — command substitution splits on newlines and `echo`
+    # rejoins the list with spaces. That left `z` reading a single 53KB "entry".
+    # `sort -o` may name one of its own inputs; it reads them fully first.
+    sort -u -o $hist $hist
 end
 
 function recordCWD --description 'Record CWD if at git root or not in git'
