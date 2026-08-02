@@ -38,3 +38,30 @@
 # prebuilt binaries (esbuild and bufferutil both install fine with scripts
 # blocked, via optionalDependencies/prebuildify).
 ignore-scripts=true
+
+# --------------------------------------------------------------------------
+# Cache location, for callers that are not fish
+# --------------------------------------------------------------------------
+# fish/conf.d/00_xdg.fish sets npm_config_cache, and an env var beats every
+# npmrc -- so this line only ever applies where that never ran. It is a
+# backstop, not a duplicate.
+#
+# It exists because the two npm-invoking launchd services differ by one
+# shebang: services/bookmark-manager/script.sh is `#!/opt/homebrew/bin/fish`
+# and so picks up 00_xdg.fish, while services/tv-board's is
+# `#!/usr/bin/env bash` and never does. That one wrote to ~/.npm for years.
+#
+# ${HOME}, not ${XDG_CACHE_HOME}. An UNSET variable is not expanded to
+# empty here -- it stays LITERAL, producing a directory actually named
+# '${XDG_CACHE_HOME}' in whatever the cwd happens to be. HOME is always set
+# under launchd; XDG_CACHE_HOME is set only by fish. (`~` also expands
+# correctly, if that ever reads better.)
+#
+# Verified on npm 10.9.2 as well as 11.6.2 -- tv-board runs an nvm-pinned
+# node v22.14.0, not the Homebrew node on an interactive PATH, so the
+# obvious binary is the wrong one to test against.
+#
+# Tradeoff: hardcodes `.cache` rather than following XDG_CACHE_HOME if that
+# is ever relocated. Fish sessions would still follow the variable; only
+# non-fish callers would land here.
+cache=${HOME}/.cache/npm
