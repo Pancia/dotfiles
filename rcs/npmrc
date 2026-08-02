@@ -1,0 +1,40 @@
+# npm user config -> ~/.npmrc (via rcs/MANIFEST)
+
+# --------------------------------------------------------------------------
+# Block dependency install scripts by default
+# --------------------------------------------------------------------------
+# The overwhelming majority of npm supply-chain attacks execute via a
+# postinstall/preinstall hook -- it is the vector that gets code execution
+# from nothing more than "install". npm is default-allow; this inverts it.
+#
+# This is the counterpart to the pnpm cooldown in rcs/pnpm-config.yaml, and
+# it covers a different population: pnpm's defaults only protect projects
+# that USE pnpm, which is none of the ~17 npm/yarn projects in ~/projects.
+# Those are not being ported, so they need this instead.
+#
+# What still works: `npm run <script>` and `npm start` run normally --
+# verified. Only lifecycle hooks are suppressed.
+#
+# What breaks: pre/post hooks around your own scripts are silently skipped
+# (`prestart` will not fire before `start`). Audited 2026-08-01 -- the only
+# real lifecycle hook across ~/projects is work/filament's
+# `preinstall: bin/npm-preinstall`. The `preview` scripts in
+# bookmarks_manager / claudecodeui / line-tower-defense-wars are `vite
+# preview` standalone scripts, not hooks. Both launchd services
+# (bookmarks_manager `npm run service`, TVBoardApp `npm start`) are clear.
+#
+# To restore a blocked build for one package, the flag is REQUIRED --
+# `npm rebuild <pkg>` alone honours ignore-scripts and does nothing while
+# printing "rebuilt dependencies successfully":
+#
+#     npm rebuild <pkg> --ignore-scripts=false
+#     npm install --ignore-scripts=false          # whole tree, for filament
+#
+# Unlike pnpm's onlyBuiltDependencies, these approvals are NOT persisted --
+# there is no allowlist in package.json, so a fresh clone or `npm ci` needs
+# them re-issued by hand.
+#
+# Less of a problem than it sounds: the ecosystem has largely moved to
+# prebuilt binaries (esbuild and bufferutil both install fine with scripts
+# blocked, via optionalDependencies/prebuildify).
+ignore-scripts=true

@@ -87,6 +87,34 @@ ghostty.config -> $HOME/.config/ghostty/config
 ```
 The `_ENSURE_RCS()` function in `fish/config.fish` parses the MANIFEST and creates symlinks from `~/dotfiles/rcs/file` to the destination. It runs automatically in the background on every Fish shell startup (`_ENSURE_RCS &`). Some `rcs/` files have vestigial `#<[...]>` inline headers that are no longer parsed. Directories are symlinked; files are hard linked.
 
+### JS dependency hygiene (pnpm + npm)
+
+Two configs, one policy, covering **different populations**. Both are `rcs/`
+entries, so both are tracked and follow a fresh machine.
+
+| File | Covers | Setting |
+|---|---|---|
+| `rcs/pnpm-config.yaml` → `~/.config/pnpm/config.yaml` | **new** projects | `minimumReleaseAge: 20160` — refuse any version published less than 14 days ago |
+| `rcs/npmrc` → `~/.npmrc` | the 17 existing npm/yarn projects | `ignore-scripts=true` — block dependency install hooks |
+
+**pnpm is for new projects only** — nothing was ported. That is exactly why the
+npm side exists: pnpm's defaults protect only projects that *use* pnpm, and
+`~/projects` is still npm/yarn. `brew 'pnpm'` is in the Brewfile.
+
+Two escape hatches, both needed in practice:
+
+- `npm rebuild <pkg> --ignore-scripts=false` — **the flag is required.**
+  `npm rebuild <pkg>` alone honours `ignore-scripts` and does nothing while
+  printing *"rebuilt dependencies successfully"*. `work/filament` needs this;
+  its `preinstall` is the only real lifecycle hook across `~/projects`.
+- `minimumReleaseAgeExclude:` in a project's `pnpm-workspace.yaml`, to exempt a
+  package needing an urgent fix. Does **not** cascade to transitive deps.
+
+The reasoning — why 14 days rather than more, why npm expunging malicious
+versions makes this prevention rather than delay, what it costs, and three
+silent-failure traps each found by experiment — lives in the comments of those
+two files. Read them before changing either setting.
+
 ### Seed Architecture (Hammerspoon)
 Hammerspoon modules in `lib/lua/seeds/` follow a standard interface:
 - `start(config)` - Initialize the seed

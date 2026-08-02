@@ -26,6 +26,7 @@ ignore                          -> $HOME/.ignore
 karabiner.json                  -> $HOME/.config/karabiner/karabiner.json
 kitty.conf                      -> $HOME/.config/kitty/kitty.conf
 llm-command-extra-models.yaml   -> $HOME/Library/Application Support/io.datasette.llm/extra-openai-models.yaml
+npmrc                           -> $HOME/.npmrc
 nvim-init.vim                   -> $HOME/.config/nvim/init.vim
 peco.json                       -> $HOME/.config/peco/config.json
 pnpm-config.yaml                -> $HOME/.config/pnpm/config.yaml
