@@ -25,9 +25,10 @@ unmatched closing one. The asymmetry was a real bug — quoting a lone `<output>
 is contract-legal text, and it used to come back as a silently truncated fragment.
 
 CLI:
-    llm-output < reply.txt          # body on stdout
-    llm-output --json < reply.txt   # body must parse as JSON
-    llm-output --contract           # the contract text, for building a prompt
+    llm-output < reply.txt            # body on stdout
+    llm-output --json < reply.txt     # body must parse as JSON
+    llm-output --contract             # the contract text, for building a prompt
+    llm-output --contract --chat      # ditto, persona-safe wording (see CHAT_CONTRACT_PATH)
 Exit: 0 ok · 1 contract unavailable · 2 bad usage · 3 no usable envelope ·
 4 envelope present but empty · 5 bad JSON.
 
@@ -71,6 +72,24 @@ CONTRACT_PATH = (
     Path(__file__).resolve().parents[2] / "ai" / "templates" / "output_contract.md"
 )
 
+# Same envelope, different framing, for prompts where the model has a persona.
+#
+# The strict template above is written for headless callers, where the chatter being
+# suppressed is the roleplay bookends — so it says "no in-character opener or closer"
+# and "no preamble". Appended to a *persona* bot's user turn, unsigned, on a channel
+# whose only legitimate speaker is the user, that reads as an injection telling the bot
+# to stop being itself. On 2026-08-02 Inari classified it as exactly that and spent
+# three turns telling Anthony his messages were being tampered with. (It had ridden
+# along silently since 2026-07-30; what changed was the bots moving opus → sonnet.)
+#
+# The variant keeps every tag rule identical — one extractor serves both — and only
+# changes the prose: the envelope is a wrapper, the voice inside it is untouched.
+CHAT_CONTRACT_PATH = (
+    Path(__file__).resolve().parents[2] / "ai" / "templates" / "output_contract_chat.md"
+)
+
+CONTRACT_VARIANTS = ("strict", "chat")
+
 # A tag counts only when it owns its line. `<output ...>` with attributes is
 # tolerated: models add them unprompted, and rejecting the whole reply over an
 # attribute would be a loss with no upside.
@@ -103,20 +122,38 @@ class EmptyEnvelope(LLMOutputError):
     """An envelope was found but its body is empty or whitespace only."""
 
 
-def contract() -> str:
+def contract(variant: str = "strict") -> str:
     """The canonical contract text, for appending to a prompt.
 
-    Read from ai/templates/output_contract.md rather than duplicated here, so the
-    shell callers' `@<path>` includes and the Python callers say the same thing.
+    Read from ai/templates/ rather than duplicated here, so the shell callers'
+    `@<path>` includes and the Python callers say the same thing.
+
+    ``variant="chat"`` selects the persona-safe wording (see CHAT_CONTRACT_PATH).
+    Both variants describe the *same* envelope, so extract() is unchanged either way
+    — picking the wrong one is a tone bug, never a parsing one.
 
     A missing file surfaces as LLMOutputError rather than FileNotFoundError: callers
     build prompts inside `except LLMOutputError` blocks, and an OSError leaking past
-    them turns a missing template into an unhandled crash somewhere unrelated.
+    them turns a missing template into an unhandled crash somewhere unrelated. An
+    unknown variant raises the same way, for the same reason.
+
+    The paths are read off the module globals at call time, not captured in a lookup
+    table at import, so `monkeypatch.setattr(llm_output, "CONTRACT_PATH", …)` still
+    redirects it.
     """
+    if variant == "strict":
+        path = CONTRACT_PATH
+    elif variant == "chat":
+        path = CHAT_CONTRACT_PATH
+    else:
+        raise LLMOutputError(
+            f"unknown output-contract variant {variant!r}; "
+            f"expected one of {', '.join(CONTRACT_VARIANTS)}"
+        )
     try:
-        return CONTRACT_PATH.read_text().rstrip("\n")
+        return path.read_text().rstrip("\n")
     except OSError as e:
-        raise LLMOutputError(f"cannot read the output contract at {CONTRACT_PATH}: {e}") from None
+        raise LLMOutputError(f"cannot read the output contract at {path}: {e}") from None
 
 
 def _match_open(text: str, close_start: int) -> re.Match[str]:
@@ -238,10 +275,10 @@ def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     # Reject rather than ignore. A silently-dropped `-j` typo returned prose with exit
     # 0, which a caller then piped into jq.
-    unknown = [a for a in argv if a not in ("--json", "--contract")]
+    unknown = [a for a in argv if a not in ("--json", "--contract", "--chat")]
     if unknown:
         print(f"llm-output: unknown argument(s): {' '.join(unknown)}", file=sys.stderr)
-        print("usage: llm-output [--json] < reply | llm-output --contract",
+        print("usage: llm-output [--json] < reply | llm-output --contract [--chat]",
               file=sys.stderr)
         return EXIT_USAGE
 
@@ -251,11 +288,18 @@ def main(argv: list[str] | None = None) -> int:
                   file=sys.stderr)
             return EXIT_USAGE
         try:
-            print(contract())
+            print(contract("chat" if "--chat" in argv else "strict"))
         except LLMOutputError as e:
             print(f"llm-output: {e}", file=sys.stderr)
             return EXIT_NO_CONTRACT
         return 0
+
+    # Rejected rather than ignored, on the same reasoning as the unknown-argument
+    # check: --chat only selects a contract variant, so on the extraction path it can
+    # only mean the caller thought they were asking for the text and got a parse.
+    if "--chat" in argv:
+        print("llm-output: --chat is only meaningful with --contract", file=sys.stderr)
+        return EXIT_USAGE
 
     want_json = "--json" in argv
     try:

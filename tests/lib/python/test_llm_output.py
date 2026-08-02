@@ -19,6 +19,7 @@ DOTFILES = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(DOTFILES / "lib" / "python"))
 
 from llm_output import (  # noqa: E402
+    CHAT_CONTRACT_PATH,
     CONTRACT_PATH,
     EmptyEnvelope,
     LLMOutputError,
@@ -530,6 +531,25 @@ class TestContractFlag:
         assert "mutually exclusive" in r.stderr
         assert r.stdout == ""
 
+    def test_chat_selects_the_persona_safe_variant(self):
+        r = subprocess.run(
+            [str(CLI), "--contract", "--chat"], capture_output=True, text=True
+        )
+        assert r.returncode == 0
+        assert r.stdout.rstrip("\n") == contract("chat")
+        assert r.stdout.rstrip("\n") != contract()
+        assert r.stderr == ""
+
+    def test_chat_without_contract_is_a_usage_error(self):
+        """On the extraction path `--chat` selects nothing, so accepting it silently
+        would hand back a parsed body to a caller who asked for contract text."""
+        r = subprocess.run(
+            [str(CLI), "--chat"], input="<output>\nhi\n</output>\n",
+            capture_output=True, text=True,
+        )
+        assert r.returncode == EXIT_USAGE
+        assert r.stdout == ""
+
     def test_unreadable_contract_exits_no_contract(self, tmp_path, monkeypatch):
         import llm_output
 
@@ -705,3 +725,77 @@ class TestContractText:
         monkeypatch.setattr(llm_output, "CONTRACT_PATH", tmp_path / "nope.md")
         with pytest.raises(LLMOutputError):
             llm_output.contract()
+
+
+class TestChatContractText:
+    """The persona-safe variant.
+
+    Both variants describe the SAME envelope — one extractor serves both — so what
+    these pin is the wording, which is the entire reason the variant exists. The
+    strict template is written for headless callers, where the chatter to suppress
+    is the roleplay bookends; appended to a persona bot's user turn it reads as an
+    injection demanding the bot stop being itself, and on 2026-08-02 Inari refused it
+    on exactly those grounds and told its user his messages were being tampered with.
+    """
+
+    def test_chat_contract_is_readable_and_names_the_tags(self):
+        text = contract("chat")
+        assert "<output>" in text and "</output>" in text
+
+    def test_chat_contract_does_not_ask_for_the_persona_to_be_dropped(self):
+        """The regression, stated directly. The strict template's anti-bookend line is
+        what a persona bot reads as 'abandon your character'."""
+        flat = " ".join(contract("chat").split())
+        assert "in-character opener or closer" not in flat
+
+    def test_strict_contract_still_suppresses_the_bookends(self):
+        """The other half of the split: fixing chat must not quietly disarm the strict
+        template, whose whole job is killing the roleplay bookends in headless output."""
+        flat = " ".join(contract().split())
+        assert "no in-character opener or closer" in flat
+
+    def test_chat_contract_preserves_voice_and_formatting_explicitly(self):
+        flat = " ".join(contract("chat").split())
+        assert "persona" in flat and "voice and tone stay exactly" in flat
+
+    def test_chat_contract_forbids_remarking_on_itself(self):
+        """The user-visible symptom was commentary *about* the contract, not a
+        malformed envelope — the tags were fine every time."""
+        flat = " ".join(contract("chat").split())
+        assert "never mention it" in flat
+
+    def test_chat_contract_states_the_same_balance_rule_as_strict(self):
+        """One extractor, so a rule stated in one template and not the other means a
+        model judged by a standard it was never given."""
+        flat = " ".join(contract("chat").split())
+        assert "balanced in both directions" in flat
+
+    def test_chat_contract_forbids_a_whole_answer_fence(self):
+        assert "code fence" in contract("chat")
+
+    def test_chat_contract_round_trips_through_the_extractor(self):
+        """Its worked example is a balanced pair, same as strict."""
+        assert extract(contract("chat"))
+
+    def test_unknown_variant_raises_an_llm_output_error(self):
+        """Same failure mode as a missing file, so callers' `except LLMOutputError`
+        covers a typo'd variant too instead of taking a KeyError somewhere unrelated."""
+        with pytest.raises(LLMOutputError):
+            contract("bookends-please")
+
+    def test_chat_contract_path_sits_beside_the_strict_one(self):
+        """Derived from the module, not from ~/dotfiles — a worktree must prompt with
+        the templates that ship beside it. Same property TestContractText proves the
+        hard way for strict; asserted by locality here."""
+        assert CHAT_CONTRACT_PATH.parent == CONTRACT_PATH.parent
+        assert CHAT_CONTRACT_PATH != CONTRACT_PATH
+        assert CHAT_CONTRACT_PATH.is_file()
+
+    def test_missing_chat_contract_raises_an_llm_output_error(self, tmp_path, monkeypatch):
+        import llm_output
+
+        monkeypatch.setattr(llm_output, "CHAT_CONTRACT_PATH", tmp_path / "nope.md")
+        with pytest.raises(LLMOutputError):
+            llm_output.contract("chat")
+        # …and the strict variant is untouched by that.
+        assert llm_output.contract()

@@ -476,6 +476,7 @@ implements) plus `lib/python/llm_output.py` and its `bin/llm-output` CLI:
 printf '%s' "$raw" | llm-output          # body on stdout
 printf '%s' "$raw" | llm-output --json   # body, validated as JSON
 llm-output --contract                    # the contract text, for building a prompt
+llm-output --contract --chat             # ditto, persona-safe wording (see below)
 ```
 
 Exit `0` ok · `1` contract unavailable · `2` bad usage · `3` no usable envelope ·
@@ -484,6 +485,28 @@ returns the raw text** — falling back is how chatter became a commit message i
 first place. Shell callers use `--contract` rather than reading the template by path,
 so they resolve it the same way Python does and a worktree can't prompt with one
 contract while enforcing another.
+
+**Two wordings, one envelope.** `output_contract.md` (strict, the default) is written
+for headless callers, where the chatter being suppressed is the roleplay bookends — so
+it says *"no in-character opener or closer."* `output_contract_chat.md`
+(`contract("chat")`, `llm-output --contract --chat`) states the identical tag rules for
+a model that is *supposed* to have a voice: the envelope is a wrapper, the persona and
+formatting inside it are untouched, and the block itself is never to be remarked on.
+Same tags, same extractor — **picking the wrong one is a tone bug, never a parsing
+one.** `contract()` rejects an unknown variant as an `LLMOutputError`, the same way it
+reports a missing template, so a typo lands in callers' existing `except`.
+
+Reach for the chat variant wherever the block is appended to a **user turn** on a
+channel whose only legitimate speaker is a human. On 2026-08-02 the six AKR Telegram
+bots moved opus → sonnet and Inari — correctly — classified the strict contract riding
+on Anthony's messages as a prompt injection telling it to stop being itself, then spent
+three turns telling him his messages were being tampered with. It had ridden along
+silently since 2026-07-30; only the model changed. Note the envelope itself never
+broke: the tags were honoured every time, so nothing showed up in the logs. The fix was
+the chat variant **plus** a paragraph in the bots' system prompts
+(`chat_engine._CONTRACT_PREAUTH`) vouching for the block from the trusted channel — the
+template removes the reason to suspect it, the system prompt removes the standing to
+act on the suspicion.
 
 Matching is **line-anchored**: a tag only counts when it owns its line, which is what
 survives the commonest preamble shape, *"I'll put my answer in `<output>` tags:"*
