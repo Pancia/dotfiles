@@ -49,6 +49,15 @@ COMPONENTS = {
         "aliases": ["exocortex-id", "exocortex"],
         "source_path": "bin/exocortex-id",
     },
+    # Drives bin/roleplay-roll as a subprocess. No pip deps -- it is a bash
+    # script -- but it runs on every prompt via a UserPromptSubmit hook, so a
+    # regression here is felt everywhere at once.
+    "bin/roleplay-roll": {
+        "runner": "pytest",
+        "deps": [],
+        "aliases": ["roleplay-roll", "roleplay"],
+        "source_path": "bin/roleplay-roll",
+    },
     # Python tests that drive fish via `fish -c` and assert on the output --
     # NOT fishtape. Needs the `fish` binary on PATH, no pip deps.
     "fish": {
