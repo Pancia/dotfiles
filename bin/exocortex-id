@@ -17,11 +17,11 @@ Format:  [prefix] YY M D [separator] H SSS [suffix]
   SSS — deciseconds within the hour in base-36, zero-padded to 3 digits
 
 Usage:
-  exocortex-id                        # default: "2649-e1n"
-  exocortex-id --prefix "."           # ".2649-e1n"
-  exocortex-id --decimal-date         # "260409-e1n"
-  exocortex-id --unix-time            # "1k49-e1n"
-  exocortex-id --parse 2649-e1n       # parse back to datetime
+  exocortex-id                        # default: "2649-8e1n"
+  exocortex-id --prefix "."           # ".2649-8e1n"
+  exocortex-id --decimal-date         # "260409-8e1n"
+  exocortex-id --unix-time            # "1k49-8e1n"
+  exocortex-id --parse 2649-8e1n      # parse back to datetime
 """
 
 import argparse
