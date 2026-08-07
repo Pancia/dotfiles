@@ -19,7 +19,8 @@ reads a path outside itself.
 
 ## Install
 
-Two files to place, two config edits to make.
+One symlink, two edits to your own Claude config. Nothing is copied into this
+directory and nothing here is modified, so updating later is a `git pull`.
 
 **1. Put the command on your PATH.** Symlink it — the script walks the link to
 find its own roster, so it does not care where the link lives:
