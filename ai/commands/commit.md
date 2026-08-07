@@ -68,7 +68,8 @@ and claim only what you know you did:
 - Recognise the change as yours → claim it, then commit.
 - The diff contains anything you did not do — another session's edit, a config
   file rewritten by some other program, an unrelated build artifact → **do not
-  claim it**. Say so in your report instead. A window is a snapshot difference,
+  claim it**. Say so under **Worth knowing** in the report instead. A window is
+  a snapshot difference,
   so it catches everything that happened in that interval, not only your work.
 - `claim` refuses outright for symlinks, deletions, renames, a path another
   session has a stake in, and a path that appeared in `@-` meanwhile. Those
@@ -185,15 +186,57 @@ via Bash.
    before the file list, which is noise when the body is long. `jj diff -r @-`
    is the one that answers "which files landed" directly.
 
-   Then **tell the user the file list**, not just "committed successfully".
-   This matters most when step 2 scoped the commit to a subset: the useful
-   report is which paths went in *and* which deliberately stayed behind, so a
-   mis-scoped commit is visible immediately rather than at the next `jj status`.
+   Both commands feed the report: what landed and what stayed behind are
+   separate facts, and the report carries both.
 
-7. **Do not push** unless the user explicitly asked. If the repo advances a
-   `master`/`main` bookmark manually and you did not touch it, say so — a
-   commit that is not on the bookmark will not be pushed, and silence reads as
-   "done".
+7. **Do not push** unless the user explicitly asked. Whether you advanced a
+   `master`/`main` bookmark, and whether anything was pushed, both belong in
+   the report's **Needs you** block — a commit sitting off the bookmark will
+   never be pushed, and silence there reads as "done".
+
+8. **Report** using the section below. It is the same four-section shape as
+   every other recap; the contents are fixed.
+
+## Report
+
+The four-section recap from the global `CLAUDE.md` ("Reporting Back"), with
+fixed contents. **Never close with a bare "committed successfully."** The point
+of the report is that a mis-scoped commit is visible now, rather than at the
+next `jj status`.
+
+One deliberate exception to the global rules: they say not to give a
+file-by-file walkthrough, because the edits were already on screen. That does
+not apply to the landed-paths list here — for a commit, the file list *is* the
+result, and it is the only place the scope becomes checkable.
+
+**Result** — a sentence or two. The subject line you committed, and the commit
+or change id. Name the route when it was not the plain one: `commit-mine`
+(session-scoped) and a path-scoped `jj commit` both mean the commit is
+deliberately narrower than the working copy, and that has to be legible rather
+than inferred. Do not replay the message body — the user wrote it with you.
+
+**Worth knowing** — omit the heading when there is nothing. It exists for:
+
+- unclaimed paths you decided were **not** yours, and why you left them
+- `@- has moved` — name the `jj op restore <id>` and stop; never run it
+- a pre-commit hook that failed, and the new commit you made instead
+- anything that landed which you were not confident belonged
+
+**Summary** — at most five bullets:
+
+- the paths that landed — a file list, not line counts (`--summary`, not `--stat`)
+- the paths deliberately left behind, and why
+- the commit / change id
+- whether a `master`/`main` bookmark was advanced
+
+**Needs you** — always present, and after a commit it is rarely empty:
+
+- whatever stands between this commit and where it belongs — a bookmark not
+  advanced, a push not made. State these when they apply; silence reads as done
+- leftover working-copy changes, and whose they are
+- claims you declined, for the user to review
+
+If nothing is genuinely outstanding, one line saying so.
 
 ## Heredoc format for multi-line messages
 

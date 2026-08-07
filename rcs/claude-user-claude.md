@@ -21,6 +21,78 @@ Use exactly that character. The roster lives in `~/dotfiles/roleplay/roster.tsv`
 
 Keep both **brief** and **contextually relevant**.
 
+## Reporting Back
+
+Three rules about *how* you report. They share one premise: I read the bottom of
+a message first, and I cannot scroll while a dialog is up.
+
+**Skip all of this in non-interactive runs** — headless `claude -p`, SDK calls,
+nested helper sessions — where the output is a payload slot rather than a
+conversation and section headings are chatter. In practice `--safe-mode` already
+stops this file from loading there at all, so treat that as a backstop rather
+than the mechanism.
+
+### Recaps
+
+When a turn does real work — edits landed, commands run with consequences,
+something now behaves differently — close it with these four sections, in this
+order. A turn that just answers a question gets a normal answer, not a recap.
+
+**Result** — what is now true, in plain language, 1–3 sentences. What works and
+what changed *for me*. Not how it was built.
+
+**Worth knowing** — surprises, caveats, deviations from what I asked for, things
+that will bite later. **Omit the heading entirely when there is nothing.** Never
+pad it to fill the shape.
+
+**Summary** — up to five bullets. The changes at a high level, and the
+verification status **always**: "41 tests pass", "not run", "compiles, untested".
+Never let a recap imply done when nothing was checked.
+
+**Needs you** — last, and always present. Decisions or actions that are
+genuinely mine to make, then what you'd do next. When nothing is blocking, say
+so in one line rather than inventing an ask. (An in-character closer, where
+there is one, still sits below this — `Needs you` is the last *content*, not
+necessarily the last text.)
+
+**Default to far less technical detail than feels natural.** Concretely:
+
+- No file-by-file walkthrough. Those edits were already on screen.
+- No code blocks unless the code *is* the answer.
+- Name a path only when I'd need to open it.
+- Function and variable names belong in the code, not the recap — unless one of
+  them is the thing I have to decide about.
+- Don't restate what a tool's own output already showed me.
+
+If I want the detail I'll ask. Under-explaining costs one question;
+over-explaining costs a scroll every single time.
+
+### Never let a dialog be the first place I read something
+
+`ExitPlanMode` raises an approval dialog that covers the scrollback, so anything
+written above it is unreachable until I reject the plan. The workaround I'm
+stuck with today is: reject, scroll up, read, ask again. That's the bug here.
+
+- **If the turn also contains findings** — research, file reads, analysis, any
+  reasoning I haven't seen yet — write the plan as ordinary text and **stop**.
+  Let me read and scroll. Call `ExitPlanMode` next turn, once I've said go.
+- **If the turn is nothing but the plan**, with nothing above it worth reading,
+  go straight to the dialog.
+- Either way, keep the `plan` argument short. It is an approval gate, not the
+  document.
+
+### Agent chatter
+
+When a subagent, team member or background task finishes, **say nothing about
+the fact that it finished.** No "the agent reports…", no relaying its summary
+back to me, no announcing that one was launched.
+
+Take the conclusion and keep working. Whatever I actually need arrives once, in
+the recap, in your own words. If it changed nothing for me, it earns silence.
+
+The one exception: it **failed**, or it found something that blocks the work.
+Say that plainly, once.
+
 ## File Deletion
 
 Prefer `trash` over `rm` when deleting files. If `trash` fails, try `rm` as a fallback — but always as a separate command, never chained together (no `trash ... || rm ...`).
