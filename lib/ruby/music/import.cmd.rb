@@ -2,10 +2,26 @@ require 'music/music_db.rb'
 
 module MusicCMD
 
+  # ytdl's filename scheme: ‹‹BY››channel‹‹TITLE››title‹‹ID››id.m4a, with an
+  # optional leading ‹‹TAGS›› field. Replaced __$__/__#__ on 2026-08-02 — the
+  # old `$` expanded away inside a double-quoted shell path, silently
+  # truncating it. See bin/ytdl for the full rationale.
+  YTDL_NAME = /
+    (?:‹‹TAGS››(?<tags>.*?))?
+    (?:‹‹BY››(?<channel>.*?))?
+    ‹‹TITLE››(?<title>.*)
+    ‹‹ID››(?<id>[^.]+)\.m4a
+  /x
+
+  # Characters allowed to survive basename sanitising. The guillemets MUST be
+  # here — this is a whitelist, so omitting them would strip the separators
+  # before YTDL_NAME ever saw them, and every parse would return nil.
+  YTDL_NAME_SAFE = /[^\w\$\-\#\.\(\)\&\[\]\,\;\'\"‹› ]/
+
   def import_ytdl(opts)
     opts.banner = "Usage: import_ytdl"
     opts.info = "Import all music from ~/Downloads/ytdl/music/ (interactive)"
-    opts.separator "    Expects files named: <artist>__$__<title>__#__<yt-id>.m4a"
+    opts.separator "    Expects files named: ‹‹BY››<artist>‹‹TITLE››<title>‹‹ID››<yt-id>.m4a"
     opts.separator "    Top-level files get playlist 'TODO'; files in subdirs use dir name as playlist."
     opts.separator "    Prompts for artist/name confirmation per file."
     opts.separator ""
@@ -66,9 +82,10 @@ module MusicCMD
       num_files = files.count
       files.each_with_index { |f, idx|
         puts ">>> ##{idx+1}/#{num_files} => #{f}".reverse
-        sanitized = %x[basename #{Shellwords.escape f}].gsub(/[^\w\$\-\#\.\(\)\&\[\]\,\;\'\" ]/, "")
-        yt_id = sanitized[/(.*)__\$__(.*)__#__([^\.]+)\.m4a/, 3]
-        title = sanitized[/(.*)__\$__(.*)__#__([^\.]+)\.m4a/, 2]
+        sanitized = %x[basename #{Shellwords.escape f}].gsub(YTDL_NAME_SAFE, "")
+        parsed = sanitized.match(YTDL_NAME)
+        yt_id = parsed && parsed[:id]
+        title = parsed && parsed[:title]
         if options[:artist] then
           artist = options[:artist]
         else
@@ -97,8 +114,9 @@ module MusicCMD
   end
 
   def _import_single_file(options, file)
-    sanitized = %x[basename #{Shellwords.escape file}].gsub(/[^\w\$\-\#\.\(\)\&\[\]\,\;\'\" ]/, "")
-    yt_id = sanitized[/(.*)__\$__(.*)__#__([^\.]+)\.m4a/, 3]
+    sanitized = %x[basename #{Shellwords.escape file}].gsub(YTDL_NAME_SAFE, "")
+    parsed = sanitized.match(YTDL_NAME)
+    yt_id = parsed && parsed[:id]
 
     artist = options[:artist]
     name = options[:title]

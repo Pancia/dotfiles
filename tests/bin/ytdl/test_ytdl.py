@@ -13,6 +13,7 @@ import pytest
 
 DOTFILES = Path(__file__).resolve().parents[3]
 YTDL = DOTFILES / "bin" / "ytdl"
+COPY_PATH = DOTFILES / "bin" / "ytdl-copy-path"
 
 
 # ---------------------------------------------------------------------------
@@ -76,13 +77,62 @@ exit 0
     # happens to be "music" (first element of YTDL_VALID_TYPES).
     _make_stub(stubs, "fzf", "head -n1")
 
+    # terminal-notifier: only reached under --notify; just logs its argv.
+    _make_stub(stubs, "terminal-notifier")
+
     env = {
         **os.environ,
         "HOME": str(home),
         "PATH": f"{stubs}:{os.environ['PATH']}",
         "YTDL_TEST_LOG": str(log),
+        "YTDL_TEST_BASENAME": "‹‹BY››Fake Chan‹‹TITLE››Fake Title",
     }
     return {"env": env, "home": home, "log": log, "stubs": stubs}
+
+
+# yt-dlp variant that actually lands a file on disk, so the text/notes path has
+# something to glob for and transcribe. Without it YTDL_RESULT_FILE stays empty
+# and the notification falls back to opening the folder.
+DOWNLOADING_YTDLP = """
+for a in "$@"; do
+    if [ "$a" = "--get-title" ]; then
+        echo "Fake Title"
+        exit 0
+    fi
+done
+
+out=""
+prev=""
+for a in "$@"; do
+    if [ "$prev" = "-o" ]; then out="$a"; fi
+    prev="$a"
+done
+ytid="${@: -1}"
+if [ -n "$out" ]; then
+    dir=$(dirname "$out")
+    mkdir -p "$dir"
+    : > "$dir/${YTDL_TEST_BASENAME}‹‹ID››${ytid}.m4a"
+fi
+exit 0
+""".strip()
+
+
+def _notifier_calls(calls):
+    return [c for c in calls if c[0] == "terminal-notifier"]
+
+
+def _flag(call, flag: str):
+    """Value following `flag` in a logged argv, or None."""
+    return call[call.index(flag) + 1] if flag in call else None
+
+
+def _success_notification(log: Path):
+    """The completion banner (title carries ✅), not the ⏳ start banners."""
+    for c in _notifier_calls(_parse_calls(log)):
+        title = _flag(c, "-title") or ""
+        if "✅" in title:
+            return c
+    return None
 
 
 def _run_ytdl(ytdl_env, *args, stdin: str = ""):
@@ -353,3 +403,184 @@ class TestClipboardMode:
         # Selected type was "music" (first fzf line), so output dir is music
         out = dl[dl.index("-o") + 1]
         assert "/Cloud/ytdl/music/" in out
+
+
+# ---------------------------------------------------------------------------
+# Completion-notification click action
+# ---------------------------------------------------------------------------
+
+
+class TestNotifyClickAction:
+    """text/notes copy the produced file's path; media still opens the folder."""
+
+    def test_text_click_copies_transcript_path(self, ytdl_env):
+        _make_stub(ytdl_env["stubs"], "yt-dlp", DOWNLOADING_YTDLP)
+        r = _run_ytdl(ytdl_env, "--notify", "text", "abc123")
+        assert r.returncode == 0, r.stderr
+
+        expected = (
+            ytdl_env["home"]
+            / "Cloud/ytdl/text/‹‹BY››Fake Chan‹‹TITLE››Fake Title‹‹ID››abc123.txt"
+        )
+        # The guard in _ytdl_notify is `test -f`, so the file must really exist
+        # or this test would pass for the wrong reason.
+        assert expected.is_file()
+
+        call = _success_notification(ytdl_env["log"])
+        assert call is not None
+        assert _flag(call, "-execute") == f"'{COPY_PATH}' '{expected}'"
+        assert _flag(call, "-message") == "click to copy path"
+
+    def test_notes_click_copies_existing_subtitle_path(self, ytdl_env):
+        _make_stub(ytdl_env["stubs"], "yt-dlp", DOWNLOADING_YTDLP)
+        # A pre-existing .en.srt short-circuits transcription; it is then the
+        # file the notification should point at.
+        notes = ytdl_env["home"] / "Cloud/ytdl/notes"
+        notes.mkdir(parents=True, exist_ok=True)
+        srt = notes / "‹‹BY››Fake Chan‹‹TITLE››Fake Title‹‹ID››abc123.en.srt"
+        srt.write_text("1\n")
+
+        r = _run_ytdl(ytdl_env, "--notify", "notes", "abc123")
+        assert r.returncode == 0, r.stderr
+
+        call = _success_notification(ytdl_env["log"])
+        assert _flag(call, "-execute") == f"'{COPY_PATH}' '{srt}'"
+
+    def test_media_click_still_opens_the_folder(self, ytdl_env):
+        _make_stub(ytdl_env["stubs"], "yt-dlp", DOWNLOADING_YTDLP)
+        r = _run_ytdl(ytdl_env, "--notify", "audio", "abc123")
+        assert r.returncode == 0, r.stderr
+
+        call = _success_notification(ytdl_env["log"])
+        out_dir = ytdl_env["home"] / "Cloud/ytdl/audio"
+        assert _flag(call, "-execute") == f"open '{out_dir}'"
+        assert _flag(call, "-message") == f"saved to {out_dir}"
+
+    def test_text_falls_back_to_open_when_nothing_was_produced(self, ytdl_env):
+        # Default yt-dlp stub writes no file, so there is no path to copy.
+        r = _run_ytdl(ytdl_env, "--notify", "text", "abc123")
+        assert r.returncode == 0, r.stderr
+
+        call = _success_notification(ytdl_env["log"])
+        out_dir = ytdl_env["home"] / "Cloud/ytdl/text"
+        assert _flag(call, "-execute") == f"open '{out_dir}'"
+
+    def test_apostrophe_in_filename_survives_sh(self, ytdl_env):
+        # terminal-notifier runs -execute through `sh -c`, and ytdl titles are
+        # full of apostrophes ("You're", "Can't"). Quote them wrong and the
+        # command breaks or, worse, runs something.
+        ytdl_env["env"]["YTDL_TEST_BASENAME"] = (
+            "‹‹BY››Alex Osle‹‹TITLE››Why You're Lean & $(id)"
+        )
+        _make_stub(ytdl_env["stubs"], "yt-dlp", DOWNLOADING_YTDLP)
+        r = _run_ytdl(ytdl_env, "--notify", "text", "abc123")
+        assert r.returncode == 0, r.stderr
+
+        expected = (
+            ytdl_env["home"]
+            / "Cloud/ytdl/text/‹‹BY››Alex Osle‹‹TITLE››Why You're Lean & $(id)‹‹ID››abc123.txt"
+        )
+        execute = _flag(_success_notification(ytdl_env["log"]), "-execute")
+        assert execute is not None
+
+        prefix = f"'{COPY_PATH}' "
+        assert execute.startswith(prefix)
+        quoted = execute[len(prefix) :]
+
+        # The real property: sh must hand the helper back the exact path, with
+        # the command substitution inert.
+        back = subprocess.run(
+            ["sh", "-c", f"printf %s {quoted}"], capture_output=True, text=True
+        )
+        assert back.returncode == 0
+        assert back.stdout == str(expected)
+
+    def test_failed_download_gets_no_click_action(self, ytdl_env):
+        _make_stub(ytdl_env["stubs"], "yt-dlp", 'echo "boom" >&2; exit 1')
+        r = _run_ytdl(ytdl_env, "--notify", "text", "abc123")
+        assert r.returncode != 0
+
+        calls = _notifier_calls(_parse_calls(ytdl_env["log"]))
+        failure = [c for c in calls if "❌" in (_flag(c, "-title") or "")]
+        assert failure, "expected a failure notification"
+        assert "-execute" not in failure[0]
+
+    def test_failed_transcription_is_not_reported_as_success(self, ytdl_env):
+        # Pins the $pipestatus capture in _ytdl_download_text. `set` is itself a
+        # job and overwrites $pipestatus, so reading it after the assignment
+        # would yield set's own 0 — turning a dead transcriber into a ✅ banner
+        # offering the path to an empty file.
+        _make_stub(ytdl_env["stubs"], "yt-dlp", DOWNLOADING_YTDLP)
+        _make_stub(ytdl_env["stubs"], "transcribe", 'echo "whisper died" >&2; exit 1')
+
+        r = _run_ytdl(ytdl_env, "--notify", "text", "abc123")
+        assert r.returncode != 0
+
+        assert _success_notification(ytdl_env["log"]) is None
+        calls = _notifier_calls(_parse_calls(ytdl_env["log"]))
+        failure = [c for c in calls if "❌" in (_flag(c, "-title") or "")]
+        assert failure, "expected a failure notification"
+        assert "-execute" not in failure[0]
+
+
+# ---------------------------------------------------------------------------
+# bin/ytdl-copy-path
+# ---------------------------------------------------------------------------
+
+
+class TestCopyPathHelper:
+    """The two-flavor clipboard write, exercised through --dry-run."""
+
+    def _dry_run(self, path: str) -> dict[str, str]:
+        r = subprocess.run(
+            [str(COPY_PATH), "--dry-run", path], capture_output=True, text=True
+        )
+        assert r.returncode == 0, r.stderr
+        out = {}
+        for line in r.stdout.splitlines():
+            key, _, value = line.partition("\t")
+            out[key] = value
+        return out
+
+    def test_helper_is_executable(self):
+        assert os.access(COPY_PATH, os.X_OK)
+
+    def test_plain_flavor_is_the_path_untouched(self):
+        # What a terminal or Finder paste gets: no wrapping, no escaping.
+        path = "/tmp/‹‹BY››Chan‹‹TITLE››Title & <b>x</b>‹‹ID››abc.txt"
+        assert self._dry_run(path)["plain"] == path
+
+    def test_html_flavor_wraps_in_code_and_escapes_markup(self):
+        got = self._dry_run("/tmp/a & b <c> d")["html"]
+        assert got == "<code>/tmp/a &amp; b &lt;c&gt; d</code>"
+
+    def test_ampersand_escaped_first_so_entities_are_not_doubled(self):
+        got = self._dry_run("/tmp/&lt;")["html"]
+        assert got == "<code>/tmp/&amp;lt;</code>"
+
+    def test_current_separators_survive_verbatim(self):
+        out = self._dry_run("/tmp/‹‹BY››a‹‹TITLE››b‹‹ID››c.txt")
+        for sep in ("‹‹BY››", "‹‹TITLE››", "‹‹ID››"):
+            assert sep in out["html"], sep
+
+    def test_legacy_underscore_separators_still_survive(self):
+        # The helper is general-purpose, and pre-migration files still exist in
+        # backups and Syncthing versions. Underscore pairs are exactly what
+        # Telegram reads as emphasis and deletes, so they must reach the HTML
+        # flavor intact — that is the whole reason the flavor exists.
+        out = self._dry_run("/tmp/a__$__b__#__c.txt")
+        assert "__$__" in out["html"]
+        assert "__#__" in out["html"]
+
+    def test_hex_round_trips_to_the_html_including_non_ascii(self):
+        # Two sources of non-ASCII now: ytdl substitutes fullwidth ？ ＂ ｜ for
+        # filesystem-hostile characters, and the separators themselves are
+        # guillemets. The AppleScript data literal must carry both as UTF-8.
+        out = self._dry_run("/tmp/‹‹BY››Chan‹‹TITLE››Título？＂｜‹‹ID››abc.txt")
+        assert bytes.fromhex(out["hex"]).decode("utf-8") == out["html"]
+        assert "‹‹ID››" in bytes.fromhex(out["hex"]).decode("utf-8")
+
+    def test_missing_argument_is_a_usage_error(self):
+        r = subprocess.run([str(COPY_PATH)], capture_output=True, text=True)
+        assert r.returncode == 2
+        assert "usage:" in r.stderr

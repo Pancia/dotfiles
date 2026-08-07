@@ -15,9 +15,47 @@ set -g YTDL_VIDEO_CODE "bestvideo[ext=mp4][height<=480][vcodec^=avc]+bestaudio"
 set -g YTDL_VIDEO_CODE_BEST "bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
 set -g YTDL_PLAYLIST_FMT "%(playlist_title)s"
 
+# Filename field separators. Every character here is deliberately inert: safe
+# unquoted in sh and inside double quotes, not markdown or Telegram emphasis,
+# not a glob metacharacter, legal on macOS, and not yt-dlp template syntax.
+#
+# They replaced __$__ / __#__ / __&__ on 2026-08-02. Each of those was a hazard:
+# the `$` expanded away inside a double-quoted path (silently truncating it),
+# `&` backgrounded the command unquoted, `#` autolinked as a Telegram hashtag,
+# and every `__pair__` read as markdown emphasis — so a path pasted into a chat
+# arrived with characters deleted. Guillemets appear nowhere in 52,747 real
+# filenames, so they also cannot collide with a video title.
+#
+# The labels matter as much as the brackets: MediaBoard files can carry tags
+# with no channel, which is structurally identical to a channel with no tags.
+# Unlabelled, those two are indistinguishable.
+# TAGS is never written by ytdl — MediaBoard tags are applied by hand, and no
+# tool in dotfiles or ~/projects writes them. It is defined here anyway so the
+# field set has one canonical home for anything that parses these names.
+set -g YTDL_SEP_TAGS "‹‹TAGS››"
+set -g YTDL_SEP_BY "‹‹BY››"
+set -g YTDL_SEP_TITLE "‹‹TITLE››"
+set -g YTDL_SEP_ID "‹‹ID››"
+
+# Resolved through any symlink so a `~/.local/bin/ytdl` shim still finds its
+# sibling helper in the real dotfiles/bin.
+set -g YTDL_COPY_PATH_BIN (dirname (path resolve (status filename)))/ytdl-copy-path
+
+# Set by the text/notes download path to the single file worth pointing at.
+# Empty for media downloads, which can produce several files.
+set -g YTDL_RESULT_FILE ""
+
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
+
+# Single-quote a string for /bin/sh, which is what terminal-notifier runs an
+# -execute command through. ytdl filenames routinely carry apostrophes
+# ("You're", "Can't"), $ and & — unquoted, those break the command or, in the
+# case of $(…), run something.
+function _ytdl_shq
+    printf "'%s'" (string replace --all -- "'" "'\\''" $argv[1])
+end
 
 function _ytdl_select_type
     set -l selected (printf '%s\n' $YTDL_VALID_TYPES | fzf --prompt="ytdl type> " --height=10)
@@ -112,7 +150,7 @@ end
 function _ytdl_convert_to_m4a
     set -l out_dir $argv[1]
     set -l ytid $argv[2]
-    for src_file in $out_dir/*__#__$ytid.{mp4,webm}
+    for src_file in $out_dir/*$YTDL_SEP_ID$ytid.{mp4,webm}
         if test -f "$src_file"
             set -l m4a_file (string replace -r '\.[^.]+$' '.m4a' -- $src_file)
             if not test -f "$m4a_file"
@@ -159,7 +197,7 @@ function _ytdl_download_media
         set playlist_segment "/$YTDL_PLAYLIST_FMT"
     end
 
-    set -l output_path "$YTDL_OUTPUT_DIR/$download_type$playlist_segment/%(channel)s__\$__%(title)s__#__%(id)s.%(ext)s"
+    set -l output_path "$YTDL_OUTPUT_DIR/$download_type$playlist_segment/$YTDL_SEP_BY%(channel)s$YTDL_SEP_TITLE%(title)s$YTDL_SEP_ID%(id)s.%(ext)s"
 
     set -l format_code $YTDL_AUDIO_CODE
     set -l merge_args
@@ -188,20 +226,35 @@ function _ytdl_download_text
     set -l download_type $argv[2] # "text" or "notes"
 
     set -l out_dir "$YTDL_OUTPUT_DIR/$download_type"
-    set -l out_file "$out_dir/%(channel)s__\$__%(title)s__#__%(id)s.%(ext)s"
+    set -l out_file "$out_dir/$YTDL_SEP_BY%(channel)s$YTDL_SEP_TITLE%(title)s$YTDL_SEP_ID%(id)s.%(ext)s"
 
     # Download audio (prefer m4a to avoid opus conversion issues during transcription)
     _ytdl_run $ytid -o $out_file -f 'bestaudio[ext=m4a]/bestaudio'
     or return 1
 
     # Find the audio file we just downloaded (matches this specific ytid)
-    set -l audio_file $out_dir/*__#__$ytid.*
+    set -l audio_file $out_dir/*$YTDL_SEP_ID$ytid.*
     if test (count $audio_file) -gt 0 -a -f "$audio_file[1]"
         if not string match -qr '\.(txt|srt)$' -- $audio_file[1]
             set -l txt_file (string replace -r '\.[^.]+$' '.txt' -- $audio_file[1])
             echo "[Transcribing] $audio_file[1]"
             transcribe $audio_file[1] | tee $txt_file
-            return $pipestatus[1]
+            # Capture before the `if`: fish resets $pipestatus on the next job
+            # and `test` is one. (Measured on 4.1.2, `set` alone happens not to
+            # clobber it, but that is not worth relying on.)
+            set -l rc $pipestatus[1]
+            # Defensive rather than observable: _ytdl_notify only reads
+            # YTDL_RESULT_FILE on the success branch, so a failed run would
+            # ignore it anyway. Keeps the variable's meaning honest — "the file
+            # we actually produced" — for any future reader.
+            if test $rc -eq 0
+                set -g YTDL_RESULT_FILE $txt_file
+            end
+            return $rc
+        else
+            # Already a transcript (a notes .en.srt, or a re-run): that file is
+            # the result, nothing to transcribe.
+            set -g YTDL_RESULT_FILE $audio_file[1]
         end
     end
     return 0
@@ -251,9 +304,20 @@ function _ytdl_notify
     set -l out_dir "$YTDL_OUTPUT_DIR/$dl_type"
 
     if test $dl_status -eq 0
+        # text/notes end in exactly one file worth pointing at, so clicking
+        # copies its absolute path (two pasteboard flavors — see
+        # bin/ytdl-copy-path). Media downloads can produce several files, so a
+        # single path would be ambiguous and they keep opening the folder.
+        set -l body "saved to $out_dir"
+        set -l action "open "(_ytdl_shq $out_dir)
+        if test -n "$YTDL_RESULT_FILE"; and test -f "$YTDL_RESULT_FILE"
+            set body "click to copy path"
+            set action (_ytdl_shq $YTDL_COPY_PATH_BIN)" "(_ytdl_shq $YTDL_RESULT_FILE)
+        end
+
         terminal-notifier -title "ytdl ✅ $dl_type" -subtitle "$msg" \
-            -message "saved to $out_dir" -sound default -group "ytdl-$ytid" \
-            -execute "open '$out_dir'" >/dev/null 2>&1
+            -message "$body" -sound default -group "ytdl-$ytid" \
+            -execute "$action" >/dev/null 2>&1
     else
         terminal-notifier -title "ytdl ❌ $dl_type FAILED" -subtitle "$msg" \
             -message "$ytid" -sound Basso -group "ytdl-$ytid" >/dev/null 2>&1

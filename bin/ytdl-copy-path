@@ -1,0 +1,86 @@
+#!/bin/bash
+#
+# ytdl-copy-path — put a file path on the clipboard in two flavors at once.
+#
+# The plain-text flavor gets the bare path, so a paste into a terminal, Finder
+# or an editor is clean. The HTML flavor gets <code>path</code>, so an app that
+# reads rich text on paste inserts it as a code span rather than re-parsing it
+# as markdown.
+#
+# That second flavor exists for Telegram Desktop specifically. ytdl filenames
+# used to be built around __$__ and __#__ separators, and Telegram reads a
+# __pair__ as underline formatting: it *deletes* the four underscores and sends
+# a path that no longer resolves. The 2026-08-02 move to ‹‹LABEL›› separators
+# removed that hazard at the source, but this stays load-bearing — titles
+# themselves still contain markdown metacharacters (`*`, `_`, `~`, backticks),
+# and pre-migration paths persist in backups and Syncthing versions.
+# Telegram Desktop is a Qt app and Qt maps the macOS
+# public.html pasteboard type to text/html, which its input field honours — so
+# the code span survives the trip. Nothing is lost if an app ignores the HTML
+# flavor; it just falls back to the plain path.
+#
+# Invoked from ytdl's completion notification via `terminal-notifier -execute`.
+# macOS relaunches terminal-notifier under launchd to handle that click, so the
+# environment is NOT the invoking shell's — PATH is set explicitly below rather
+# than inherited.
+
+set -euo pipefail
+
+PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
+
+dry_run=0
+if [ "${1-}" = "--dry-run" ]; then
+    dry_run=1
+    shift
+fi
+
+target="${1-}"
+if [ -z "$target" ]; then
+    printf 'usage: ytdl-copy-path [--dry-run] <path>\n' >&2
+    exit 2
+fi
+
+# Escape the three characters that are markup inside element content. Ampersand
+# has to go first or it would re-escape the entities the others introduce.
+html_escape() {
+    local s=$1
+    s=${s//&/&amp;}
+    s=${s//</&lt;}
+    s=${s//>/&gt;}
+    printf '%s' "$s"
+}
+
+# AppleScript string literals take backslash and double quote as escapes.
+# Backslash first, same re-escaping reason as above.
+applescript_escape() {
+    local s=$1
+    s=${s//\\/\\\\}
+    s=${s//\"/\\\"}
+    printf '%s' "$s"
+}
+
+html="<code>$(html_escape "$target")</code>"
+
+# AppleScript raw data literals are hex. Encoding the UTF-8 bytes this way
+# keeps the path's non-ASCII characters (ytdl substitutes ？ ＂ ｜ for the
+# filesystem-hostile ones) out of the AppleScript source entirely.
+hex=$(printf '%s' "$html" | xxd -p | tr -d '\n' | tr '[:lower:]' '[:upper:]')
+
+if [ "$dry_run" -eq 1 ]; then
+    printf 'plain\t%s\n' "$target"
+    printf 'html\t%s\n' "$html"
+    printf 'hex\t%s\n' "$hex"
+    exit 0
+fi
+
+# One call sets both flavors — `set the clipboard to` replaces the whole
+# pasteboard, so a separate pbcopy would drop whichever ran first.
+osascript -e "set the clipboard to {string:\"$(applescript_escape "$target")\", «class HTML»:«data HTML${hex}»}"
+
+# Clicking a notification is otherwise silent, so confirm the copy landed.
+# Best-effort: a missing terminal-notifier must not fail the copy itself.
+if command -v terminal-notifier >/dev/null 2>&1; then
+    terminal-notifier -title "ytdl 📋 path copied" \
+        -message "$(basename "$target")" \
+        -group "ytdl-copy-path" >/dev/null 2>&1 || true
+fi

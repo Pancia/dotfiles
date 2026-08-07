@@ -123,19 +123,21 @@ module MusicCMD
 
   def _parse_ytdl_filename(filepath)
     basename = File.basename(filepath)
-    m = basename.match(/^(.*)__\$__(.*)__#__([^\.]+)\.m4a$/)
+    # ‹‹BY››channel‹‹TITLE››title‹‹ID››id.m4a, optional leading ‹‹TAGS››.
+    # Replaced __$__/__#__ on 2026-08-02; see bin/ytdl for why.
+    m = basename.match(/^(?:‹‹TAGS››(.*?))?(?:‹‹BY››(.*?))?‹‹TITLE››(.*)‹‹ID››([^.]+)\.m4a$/)
     return nil unless m
-    { file: filepath, channel: m[1], raw_title: m[2], yt_id: m[3] }
+    { file: filepath, channel: m[2], raw_title: m[3], yt_id: m[4] }
   end
 
   def _ai_parse_filenames(entries)
     descriptions = entries.map { |e|
-      "#{e[:channel]}__$__#{e[:raw_title]}__#__#{e[:yt_id]}.m4a"
+      "‹‹BY››#{e[:channel]}‹‹TITLE››#{e[:raw_title]}‹‹ID››#{e[:yt_id]}.m4a"
     }
 
     prompt = <<~PROMPT
       Parse these YouTube music filenames into artist and title metadata.
-      The format is: channel__$__title__#__YTID.m4a
+      The format is: ‹‹BY››channel‹‹TITLE››title‹‹ID››YTID.m4a
 
       The "channel" is the YouTube uploader (often not the real artist).
       The "title" is the YouTube video title (often has "artist - song" or extra junk like "(Official Video)", "slowed + reverb", etc.).
