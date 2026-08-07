@@ -313,6 +313,259 @@ def test_out_of_repo_path_is_named_not_blamed(repo):
     assert "conflict" not in r.stderr.lower()
 
 
+# ------------------------------------------------------------------- path case
+#
+# macOS is case-insensitive but case-preserving, and os.path.realpath does not
+# normalize case -- so one directory has two working spellings. ROOT comes from
+# `jj root` (canonical); a record's path comes from the agent's file_path,
+# whatever it used. Comparing them as STRINGS made `ccjj audit` silently drop
+# every mismatched record from its claims and made `ccjj commit` abort the whole
+# run on the first one, both for paths sitting plainly inside the repo.
+
+def _load_ccjj():
+    """ccjj.py imported as a module, for the few pure functions worth unit
+    testing directly. It is a script, not a package member, so it is loaded by
+    path rather than imported by name."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("ccjj_under_test", CCJJ)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _case_insensitive(base):
+    p = os.path.join(base, "CaseProbe")
+    os.mkdir(p)
+    try:
+        return os.path.isdir(os.path.join(base, "caseprobe"))
+    finally:
+        os.rmdir(p)
+
+
+@pytest.fixture
+def icase(tmp_path):
+    if not _case_insensitive(str(tmp_path)):
+        pytest.skip("filesystem is case-sensitive; the bug cannot arise")
+
+
+def _variant(root):
+    """`root` with its last component upper-cased -- the same directory here."""
+    return os.path.join(os.path.dirname(root), os.path.basename(root).upper())
+
+
+def _write_rec(repo, sid, path, **kw):
+    """A schema-1 record, i.e. one written before `rel` existed."""
+    d = os.path.join(repo.journal, repo.root.replace("/", "_"), sid)
+    os.makedirs(d, exist_ok=True)
+    rec = {"schema": 1, "tool": "Write", "path": path, "old": None, "new": None,
+           "content": None, "replace_all": False, "original": None}
+    rec.update(kw)
+    with open(os.path.join(d, "%019d-0.json" % time.time_ns()), "w") as fh:
+        json.dump(rec, fh)
+
+
+def test_legacy_record_spelled_with_other_case_still_commits(repo, icase):
+    """`ccjj commit` aborted the ENTIRE run -- build() called rel() unguarded,
+    so one mis-cased record refused every path the session owned.
+
+    NESTED on purpose. under_root() rebuilds the relative path from components
+    collected walking UP, so it must reverse them; every one-level-deep path
+    makes that reversal a no-op and lets `a/b/f` -> `f/b/a` pass unnoticed."""
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    repo.write("deep/nest/new.md", "written\n")
+    _write_rec(repo, "S1", os.path.join(_variant(repo.root), "deep", "nest", "new.md"),
+               content="written\n")
+
+    r = repo.run("commit", "-m", "cased", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert "outside the repo" not in r.stderr
+    assert repo.show(os.path.join("deep", "nest", "new.md")) == b"written\n"
+
+
+def test_legacy_record_spelled_with_other_case_counts_as_claimed(repo, icase):
+    """survey() swallowed rel()'s exit and `continue`d, so the path vanished
+    from the claims set and audit reported it as owned by nobody."""
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    repo.write("f.txt", "b\n")
+    _write_rec(repo, "S1", os.path.join(_variant(repo.root), "f.txt"),
+               content="b\n")
+
+    r = repo.run("audit", sid="S1")
+    assert "outside the repo" not in r.stderr
+    assert "f.txt" not in r.stdout.split("claimed by no session")[-1]
+
+
+def test_a_genuinely_outside_path_is_still_refused(repo):
+    """The inode fallback must not turn into 'accept anything that escapes'.
+    No icase fixture: a sibling repo is outside on every filesystem, and this
+    is exactly the assertion worth keeping on a case-sensitive one."""
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    sibling = os.path.join(os.path.dirname(repo.root), "repo2")
+    os.makedirs(sibling)
+    with open(os.path.join(sibling, "f.txt"), "w") as fh:
+        fh.write("x\n")
+    _write_rec(repo, "S1", os.path.join(sibling, "f.txt"), content="x\n")
+
+    r = repo.run("commit", "-m", "outside", sid="S1")
+    assert r.returncode != 0
+    assert "outside the repo" in r.stderr
+
+
+def test_record_edit_stores_a_repo_relative_path(tmp_path):
+    """Schema 2. Derived where the root is known to be this path's ancestor,
+    so no reader has to re-derive it against a differently-spelled ROOT."""
+    repo = Repo(str(tmp_path))
+    repo.write("d/f.txt", "a\n")
+    repo.commit("base")
+    repo.write("d/f.txt", "A\n")
+    payload = json.dumps({
+        "tool_name": "Edit", "session_id": "S1", "tool_use_id": "t",
+        "tool_input": {"file_path": os.path.join(repo.root, "d", "f.txt"),
+                       "old_string": "a", "new_string": "A"},
+        "tool_response": {"originalFile": "a\n",
+                          "structuredPatch": [{"lines": ["-a", "+A"]}]},
+    })
+    subprocess.run([sys.executable, CCJJ, "record-edit"], input=payload,
+                   capture_output=True, text=True,
+                   env={**os.environ, "CC_JJ_JOURNAL": repo.journal})
+
+    names = repo.journal_records("S1")
+    assert len(names) == 1
+    d = os.path.join(repo.journal, repo.root.replace("/", "_"), "S1")
+    with open(os.path.join(d, names[0])) as fh:
+        rec = json.load(fh)
+    assert rec["schema"] == 2
+    assert rec["rel"] == os.path.join("d", "f.txt")
+
+
+def test_recorder_and_reader_agree_on_the_journal_directory(tmp_path, icase):
+    """repo_key() names the journal dir from the root STRING. The recorder
+    resolved it from the agent's file_path and readers from `jj root`, so a
+    mis-cased cwd wrote a second journal -- masked here because both names open
+    one directory, but a real split on any case-sensitive volume."""
+    repo = Repo(str(tmp_path))
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    repo.write("f.txt", "A\n")
+    payload = json.dumps({
+        "tool_name": "Edit", "session_id": "S1", "tool_use_id": "t",
+        "tool_input": {"file_path": os.path.join(_variant(repo.root), "f.txt"),
+                       "old_string": "a", "new_string": "A"},
+        "tool_response": {"originalFile": "a\n",
+                          "structuredPatch": [{"lines": ["-a", "+A"]}]},
+    })
+    subprocess.run([sys.executable, CCJJ, "record-edit"], input=payload,
+                   capture_output=True, text=True,
+                   env={**os.environ, "CC_JJ_JOURNAL": repo.journal})
+
+    # keyed by the canonical root, not the spelling the payload happened to use
+    assert os.listdir(repo.journal) == [repo.root.replace("/", "_")]
+    assert repo.run("commit", "-m", "hooked", sid="S1").returncode == 0
+    assert repo.show("f.txt") == b"A\n"
+
+
+def test_record_edit_stores_rel_for_a_mis_cased_path(tmp_path, icase):
+    """find_repo() canonicalizes the root it returns, so computing `rel` against
+    a bare realpath compared a normalized string to an unnormalized one and
+    stored null -- in precisely the case the field was added for. Schema 2 then
+    silently delivered nothing and the inode fallback carried every record."""
+    repo = Repo(str(tmp_path))
+    repo.write("sub/f.txt", "a\n")
+    repo.commit("base")
+    repo.write("sub/f.txt", "A\n")
+    payload = json.dumps({
+        "tool_name": "Edit", "session_id": "S1", "tool_use_id": "t",
+        "tool_input": {"file_path": os.path.join(_variant(repo.root), "sub", "f.txt"),
+                       "old_string": "a", "new_string": "A"},
+        "tool_response": {"originalFile": "a\n",
+                          "structuredPatch": [{"lines": ["-a", "+A"]}]},
+    })
+    subprocess.run([sys.executable, CCJJ, "record-edit"], input=payload,
+                   capture_output=True, text=True,
+                   env={**os.environ, "CC_JJ_JOURNAL": repo.journal})
+
+    d = os.path.join(repo.journal, repo.root.replace("/", "_"), "S1")
+    with open(os.path.join(d, repo.journal_records("S1")[0])) as fh:
+        rec = json.load(fh)
+    assert rec["rel"] == os.path.join("sub", "f.txt")
+
+
+def test_a_stored_rel_is_what_readers_use(repo):
+    """Pins that schema 2 is HONORED, not merely written. The two fields are
+    made to disagree deliberately -- nothing produces this in the wild -- because
+    a reader that quietly re-derived from `path` would otherwise be invisible."""
+    repo.write("a.txt", "a\n")
+    repo.write("b.txt", "b\n")
+    repo.commit("base")
+    repo.write("b.txt", "from-rel\n")
+    _write_rec(repo, "S1", os.path.join(repo.root, "a.txt"),
+               schema=2, rel="b.txt", content="from-rel\n", original="b\n")
+
+    r = repo.run("commit", "-m", "stored rel wins", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert repo.show("b.txt") == b"from-rel\n"     # the record's `rel`
+    assert repo.show("a.txt") == b"a\n"            # not its `path`
+
+
+def test_also_excludes_records_by_the_same_key_build_uses(repo):
+    """`--also` takes a path WHOLESALE, so its records must not ALSO be replayed.
+    The filter has to key exactly as build() does: build() moved to rec_rel while
+    the filter still called rel(), so a record whose stored `rel` differs from
+    its `path` slipped through and was applied on top of the wholesale copy --
+    the double-application the exclusion exists to prevent.
+
+    The two fields are made to disagree deliberately; see the test above."""
+    repo.write("a.txt", "a\n")
+    repo.write("b.txt", "b\n")
+    repo.commit("base")
+    repo.write("b.txt", "from-working-copy\n")
+    _write_rec(repo, "S1", os.path.join(repo.root, "a.txt"),
+               schema=2, rel="b.txt", content="from-record\n", original="b\n")
+
+    r = repo.run("commit", "-m", "also", "--also", "b.txt", sid="S1")
+    assert r.returncode == 0, r.stderr
+    # wholesale from the working copy, NOT the record replayed over it
+    assert repo.show("b.txt") == b"from-working-copy\n"
+
+
+def test_claim_survives_a_mis_cased_absolute_path(repo, icase):
+    """rel_literal() has the same string-compare trap as rel(), and `ccjj claim`
+    is the one caller that reaches it -- with no coverage at all before this."""
+    _optin(repo)
+    repo.write("s.sh", "one\ntwo\n")
+    repo.commit("base")
+    _bash(repo)
+    repo.write("s.sh", "one\nTWO-via-sed\n")
+    _bash(repo)
+
+    c = repo.run("claim", os.path.join(_variant(repo.root), "s.sh"), sid="S1")
+    assert c.returncode == 0, c.stderr
+    assert "outside the repo" not in c.stderr
+    assert repo.run("commit", "-m", "sed", sid="S1").returncode == 0
+    assert repo.show("s.sh") == b"one\nTWO-via-sed\n"
+
+
+def test_true_case_refuses_to_guess_between_two_spellings(monkeypatch):
+    """On a case-SENSITIVE volume `Foo` and `foo` are different directories, so
+    a lone case-insensitive match is the only safe one. Weakened to `len < 1`
+    the walk picks hits[0] arbitrarily and silently retargets the journal.
+
+    Driven through a faked listdir because the ambiguity is unconstructible on
+    the case-insensitive filesystem this suite runs on."""
+    ccjj = _load_ccjj()
+    monkeypatch.setattr(ccjj.os, "listdir",
+                        lambda d: ["Foo", "foo"] if d == os.sep else [])
+    # ambiguous -> the remainder is handed back verbatim, never guessed
+    assert ccjj.true_case("/FOO") == "/FOO"
+    monkeypatch.setattr(ccjj.os, "listdir",
+                        lambda d: ["Foo"] if d == os.sep else [])
+    assert ccjj.true_case("/FOO") == "/Foo"
+
+
 # --------------------------------------------------------------------- journal
 
 def test_records_replay_regardless_of_filename_order(repo):

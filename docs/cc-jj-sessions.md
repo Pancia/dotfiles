@@ -363,6 +363,60 @@ tools show the same repo names in the state directory. Journals are **moved** to
 re-count them. `ccjj prune` drops archived days older than 14 and is called
 automatically, at most once a day, after a successful commit.
 
+## Path case
+
+macOS is case-**insensitive** but case-**preserving**, and `os.path.realpath` does
+not normalize case — it resolves symlinks and nothing else. So one directory has
+two equally-working spellings, and ccjj learned the root two ways: readers from
+`jj root` (canonical), records from the agent's `file_path` (whatever it used).
+`os.path.relpath` compares those as **strings**, so a record naming
+`~/Vaults/the-akashic-records/…` measured against a ROOT of `~/vaults/…` came back
+as `../../Vaults/…` and was declared *"outside the repo"* — while sitting plainly
+inside it, same `st_ino`.
+
+It failed two different ways, neither loud:
+
+- `survey()` and `claims_of()` catch `rel()`'s exit and `continue`, so the path was
+  **silently dropped from the claims set** — audit printed the error *and*
+  under-reported, showing a path its owner had claimed as claimed by nobody.
+- `build()` and `cmd_claim` called `rel()` unguarded, so one mis-cased record
+  **aborted the entire `ccjj commit`** with exit 1, refusing every other path the
+  session owned along with it.
+
+Three parts to the fix, and all three are load-bearing:
+
+- **`rel` is stored at record time** (schema 2). `cmd_record_edit` knows the root is
+  an ancestor of the very path it is recording, so it resolves the relative path
+  once, where the question cannot be ambiguous, instead of leaving every reader to
+  re-derive it against a root that arrives from somewhere else.
+- **`true_case()`** respells a path with the casing the filesystem actually stores,
+  applied to `find_repo()`'s return and to `ROOT` in `main()`. `repo_key()` builds
+  the journal **directory name** from that string at 20-odd call sites;
+  canonicalizing at the two places a root originates keeps them all consistent
+  without touching any. Both sides still derive from `jj root`, which is already
+  canonical, so the key stays byte-identical to `ai_jj_commit.fish`'s.
+- **`under_root()`** compares by **inode**, walking up until it finds ROOT, and is
+  the fallback for schema-1 records written before any of this. Spelling cannot
+  fool it. It runs only on the branch where the string compare already escaped, so
+  the common path pays nothing.
+
+Two traps worth keeping in mind if you touch this:
+
+- **Canonicalize both sides or neither.** The first cut applied `true_case` to
+  `find_repo()` but computed the record's `rel` against a bare `realpath` — which
+  reintroduced the exact mismatch, stored `rel: null` on every mis-cased record,
+  and left schema 2 delivering nothing while the inode fallback quietly carried
+  all of it. Green tests throughout; found by review.
+- **Sub-root components matter too.** `under_root` returning literal names meant a
+  record spelled `.../ROOT/SUB/f.txt` yielded `SUB/f.txt`, which no revision
+  contains — so `build()` mistook a file it could not find for a **new** one and
+  adopted its content wholesale instead of reporting the conflict.
+
+The journal-splitting half is latent rather than observed: on this filesystem both
+spellings open one directory, so the two keys collide harmlessly. Move
+`XDG_STATE_HOME` to a case-sensitive volume without `true_case` and the journal
+divides in two, with audit reporting nothing at all.
+
 ## Files
 
 | Path | Role |

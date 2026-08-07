@@ -35,7 +35,7 @@ import time
 from typing import NoReturn
 
 JJ_DEADLINE = 8          # seconds; a wedged jj must never hang the agent
-SCHEMA = 1
+SCHEMA = 2               # 2 adds "rel"; schema 1 records still read, see rec_rel
 ROOT = ""                # repo root, set once in main() before any subcommand
 
 
@@ -55,11 +55,98 @@ def repo_key(root):
     return root.replace("/", "_")
 
 
+def true_case(path):
+    """`path` respelled with the casing the filesystem actually stores.
+
+    macOS is case-INSENSITIVE but case-PRESERVING, and os.path.realpath does not
+    normalize case (posixpath resolves symlinks, nothing more). So one directory
+    has two equally-working spellings, and the recorder -- which resolves the
+    root from the agent's file_path -- could spell it differently from readers,
+    which take it from `jj root`. repo_key() turns that string into the journal
+    directory NAME, so the journal would silently split in two on any
+    case-sensitive volume; here it merely masks the split. Canonicalizing at the
+    two places a root originates keeps all 20-odd repo_key() call sites
+    consistent without touching any of them.
+
+    Resolution is per component and best-effort: an unreadable, missing or
+    ambiguous component ends the walk and the REMAINDER is kept verbatim, so a
+    path that does not exist yet still gets its existing ancestors canonicalized.
+    All-or-nothing would have been worse in the one case that matters -- a record
+    names a file, and only its directories can be looked up.
+
+    Two same-inode spellings cannot both appear in one listdir on a
+    case-insensitive volume, so the ambiguity guard only ever fires on a
+    case-sensitive one, where `Foo` and `foo` are genuinely different
+    directories and guessing between them would be a data-loss bug.
+    """
+    if not os.path.isabs(path):
+        return path
+    out = os.sep
+    parts = [p for p in path.split(os.sep) if p]
+    for i, part in enumerate(parts):
+        try:
+            names = os.listdir(out)
+        except OSError:
+            return os.path.join(out, *parts[i:])
+        if part not in names:
+            hits = [n for n in names if n.lower() == part.lower()]
+            if len(hits) != 1:
+                return os.path.join(out, *parts[i:])
+            part = hits[0]
+        out = os.path.join(out, part)
+    return out
+
+
+def under_root(p, resolve=True):
+    """`p` relative to ROOT by INODE, or None when genuinely outside.
+
+    os.path.relpath is a pure string compare against a ROOT that may be spelled
+    with different case (see true_case), so `.../Vaults/x` under a ROOT of
+    `.../vaults` read as "outside the repo" though both name one directory --
+    same st_ino. Walking up by identity is the only comparison that cannot be
+    fooled by spelling. Non-existent components are skipped rather than fatal:
+    a record may name a file that has since been deleted, and only its
+    ancestors need to exist for containment to be decidable.
+
+    resolve=False keeps rel_literal()'s contract where it is load-bearing: a
+    LEAF symlink still names itself rather than its target, so a claim cannot be
+    silently retargeted. Ancestor directories are resolved either way -- os.stat
+    follows links and must, since containment is a question about real
+    directories -- which is a change only for a symlinked ancestor, where it
+    replaces a spurious refusal with the right answer.
+
+    The starting point is true_case'd so the components handed back are the
+    names jj tracks. Without it a record spelled `.../ROOT/SUB/f.txt` yielded
+    `SUB/f.txt`, which no revision contains, and build() then mistook a file it
+    could not find for a newly created one and adopted its content wholesale
+    instead of reporting the conflict.
+    """
+    try:
+        st_root = os.stat(ROOT)
+    except OSError:
+        return None
+    cur = true_case(os.path.realpath(p) if resolve else os.path.abspath(p))
+    parts = []
+    while True:
+        try:
+            if os.path.samestat(os.stat(cur), st_root):
+                return os.path.join(*reversed(parts)) if parts else "."
+        except OSError:
+            pass
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            return None
+        parts.append(os.path.basename(cur))
+        cur = parent
+
+
 def find_repo(start):
     d = os.path.realpath(start)
     while True:
         if os.path.isdir(os.path.join(d, ".jj")):
-            return d
+            # Canonical case, so repo_key() names one journal dir per repo
+            # however the agent happened to spell the path it handed us.
+            return true_case(d)
         parent = os.path.dirname(d)
         if parent == d:
             return None
@@ -95,6 +182,14 @@ def fs(path):
 def rel(p):
     r = os.path.relpath(os.path.realpath(p), ROOT)
     if r == ".." or r.startswith(".." + os.sep) or os.path.isabs(r):
+        # The string compare escaped. That is the answer on a case-sensitive
+        # filesystem and a lie on this one, so confirm by inode before refusing:
+        # `ccjj audit` dropped every record whose path was spelled with
+        # different case, and `ccjj commit` aborted the WHOLE run on the first
+        # one -- both while the path sat plainly inside the repo.
+        alt = under_root(p)
+        if alt is not None:
+            return alt
         die("%s is outside the repo (%s).\n"
             "  It cannot be committed here; remove its journal record and re-run." % (p, ROOT))
     return r
@@ -130,8 +225,23 @@ def rel_literal(p):
     """
     r = os.path.relpath(os.path.abspath(p), ROOT)
     if r == ".." or r.startswith(".." + os.sep) or os.path.isabs(r):
+        alt = under_root(p, resolve=False)   # same case trap as rel()
+        if alt is not None:
+            return alt
         die("%s is outside the repo (%s)." % (p, ROOT))
     return r
+
+
+def rec_rel(rec):
+    """Repo-relative path of a journal record.
+
+    Schema 2 records carry it, computed at record time against the root the
+    recorder itself resolved -- so it needs no re-derivation and no comparison
+    that spelling can break. Schema 1 records hold only an absolute path, which
+    must still be measured against ROOT; that is the path rel() now guards by
+    inode, and it is how records written before this change keep working.
+    """
+    return rec.get("rel") or rel(rec["path"])
 
 
 # ---------------------------------------------------------------- shared lock
@@ -382,10 +492,23 @@ def cmd_record_edit(_args):
     if not root:
         return
 
+    # Resolved here, where the root is known to be an ancestor of this very
+    # path, rather than re-derived at read time against a root that arrives
+    # from `jj root` and may be spelled with different case.
+    #
+    # true_case on BOTH sides or neither: find_repo() canonicalizes what it
+    # returns, so comparing it against a bare realpath reintroduced the exact
+    # string mismatch this field exists to avoid -- every mis-cased record
+    # stored rel=null and fell back to the very path being fixed.
+    rp = os.path.relpath(true_case(os.path.realpath(path)), root)
+    if rp == ".." or rp.startswith(".." + os.sep) or os.path.isabs(rp):
+        rp = None   # a genuine escape: a leaf symlink out of the repo
+
     record = {
         "schema": SCHEMA,
         "tool": payload["tool_name"],
         "path": path,
+        "rel": rp,
         "old": tin.get("old_string"),
         "new": tin.get("new_string"),
         "content": tin.get("content"),
@@ -813,7 +936,7 @@ def build(records, present, pinned):
     by_path = {}
     for rec in records:
         if rec.get("path"):
-            by_path.setdefault(rel(rec["path"]), []).append(rec)
+            by_path.setdefault(rec_rel(rec), []).append(rec)
 
     mine = {}
     for path, recs in by_path.items():
@@ -989,7 +1112,10 @@ def cmd_commit(args):
             p = r.get("path")
             if p:
                 try:
-                    if rel(p) in also_set:
+                    # rec_rel, not rel: build() keys by rec_rel, and an
+                    # exclusion filter that keys differently silently fails to
+                    # exclude -- which is the double-application above.
+                    if rec_rel(r) in also_set:
                         continue
                 except SystemExit:
                     pass
@@ -1286,7 +1412,7 @@ def cmd_claim(args):
     # apply the edits twice -- silently, for the commonest (insertion-shaped)
     # Edit, which duplicates a hunk rather than failing to match.
     mine_here = [r for r in load_records(jdir)
-                 if r.get("path") and rel(r["path"]) == path]
+                 if r.get("path") and rec_rel(r) == path]
     if mine_here:
         die("%s already has %d recorded Edit/Write record(s) in this session.\n"
             "  Claiming the window as well would apply those edits twice.\n"
@@ -1364,7 +1490,7 @@ def claims_of(sid):
     for rec in load_records(os.path.join(journal_root(), repo_key(ROOT), sid)):
         if rec.get("path"):
             try:
-                paths.add(rel(rec["path"]))
+                paths.add(rec_rel(rec))
             except SystemExit:
                 continue
     return paths
@@ -1447,7 +1573,7 @@ def survey():
             for rec in load_records(d):
                 if rec.get("path"):
                     try:
-                        paths.add(rel(rec["path"]))
+                        paths.add(rec_rel(rec))
                     except SystemExit:
                         continue
             if paths:
@@ -1875,7 +2001,9 @@ def main():
     r = subprocess.run(["jj", "root"], capture_output=True, text=True)
     if r.returncode != 0:
         die("not inside a jj repo", 2)
-    ROOT = os.path.realpath(r.stdout.strip())
+    # true_case for the same reason find_repo() applies it: both sides must
+    # agree on the spelling, or repo_key() names two journals for one repo.
+    ROOT = true_case(os.path.realpath(r.stdout.strip()))
 
     {"commit": cmd_commit, "audit": cmd_audit, "prune": cmd_prune,
      "disown": cmd_disown, "should-scope": cmd_should_scope,
