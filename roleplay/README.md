@@ -17,6 +17,77 @@ prompt. The technical content in between is written normally.
 This directory is **self-contained**: copy it anywhere and it works. Nothing in it
 reads a path outside itself.
 
+---
+
+## Porting this
+
+If you are reading this to **reimplement** the idea rather than install it —
+different shell, different agent harness, your own cast — start here. The whole
+subsystem is ~2,200 lines and fits in one context.
+
+**Read in this order.** `docs/claude-roleplay.md` first: it is the *why*, and
+almost every decision below has a paragraph there explaining what it cost to
+learn. Then `bin/roleplay-roll` (187 lines, bash + awk). Then skim `examples.md`
+— it is the only artifact that conveys what "in character but *not* quoting the
+famous line" actually reads like, which is the hard part of the design and the
+part a reimplementation usually misses. `README.md` and `tests/` are the least
+interesting here; they serve installers and regressions.
+
+**Non-negotiables.** These look incidental and are not. Each was a bug first:
+
+- **Fail open on every path.** Missing roster, unreadable file, broken awk, empty
+  result — print nothing, exit 0. A prompt-submit hook that errors or emits
+  garbage degrades *every prompt the user ever sends*. `set -uo pipefail`,
+  deliberately never `set -e`. The cost is that all failures look identical, which
+  the Troubleshooting section below exists to offset. Take the trade anyway.
+- **Nothing but the payload on stdout.** Claude Code parses it as JSON. A stray
+  diagnostic is not a warning, it is a broken prompt.
+- **JSON-escape the roster text.** Characters legitimately carry quotes and
+  backslashes in their traits and signature lines. Unescaped, they emit invalid
+  JSON and the hook silently does nothing.
+- **Keep the cast out of the system prompt.** This is the entire design, not a
+  file-layout preference: the prompt section is constant-size and the injected tag
+  is self-contained, so per-prompt cost is one line whether the roster holds 6
+  characters or 600. An inline table pays for every unused character on every
+  prompt forever. If your port inlines the cast, you have ported the flavour and
+  thrown away the point.
+- **Do not seed the RNG from time-of-day.** awk's `srand()` with no argument has
+  one-second resolution, so two prompts sent in the same second get the same
+  character. Seed from something per-process (`$RANDOM` here).
+- **Two-stage selection is deliberate.** Universe at even odds, *then* character
+  within it. A flat roll across all entries lets one large group swallow the
+  distribution — 63%, in the cast that prompted this. The tradeoff is that
+  per-character odds are then unequal across groups; that is the accepted cost,
+  and the fix is growing small groups rather than flattening the roll.
+- **Ration the famous quote, do not ban it.** An unconditional ban was the first
+  design and it was too blunt — the problem was never the quote, only that it
+  appeared *every single time*. Roll for it (1/3 default) and tell the model which
+  way it landed, naming the line in **both** branches: when spent, it has to be
+  identified in order to be avoided.
+- **The signature roll must happen after the character picks.** It consumes from
+  the same RNG stream; moving it earlier shifts every downstream selection.
+- **No roll tag → no bookends.** That convention is what keeps flavour out of
+  headless/non-interactive output, where it would land in a payload slot rather
+  than a chat. Your port needs an equivalent, or it will corrupt scripted calls.
+
+**Two things that are just bash trivia**, safe to drop if your target language
+differs: the awk program is single-quoted, so no apostrophe may appear anywhere
+inside it; and the guillemets and em-dash are literal UTF-8 rather than `\xNN`
+escapes, because BSD awk on macOS does not read those the way gawk does.
+
+**The harness-specific piece** is the output envelope. Here it is Claude Code's
+`UserPromptSubmit` hook contract:
+
+```json
+{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"[🎭 Character Roll: «Name» 🔍 UNIVERSE — traits]"}}
+```
+
+Anything that can inject a line into the model's context per turn will do —
+substitute your harness's mechanism and the rest of the design carries over
+unchanged.
+
+---
+
 ## Install
 
 One symlink, two edits to your own Claude config. Nothing is copied into this
