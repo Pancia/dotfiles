@@ -1,4 +1,15 @@
-#!/usr/bin/env fish
+#!/opt/homebrew/bin/fish
+#
+# Absolute interpreter path, not `/usr/bin/env fish`. A shebang's interpreter is
+# resolved through PATH at exec time, so `env fish` fails with rc=127 under
+# launchd's default PATH (/usr/bin:/bin:/usr/sbin:/sbin), which does not include
+# /opt/homebrew/bin. Callers that pass an absolute path to *this script* gain
+# nothing from doing so if the interpreter itself can't be found.
+#
+# This currently works only by accident — the wget_server chain happens to reach
+# a fish that repairs PATH via config.fish — and would break for every journal
+# upload the moment that config grew a `status is-interactive` guard.
+# services/wget_server/script.sh already hardcodes this same path.
 
 set model_path "$HOME/.local/share/whisper-cpp/models/ggml-large-v3-turbo.bin"
 set vad_model_path "$HOME/.local/share/whisper-cpp/models/silero-v6.2.0.ggml"
@@ -41,19 +52,47 @@ if not test -f "$model_path"
     exit 1
 end
 
-# Check if input needs conversion (whisper-cpp only handles wav/mp3/ogg/flac natively)
-set -l ext (string lower (string replace -r '.*\.' '' "$audio_file"))
-set -l input_file "$audio_file"
+# Always convert to 16 kHz mono WAV.
+#
+# whisper-cli is built without ffmpeg (WHISPER_FFMPEG=OFF), so it decodes only
+# what its bundled decoders handle: wav, mp3, flac, and ogg/**vorbis**. It
+# cannot decode ogg/**opus** — and `.ogg` is a container, not a codec, so an
+# extension test can't tell the two apart. Opus is what Telegram, WhatsApp and
+# Android recorders all produce, so the old `contains $ext wav mp3 ogg flac`
+# whitelist passed the single most common case straight through to whisper-cli,
+# which failed with "failed to read audio data as wav".
+#
+# Converting unconditionally costs ~1.9s for 20 minutes of audio — noise beside
+# transcription — and removes the whole class of bug rather than one instance of
+# it. It also normalises sample rate and channel count, which the whitelist path
+# passed through untouched (a 48 kHz stereo wav previously reached whisper-cli
+# as-is).
+#
+# The scratch dir is global and torn down by a signal handler as well as on the
+# normal paths. Every invocation now creates one (the conversion is
+# unconditional, where the old whitelist skipped it for most inputs), and the
+# converted WAV is 16 kHz mono s16le ≈ 32 KB/s — so a Ctrl-C during a 2-hour
+# transcription used to strand ~230 MB with only macOS's /var/folders reaper
+# behind it. SIGKILL remains uncatchable by definition.
+set -g __transcribe_tmpdir (mktemp -d -t transcribe)
+or begin
+    echo "Error: could not create temp directory" >&2
+    exit 1
+end
 
-if not contains $ext wav mp3 ogg flac
-    set -l tmp (mktemp -t transcribe.XXXXXX).wav
-    echo "Converting to WAV..." >&2
-    ffmpeg -err_detect ignore_err -i "$audio_file" -ar 16000 -ac 1 -c:a pcm_s16le "$tmp" -y -loglevel error
-    or begin
-        echo "Error: ffmpeg conversion failed" >&2
-        exit 1
-    end
-    set input_file "$tmp"
+function __transcribe_cleanup --on-signal INT --on-signal TERM --on-signal HUP
+    test -n "$__transcribe_tmpdir"; and rm -rf "$__transcribe_tmpdir"
+    exit 130
+end
+
+set -l input_file "$__transcribe_tmpdir/audio.wav"
+
+echo "Converting to WAV..." >&2
+ffmpeg -nostdin -err_detect ignore_err -i "$audio_file" -ar 16000 -ac 1 -c:a pcm_s16le "$input_file" -y -loglevel error
+or begin
+    echo "Error: ffmpeg conversion failed" >&2
+    rm -rf "$__transcribe_tmpdir"
+    exit 1
 end
 
 # Transcribe
@@ -65,10 +104,8 @@ end
 set -l output (whisper-cli -m "$model_path" -f "$input_file" --no-prints -nt -mc 64 -et 2.0 -lpt -0.3 --suppress-nst $vad_args 2>&1)
 set -l status_code $status
 
-# Clean up temp file if we made one
-if test "$input_file" != "$audio_file"
-    rm -f "$input_file"
-end
+# Clean up the scratch directory (always ours — the conversion is unconditional)
+rm -rf "$__transcribe_tmpdir"
 
 if test $status_code -ne 0
     echo "Error: whisper-cli failed" >&2

@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+#
+# akr-voice — transcribe a recording and file it as a bot voice note.
+#
+# Thin shim. The real script lives in the vault because it imports
+# voice_archive/attachments from tools/inari (both stdlib-only, so no venv and
+# no uv — but see the interpreter note below).
+#
+#   akr-voice <file>              transcribe, archive under the Guide
+#   akr-voice --latest            newest recording in the drop folder
+#   akr-voice <file> --bot health file it under a different bot
+#   akr-voice --help              full options
+#
+set -euo pipefail
+
+# Canonical path first, then the back-compat symlink akr-scratch uses.
+root=""
+for candidate in "${AKR_ROOT:-}" "$HOME/Vaults/the-akashic-records" "$HOME/AKR"; do
+    if [[ -n "$candidate" && -f "$candidate/tools/inari/akr_voice.py" ]]; then
+        root="$candidate"
+        break
+    fi
+done
+
+if [[ -z "$root" ]]; then
+    echo "akr-voice: could not locate akr_voice.py (set AKR_ROOT)" >&2
+    exit 1
+fi
+
+# Pick an interpreter deliberately rather than trusting `python3` on PATH.
+# attachments.py uses PEP 604 unions (`str | None`) at import time, so anything
+# below 3.10 dies with a TypeError pointing at a module the user never invoked.
+# macOS ships /usr/bin/python3 as 3.9.6 and it is last on a normal PATH — fine
+# interactively, but a reduced-PATH caller (launchd, Shortcuts, Raycast, a
+# PATH-sanitizing wrapper) would hit it and get a baffling error.
+py=""
+for candidate in python3.14 python3.13 python3.12 python3.11 python3.10 python3; do
+    command -v "$candidate" >/dev/null 2>&1 || continue
+    if "$candidate" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
+        py="$candidate"
+        break
+    fi
+done
+
+if [[ -z "$py" ]]; then
+    echo "akr-voice: need python3.10+ on PATH (found: $(command -v python3 || echo none))" >&2
+    exit 1
+fi
+
+exec "$py" "$root/tools/inari/akr_voice.py" "$@"
