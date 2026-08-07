@@ -49,14 +49,19 @@ COMPONENTS = {
         "aliases": ["exocortex-id", "exocortex"],
         "source_path": "bin/exocortex-id",
     },
-    # Drives bin/roleplay-roll as a subprocess. No pip deps -- it is a bash
-    # script -- but it runs on every prompt via a UserPromptSubmit hook, so a
-    # regression here is felt everywhere at once.
-    "bin/roleplay-roll": {
+    # Drives roleplay/bin/roleplay-roll as a subprocess. No pip deps -- it is a
+    # bash script -- but it runs on every prompt via a UserPromptSubmit hook, so
+    # a regression here is felt everywhere at once.
+    #
+    # The tests live in roleplay/tests/, inside the self-contained subsystem, and
+    # reach this tree through the `tests/roleplay` symlink. run_component() does
+    # `TESTS_DIR / component`, so without that link the component would resolve to
+    # nothing and rot unrun -- the exact silent failure this dict exists to stop.
+    "roleplay": {
         "runner": "pytest",
         "deps": [],
         "aliases": ["roleplay-roll", "roleplay"],
-        "source_path": "bin/roleplay-roll",
+        "source_path": "roleplay/bin/roleplay-roll",
     },
     # Python tests that drive fish via `fish -c` and assert on the output --
     # NOT fishtape. Needs the `fish` binary on PATH, no pip deps.

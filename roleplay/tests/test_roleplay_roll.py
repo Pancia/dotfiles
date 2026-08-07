@@ -1,4 +1,4 @@
-"""Tests for bin/roleplay-roll, the roleplay character picker.
+"""Tests for roleplay/bin/roleplay-roll, the roleplay character picker.
 
 This script runs as a UserPromptSubmit hook on every prompt in every project, so
 its failure modes are unusually expensive: bad stdout is parsed as JSON by Claude
@@ -7,6 +7,7 @@ sends. The fail-open tests below are the load-bearing ones.
 """
 
 import json
+import os
 import re
 import subprocess
 from collections import Counter
@@ -14,9 +15,13 @@ from pathlib import Path
 
 import pytest
 
-DOTFILES = Path(__file__).resolve().parents[3]
-SCRIPT = DOTFILES / "bin" / "roleplay-roll"
-REAL_ROSTER = DOTFILES / "ai" / "roleplay" / "roster.tsv"
+# `.resolve()` matters: dotfiles reaches this tree through the `tests/roleplay`
+# symlink, so an unresolved __file__ would put ROOT under tests/ instead.
+# parents[1] is roleplay/ -- the self-contained subsystem root, which is what
+# gets copied when this is shared, so nothing below reaches outside it.
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "bin" / "roleplay-roll"
+REAL_ROSTER = ROOT / "roster.tsv"
 
 
 def run(*args, roster=None, seed=None, odds=None):
@@ -355,3 +360,103 @@ def test_real_roster_produces_a_usable_roll():
     ctx = payload["hookSpecificOutput"]["additionalContext"]
     assert ctx.startswith("[🎭 Character Roll: «")
     assert ctx.endswith("]")
+
+
+# --------------------------------------------------------------------------
+# Symlink resolution.
+#
+# The copy that actually runs is reached through a symlink -- dotfiles keeps
+# `bin/roleplay-roll` as a link into this subsystem, and anyone installing it
+# elsewhere will link it onto their PATH. bash does NOT resolve a script symlink
+# in $BASH_SOURCE, so without the walk in the script the roster lookup lands next
+# to the *link* and finds nothing. That fails open, i.e. silently, so these tests
+# are the only thing standing between a bad refactor and bookends quietly
+# vanishing everywhere at once.
+#
+# Every test here deliberately omits ROLEPLAY_ROSTER: the override would mask the
+# very resolution being tested.
+# --------------------------------------------------------------------------
+
+
+def _install(tmp_path):
+    """Build a copy of the shipped layout: <root>/bin/roleplay-roll + <root>/roster.tsv."""
+    root = tmp_path / "install"
+    (root / "bin").mkdir(parents=True)
+    script = root / "bin" / "roleplay-roll"
+    script.write_bytes(SCRIPT.read_bytes())
+    script.chmod(0o755)
+    (root / "roster.tsv").write_text(
+        "MYTH | Hermes | 🪽 | Fast · a messenger\n", encoding="utf-8"
+    )
+    return root, script
+
+
+def _roll(path):
+    """Run a script path with no roster override at all."""
+    return subprocess.run(
+        [str(path), "--plain"],
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": str(Path.home())},
+    )
+
+
+def test_finds_sibling_roster_without_a_symlink(tmp_path):
+    """Baseline: direct invocation resolves ../roster.tsv. If this fails the
+    symlink tests below prove nothing."""
+    _, script = _install(tmp_path)
+    assert "Hermes" in _roll(script).stdout
+
+
+def test_relative_symlink_resolves_to_the_real_roster(tmp_path):
+    """The dotfiles case: bin/roleplay-roll -> ../roleplay/bin/roleplay-roll."""
+    _, script = _install(tmp_path)
+    linkdir = tmp_path / "elsewhere"
+    linkdir.mkdir()
+    link = linkdir / "roleplay-roll"
+    link.symlink_to(os.path.relpath(script, linkdir))
+    assert "Hermes" in _roll(link).stdout
+
+
+def test_absolute_symlink_resolves_to_the_real_roster(tmp_path):
+    """The `ln -s /path/to/roleplay/bin/roleplay-roll ~/.local/bin/` case."""
+    _, script = _install(tmp_path)
+    link = tmp_path / "abs-roleplay-roll"
+    link.symlink_to(script)
+    assert "Hermes" in _roll(link).stdout
+
+
+def test_chained_symlinks_resolve(tmp_path):
+    """A link to a link -- the walk is a loop, not a single readlink."""
+    _, script = _install(tmp_path)
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.symlink_to(script)
+    second.symlink_to(first)
+    assert "Hermes" in _roll(second).stdout
+
+
+def test_symlink_next_to_a_decoy_roster_ignores_the_decoy(tmp_path):
+    """Pins the actual bug: resolving to the *link's* directory would read a
+    roster sitting beside the link. Only a passing walk reaches the real one."""
+    _, script = _install(tmp_path)
+    linkdir = tmp_path / "decoy" / "bin"
+    linkdir.mkdir(parents=True)
+    (tmp_path / "decoy" / "roster.tsv").write_text(
+        "WRONG | Decoy | 💀 | should never be selected\n", encoding="utf-8"
+    )
+    link = linkdir / "roleplay-roll"
+    link.symlink_to(script)
+    out = _roll(link).stdout
+    assert "Hermes" in out
+    assert "Decoy" not in out
+
+
+def test_dotfiles_bin_symlink_is_wired_up():
+    """The wiring in this repo specifically. Skips cleanly for a standalone copy,
+    which has no parent tree to link from."""
+    shim = ROOT.parent / "bin" / "roleplay-roll"
+    if not shim.is_symlink():
+        pytest.skip("not installed in a dotfiles tree")
+    assert shim.resolve() == SCRIPT.resolve()
+    assert "«" in _roll(shim).stdout

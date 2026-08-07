@@ -21,7 +21,7 @@ a habit, a grudge, an object the character would handle, or a detail of their
 world. If you are writing new examples, that constraint is the point — a
 character who is only recognisable by their catchphrase is not characterised.
 
-See [`docs/claude-roleplay.md`](../../docs/claude-roleplay.md) for the mechanism.
+See [`docs/claude-roleplay.md`](docs/claude-roleplay.md) for the mechanism.
 
 ---
 

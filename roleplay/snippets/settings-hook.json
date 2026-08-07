@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "Merge the UserPromptSubmit entry below into ~/.claude/settings.json.",
+    "",
+    "If you already have a `hooks` key, add this object to the existing",
+    "UserPromptSubmit array rather than replacing it -- Claude Code runs every",
+    "entry in the array, so several hooks coexist happily.",
+    "",
+    "`command` assumes roleplay-roll is on PATH. If it isn't, use an absolute",
+    "path to the symlink or to roleplay/bin/roleplay-roll directly; the script",
+    "resolves its own roster either way.",
+    "",
+    "Keys beginning with _ are not read by Claude Code, so this block is safe to",
+    "leave in place -- but there is no reason to copy it across."
+  ],
+
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "roleplay-roll"
+          }
+        ]
+      }
+    ]
+  }
+}

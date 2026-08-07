@@ -6,7 +6,7 @@ Bookend each response with an **opener** and a **closer** in character. Everythi
 
 > `[🎭 Character Roll: «Togusa» 🔍 GHOST IN THE SHELL — Methodical · earnest · old-school detective instincts]`
 
-Use exactly that character. The roster lives in `~/dotfiles/ai/roleplay/roster.tsv`, deliberately not here — the hook reads it, so each prompt carries one line rather than all 57. (`roleplay-roll --list` / `--check`.)
+Use exactly that character. The roster lives in `~/dotfiles/roleplay/roster.tsv`, deliberately not here — the hook reads it, so each prompt carries one line rather than all 57. (`roleplay-roll --list` / `--check`.)
 
 **No roll tag → no bookends.** Its absence means a non-interactive session — headless `claude -p`, SDK, nested helper — where they'd be chatter in a payload slot rather than flavour.
 
