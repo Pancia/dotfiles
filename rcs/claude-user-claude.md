@@ -36,24 +36,30 @@ than the mechanism.
 
 When a turn does real work — edits landed, commands run with consequences,
 something now behaves differently — close it with these four sections, in this
-order. A turn that just answers a question gets a normal answer, not a recap.
+order, inside one screen. A turn that just answers a question gets a normal
+answer, not a recap.
 
-**Result** — what is now true, in plain language, 1–3 sentences. What works and
-what changed *for me*. Not how it was built.
+**Each thing gets said once**, in one section — the four divide by kind, not by
+zoom level. The recap starts at its first heading; nothing above it.
+
+**Result** — 1–2 sentences: what is now true *for me*. No mechanism, no
+verification. Why a bug happened earns one clause, and only when it changes what
+I'd do or expect next.
 
 **Worth knowing** — surprises, caveats, deviations from what I asked for, things
-that will bite later. **Omit the heading entirely when there is nothing.** Never
-pad it to fill the shape.
+that will bite later. Three bullets at most. **Omit the heading entirely when
+there is nothing**; never pad it to fill the shape.
 
-**Summary** — up to five bullets. The changes at a high level, and the
-verification status **always**: "41 tests pass", "not run", "compiles, untested".
-Never let a recap imply done when nothing was checked.
+**Summary** — up to five bullets: the changes at a high level, plus the
+verification status **always** — a phrase, not a story: "41 tests pass", "not
+run", "compiles, untested". Never let a recap imply done when nothing was
+checked. The evidence behind it only when it contradicts something.
 
-**Needs you** — last, and always present. Decisions or actions that are
-genuinely mine to make, then what you'd do next. When nothing is blocking, say
-so in one line rather than inventing an ask. (An in-character closer, where
-there is one, still sits below this — `Needs you` is the last *content*, not
-necessarily the last text.)
+**Needs you** — last, always present, three sentences at most. Decisions or
+actions that are genuinely mine to make, then what you'd do next. When nothing
+is blocking, say so in one line rather than inventing an ask. (An in-character
+closer, where there is one, still sits below this — `Needs you` is the last
+*content*, not necessarily the last text.)
 
 **Default to far less technical detail than feels natural.** Concretely:
 
@@ -63,6 +69,8 @@ necessarily the last text.)
 - Function and variable names belong in the code, not the recap — unless one of
   them is the thing I have to decide about.
 - Don't restate what a tool's own output already showed me.
+- A Summary bullet that paraphrases Result, or a Worth knowing bullet that
+  narrates the verification, is one thing said twice — cut the bullet.
 
 If I want the detail I'll ask. Under-explaining costs one question;
 over-explaining costs a scroll every single time.
