@@ -1,0 +1,28 @@
+# Domains blocked at the resolver level, rendered into /etc/hosts by
+# `site-block sync`. One name per line; `#` starts a comment.
+#
+# A name with exactly two labels (an apex like `example.com`) also gets its
+# `www.` form emitted automatically — don't list that yourself.
+#
+# /etc/hosts has NO WILDCARD SUPPORT. `*.example.com` will not work, and a site
+# on wildcard DNS answers on every subdomain whether or not it uses one. List
+# the names you might actually reach for; see the openfront.io note below.
+
+# openfront.io — browser RTS. Runs on Cloudflare wildcard DNS (cert SAN is
+# `*.openfront.io`), so every conceivable subdomain resolves. Listed here are
+# the apex, the plausible client hosts, and the regional game servers.
+openfront.io
+play.openfront.io
+game.openfront.io
+app.openfront.io
+beta.openfront.io
+staging.openfront.io
+dev.openfront.io
+api.openfront.io
+ws.openfront.io
+us.openfront.io
+eu.openfront.io
+asia.openfront.io
+na.openfront.io
+sa.openfront.io
+oceania.openfront.io

@@ -1,0 +1,223 @@
+#!/usr/bin/env bash
+#
+# site-block — block domains at the resolver level via /etc/hosts.
+#
+# The tracked list in misc/blocked-domains is the source of truth; `sync`
+# renders it into a marked region of /etc/hosts and leaves everything outside
+# those markers alone. That keeps the block versioned and reproducible on a new
+# machine, which a hand-edited /etc/hosts is not.
+#
+#   site-block               show the list and whether /etc/hosts matches it
+#   site-block add DOMAIN…   add to the list, then sync
+#   site-block rm DOMAIN…    remove from the list, then sync
+#   site-block sync          re-render /etc/hosts from the list
+#   site-block off DOMAIN…   alias for rm — undoing is meant to be easy to type
+#
+# Entries resolve to 0.0.0.0 and :: (both families — a name left with only an A
+# override can still answer over AAAA). Writing needs root, so sync prompts for
+# sudo unless /etc/hosts is already writable.
+#
+# LIMITATION: /etc/hosts cannot express a wildcard. A site on wildcard DNS
+# answers on every subdomain, so only the names listed here are actually
+# blocked. If that gap matters, the upgrade is a local dnsmasq with
+# `address=/example.com/0.0.0.0`, which does cover subdomains.
+
+set -euo pipefail
+
+DOTFILES="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/.." && pwd)"
+LIST="${SITE_BLOCK_LIST:-$DOTFILES/misc/blocked-domains}"
+HOSTS="${SITE_BLOCK_HOSTS:-/etc/hosts}"
+
+BEGIN_MARKER="# BEGIN site-block"
+END_MARKER="# END site-block"
+
+# One scratch dir cleaned up on exit. Deliberately not a per-function `trap …
+# RETURN`: bash keeps that trap armed after the function returns, so it re-fires
+# on every later return and dies on the now-out-of-scope variable under `set -u`.
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+die() { printf 'site-block: %s\n' "$*" >&2; exit 1; }
+
+# Strip scheme/path, lowercase, and reject anything that isn't a plain hostname.
+# `rm` validates too, not just `add`: the name is interpolated into a grep -E
+# pattern below, and something like `.*` would otherwise match lines it must not.
+normalize_domain() {
+    local d
+    d="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's#^https?://##; s#/.*$##; s#\.$##')"
+    [[ "$d" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] \
+        || die "'$1' does not look like a domain"
+    printf '%s' "$d"
+}
+
+# Names as they should appear in /etc/hosts: list order, deduped, with the www.
+# form added for apex domains (exactly two labels).
+expanded_names() {
+    local name n seen="" variants
+    while IFS= read -r name; do
+        name="${name%%#*}"
+        name="$(printf '%s' "$name" | tr -d '[:space:]')"
+        [ -n "$name" ] || continue
+
+        variants="$name"
+        # Exactly one dot means an apex domain; block its www. form too.
+        if [[ "$name" == *.* && "$name" != *.*.* ]]; then
+            variants="$variants www.$name"
+        fi
+
+        for n in $variants; do
+            case " $seen " in *" $n "*) continue ;; esac
+            seen="$seen $n"
+            printf '%s\n' "$n"
+        done
+    done < "$LIST"
+}
+
+render_block() {
+    printf '%s\n' "$BEGIN_MARKER"
+    printf '# Managed by site-block — edits here are overwritten. Change the list at\n'
+    printf '# %s then run: site-block sync\n' "${LIST/#$HOME/\~}"
+    local name
+    while IFS= read -r name; do
+        printf '0.0.0.0\t%s\n' "$name"
+        printf '::\t%s\n' "$name"
+    done < <(expanded_names)
+    printf '%s\n' "$END_MARKER"
+}
+
+# /etc/hosts with any existing managed region removed and trailing blanks trimmed.
+strip_region() {
+    [ -f "$HOSTS" ] || die "$HOSTS does not exist"
+
+    # Validate marker ORDER, not just counts. A file where END precedes BEGIN has
+    # balanced counts but makes the stripper treat everything after BEGIN as
+    # inside the region — silently deleting the tail of /etc/hosts.
+    local problem
+    problem="$(awk -v b="$BEGIN_MARKER" -v e="$END_MARKER" '
+        $0 == b { if (inblock) { print "a nested BEGIN marker at line " NR; bad = 1; exit }
+                  inblock = 1; next }
+        $0 == e { if (!inblock) { print "an END marker before its BEGIN at line " NR; bad = 1; exit }
+                  inblock = 0; next }
+        END { if (!bad && inblock) print "a BEGIN marker that is never closed" }
+    ' "$HOSTS")"
+    [ -z "$problem" ] || die "$HOSTS has $problem — fix it by hand before syncing"
+
+    awk -v b="$BEGIN_MARKER" -v e="$END_MARKER" '
+        $0 == b { inblock = 1; next }
+        $0 == e { inblock = 0; next }
+        !inblock
+    ' "$HOSTS" | awk '{ lines[NR] = $0 }
+        END { last = 0
+              for (i = 1; i <= NR; i++) if (lines[i] ~ /[^[:space:]]/) last = i
+              for (i = 1; i <= last; i++) print lines[i] }'
+}
+
+desired_hosts() {
+    strip_region
+    printf '\n'
+    render_block
+}
+
+cmd_sync() {
+    local tmp="$WORK/hosts.new" sudo=""
+    desired_hosts > "$tmp"
+
+    if cmp -s "$tmp" "$HOSTS"; then
+        printf '%s is already in sync (%s names).\n' "$HOSTS" "$(expanded_names | wc -l | tr -d ' ')"
+        return 0
+    fi
+
+    [ -w "$HOSTS" ] || sudo="sudo"
+
+    if [ ! -e "$HOSTS.site-block.bak" ]; then
+        $sudo cp "$HOSTS" "$HOSTS.site-block.bak"
+        printf 'Saved a pre-site-block backup at %s\n' "$HOSTS.site-block.bak"
+    fi
+
+    # Replace by rename(2), not `tee`. `tee` opens with O_TRUNC, so the target is
+    # empty for the whole write — interrupt that and /etc/hosts is left truncated,
+    # which breaks localhost. A rename is atomic: readers see the old file or the
+    # new one, never a partial one. The staging file sits beside the target so the
+    # rename stays within one filesystem.
+    local staged="$HOSTS.site-block.new" mode owner
+    mode="$(stat -f '%OLp' "$HOSTS")"
+    owner="$(stat -f '%u:%g' "$HOSTS")"
+    $sudo cp "$tmp" "$staged"
+    $sudo chmod "$mode" "$staged"
+    $sudo chown "$owner" "$staged"
+    $sudo mv -f "$staged" "$HOSTS"
+    printf 'Wrote %s (%s names blocked).\n' "$HOSTS" "$(expanded_names | wc -l | tr -d ' ')"
+
+    if [ "$HOSTS" = /etc/hosts ]; then
+        $sudo dscacheutil -flushcache 2>/dev/null || true
+        $sudo killall -HUP mDNSResponder 2>/dev/null || true
+        printf 'Flushed the DNS cache.\n'
+    fi
+}
+
+cmd_list() {
+    local count
+    count="$(expanded_names | wc -l | tr -d ' ')"
+    expanded_names | sed 's/^/  /'
+    printf '\n%s names from %s\n' "$count" "${LIST/#$HOME/\~}"
+
+    if cmp -s <(desired_hosts) "$HOSTS"; then
+        printf 'Status: %s is in sync.\n' "$HOSTS"
+    else
+        printf 'Status: %s is OUT OF SYNC — run `site-block sync`.\n' "$HOSTS"
+    fi
+}
+
+cmd_add() {
+    [ $# -gt 0 ] || die "add needs at least one domain"
+    local d added=0
+    for d in "$@"; do
+        d="$(normalize_domain "$d")"
+        # Here-string, not a pipe: `grep -q` exits on first match, and under
+        # `pipefail` the SIGPIPE'd producer would fail the whole test.
+        if grep -qxF "$d" <<< "$(expanded_names)"; then
+            printf 'Already blocked: %s\n' "$d"
+            continue
+        fi
+        printf '%s\n' "$d" >> "$LIST"
+        printf 'Added: %s\n' "$d"
+        added=1
+    done
+    [ "$added" = 1 ] && cmd_sync || true
+}
+
+cmd_rm() {
+    [ $# -gt 0 ] || die "rm needs at least one domain"
+    local d pat rc left tmp="$WORK/list.new" removed=0
+    for d in "$@"; do
+        d="$(normalize_domain "$d")"
+        pat="^[[:space:]]*${d//./\\.}[[:space:]]*$"
+        if grep -qE "$pat" "$LIST"; then
+            # `grep -v` exits 1 when it selects nothing, which is exactly what
+            # happens removing the last entry from a comment-free list. Untrapped,
+            # `set -e` aborted before the write and left the domain still blocked.
+            rc=0; grep -vE "$pat" "$LIST" > "$tmp" || rc=$?
+            [ "$rc" -le 1 ] || die "grep failed (status $rc) while removing $d"
+            cat "$tmp" > "$LIST"
+            printf 'Removed: %s\n' "$d"
+            removed=1
+
+            # Removing an apex leaves its subdomains listed and still blocked —
+            # say so, or `off openfront.io` looks like it unblocked the site.
+            left="$(expanded_names | grep -cE "\.${d//./\\.}$" || true)"
+            [ "$left" = 0 ] || printf '  note: %s subdomain(s) of %s are still listed and still blocked\n' "$left" "$d"
+        else
+            printf 'Not in the list: %s\n' "$d"
+        fi
+    done
+    [ "$removed" = 1 ] && cmd_sync || true
+}
+
+case "${1:-list}" in
+    list|status|"")   shift || true; cmd_list ;;
+    sync)             shift; cmd_sync ;;
+    add)              shift; cmd_add "$@" ;;
+    rm|remove|off)    shift; cmd_rm "$@" ;;
+    -h|--help|help)   awk 'NR > 1 { if ($0 !~ /^#/) exit; sub(/^# ?/, ""); print }' "$0" ;;
+    *)                die "unknown command '$1' — try: list, add, rm, sync" ;;
+esac
