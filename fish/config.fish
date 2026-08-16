@@ -5,83 +5,12 @@ function _not_same_inode
     test (stat -f '%i' $argv[1]) != (stat -f '%i' $argv[2])
 end
 
+# rcs/MANIFEST pairs: hardlinked files, symlinked directories. The logic lives in
+# bin/rcs-sync, which resolves a split pair by which side changed since the last
+# sync instead of letting the repo copy always win -- that silently reverted
+# apps (Claude Code's /effort, /permissions) that save by atomic rename.
 function _ENSURE_RCS
-    set -l manifest "$HOME/dotfiles/rcs/MANIFEST"
-    if not test -f "$manifest"
-        if status is-interactive; and isatty stderr
-            echo "[_ENSURE_RCS] warning: $manifest not found" >&2
-        end
-        return 1
-    end
-
-    # Collect all source files listed in manifest
-    set -l manifest_files
-
-    while read -l line
-        # Skip comments and empty lines
-        string match -rq '^\s*#' -- $line; and continue
-        string match -rq '^\s*$' -- $line; and continue
-
-        # Parse "source -> destination" format
-        set -l parts (string split ' -> ' -- $line)
-        if test (count $parts) -ne 2
-            continue
-        end
-
-        set -l rc_name (string trim -- $parts[1])
-        set -l rc_dest (string trim -- $parts[2])
-        # Expand $HOME in destination path
-        set -l rc_dest (string replace '$HOME' "$HOME" -- $rc_dest)
-
-        # Support absolute paths (starting with / or $HOME) for rc_name
-        set -l rc_path
-        if string match -rq '^(/|\$HOME)' -- $rc_name
-            set rc_path (string replace '$HOME' "$HOME" -- $rc_name)
-        else
-            set rc_path "$HOME/dotfiles/rcs/$rc_name"
-        end
-
-        set -a manifest_files (basename $rc_name)
-
-        # Handle directories (use symlinks since hard links don't work for dirs)
-        if test -d "$rc_path"
-            if not test -L "$rc_dest"; or test (readlink "$rc_dest") != "$rc_path"
-                mkdir -p (dirname "$rc_dest")
-                ln -sfn "$rc_path" "$rc_dest"
-            end
-            continue
-        end
-
-        if not test -f "$rc_path"
-            if status is-interactive; and isatty stderr
-                echo "[_ENSURE_RCS] warning: $rc_path not found" >&2
-            end
-            continue
-        end
-
-        if not test -f "$rc_dest"; or _not_same_inode "$rc_dest" "$rc_path"
-            mkdir -p (dirname "$rc_dest")
-            ln -f "$rc_path" "$rc_dest"
-        end
-    end < "$manifest"
-
-    # Check for files in rcs/ not listed in manifest
-    if status is-interactive; and isatty stderr
-        for rc_file in $HOME/dotfiles/rcs/*
-            # Skip directories
-            test -d "$rc_file"; and continue
-
-            set -l filename (basename $rc_file)
-            # Skip MANIFEST itself and common non-rc items
-            test "$filename" = "MANIFEST"; and continue
-            string match -q '__pycache__' -- $filename; and continue
-            string match -q '*.pyc' -- $filename; and continue
-
-            if not contains -- $filename $manifest_files
-                echo "[_ENSURE_RCS] warning: rcs/$filename not in MANIFEST" >&2
-            end
-        end
-    end
+    $HOME/dotfiles/bin/rcs-sync $argv
 end
 
 function _ENSURE_SERVICES
@@ -121,7 +50,13 @@ function _ENSURE_COMPLETIONS
 end
 
 # Initialize RC and service management (in background)
-_ENSURE_RCS &
+# fish cannot background a *function* -- `func &` runs in the foreground -- so
+# rcs-sync is launched as a real process. Interactive shells only: `fish -c` and
+# fish scripts paid ~280ms each for it, and Claude sessions sync via hooks.
+if status is-interactive
+    command $HOME/dotfiles/bin/rcs-sync --check-unlisted &
+    disown 2>/dev/null
+end
 _ENSURE_SERVICES &
 _ENSURE_CONF_D &
 _ENSURE_COMPLETIONS &

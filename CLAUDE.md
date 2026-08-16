@@ -86,7 +86,11 @@ Files in `rcs/` are managed via `rcs/MANIFEST` using `source -> destination` for
 tmux.conf -> $HOME/.tmux.conf
 ghostty.config -> $HOME/.config/ghostty/config
 ```
-The `_ENSURE_RCS()` function in `fish/config.fish` parses the MANIFEST and creates symlinks from `~/dotfiles/rcs/file` to the destination. It runs automatically in the background on every Fish shell startup (`_ENSURE_RCS &`). Some `rcs/` files have vestigial `#<[...]>` inline headers that are no longer parsed. Directories are symlinked; files are hard linked.
+`bin/rcs-sync` parses the MANIFEST; directories are symlinked, files are hard linked. Some `rcs/` files have vestigial `#<[...]>` inline headers that are no longer parsed.
+
+**A hardlink splits whenever either side is replaced rather than written in place** — `sed -i`, the Edit tool, any jj checkout/restore/rebase on the repo side, or an app saving by atomic rename on the live side (Claude Code does, for `/effort` and `/permissions`). The old rule, "repo always wins", silently reverted those app saves. `rcs-sync` instead keeps a per-pair record of the source's content at last sync (`$XDG_STATE_HOME/rcs-sync/records/`) and resolves a split by which side still matches it: both equal → relink; live copy unchanged → repo wins; repo unchanged → **the live copy is copied into the repo** (shows up in `jj diff`); both changed or no record → touch nothing and report a CONFLICT.
+
+It runs from three places: interactive fish startup (a real background process — fish cannot background a *function*, so the old `_ENSURE_RCS &` blocked every `fish -c` for ~280ms), the `ensure-rcs` Edit/Write hook, and a `PostToolUse` Bash hook (`rcs-sync --hook`, ~40ms when nothing split) that reports anything it resolved back into the Claude session. `_ENSURE_RCS` remains as a thin fish wrapper. Tests: `tests/hooks/test_rcs_sync.py`.
 
 ### JS dependency hygiene (pnpm + npm)
 

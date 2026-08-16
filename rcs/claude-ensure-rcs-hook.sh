@@ -17,7 +17,7 @@ FILE_PATH=$(echo "$INPUT" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"
 if [ "$MODE" = "post" ]; then
     # Quick prefix check — skip MANIFEST parsing for unrelated files
     [[ "$FILE_PATH" != "$HOME/dotfiles/rcs/"* ]] && exit 0
-    fish -c '_ENSURE_RCS' 2>/dev/null
+    "$HOME/dotfiles/bin/rcs-sync" --hook </dev/null
     exit 0
 fi
 

@@ -1,0 +1,203 @@
+#!/bin/bash
+# rcs-sync -- keep rcs/MANIFEST pairs hardlinked without clobbering either side.
+#
+# A hardlinked pair splits whenever something replaces one side with a new file
+# instead of writing into it: `sed -i`, `jj restore`/checkout/rebase on the repo
+# side, or an app saving its config by atomic rename on the live side (Claude
+# Code does this). Relinking blindly means one side's change is thrown away, so
+# every pair carries a record of the source's content as of its last sync, and a
+# split is resolved by asking which side still matches it:
+#
+#   both sides equal          -> relink
+#   live copy == record       -> the repo changed; repo wins
+#   repo copy == record       -> an app changed the live copy; copy it INTO the
+#                                repo (reviewable in `jj diff`), then relink
+#   neither, or no record yet -> touch nothing, report a conflict
+#
+# Usage:
+#   rcs-sync                   sync, report to stderr
+#   rcs-sync --check-unlisted  also warn about rcs/ files missing from MANIFEST
+#   rcs-sync --hook            Claude Code PostToolUse hook: consumes stdin,
+#                              reports as additionalContext JSON on stdout
+#   rcs-sync -q                sync silently
+#
+# Env (for tests): RCS_DOTFILES (default ~/dotfiles), RCS_STATE_DIR.
+#
+# Written for /bin/bash 3.2: hooks cannot assume a newer bash is on PATH.
+
+MODE=cli
+CHECK_UNLISTED=0
+for arg in "$@"; do
+    case "$arg" in
+        --hook) MODE=hook ;;
+        --check-unlisted) CHECK_UNLISTED=1 ;;
+        -q|--quiet) MODE=quiet ;;
+        -h|--help) sed -n '2,/^$/s/^# \{0,1\}//p' "$0"; exit 0 ;;
+        *) echo "rcs-sync: unknown argument: $arg" >&2; exit 2 ;;
+    esac
+done
+
+[ "$MODE" = hook ] && cat >/dev/null
+
+DOTFILES="${RCS_DOTFILES:-$HOME/dotfiles}"
+RCS_DIR="$DOTFILES/rcs"
+MANIFEST="$RCS_DIR/MANIFEST"
+STATE="${RCS_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/rcs-sync}"
+RECORDS="$STATE/records"
+
+[ -f "$MANIFEST" ] || { [ "$MODE" = cli ] && echo "[rcs-sync] warning: $MANIFEST not found" >&2; exit 0; }
+[ -d "$RECORDS" ] || mkdir -p "$RECORDS" || exit 0
+
+# One sync at a time. Startup and hooks fire concurrently; a second run would
+# only race the first, so it simply leaves. A lock older than a minute is from
+# a run that died.
+LOCK="$STATE/lock"
+if ! mkdir "$LOCK" 2>/dev/null; then
+    if [ -n "$(find "$LOCK" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then
+        rmdir "$LOCK" 2>/dev/null
+        mkdir "$LOCK" 2>/dev/null || exit 0
+    else
+        exit 0
+    fi
+fi
+trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+
+NOTES=()
+note() { NOTES+=("$1"); }
+
+# Everything on the steady-state path is a builtin except ONE stat call for all
+# linked sources: this runs after every Claude Bash call, and a fork per pair
+# cost ~0.5s.
+
+record_file() { REC="$RECORDS/${1//\//%}"; }
+
+# Record = "<mtime> <size> <md5>" of the source as last synced. mtime+size let
+# an unchanged linked pair skip hashing entirely.
+write_record() { # src hash
+    local tmp
+    record_file "$1"
+    tmp="$REC.tmp.$$"
+    printf '%s %s\n' "$(stat -f '%Fm %z' "$1")" "$2" >"$tmp" && mv -f "$tmp" "$REC"
+}
+
+# Replace dst with a hardlink to src by rename, so dst never briefly vanishes
+# for an app reading it (`ln -f` unlinks first).
+link() { # src dst
+    local tmp="$2.rcs-sync.$$"
+    rm -f "$tmp"
+    ln "$1" "$tmp" && mv -f "$tmp" "$2"
+}
+
+resolve_split() { # src dst name
+    local src="$1" dst="$2" name="$3" r_m r_z r_hash= hs hd why
+    record_file "$src"
+    [ -f "$REC" ] && read -r r_m r_z r_hash <"$REC"
+    hs=$(md5 -q "$src")
+    hd=$(md5 -q "$dst")
+
+    if [ "$hs" = "$hd" ]; then
+        link "$src" "$dst" && write_record "$src" "$hs"
+    elif [ -n "$r_hash" ] && [ "$hd" = "$r_hash" ]; then
+        link "$src" "$dst" && write_record "$src" "$hs"
+        note "relinked $dst: rcs/$name was replaced by a new file (sed -i, jj, the Edit tool...), which left the live copy stale; the live copy now has the repo version."
+    elif [ -n "$r_hash" ] && [ "$hs" = "$r_hash" ]; then
+        # cp writes into src's existing inode, so the repo file stays the one
+        # jj tracks; the live copy then becomes a link to it.
+        cp "$dst" "$src" && link "$src" "$dst" && write_record "$src" "$hd"
+        note "adopted $dst into rcs/$name: something (usually the app itself) rewrote the live copy; that change is now in the repo -- review with: jj diff rcs/$name"
+    else
+        why="both changed since the last sync"
+        [ -z "$r_hash" ] && why="no sync record to tell which side changed"
+        note "CONFLICT rcs/$name vs $dst: $why; left unlinked. Merge the wanted content into rcs/$name, then: ln -f $src $dst"
+    fi
+}
+
+# Pass 1: walk the manifest. Directories and missing destinations are handled
+# on the spot; file pairs are sorted into linked (-ef: same inode) and split.
+SKIP_RE='^[[:space:]]*(#|$)'
+LISTED=()
+LINKED=()
+SPLIT_SRC=() SPLIT_DST=() SPLIT_NAME=()
+while IFS= read -r line || [ -n "$line" ]; do
+    [[ "$line" =~ $SKIP_RE ]] && continue
+    [[ "$line" == *' -> '* ]] || continue
+
+    name="${line%% -> *}"
+    dst="${line#* -> }"
+    name="${name#"${name%%[![:space:]]*}"}"; name="${name%"${name##*[![:space:]]}"}"
+    dst="${dst#"${dst%%[![:space:]]*}"}"; dst="${dst%"${dst##*[![:space:]]}"}"
+    dst="${dst//\$HOME/$HOME}"
+
+    case "$name" in
+        /*) src="$name" ;;
+        \$HOME*) src="${name//\$HOME/$HOME}" ;;
+        *) src="$RCS_DIR/$name" ;;
+    esac
+    LISTED+=("${name##*/}")
+
+    if [ -d "$src" ]; then
+        if [ ! -L "$dst" ] || [ ! "$dst" -ef "$src" ]; then
+            mkdir -p "${dst%/*}"
+            ln -sfn "$src" "$dst"
+        fi
+    elif [ ! -f "$src" ]; then
+        [ "$MODE" = cli ] && echo "[rcs-sync] warning: $src not found" >&2
+    elif [ ! -e "$dst" ]; then
+        mkdir -p "${dst%/*}"
+        link "$src" "$dst" && write_record "$src" "$(md5 -q "$src")"
+    elif [ "$src" -ef "$dst" ]; then
+        LINKED+=("$src")
+    else
+        SPLIT_SRC+=("$src"); SPLIT_DST+=("$dst"); SPLIT_NAME+=("$name")
+    fi
+done <"$MANIFEST"
+
+# Pass 2: refresh the record of any linked source whose mtime/size moved (an
+# edit through the link). One stat for all of them; every path exists.
+if [ ${#LINKED[@]} -gt 0 ]; then
+    i=0
+    while read -r m z; do
+        src="${LINKED[$i]}"
+        i=$((i + 1))
+        record_file "$src"
+        r_m= r_z=
+        [ -f "$REC" ] && read -r r_m r_z _ <"$REC"
+        [ "$m $z" = "$r_m $r_z" ] || write_record "$src" "$(md5 -q "$src")"
+    done <<<"$(stat -f '%Fm %z' "${LINKED[@]}")"
+fi
+
+# Pass 3: resolve splits.
+i=0
+while [ $i -lt ${#SPLIT_SRC[@]} ]; do
+    resolve_split "${SPLIT_SRC[$i]}" "${SPLIT_DST[$i]}" "${SPLIT_NAME[$i]}"
+    i=$((i + 1))
+done
+
+if [ "$CHECK_UNLISTED" = 1 ] && [ "$MODE" = cli ]; then
+    for f in "$RCS_DIR"/*; do
+        [ -d "$f" ] && continue
+        b="${f##*/}"
+        case "$b" in MANIFEST|__pycache__|*.pyc) continue ;; esac
+        found=0
+        for l in "${LISTED[@]}"; do [ "$l" = "$b" ] && found=1 && break; done
+        [ "$found" = 0 ] && echo "[rcs-sync] warning: rcs/$b not in MANIFEST" >&2
+    done
+fi
+
+[ ${#NOTES[@]} -eq 0 ] && exit 0
+
+case "$MODE" in
+    cli)
+        for n in "${NOTES[@]}"; do echo "[rcs-sync] $n" >&2; done
+        ;;
+    hook)
+        body="[rcs-sync] Hardlinked config pairs (rcs/MANIFEST) had split; resolved as follows. Mention anything adopted or conflicted to the user."
+        for n in "${NOTES[@]}"; do
+            n=${n//\\/\\\\}
+            n=${n//\"/\\\"}
+            body="$body\\n- $n"
+        done
+        printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"%s"}}\n' "$body"
+        ;;
+esac
+exit 0
