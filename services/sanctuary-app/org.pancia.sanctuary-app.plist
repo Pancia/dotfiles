@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>org.pancia.sanctuary-app</string>
+
+        <!-- The app binary directly, not the house dotfiles-services wrapper. The wrapper's
+             `| ts` pipeline would make launchd's job PID bash's rather than Sanctuary's,
+             breaking the PID column of `service status`, `launchctl kill`, and any
+             equation of this job with the kiosk marker's enginePID (spec critique C9). It
+             would buy nothing: the app logs through os.Logger, not stdout.
+             /Users/anthony is filled in by scripts/sanctuary-agent.sh install-agent. -->
+        <key>ProgramArguments</key>
+        <array>
+            <string>/Users/anthony/Applications/Sanctuary.app/Contents/MacOS/Sanctuary</string>
+        </array>
+        <key>RunAtLoad</key>
+        <true/>
+
+        <!-- A bool, not {SuccessfulExit: false}: a clean Cmd+Q is exactly what this undoes.
+             Deliberately no WatchPaths: with KeepAlive true the job is always running, so a
+             watched path could never start it, and the unlock response already lives
+             in-process (com.apple.screenIsUnlocked, m-061), which KeepAlive keeps alive. -->
+        <key>KeepAlive</key>
+        <true/>
+
+        <!-- The next three are deliberate additions beyond the house six (spec Req 8).
+             ThrottleInterval restates launchd's default: a crash loop relaunches at most
+             six times a minute. -->
+        <key>ThrottleInterval</key>
+        <integer>10</integer>
+
+        <!-- SIGTERM to SIGKILL. The app's SIGTERM handler records a clean termination
+             within its 2 s budget and exits well inside this. -->
+        <key>ExitTimeOut</key>
+        <integer>5</integer>
+
+        <!-- A GUI app the user is looking at. A throttled one could miss main-thread
+             heartbeats and be reaped while healthy. -->
+        <key>ProcessType</key>
+        <string>Interactive</string>
+
+        <!-- No EnvironmentVariables: SANCTUARY_KIOSK must not be set here. A Release
+             install engages by policy; the variable stays free for drills and for
+             `launchctl setenv SANCTUARY_KIOSK 0`, the off-switch. -->
+        <key>StandardOutPath</key>
+        <string>/Users/anthony/.log/services/sanctuary-app.log</string>
+        <key>StandardErrorPath</key>
+        <string>/Users/anthony/.log/services/sanctuary-app.log</string>
+    </dict>
+</plist>
