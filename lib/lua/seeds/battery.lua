@@ -1,4 +1,5 @@
--- Battery: low-battery alerts for Bluetooth peripherals (keyboard / mouse).
+-- Battery: low-battery alerts for Bluetooth peripherals (keyboard / mouse,
+-- plus any device named in config.names).
 -- Polls bin/bt-battery on a timer and fires tiered, deduped hs.notify alerts.
 
 local safeLogger = require("lib/safeLogger")
@@ -13,6 +14,8 @@ local config = {
     pollInterval = 600,            -- seconds (10 min); battery drains slowly
     rearmAbove   = 25,             -- climb above this to re-arm (a real recharge)
     devices      = { keyboard = true, mouse = true },  -- lowercased minorTypes
+    names        = {},             -- lowercased device name -> true, or a table overriding
+                                   -- tiers / rearmAbove for that device; watched whatever its type
     alertUnknown = false,          -- also alert devices we couldn't classify
 }
 
@@ -22,9 +25,9 @@ obj._state = {}          -- address -> { tier = <lowest tier already alerted, or
 obj._notifications = {}  -- address -> live hs.notify ref (withdraw before replacing)
 
 -- Lowest configured tier at/below `pct`, or nil if above all tiers.
-local function tierFor(pct)
+local function tierFor(pct, tiers)
     local hit = nil
-    for _, t in ipairs(config.tiers) do
+    for _, t in ipairs(tiers) do
         if pct <= t and (hit == nil or t < hit) then hit = t end
     end
     return hit
@@ -50,7 +53,8 @@ function obj:evaluate(d)
     local pct = tonumber(d.percent)  -- defensive: never trust the type
     if pct == nil or not d.address then return end
 
-    local watched = config.devices[(d.type or ""):lower()]
+    local byName = config.names[(d.name or ""):lower()]
+    local watched = config.devices[(d.type or ""):lower()] or byName
         or (config.alertUnknown and (d.type == nil or d.type == "Unknown"))
     if not watched then
         obj._logger.i(string.format("skip %s (%s) %s%%",
@@ -58,11 +62,15 @@ function obj:evaluate(d)
         return
     end
 
+    local opts = type(byName) == "table" and byName or {}
+    local tiers = opts.tiers or config.tiers
+    local rearmAbove = opts.rearmAbove or config.rearmAbove
+
     local st = obj._state[d.address] or {}
-    if pct > config.rearmAbove then
+    if pct > rearmAbove then
         st.tier = nil  -- recharged: re-arm for the next drain cycle
     else
-        local tier = tierFor(pct)
+        local tier = tierFor(pct, tiers)
         -- Alert only when crossing to a LOWER tier than last alerted.
         if tier and (st.tier == nil or tier < st.tier) then
             obj:alert(d, pct, tier)

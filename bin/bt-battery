@@ -2,7 +2,9 @@
 """bt-battery — report Bluetooth peripheral battery levels.
 
 Battery % comes from ioreg (the source of truth for what is present and its
-charge). Friendly names and device types come from system_profiler, read from
+charge). Audio devices (speakers, headsets) report over HFP instead and never
+appear there, so `pmset -g accps` fills the gap for anything ioreg lacks —
+joined by name, since pmset gives no address. Friendly names and device types come from system_profiler, read from
 BOTH its connected and not-connected buckets — Apple Magic peripherals often sit
 in "not connected" even while ioreg reports them live, so joining on only the
 connected bucket silently loses them. The two sources are joined on the
@@ -23,6 +25,7 @@ import subprocess
 
 IOREG = "/usr/sbin/ioreg"
 SYSTEM_PROFILER = "/usr/sbin/system_profiler"
+PMSET = "/usr/bin/pmset"
 
 
 def _run(cmd):
@@ -33,6 +36,16 @@ def _run(cmd):
         ).stdout
     except (OSError, subprocess.SubprocessError):
         return ""
+
+
+def _run_bytes(cmd):
+    """Like _run, but raw bytes — for tools that don't emit UTF-8."""
+    try:
+        return subprocess.run(
+            cmd, capture_output=True, timeout=15, check=False
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return b""
 
 
 def _norm_addr(addr):
@@ -74,6 +87,18 @@ def read_ioreg():
 
         devices.append({"addr": addr, "product": product, "percent": percent})
     return devices
+
+
+def read_pmset():
+    """Accessory batteries from pmset as [{name, percent}].
+
+    pmset prints names in MacRoman (’ is byte 0xD5), not UTF-8; decoding it as
+    such makes them match system_profiler's names exactly.
+    """
+    text = _run_bytes([PMSET, "-g", "accps"]).decode("mac_roman")
+    return [{"name": m.group(1), "percent": int(m.group(2))}
+            for m in re.finditer(r"^[ \t]*-(.+?) \(id=\d+\)\t(\d+)%",
+                                 text, flags=re.MULTILINE)]
 
 
 def read_sp_map():
@@ -127,6 +152,23 @@ def collect():
             "name": dev["product"] or meta.get("name") or dev["addr"],
             "type": classify(dev["product"], meta.get("type")),
             "address": dev["addr"],
+            "percent": dev["percent"],
+        })
+
+    # HFP audio devices: only pmset knows their charge. Skip anything ioreg
+    # already covered, and anything with no system_profiler match — without an
+    # address there is no stable key for the alert seed's per-device state.
+    seen = {d["address"] for d in out}
+    by_name = {meta["name"]: addr for addr, meta in sp.items()}
+    for dev in read_pmset():
+        addr = by_name.get(dev["name"])
+        if not addr or addr in seen:
+            continue
+        seen.add(addr)
+        out.append({
+            "name": dev["name"],
+            "type": classify(dev["name"], sp[addr].get("type")),
+            "address": addr,
             "percent": dev["percent"],
         })
     return out

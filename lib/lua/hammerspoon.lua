@@ -183,6 +183,11 @@ local cursor = engage("seeds.cursor", {
 
 local battery = engage("seeds.battery", {
   -- defaults are fine; override here if desired, e.g. tiers / pollInterval
+  -- A "Headset" by type, so not watched by default. Reports in coarse steps, so
+  -- earlier tiers; rearmAbove must clear the top tier or 40 could never fire.
+  names = {
+    ["anker soundcore boost"] = { tiers = { 40, 20, 10 }, rearmAbove = 50 },
+  },
 })
 
 local _engageElapsed = (hs.timer.absoluteTime() - _engageStart) / 1e6
