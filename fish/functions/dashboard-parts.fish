@@ -22,6 +22,11 @@ function dashboard-parts --description 'Collect dashboard indicator parts for th
     set -l fixme_count (find .cc -maxdepth 1 -name 'FIXME*' 2>/dev/null | count)
     test $fixme_count -gt 0; and set -a parts "⚑"
 
+    # ⟲ = this pane left a record behind the last time it died
+    if test -n "$__revive_pending"; and test -e "$__revive_pending"
+        set -a parts "⟲"
+    end
+
     # Claude Code sessions to resume
     set -l cc_file "$HOME/Cloud/cc-sessions"(pwd)"/sessions.json"
     if test -f "$cc_file"

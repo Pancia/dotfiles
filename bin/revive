@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Shell entry point for lib/python/revive.py — what each terminal pane was doing
+# before it died, so a pane iTerm restored after a crash can say what it was for.
+#
+#   revive list                 # ghosts, grouped by the live window/tab/pane tree
+#   revive --ccs                # also synthesise ghosts from crashed Claude sessions
+#   revive here                 # this pane's ghost in full
+#   revive live                 # what every currently-journaling pane is doing
+#   revive dismiss <n>|here|--all  # stop reporting a ghost
+#   revive prune [--days N]     # drop ghosts older than N days (default 30)
+#
+# The journal is written by fish/functions/revive-journal.fish, one record per
+# pane, keyed by the iTerm session GUID — which survives a reboot, unlike the
+# wNtMpK prefix in front of it.
+#
+# Exit: 0 ok · 1 nothing to report · 2 bad usage.
+#
+# Docs: docs/revive.md.
+#
+# In fish, `revive` resolves to the function of the same name, which handles the
+# verbs that have to run in the caller's shell (bare `revive` and `revive <n>` cd
+# and resume) and forwards the rest here. This file is for everyone else.
+exec python3 "$(dirname "$(dirname "$(readlink -f "$0")")")/lib/python/revive.py" "$@"

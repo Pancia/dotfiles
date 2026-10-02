@@ -145,7 +145,9 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
         # Helpers live in ccs.fish; autoload only picks up the top-level `ccs`
         # function, so source explicitly the first time.
         functions -q _ccs_open_register; or source ~/dotfiles/fish/functions/ccs.fish
-        set CCS_ENTRY_FILE (_ccs_open_register $fish_pid)
+        # The ORIGINAL argv, not pass_argv: --process-label is ours, and a
+        # resume has to hand it back to this wrapper along with the rest
+        set CCS_ENTRY_FILE (_ccs_open_register $fish_pid (_ccs_launch_flags $argv | string split0))
     end
 
     proc-label "claude [$label]" claude --verbose $wt_flag $pass_argv

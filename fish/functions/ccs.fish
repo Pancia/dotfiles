@@ -569,20 +569,13 @@ function _ccs_open --description 'Pick and resume/switch to a session'
         case running
             _ccs_switch_to "$ef"
         case crashed
-            # Claude Code eventually prunes transcripts; put ours back first, or
-            # --resume has nothing to open. Must run before the entry is
-            # archived, since it holds the path to restore to.
-            if not _ccs_session_jsonl "$sid" >/dev/null
-                if not _ccs_restore_transcript "$sid" "$ef"
-                    echo (set_color yellow)"Transcript for $sid is gone and could not be restored — resume will likely fail."(set_color normal)
-                end
-            end
-            _ccs_archive_entry "$ef"
-            echo "Resuming session $sid..."
-            my-claude-code-wrapper --resume "$sid"
+            _ccs_resume_entry "$ef"
         case saved
+            set -l launch (jq -j --arg id "$sid" \
+                '(first(.[] | select(.id == $id)) | .argv // [])[] | (., "\u0000")' \
+                "$file" 2>/dev/null | string split0)
             echo "Resuming session $sid..."
-            my-claude-code-wrapper --resume "$sid"
+            my-claude-code-wrapper $launch --resume "$sid"
     end
 end
 
@@ -707,7 +700,10 @@ function _ccs_local_backup_dir --description 'Local (non-cloud) transcript backu
 end
 
 function _ccs_open_register --description 'Register a new open session entry'
+    # Remaining args are the launch flags (_ccs_launch_flags), stored so a
+    # resume can come back with the same system prompt, model and label.
     set -l pid $argv[1]
+    set -l launch $argv[2..-1]
     if test -z "$pid"
         return 1
     end
@@ -739,9 +735,24 @@ function _ccs_open_register --description 'Register a new open session entry'
         end
     end
 
+    # One `--arg` per element, reassembled by index. Not `--args`: jq 1.6 still
+    # parses a positional that starts with `--` as its own option, and every
+    # launch flag does. Not NUL-split raw input either: 1.6 truncates at the
+    # first multi-line element.
+    set -l argv_json '[]'
+    if test (count $launch) -gt 0
+        set -l named
+        for i in (seq (count $launch))
+            set -a named --arg $i $launch[$i]
+        end
+        set argv_json (jq -nc $named '$ARGS.named | to_entries | sort_by(.key | tonumber) | map(.value)')
+        or set argv_json '[]'
+    end
+
     set -l file "$dir/$pid-$now.json"
     set -l tmp "$file.tmp.$fish_pid"
     jq -n \
+        --argjson argv "$argv_json" \
         --argjson pid "$pid" \
         --arg lstart "$lstart" \
         --arg cwd "$cwd" \
@@ -761,6 +772,7 @@ function _ccs_open_register --description 'Register a new open session entry'
             started_at: $started_at,
             ended_at: null,
             session_id: "",
+            argv: $argv,
             terminal: {
                 program: $program,
                 tmux_socket: $tmux_socket,
@@ -820,6 +832,20 @@ function _ccs_open_finalize --description 'Retire the open entry for this pid (c
             else
                 rm -f "$tmp"
             end
+        end
+    end
+
+    # A saved session keeps its launch flags past the entry, which is about to
+    # go: without them a resume from the picker comes back without its
+    # --system-prompt. Resumed sessions re-record theirs, so this stays current.
+    if test -n "$sid"; and test -f "$saved"; and jq -e 'has("argv")' "$entry_file" >/dev/null 2>&1
+        set -l tmp "$saved.tmp.$fish_pid"
+        if jq -c --arg id "$sid" --slurpfile e "$entry_file" \
+            '[.[] | if .id == $id then .argv = $e[0].argv else . end]' \
+            "$saved" > "$tmp" 2>/dev/null
+            mv "$tmp" "$saved"
+        else
+            rm -f "$tmp"
         end
     end
 
@@ -1060,6 +1086,76 @@ function _ccs_switch_to --description 'Best-effort focus the terminal running a 
     set -l started_h (date -r "$started_at" '+%Y-%m-%d %H:%M' 2>/dev/null)
     echo (set_color yellow)"Session running as PID $pid on $tty_path (started $started_h)"(set_color normal)
     echo "Could not auto-switch; bring that window to focus manually."
+end
+
+function _ccs_launch_flags --description 'The wrapper flags that shape a session, NUL-separated'
+    # What a resume has to pass again to get the same session back: Claude Code
+    # does not persist --system-prompt and friends, so `--resume <id>` alone
+    # brings the akr-assistant back without its persona.
+    #
+    # An allowlist, not "everything but --resume": argv also holds the initial
+    # prompt, and replaying that would send it again as a new message. Which
+    # bare word is a flag's value and which is the prompt cannot be told apart
+    # without knowing each flag's arity, so only flags named here survive, and
+    # an unknown one is dropped — the worst case is a resume missing a flag.
+    #
+    # NUL-separated because a system prompt is multi-line: read it back with
+    # `string split0`, never a bare command substitution.
+    set -l valued --process-label --system-prompt --system-prompt-file \
+        --append-system-prompt --append-system-prompt-file --model \
+        --fallback-model --agent --agents --permission-mode --settings \
+        --mcp-config --add-dir --plugin-dir --effort
+    set -l bare --dangerously-skip-permissions --strict-mcp-config --chrome --ide
+    set -l keep
+    set -l take 0
+    for arg in $argv
+        if test $take -eq 1
+            set -a keep $arg
+            set take 0
+        else if contains -- $arg $valued
+            set -a keep $arg
+            set take 1
+        else if contains -- $arg $bare
+            set -a keep $arg
+        else if contains -- (string split -m1 = -- $arg)[1] $valued
+            set -a keep $arg
+        end
+    end
+    test (count $keep) -gt 0; and printf '%s\0' $keep
+    return 0
+end
+
+function _ccs_resume_entry --description 'Resume the session an open entry holds, with its launch flags'
+    set -l ef $argv[1]
+    test -f "$ef"; or return 1
+    set -l sid (jq -r '.session_id // ""' "$ef" 2>/dev/null)
+    if test -z "$sid"
+        echo "That entry never recorded a session id — nothing to resume." >&2
+        return 1
+    end
+    set -l cwd (jq -r '.cwd // ""' "$ef" 2>/dev/null)
+    set -l launch (jq -j '(.argv // [])[] | (., "\u0000")' "$ef" 2>/dev/null | string split0)
+    set -l legacy 0
+    jq -e 'has("argv")' "$ef" >/dev/null 2>&1; or set legacy 1
+
+    # Claude Code eventually prunes transcripts; put ours back first, or
+    # --resume has nothing to open. Must run before the entry is archived,
+    # since it holds the path to restore to.
+    if not _ccs_session_jsonl "$sid" >/dev/null
+        if not _ccs_restore_transcript "$sid" "$ef"
+            echo (set_color yellow)"Transcript for $sid is gone and could not be restored — resume will likely fail."(set_color normal)
+        end
+    end
+    _ccs_archive_entry "$ef"
+    # The transcript is keyed by the cwd Claude ran in, which the hook recorded
+    if test -n "$cwd"; and test -d "$cwd"; and test "$cwd" != "$PWD"
+        cd "$cwd"
+    end
+    if test $legacy -eq 1
+        echo (set_color brblack)"(started before launch flags were recorded — resuming without them)"(set_color normal)
+    end
+    echo "Resuming session $sid..."
+    my-claude-code-wrapper $launch --resume "$sid"
 end
 
 function _ccs_archive_entry --description 'Move an open entry into the archive'

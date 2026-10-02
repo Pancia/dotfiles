@@ -117,6 +117,9 @@ end
 # This hook is called on directory change (integrated into config.fish)
 function chpwd_hook --on-variable PWD
     recordCWD
+    # One builtin append into this pane's journal; guarded because
+    # revive-journal.fish is sourced separately (see config.fish)
+    functions -q reviveRecordCwd; and reviveRecordCwd
     cache 15 showTodos
     cache 15 showCmds
     cache 5 listVims

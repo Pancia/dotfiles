@@ -84,6 +84,9 @@ end
 # Source chpwd hooks (event handlers need explicit sourcing)
 source ~/dotfiles/fish/functions/chpwd.fish
 
+# Per-pane journal for `revive` (event handlers, same reason)
+source ~/dotfiles/fish/functions/revive-journal.fish
+
 # Disable fish greeting
 set -g fish_greeting ""
 
@@ -155,5 +158,9 @@ if status is-interactive
         echo "Remember to try out:"
         echo "scooter (find&replace), yazi(tui file manager), lazygit"
         echo "music ai_import, ii(ai_inbox), ..."
+
+        # What this pane was doing before it died. Pre-rendered at adoption, so
+        # this is a file test and a read -- no fork, no python.
+        revive-banner
     end
 end
