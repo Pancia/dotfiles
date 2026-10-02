@@ -9,7 +9,7 @@ if [ -z "${CLAUDE_SESSION_ID:-}" ]; then
 fi
 
 id="$CLAUDE_SESSION_ID"
-title="${*}"
+title="${*:-}"
 timestamp=$(date '+%Y-%m-%d %H:%M')
 dir="$HOME/Cloud/cc-sessions$(pwd)"
 file="$dir/sessions.json"
