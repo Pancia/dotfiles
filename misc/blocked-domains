@@ -11,18 +11,17 @@
 # openfront.io — browser RTS. Runs on Cloudflare wildcard DNS (cert SAN is
 # `*.openfront.io`), so every conceivable subdomain resolves. Listed here are
 # the apex, the plausible client hosts, and the regional game servers.
-openfront.io
-play.openfront.io
-game.openfront.io
-app.openfront.io
-beta.openfront.io
-staging.openfront.io
-dev.openfront.io
-api.openfront.io
-ws.openfront.io
-us.openfront.io
-eu.openfront.io
-asia.openfront.io
-na.openfront.io
-sa.openfront.io
-oceania.openfront.io
+#play.openfront.io
+#game.openfront.io
+#app.openfront.io
+#beta.openfront.io
+#staging.openfront.io
+#dev.openfront.io
+#api.openfront.io
+#ws.openfront.io
+#us.openfront.io
+#eu.openfront.io
+#asia.openfront.io
+#na.openfront.io
+#sa.openfront.io
+#oceania.openfront.io
