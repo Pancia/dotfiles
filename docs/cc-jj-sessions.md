@@ -357,6 +357,41 @@ than `--stale-days` (2), and deletes archived days older than `--days` (14). A
 recent orphan is left alone — the session may have just crashed and its work is
 still committable. `ccjj disown <sid>` retires one by hand.
 
+### Forgetting one record
+
+`ccjj disown` retires a whole session. `ccjj forget <path>` is the scalpel: it
+drops **this** session's records for one path, leaving the rest of the session
+intact.
+
+```bash
+ccjj forget path/to/file      # drop this session's records for it
+ccjj forget path -n           # preview only
+```
+
+Reach for it when a record is wedging a commit rather than describing work you
+want:
+
+- a record whose recorded pre-edit content no longer contains its `old` string,
+  so `anchored_replace` refuses and takes the whole commit with it
+- a `Write` for a file you created and then deleted in the same session — the
+  journal is append-only and Bash deletions are journaled nowhere, so nothing
+  else subtracts it and the replay reconstructs a file that is gone
+
+Both were worked around by hand — finding the journal directory and deleting a
+`.json` — before this existed, and two `die()` messages instructed exactly that
+while nothing implemented it. Those messages now name the command.
+
+Records are **moved** to `<session_id>/forgotten/`, not unlinked. Forgetting is
+destructive in a way nothing else here is: the edits a forgotten record describes
+simply stop being committed, with no error, so a mistake looks exactly like work
+that was never done. `load_records` filters on the `.json` suffix, so the
+subdirectory is skipped; `retire()` carries it into `archive/` with the rest.
+Move a file back to undo.
+
+Exit `2` means no record matched. An **unreadable** record cannot be forgotten
+this way — matching is by repo path and a record too broken to parse has none —
+so `forget` reports those separately and they still have to be moved by hand.
+
 The repo key matches `fish/functions/ai_jj_commit.fish:52` byte for byte, so both
 tools show the same repo names in the state directory. Journals are **moved** to
 `archive/` rather than renamed in place, so "scan every claim" sweeps cannot

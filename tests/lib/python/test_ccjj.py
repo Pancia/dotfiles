@@ -1819,3 +1819,130 @@ def test_stop_fires_when_a_journaled_path_also_changed_via_bash(repo):
     ok = repo.run("commit", "-m", "doc", sid="S1", extra=["--no-claim"])
     assert ok.returncode == 0, ok.stderr
     assert repo.show("doc.md") == b"line1-edited\n"
+
+
+# ------------------------------------------------------------- `ccjj forget`
+#
+# Every journal defect found so far was worked around by deleting a record by
+# hand, while two die() messages told you to do exactly that and nothing
+# implemented it. These pin the command that does.
+
+
+def test_forget_removes_this_sessions_records_for_a_path(repo):
+    repo.write("a.txt", "one\n")
+    repo.commit("base")
+    repo.write("a.txt", "ONE\n")
+    repo.record("S1", "a.txt", old="one", new="ONE", original="one\n")
+
+    assert len(repo.journal_records("S1")) == 1
+    r = repo.run("forget", "a.txt")
+    assert r.returncode == 0, r.stderr
+    assert repo.journal_records("S1") == []
+
+
+def test_forget_leaves_other_paths_alone(repo):
+    repo.write("a.txt", "one\n")
+    repo.write("b.txt", "two\n")
+    repo.commit("base")
+    repo.write("a.txt", "ONE\n")
+    repo.write("b.txt", "TWO\n")
+    repo.record("S1", "a.txt", old="one", new="ONE", original="one\n")
+    repo.record("S1", "b.txt", old="two", new="TWO", original="two\n")
+
+    assert repo.run("forget", "a.txt").returncode == 0
+    assert len(repo.journal_records("S1")) == 1
+
+    ok = repo.run("commit", "-m", "b only", sid="S1")
+    assert ok.returncode == 0, ok.stderr
+    assert repo.show("b.txt") == b"TWO\n"
+    assert repo.show("a.txt") == b"one\n"      # the forgotten edit did not land
+
+
+def test_forget_dry_run_removes_nothing(repo):
+    repo.write("a.txt", "one\n")
+    repo.commit("base")
+    repo.write("a.txt", "ONE\n")
+    repo.record("S1", "a.txt", old="one", new="ONE", original="one\n")
+
+    r = repo.run("forget", "-n", "a.txt")
+    assert r.returncode == 0, r.stderr
+    assert "dry run" in r.stdout
+    assert len(repo.journal_records("S1")) == 1
+
+
+def test_forget_moves_records_rather_than_deleting_them(repo):
+    """Forgetting is silent data loss when it is wrong -- the edits simply do
+    not get committed and nothing says so -- so it has to be reversible."""
+    repo.write("a.txt", "one\n")
+    repo.commit("base")
+    repo.write("a.txt", "ONE\n")
+    repo.record("S1", "a.txt", old="one", new="ONE", original="one\n")
+
+    assert repo.run("forget", "a.txt").returncode == 0
+    kept = os.path.join(repo.journal, repo.root.replace("/", "_"),
+                        "S1", "forgotten")
+    assert len(os.listdir(kept)) == 1
+
+
+def test_forgotten_records_are_not_replayed(repo):
+    """`forgotten/` lives inside the session journal dir, so load_records has
+    to skip it -- it filters on the .json suffix, and this pins that."""
+    repo.write("a.txt", "one\n")
+    repo.commit("base")
+    repo.write("a.txt", "ONE\n")
+    repo.record("S1", "a.txt", old="one", new="ONE", original="one\n")
+    assert repo.run("forget", "a.txt").returncode == 0
+
+    r = repo.run("commit", "-m", "nothing left", sid="S1")
+    assert r.returncode != 0                    # nothing to commit, not a replay
+    assert repo.show("a.txt") == b"one\n"
+
+
+def test_forget_exits_2_when_no_record_matches(repo):
+    repo.write("a.txt", "one\n")
+    repo.commit("base")
+    assert repo.run("forget", "a.txt").returncode == 2
+
+
+def test_forget_unwedges_an_inconsistent_record(repo):
+    """Bug 1. `old` is not a substring of `original`, so anchored_replace dies
+    and takes the whole commit with it -- including the unrelated good record.
+    Before `forget` there was no CLI route out of this at all.
+    """
+    repo.write("a.txt", "alpha\n")
+    repo.write("b.txt", "beta\n")
+    repo.commit("base")
+    repo.write("a.txt", "ALPHA\n")
+    repo.write("b.txt", "BETA\n")
+    repo.record("S1", "a.txt", old="NOT-IN-THE-FILE", new="ALPHA",
+                original="alpha\n")
+    repo.record("S1", "b.txt", old="beta", new="BETA", original="beta\n")
+
+    wedged = repo.run("commit", "-m", "wedged", sid="S1")
+    assert wedged.returncode != 0
+    assert "inconsistent" in wedged.stderr
+    assert "ccjj forget" in wedged.stderr       # the message names its own escape
+
+    assert repo.run("forget", "a.txt").returncode == 0
+    ok = repo.run("commit", "-m", "unwedged", sid="S1")
+    assert ok.returncode == 0, ok.stderr
+    assert repo.show("b.txt") == b"BETA\n"
+
+
+def test_forget_stops_a_deleted_throwaway_being_resurrected(repo):
+    """Bug 3. build() never consults the filesystem, so a Write record for a
+    file created and then deleted in-session still reconstructs it."""
+    repo.write("keep.txt", "keep\n")
+    repo.commit("base")
+    repo.write("keep.txt", "KEEP\n")
+    repo.record("S1", "keep.txt", old="keep", new="KEEP", original="keep\n")
+
+    repo.write("probe.py", "secret\n")
+    repo.record("S1", "probe.py", tool="Write", content="secret\n")
+    os.remove(os.path.join(repo.root, "probe.py"))
+
+    assert repo.run("forget", "probe.py").returncode == 0
+    ok = repo.run("commit", "-m", "no probe", sid="S1")
+    assert ok.returncode == 0, ok.stderr
+    assert repo.show("keep.txt") == b"KEEP\n"
+    assert repo.show("probe.py") is None

@@ -794,7 +794,9 @@ def load_records(jdir):
                 out.append(json.load(fh))
         except (json.JSONDecodeError, OSError) as e:
             die("journal record %s is unreadable (%s).\n"
-                "  Inspect or remove it, then re-run." % (fp, e))
+                "  Inspect or remove it, then re-run. `ccjj forget` cannot take\n"
+                "  this one -- it matches by repo path and this record has none\n"
+                "  that parses -- so move the file aside by hand." % (fp, e))
     return out
 
 
@@ -840,7 +842,11 @@ def anchored_replace(target, original, old, new, path, label):
     i = original.find(old)
     if i < 0:
         die("journal record for %s is inconsistent: its recorded pre-edit\n"
-            "  content does not contain %r. Remove the record." % (path, old))
+            "  content does not contain %r.\n"
+            "  Remove it with:  ccjj forget %s\n"
+            "  That drops this session's records for the path, so the edits they\n"
+            "  describe will not be committed -- check `jj status` after."
+            % (path, old, path))
     before, after = original[:i], original[i + len(old):]
 
     n = target.count(old)
@@ -1868,6 +1874,104 @@ def cmd_disown(args):
     print("disowned %s -- its claims no longer suppress warnings" % args.session[:8])
 
 
+def cmd_forget(args):
+    """Remove this session's journal records for one or more paths.
+
+    Every journal defect found so far has been worked around the same way: find
+    the journal directory and delete a record by hand. Two die() messages
+    instruct exactly that -- anchored_replace's "Remove the record" and
+    load_records' "Inspect or remove it" -- while nothing implemented it. This
+    does, and it is the recovery route for whatever the next such defect is.
+
+    Records are MOVED, not unlinked. Forgetting is destructive in a way nothing
+    else here is: the edits a forgotten record describes are then simply not
+    committed, with no error, so a mistake looks exactly like work that was
+    never done. `forgotten/` lives inside the session journal, where
+    load_records skips it (it filters on the .json suffix) and retire() carries
+    it along with the rest of the session.
+    """
+    sid = args.session or os.environ.get("CLAUDE_SESSION_ID", "")
+    if not sid:
+        die("no --session and CLAUDE_SESSION_ID is unset")
+
+    jdir = os.path.join(journal_root(), repo_key(ROOT), sid)
+    if not os.path.isdir(jdir):
+        die("no journal for session %s in this repo" % sid[:8], 2)
+
+    wanted = {rel(os.path.abspath(p)) for p in args.path}
+
+    def describe(rec):
+        if rec.get("tool") == "Write":
+            return "Write, %d bytes" % len(blob(rec, "content") or b"")
+
+        old, new = rec.get("old") or "", rec.get("new") or ""
+
+        def head(s):
+            return s.split("\n")[0][:44]
+
+        if head(old) == head(new):
+            # Real edits usually share a long first line -- an anchored replace
+            # keeps its context -- and two identical-looking previews are no
+            # help at all when the preview is the thing you decide from.
+            return "Edit, %d -> %d bytes, first lines identical" % (len(old), len(new))
+        return "%r -> %r" % (head(old), head(new))
+
+    hits, unreadable = [], []
+    for name in sorted(os.listdir(jdir)):
+        if not name.endswith(".json"):
+            continue
+        fp = os.path.join(jdir, name)
+        try:
+            with open(fp) as fh:
+                rec = json.load(fh)
+        except (json.JSONDecodeError, OSError):
+            # Deliberately not load_records(): that dies on an unreadable
+            # record, which would make the one escape from an unreadable record
+            # unreachable. Report them instead -- they have no parseable path,
+            # so they cannot be matched by one.
+            unreadable.append(name)
+            continue
+        if not rec.get("path"):
+            continue
+        try:
+            r = rec_rel(rec)
+        except SystemExit:
+            # Same reasoning: a record whose path no longer resolves against
+            # ROOT is exactly a thing that must stay removable.
+            r = os.path.relpath(rec["path"], ROOT)
+        if r in wanted:
+            hits.append((fp, name, rec, r))
+
+    if not hits:
+        msg = "no records for %s in session %s" % (", ".join(sorted(wanted)), sid[:8])
+        if unreadable:
+            msg += ("\n  %d unreadable record(s) are present and cannot be matched\n"
+                    "  by path: %s" % (len(unreadable), ", ".join(unreadable)))
+        die(msg, 2)
+
+    print("session %s -- %d record(s):" % (sid[:8], len(hits)))
+    for _, name, rec, r in hits:
+        print("    %s  %s  %s" % (name, rec.get("tool", "?"), r))
+        print("        %s" % describe(rec))
+
+    if args.dry_run:
+        print("(dry run -- nothing removed)")
+        return
+
+    dest = os.path.join(jdir, "forgotten")
+    os.makedirs(dest, mode=0o700, exist_ok=True)
+    for fp, name, _, _ in hits:
+        os.replace(fp, os.path.join(dest, name))
+
+    print("forgotten %d record(s). `ccjj commit` will no longer replay them, so\n"
+          "  whatever they describe will NOT be committed by this session --\n"
+          "  check `jj status` if you expected those edits to land.\n"
+          "  Moved to %s; move them back to undo." % (len(hits), dest))
+    if unreadable:
+        print("  note: %d unreadable record(s) remain and cannot be matched by\n"
+              "  path: %s" % (len(unreadable), ", ".join(unreadable)))
+
+
 def cmd_prune(args, quiet=False):
     base = os.path.join(journal_root(), repo_key(ROOT))
     arch = os.path.join(base, "archive")
@@ -1991,6 +2095,12 @@ def main():
     dz = sub.add_parser("disown", help="retire one session's journal by hand")
     dz.add_argument("session")
 
+    fg = sub.add_parser("forget",
+                        help="remove this session's records for a path")
+    fg.add_argument("path", nargs="+")
+    fg.add_argument("--session", default="")
+    fg.add_argument("-n", "--dry-run", action="store_true")
+
     args = ap.parse_args()
 
     if args.cmd in ("record-edit", "nudge", "bash-window"):
@@ -2008,6 +2118,7 @@ def main():
     {"commit": cmd_commit, "audit": cmd_audit, "prune": cmd_prune,
      "disown": cmd_disown, "should-scope": cmd_should_scope,
      "retire-all": cmd_retire_all, "claim": cmd_claim,
+     "forget": cmd_forget,
      "bash-windows": cmd_bash_windows}[args.cmd](args)
 
 
