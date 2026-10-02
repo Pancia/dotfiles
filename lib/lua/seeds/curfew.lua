@@ -245,6 +245,30 @@ function obj:cleanupEventTaps()
     end
 end
 
+-- Shifting schedule: move triggerTime earlier by `stepMinutes` each night until
+-- it reaches `target`. A "night" starts at noon, so a 4am curfew belongs to the
+-- previous calendar day. Config shape:
+--   shift = { start = {year=, month=, day=}, from = {hour=, minute=},
+--             target = {hour=, minute=}, stepMinutes = 30 }
+local function minutesAfterNoon(t)
+    return ((t.hour * 60 + t.minute) - 720) % 1440
+end
+
+function obj:applyShift()
+    local s = config.shift
+    if not s then return end
+    local startNoon = os.time({year = s.start.year, month = s.start.month, day = s.start.day, hour = 12})
+    local night = math.max(0, math.floor((os.time() - startNoon) / 86400))
+    local m = math.max(minutesAfterNoon(s.target), minutesAfterNoon(s.from) - night * (s.stepMinutes or 30))
+    local clock = (m + 720) % 1440
+    local hour, minute = math.floor(clock / 60), clock % 60
+    local tt = config.triggerTime
+    if not tt or tt.hour ~= hour or tt.minute ~= minute then
+        config.triggerTime = {hour = hour, minute = minute}
+        obj._logger.i(string.format("Shifted curfew: night %d -> %02d:%02d", night, hour, minute))
+    end
+end
+
 function obj:isWithinCurfew()
     local hour = tonumber(os.date("%H"))
     local minute = tonumber(os.date("%M"))
@@ -300,6 +324,7 @@ end
 
 function obj:trigger()
     if obj._isShowing then return end
+    obj:applyShift()
     if hs.timer.secondsSinceEpoch() - obj._lastDismissed < 300 then return end
 
     -- Warning notification before curfew

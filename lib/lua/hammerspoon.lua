@@ -154,9 +154,17 @@ local watch = engage("seeds.watch.init", {
 
 local sanctuary = nil and engage("seeds.sanctuary", {})
 
+-- Sleep-schedule shift (2026-09): wind-down starts 3:00am on the night of Sep 23
+-- and moves 30 min earlier each night until it settles at 11:00pm (~Oct 1).
+-- After that it behaves like a plain fixed curfew at 23:00.
 local curfew = nil and engage("seeds.curfew", {
-    triggerTime = {hour = 22, minute = 30},
-    resetTime = {hour = 6, minute = 0},
+    shift = {
+        start = {year = 2026, month = 9, day = 27},
+        from = {hour = 3, minute = 0},
+        target = {hour = 23, minute = 0},
+        stepMinutes = 30,
+    },
+    resetTime = {hour = 8, minute = 0},
     holdDuration = 15
 })
 
