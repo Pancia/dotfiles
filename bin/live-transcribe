@@ -835,15 +835,22 @@ def set_audio_output(device_name):
         return False
 
 def find_device_by_name(name):
-    """Find device index by name (case-insensitive substring match)"""
+    """Find an INPUT device's index by case-insensitive substring match.
+
+    Input-only because both callers open capture streams: --mic-device, and
+    --computer-device (BlackHole and friends are loopback *inputs*). PortAudio on
+    macOS lists a duplex device once per direction under the same name, so an
+    unfiltered match could return the output half — which then opens with zero
+    input channels and records silence rather than failing.
+    """
     devices = sd.query_devices()
     name_lower = name.lower()
 
     for i, device in enumerate(devices):
-        if name_lower in device['name'].lower():
+        if name_lower in device['name'].lower() and device['max_input_channels'] > 0:
             return i
 
-    raise ValueError(f"No device found matching '{name}'")
+    raise ValueError(f"No input device found matching '{name}'")
 
 def list_devices():
     """List all available audio devices"""

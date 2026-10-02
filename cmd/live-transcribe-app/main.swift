@@ -14,11 +14,26 @@
 // copy the transcript to the clipboard and close. We never leave an orphan
 // engine: on shutdown we SIGINT the child, then SIGKILL if it lingers.
 //
+// One exception, added with the mic picker: an engine that exits NONZERO having
+// transcribed nothing never started a session at all, so we go idle instead of
+// closing — otherwise a bad device would take the picker down with it.
+//
+// Microphone: chosen from the 🎙 pull-down in the footer (or the status menu's
+// "Microphone" submenu), listed live from CoreAudio and remembered in
+// pref.micDevice. The engine binds its device at start-up, so switching stops it
+// and starts a fresh one on the new device — which is why the session tracks a
+// LIST of transcript files rather than one.
+//
+// History: the status menu's "Recent Transcripts" submenu lists the last 10 saved
+// transcripts, newest first. Clicking one copies its `read <path>` reference and
+// opens it in whatever owns .txt.
+//
 // Build: see Makefile (plain swiftc → .app bundle, codesigned).
 
 import AppKit
 import CoreGraphics   // CGEvent + CGPreflight/RequestPostEventAccess (auto-linked via AppKit)
 import Carbon.HIToolbox   // RegisterEventHotKey — the global Escape grab (see registerEscapeHotKey)
+import CoreAudio          // AudioObject* — the input-device list behind the mic picker
 import Foundation
 
 // MARK: - Config / args
@@ -29,7 +44,10 @@ func argValue(_ name: String) -> String? {
     return nil
 }
 
-let micDevice = argValue("--mic") ?? "BOYA"
+// The device a session opens with when nothing better is known. A mic chosen in the UI
+// (pref.micDevice) outranks it: the launcher passes --mic from a hardcoded default,
+// while the preference is a decision somebody made. See resolveMicDevice().
+let micArgDefault = argValue("--mic") ?? "BOYA"
 
 // Which hotkey drives this session. The mode — not a persisted preference — is the
 // authority on the two output settings, so each key means exactly one thing:
@@ -90,6 +108,98 @@ func enrichedEnvironment() -> [String: String] {
     let existing = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
     env["PATH"] = (extra + [existing]).joined(separator: ":")
     return env
+}
+
+// MARK: - Audio input devices
+
+// Enumerated through CoreAudio rather than by shelling out to the engine's
+// `--list-devices`: that means a second Python + PortAudio start-up (seconds) racing the
+// engine's own, and the picker re-reads the list every time it opens.
+//
+// The engine resolves --mic-device by case-insensitive SUBSTRING match over PortAudio's
+// device list, and PortAudio on macOS reports the CoreAudio device name verbatim — so
+// handing it a full name read here selects the same device. Names are not guaranteed
+// unique (two identical USB interfaces), which the engine can't disambiguate either.
+struct AudioInputDevice {
+    let id: AudioDeviceID
+    let name: String
+}
+
+private func audioObjectString(_ id: AudioObjectID, _ selector: AudioObjectPropertySelector) -> String? {
+    var addr = AudioObjectPropertyAddress(mSelector: selector,
+                                          mScope: kAudioObjectPropertyScopeGlobal,
+                                          mElement: kAudioObjectPropertyElementMain)
+    // Unmanaged, not a plain CFString?: CoreAudio hands back a +1 reference here, and
+    // writing it through a raw pointer into a managed optional leaves ARC guessing.
+    var out: Unmanaged<CFString>? = nil
+    var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+    let err = withUnsafeMutablePointer(to: &out) {
+        AudioObjectGetPropertyData(id, &addr, 0, nil, &size, UnsafeMutableRawPointer($0))
+    }
+    guard err == noErr, let name = out else { return nil }
+    return name.takeRetainedValue() as String
+}
+
+// Total input channels across the device's input streams. Zero means it can't record,
+// which is how output-only devices (and the output half of a duplex device) are dropped.
+private func inputChannelCount(_ id: AudioDeviceID) -> UInt32 {
+    var addr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreamConfiguration,
+                                          mScope: kAudioObjectPropertyScopeInput,
+                                          mElement: kAudioObjectPropertyElementMain)
+    var size: UInt32 = 0
+    guard AudioObjectGetPropertyDataSize(id, &addr, 0, nil, &size) == noErr, size > 0 else { return 0 }
+    let raw = UnsafeMutableRawPointer.allocate(byteCount: Int(size),
+                                               alignment: MemoryLayout<AudioBufferList>.alignment)
+    defer { raw.deallocate() }
+    guard AudioObjectGetPropertyData(id, &addr, 0, nil, &size, raw) == noErr else { return 0 }
+    let list = UnsafeMutableAudioBufferListPointer(raw.assumingMemoryBound(to: AudioBufferList.self))
+    return list.reduce(0) { $0 + $1.mNumberChannels }
+}
+
+func availableInputDevices() -> [AudioInputDevice] {
+    var addr = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices,
+                                          mScope: kAudioObjectPropertyScopeGlobal,
+                                          mElement: kAudioObjectPropertyElementMain)
+    let sys = AudioObjectID(kAudioObjectSystemObject)
+    var size: UInt32 = 0
+    guard AudioObjectGetPropertyDataSize(sys, &addr, 0, nil, &size) == noErr, size > 0 else { return [] }
+    var ids = [AudioDeviceID](repeating: 0, count: Int(size) / MemoryLayout<AudioDeviceID>.size)
+    guard AudioObjectGetPropertyData(sys, &addr, 0, nil, &size, &ids) == noErr else { return [] }
+    return ids.compactMap { id in
+        guard inputChannelCount(id) > 0,
+              let name = audioObjectString(id, kAudioObjectPropertyName) else { return nil }
+        return AudioInputDevice(id: id, name: name)
+    }
+}
+
+func defaultInputDeviceName() -> String? {
+    var addr = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                                          mScope: kAudioObjectPropertyScopeGlobal,
+                                          mElement: kAudioObjectPropertyElementMain)
+    var id = AudioDeviceID(0)
+    var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+    guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &id) == noErr,
+          id != 0 else { return nil }
+    return audioObjectString(id, kAudioObjectPropertyName)
+}
+
+// Which device this session opens on. Preference first (a choice made in the picker),
+// then --mic (the launcher's hardcoded default), then whatever macOS is currently using
+// for input — so an unplugged BOYA degrades to something that records instead of the
+// engine dying on "No device found matching 'BOYA'" before the UI can offer an
+// alternative. Matching is the same case-insensitive substring test the engine applies,
+// so a stored name and the engine agree on which device it names; the FULL name of the
+// device that matched is what we return and pass on.
+func resolveMicDevice() -> String {
+    let devices = availableInputDevices()
+    func present(_ needle: String) -> String? {
+        let n = needle.lowercased()
+        return devices.first { $0.name.lowercased().contains(n) }?.name
+    }
+    if let pref = UserDefaults.standard.string(forKey: "pref.micDevice"), let hit = present(pref) { return hit }
+    if let hit = present(micArgDefault) { return hit }
+    if let fallback = defaultInputDeviceName() { return fallback }
+    return micArgDefault
 }
 
 // MARK: - Colors (terminal-ish dark theme)
@@ -264,7 +374,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var logHandle: FileHandle?
     private var lineBuffer = Data()   // touched only on the pipe's serial reader
 
+    // The CURRENT engine run's transcript, and the latch that captures it: reset to nil
+    // on a mic switch so the replacement engine's path is picked up too.
     private var transcriptPath: String?
+    // Every transcript file this session has produced, oldest first — one per engine run,
+    // so a mic switch APPENDS a file rather than replacing the one a copy reads. This,
+    // not transcriptPath, is what every copy/reveal/overflow check reads.
+    private var transcriptPaths: [String] = []
     private var accumulated: [String] = []
     // Every raw line that reached the transcript scroll (meter lines excluded), in
     // order — replayed by rerenderTranscript() when the Timestamps checkbox toggles.
@@ -311,6 +427,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var targetApp: NSRunningApplication?
 
     // In-window controls.
+    private var micPopup: NSPopUpButton!
     private var tsCheck: NSButton!
     private var refCheck: NSButton!
     private var pasteCheck: NSButton!
@@ -318,8 +435,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var completeButton: NSButton!
     private var cancelButton: NSButton!
 
+    // The device the engine is currently recording from — a real device name resolved
+    // against the live CoreAudio list, not whatever string happened to be stored.
+    private var micDevice = micArgDefault
+    // Set while a mic switch is tearing the old engine down, so the shutdown funnel
+    // doesn't read a deliberate restart as the session ending.
+    private var restarting = false
+
     // Menu items whose actions need a known transcript path; disabled until then.
     private var cancelItem: NSMenuItem!
+    private var micMenuItem: NSMenuItem!    // "Microphone" submenu; rebuilt on every open
+    private var recentItem: NSMenuItem!     // "Recent Transcripts" submenu; ditto
     private var copyTranscriptItem: NSMenuItem!
     private var copyRefItem: NSMenuItem!
     private var revealItem: NSMenuItem!
@@ -356,6 +482,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if let seed = NSWorkspace.shared.frontmostApplication, seed != .current {
             targetApp = seed
         }
+
+        // Resolved before the UI is built: the panel title and both pickers name it.
+        micDevice = resolveMicDevice()
 
         buildPanel()
         buildStatusItem()
@@ -475,7 +604,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             contentRect: NSRect(x: 0, y: 0, width: w, height: h),
             styleMask: [.titled, .closable, .resizable, .utilityWindow, .nonactivatingPanel],
             backing: .buffered, defer: false)
-        panel.title = "Live Transcribe"
+        panel.title = panelTitle()
         panel.level = .floating
         panel.isFloatingPanel = true
         // Redundant next to the canBecomeKey override, kept as a second line of defence:
@@ -532,9 +661,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         // The Debug toggle rides at the right end of this bar rather than in the top
         // control row: at the default 586pt window that row is already full, and a
         // fourth checkbox there would clip Cancel/Complete.
-        let dbgW: CGFloat = 86
+        //
+        // The mic picker is here for the same reason, and is a 44pt icon-only pull-down
+        // for a second one: this strip's real tenant is the meter, which measures 396pt
+        // at rest and 436pt at a five-digit chunk count, so a popup wide enough to show a
+        // device NAME would truncate it — the name goes in the panel title instead. What
+        // makes it fit at all is that the button TAKES OVER the meter's leading "🎙 "
+        // (33pt) rather than adding to it, and dbgW drops to what Debug actually measures
+        // (64pt) from a long-stale 86. Net cost to the meter: 5pt.
+        let dbgW: CGFloat = 70
+        let micW: CGFloat = 44
+        let micH: CGFloat = 22
+        let mic = NSPopUpButton(frame: NSRect(x: 4, y: (barH - micH) / 2, width: micW, height: micH),
+                                pullsDown: true)
+        mic.font = NSFont.systemFont(ofSize: 13)
+        mic.autoresizingMask = [.maxXMargin, .maxYMargin]
+        mic.toolTip = "Microphone — switching restarts the engine"
+        content.addSubview(mic)
+        micPopup = mic
+        rebuildMicPopup()
+        mic.menu?.delegate = self   // repopulated on open, so a hot-plugged device shows up
+
         let sfH: CGFloat = 24
-        let sf = NSTextField(frame: NSRect(x: 8, y: (barH - sfH) / 2, width: content.bounds.width - 16 - dbgW, height: sfH))
+        let sfX: CGFloat = 4 + micW + 6
+        let sf = NSTextField(frame: NSRect(x: sfX, y: (barH - sfH) / 2, width: content.bounds.width - sfX - dbgW - 6, height: sfH))
         sf.isEditable = false
         sf.isSelectable = false
         sf.isBordered = false
@@ -543,7 +693,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         sf.textColor = Palette.dim   // covers the initial text + any parse-miss fallback
         sf.usesSingleLineMode = true
         sf.lineBreakMode = .byTruncatingTail
-        sf.stringValue = "🎙 waiting for audio…"
+        sf.stringValue = "waiting for audio…"
         sf.autoresizingMask = [.width, .maxYMargin]
         content.addSubview(sf)
         statusField = sf
@@ -635,8 +785,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         content.addSubview(topSep)
     }
 
+    // The active device rides in the title bar because the footer strip it is picked
+    // from has to keep its width for the meter. Recomputed on every switch.
+    private func panelTitle() -> String { "Live Transcribe — " + micDevice }
+
     private func setControlsEnabled(_ on: Bool) {
-        [tsCheck, refCheck, pasteCheck, debugCheck, completeButton, cancelButton].forEach { $0?.isEnabled = on }
+        [micPopup, tsCheck, refCheck, pasteCheck, debugCheck, completeButton, cancelButton].forEach { $0?.isEnabled = on }
     }
 
     // Neither of these persists any more: the launch mode reseeds them every session, so
@@ -682,6 +836,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
         menu.addItem(.separator())
 
+        // The same picker as the panel's, for when the panel is hidden. Contents are
+        // rebuilt in menuNeedsUpdate, so a device plugged in mid-session shows up here too.
+        micMenuItem = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
+        micMenuItem.submenu = NSMenu()
+        micMenuItem.submenu?.autoenablesItems = false
+        menu.addItem(micMenuItem)
+
+        menu.addItem(.separator())
+
         // Copy actions on the current session — grab the reference mid-session if
         // you know it'll be long, without waiting for stop.
         copyTranscriptItem = NSMenuItem(title: "Copy Transcript", action: #selector(copyTranscriptAction), keyEquivalent: "")
@@ -695,6 +858,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         revealItem = NSMenuItem(title: "Reveal Transcript in Finder", action: #selector(revealInFinder), keyEquivalent: "")
         revealItem.target = self
         menu.addItem(revealItem)
+
+        // Earlier sessions, opened in whatever owns .txt. Lives here rather than in the
+        // panel because the footer strip it would have shared has no width left: the
+        // meter needs up to 436pt of it, and a second 40pt pull-down plus its gap put a
+        // four-digit chunk count past the truncation point at the default window size.
+        recentItem = NSMenuItem(title: "Recent Transcripts", action: nil, keyEquivalent: "")
+        recentItem.submenu = NSMenu()
+        recentItem.submenu?.autoenablesItems = false
+        menu.addItem(recentItem)
 
         menu.addItem(.separator())
 
@@ -722,10 +894,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        // Two menus share this delegate. The popup's has no "Hide Panel" at index 0, so
+        // the status-menu maintenance below would rewrite its button title.
+        if let popup = micPopup, menu === popup.menu { rebuildMicPopup(); return }
+        rebuildMicSubmenu()
+        rebuildRecentSubmenu()
         menu.item(at: 0)?.title = panel.isVisible ? "Hide Panel" : "Show Panel"
-        // The copy/reveal actions need a known transcript path (nil for ~1s at
+        // The copy/reveal actions need a known transcript path (empty for ~1s at
         // startup until the engine emits "Writing transcript to:").
-        let hasPath = (transcriptPath != nil)
+        let hasPath = !transcriptPaths.isEmpty
         copyTranscriptItem?.isEnabled = hasPath
         copyRefItem?.isEnabled = hasPath
         revealItem?.isEnabled = hasPath
@@ -740,8 +917,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc private func revealInFinder() {
         // Mid-session the .m4a doesn't exist yet (transcode happens at stop), so
         // reveal the .txt — it's flushed per line and always present.
-        guard let p = transcriptPath else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: p)])
+        guard !transcriptPaths.isEmpty else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(transcriptPaths.map { URL(fileURLWithPath: $0) })
     }
 
     @objc private func togglePanel() {
@@ -767,12 +944,256 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     @objc private func cancelSession() { finish(cancelled: true, userInitiated: false) }
 
+    // MARK: Mic picker
+
+    // Both pickers are rebuilt from the live CoreAudio list every time they are about to
+    // open, so a mic plugged in mid-session appears without a relaunch. The active device
+    // is always in the list even when CoreAudio has stopped reporting it (unplugged while
+    // recording), so neither picker can offer a set of names excluding the one in use.
+    private func micMenuNames() -> [String] {
+        var names = availableInputDevices().map { $0.name }
+        if !names.contains(micDevice) { names.insert(micDevice, at: 0) }
+        return names
+    }
+
+    private func micItem(_ name: String) -> NSMenuItem {
+        let item = NSMenuItem(title: name, action: #selector(micPicked(_:)), keyEquivalent: "")
+        item.target = self
+        item.state = (name == micDevice) ? .on : .off
+        // Once the session is stopping there is no engine left to point anywhere.
+        item.isEnabled = !finishing
+        return item
+    }
+
+    // A pull-down, not a pop-up: the button keeps its narrow "🎙" title instead of
+    // widening to whatever the selected device is called. Item 0 IS that title — a
+    // pull-down never lists its first item — so the devices start at index 1.
+    private func rebuildMicPopup() {
+        guard let menu = micPopup?.menu else { return }
+        menu.removeAllItems()
+        menu.autoenablesItems = false
+        menu.addItem(NSMenuItem(title: "🎙", action: nil, keyEquivalent: ""))
+        for name in micMenuNames() { menu.addItem(micItem(name)) }
+    }
+
+    private func rebuildMicSubmenu() {
+        guard let menu = micMenuItem?.submenu else { return }
+        menu.removeAllItems()
+        for name in micMenuNames() { menu.addItem(micItem(name)) }
+    }
+
+    @objc private func micPicked(_ sender: NSMenuItem) { switchMic(to: sender.title) }
+
+    // Move the session to another input device. The engine binds its device at start-up
+    // and offers no way to retune it, so this stops the running one and starts a fresh
+    // one — which is why the transcript is tracked as a LIST of files: the new engine
+    // opens its own transcript_<ts>.txt and .m4a, and a copy at stop has to carry both.
+    //
+    // Strictly sequential, never overlapping. Each engine clears
+    // ~/.local/state/live-transcribe/rec_*.wav at start-up as an orphan sweep, so a
+    // second one launched while the first is still recording would delete the recording
+    // out from under it.
+    private func switchMic(to name: String) {
+        guard !finishing, !restarting else { return }
+        let idle = (engine == nil)
+        // From idle this is a retry, so re-picking the SAME device has to be honoured.
+        guard idle || name != micDevice else { return }
+
+        micDevice = name
+        UserDefaults.standard.set(name, forKey: "pref.micDevice")
+        panel.title = panelTitle()
+
+        if idle {
+            statusField?.stringValue = "starting on \(name)…"
+            transcriptPath = nil
+            startEngine()
+            updateIcon(running: true)
+            return
+        }
+
+        restarting = true
+        statusField?.stringValue = "switching to \(name)…"
+        appendNotice("— switching microphone to \(name) —")
+
+        // Drop the termination handler BEFORE the kill. Left in place it would race the
+        // restart onto the main queue and end the whole session for us, and `restarting`
+        // is not a reliable guard against it: both hops land on main in no fixed order.
+        //
+        // `engine` deliberately keeps pointing at the old process until it is dead, so a
+        // Complete/Cancel landing in this window still finds something to SIGINT and wait
+        // on rather than copying a transcript the engine is mid-flush of.
+        let old = engine
+        old?.terminationHandler = nil
+        enginePipe?.fileHandleForReading.readabilityHandler = nil
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            if let p = old, p.isRunning {
+                kill(p.processIdentifier, SIGINT)
+                let deadline = Date().addingTimeInterval(10.0)
+                while p.isRunning && Date() < deadline { usleep(100_000) }
+                if p.isRunning { kill(p.processIdentifier, SIGKILL) }
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.restarting = false
+                guard !self.finishing else { return }   // a stop landed mid-teardown
+                self.engine = nil
+                self.enginePipe = nil
+                self.transcriptPath = nil               // the new engine announces its own
+                self.lineBuffer = Data()                // no reader is attached; drop any half line
+                self.startEngine()
+                self.updateIcon(running: true)
+            }
+        }
+    }
+
+    // Engine dead but the session is NOT over: nothing was recorded, so there is nothing
+    // to copy and nothing to flush. Keep the panel, the menu and the picker alive so a
+    // different device can be chosen — picking one starts a fresh engine.
+    private func enterIdle() {
+        enginePipe?.fileHandleForReading.readabilityHandler = nil
+        engine = nil
+        enginePipe = nil
+        updateIcon(running: false)
+        statusField?.stringValue = "engine stopped — pick a microphone to retry"
+        appendNotice("— engine exited before recording started; pick a microphone from 🎙 to retry —")
+    }
+
+    // MARK: Recent transcripts
+
+    // Built once: a DateFormatter is expensive, and these are used ten at a time every
+    // time the menu opens. The parser is pinned to POSIX because the filename stamp is a
+    // fixed format, not a localized one — a user locale with a non-Gregorian calendar
+    // would otherwise fail to parse it.
+    private static let stampParser: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+    private static let stampDisplay: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .short
+        f.timeStyle = .short
+        f.doesRelativeDateFormatting = true   // "Today, 7:28 PM"
+        return f
+    }()
+
+    private func rebuildRecentSubmenu() {
+        guard let menu = recentItem?.submenu else { return }
+        menu.removeAllItems()
+        let items = recentTranscriptItems()
+        guard !items.isEmpty else {
+            let empty = NSMenuItem(title: "No earlier transcripts", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            menu.addItem(empty)
+            return
+        }
+        for item in items { menu.addItem(item) }
+    }
+
+    // The last `limit` saved transcripts, newest first, as ready-made menu items.
+    //
+    // Ordered by FILENAME, not mtime — the same reason live-transcribe-launch's --copy
+    // recovery is: transcript_<ts> sorts lexically with record-start, and ProtonDrive
+    // rewrites mtimes when it syncs a file back down from another device, which would
+    // shuffle this list into "whatever synced last".
+    //
+    // This session's own files are left out; Copy Transcript and Reveal in Finder already
+    // address those, and a file still being appended to reads oddly as history. Empty ones
+    // are left out too — an aborted session would otherwise cost a slot a real transcript
+    // wants. That test is a stat, so it rejects them without a read.
+    private func recentTranscriptItems(limit: Int = 10) -> [NSMenuItem] {
+        let fm = FileManager.default
+        guard let names = try? fm.contentsOfDirectory(atPath: cloudTranscriptsDir) else { return [] }
+        let mine = Set(transcriptPaths)
+        var items: [NSMenuItem] = []
+        for name in names.filter({ $0.hasPrefix("transcript_") && $0.hasSuffix(".txt") }).sorted(by: >) {
+            if items.count >= limit { break }
+            let path = cloudTranscriptsDir + "/" + name
+            if mine.contains(path) { continue }
+            let size = ((try? fm.attributesOfItem(atPath: path))?[.size] as? NSNumber)?.intValue ?? 0
+            if size == 0 { continue }
+            let item = NSMenuItem(title: transcriptLabel(name: name, path: path),
+                                  action: #selector(openTranscript(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = path
+            // Says what clicking does, because the copy half of it is otherwise silent:
+            // the footer is the meter, which the engine repaints ten times a second.
+            item.toolTip = "Opens \(path)\nand copies: \(referenceString(for: [path]))"
+            items.append(item)
+        }
+        return items
+    }
+
+    // "Today, 7:28 PM  ·  Testing 1, 2, 3." — a bare column of timestamps is unusable for
+    // picking one out, and the opening words are what a session is actually recognisable by.
+    private func transcriptLabel(name: String, path: String) -> String {
+        let stamp = String(name.dropFirst("transcript_".count).dropLast(".txt".count))
+        let when = AppDelegate.stampParser.date(from: stamp)
+            .map { AppDelegate.stampDisplay.string(from: $0) } ?? stamp
+        guard let preview = transcriptPreview(path) else { return when }
+        return when + "  ·  " + preview
+    }
+
+    // First line of the file, with the engine's "[HH:MM:SS] " and any "Microphone: "
+    // source label stripped. Reads the head only: these sit in ~/Cloud/transcripts, today
+    // a plain local directory that ProtonDrive syncs, but building a menu should not
+    // depend on that — or on how long the first line of a transcript happens to be.
+    private func transcriptPreview(_ path: String, max: Int = 44) -> String? {
+        guard let fh = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? fh.close() }
+        guard let head = try? fh.read(upToCount: 512), !head.isEmpty else { return nil }
+        // A fixed-byte cut can land mid-codepoint; the U+FFFD that leaves behind is dropped.
+        var line = String(decoding: head, as: UTF8.self)
+            .split(separator: "\n", omittingEmptySubsequences: true).first.map(String.init) ?? ""
+        line = line.replacingOccurrences(of: "\u{FFFD}", with: "")
+        let range = NSRange(line.startIndex..., in: line)
+        if let m = transcriptRegex.firstMatch(in: line, range: range),
+           let textR = Range(m.range(at: 3), in: line) {
+            line = String(line[textR])
+        }
+        line = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        if line.isEmpty { return nil }
+        return line.count > max ? String(line.prefix(max - 1)) + "…" : line
+    }
+
+    // Puts the file's `read <path>` reference on the clipboard, then hands the file to
+    // whatever owns .txt (TextEdit unless you've changed it). Clipboard FIRST, so a
+    // LaunchServices open that fails still leaves you the reference.
+    //
+    // Deliberately does NOT set `clipboardWritten`: that flag means "this session's
+    // transcript has been delivered", and the terminate safety net reads it to decide
+    // whether it still owes you a copy. Setting it here would make opening a piece of
+    // history silently cancel the delivery of the session you're recording.
+    //
+    // The stop path will overwrite this clipboard when the session ends — unavoidable,
+    // one clipboard — so this is for grabbing a reference in passing, not for parking one.
+    //
+    // Opening also moves the auto-paste target: the app you open becomes frontmost, and
+    // appActivated tracks whatever that is. Deliberately not special-cased — the rule is
+    // "paste where you were last", and clicking back to your editor restores it — but a
+    // stop issued while the transcript is still frontmost pastes there.
+    @objc private func openTranscript(_ sender: NSMenuItem) {
+        guard let path = sender.representedObject as? String else { return }
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(referenceString(for: [path]), forType: .string)
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+    }
+
     // MARK: Engine
 
     private func startEngine() {
-        // Fresh log for this session (also tee'd here for debugging).
-        FileManager.default.createFile(atPath: logFilePath, contents: nil)
-        logHandle = FileHandle(forWritingAtPath: logFilePath)
+        // Fresh log for this session (also tee'd here for debugging). A restart after a
+        // mic switch appends to the same file instead of truncating it — what you open
+        // last.log to read is usually whatever went wrong BEFORE the switch.
+        if logHandle == nil {
+            FileManager.default.createFile(atPath: logFilePath, contents: nil)
+            logHandle = FileHandle(forWritingAtPath: logFilePath)
+        } else {
+            logHandle?.write(Data("\n--- engine restart on \(micDevice) ---\n".utf8))
+        }
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: enginePath)
@@ -793,8 +1214,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             guard !data.isEmpty else { return }
             self?.ingest(data)
         }
-        p.terminationHandler = { [weak self] _ in
-            DispatchQueue.main.async { self?.engineEnded() }
+        p.terminationHandler = { [weak self] proc in
+            let status = proc.terminationStatus
+            DispatchQueue.main.async { self?.engineEnded(status: status) }
         }
 
         engine = p
@@ -840,7 +1262,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             return
         }
         if transcriptPath == nil, let r = raw.range(of: "Writing transcript to: ") {
-            transcriptPath = String(raw[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let path = String(raw[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            transcriptPath = path
+            if !transcriptPaths.contains(path) { transcriptPaths.append(path) }
         }
         displayedRawLines.append(raw)   // replayed by rerenderTranscript() on a Timestamps toggle
         let styled = styleLine(raw, showTimestamps: showTimestamps)
@@ -880,11 +1304,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
 
         let s = NSMutableAttributedString()
-        s.append(NSAttributedString(string: "🎙 ", attributes: [.font: statusFont]))
         s.append(NSAttributedString(string: bar, attributes: [.font: statusFont, .foregroundColor: color]))
         s.append(NSAttributedString(string: "  \(word)", attributes: [.font: statusFontBold, .foregroundColor: color]))
         s.append(NSAttributedString(string: "  · sent \(chunks)", attributes: [.font: statusFont, .foregroundColor: Palette.dim]))
         statusField.attributedStringValue = s
+    }
+
+    // A line the app itself contributes to the scroll. Amber, never filtered by the
+    // Debug checkbox, because it explains a discontinuity in the transcript around it.
+    // Like appendError it bypasses `displayedRawLines`, so a Timestamps toggle drops it.
+    private func appendNotice(_ msg: String) {
+        append(NSAttributedString(string: msg, attributes: [.font: monoBold, .foregroundColor: Palette.amber]))
     }
 
     private func appendError(_ msg: String) {
@@ -966,7 +1396,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     // The engine exited on its own (self-stop / crash). Copy per prefs, no paste.
     // The `finishing` guard absorbs the race with a concurrent user stop.
-    private func engineEnded() {
+    //
+    // Except when it never got going: a NONZERO exit with nothing transcribed is a
+    // start-up failure — a mic name matching no device, a missing model, whisper-server
+    // refusing to come up — and quitting there would close the one piece of UI that can
+    // choose a different microphone. Go idle and leave the picker live instead. A clean
+    // stop exits 0 (the engine catches KeyboardInterrupt), so this can't swallow one.
+    private func engineEnded(status: Int32) {
+        if restarting { return }   // a deliberate teardown for a mic switch; a new engine follows
+        if status != 0, accumulated.isEmpty {
+            enterIdle()
+            return
+        }
         finish(cancelled: false, userInitiated: false)
     }
 
@@ -1043,7 +1484,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             if !refTouched { copyAsReference = mode.wantsReference }
         }
         updateIcon(running: false)
-        statusField?.stringValue = "🎙 stopped"
+        statusField?.stringValue = "stopped"
         setControlsEnabled(false)
 
         let p = engine
@@ -1125,7 +1566,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     // at. Deliberately NOT applied in applicationWillTerminate: that route never pastes,
     // so nothing is known about a destination.
     private func applyPasteTargetOverride() {
-        guard !cancelled, pasteEligible, !copyAsReference, transcriptPath != nil,
+        guard !cancelled, pasteEligible, !copyAsReference, !transcriptPaths.isEmpty,
               UserDefaults.standard.bool(forKey: "pref.autoPaste"),
               let target = targetApp, !target.isTerminated,
               target.bundleIdentifier == telegramBundleID,
@@ -1140,21 +1581,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private func deliver() -> Bool {
         if cancelled { return false }   // Escape/Cancel/close: leave the clipboard alone
         let useRef = copyAsReference || overflowReference
-        if useRef, transcriptPath != nil { return copyReferenceToPasteboard() }
+        if useRef, !transcriptPaths.isEmpty { return copyReferenceToPasteboard() }
         return copyFullToPasteboard()   // full, or reference with an unknown path
     }
 
-    // The text a full copy would place on the clipboard — the saved .txt when it's
-    // readable, else the in-memory accumulation, flowed into prose when Timestamps is
-    // off. nil when there's nothing worth writing, so no caller can clobber the
-    // clipboard with empty. Read twice per stop at most (the override probe, then the
+    // The text a full copy would place on the clipboard — the saved .txt files when
+    // they're readable, else the in-memory accumulation, flowed into prose when
+    // Timestamps is off. nil when there's nothing worth writing, so no caller can clobber
+    // the clipboard with empty. Read twice per stop at most (the override probe, then the
     // copy); a once-per-session file read isn't worth caching around.
     private func fullTranscriptText() -> String? {
         var text: String?
-        if let p = transcriptPath, let s = try? String(contentsOfFile: p, encoding: .utf8),
-           !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            text = s
+        // Every file the session wrote, in order. A mic switch splits the transcript
+        // across engine runs, and reading only the newest would silently drop everything
+        // recorded before the switch. Empty ones (a run that died at start-up) drop out.
+        let parts = transcriptPaths.compactMap { path -> String? in
+            guard let s = try? String(contentsOfFile: path, encoding: .utf8),
+                  !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return s.hasSuffix("\n") ? s : s + "\n"
         }
+        if !parts.isEmpty { text = parts.joined() }
         if text == nil, !accumulated.isEmpty {
             text = accumulated.joined(separator: "\n") + "\n"
         }
@@ -1175,12 +1621,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         return true
     }
 
+    // The `read <path>` form, one line per file. Shared with the Recent Transcripts
+    // menu so a reference copied from history is byte-identical to one copied at stop —
+    // both are pasted into the same place and must read the same there.
+    private func referenceString(for paths: [String]) -> String {
+        paths.map { "read " + ($0 as NSString).abbreviatingWithTildeInPath }.joined(separator: "\n")
+    }
+
     // Short cross-device reference for when the full transcript overflows a chat
     // limit — ~/Cloud/... resolves on other devices since the folder syncs.
     @discardableResult
     private func copyReferenceToPasteboard() -> Bool {
-        guard let p = transcriptPath else { return false }
-        let ref = "read " + (p as NSString).abbreviatingWithTildeInPath
+        guard !transcriptPaths.isEmpty else { return false }
+        // One `read` line per engine run: a mic switch splits the session across files,
+        // and a reference naming only the last would point at half the transcript.
+        let ref = referenceString(for: transcriptPaths)
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(ref, forType: .string)
