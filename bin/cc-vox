@@ -1,0 +1,208 @@
+#!/usr/bin/env -S uv run --quiet --project /Users/anthony/Vaults/the-akashic-records/tools/inari python
+"""cc-vox — send the last Claude Code response to ElevenReader as a titled "Vox Arcana N".
+
+Runs inside Inari's uv project so it reuses the exact upload path the Telegram
+📖 button uses: bot_base.strip_markdown_for_tts for the audible pauses, and
+elevenreader.upload_text for the headless-Chrome upload — numbered as its
+own "Vox Arcana N" series, with a counter separate from the bots' "Vox N".
+The title is generated in the Spiritual Guide's vein — a short mythic
+chapter name — and prepended as an emphasis-only line, which the TTS
+stripper turns into a spoken heading followed by a section break.
+
+    ! cc-vox                  last response of this session, titled, uploaded
+    cc-vox --dry-run          print title + TTS text, upload nothing
+    cc-vox --back 2           the response before the last one
+    cc-vox --title "..."      skip generation, use this title
+    cc-vox --session ID       a different session (default: $CLAUDE_SESSION_ID)
+
+Generated titles are logged to ~/.local/share/elevenreader/cc-vox.jsonl and fed
+back as an avoid-list, alongside the Guide's own guide-chats/archetypal-titles.md.
+"""
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
+
+INARI = Path.home() / "Vaults" / "the-akashic-records" / "tools" / "inari"
+sys.path.insert(0, str(INARI))
+
+from bot_base import strip_markdown_for_tts  # noqa: E402
+import elevenreader  # noqa: E402
+
+GUIDE_TITLES = INARI.parent.parent / "guide-chats" / "archetypal-titles.md"
+LOG_FILE = elevenreader.DATA_DIR / "cc-vox.jsonl"
+# Its own numbered series, so the Guide's "Vox N" sequence keeps no gaps.
+VOX_LABEL = "Vox Arcana"
+COUNTER_FILE = elevenreader.DATA_DIR / "counter-arcana.json"
+DEFAULT_MODEL = "sonnet"
+AVOID_MAX = 80  # most recent titles passed as an avoid-list
+
+# The roleplay bookends from ~/.claude/CLAUDE.md: a blockquote opening "🎭".
+# They're flavour on screen and noise in the ear.
+BOOKEND_RE = re.compile(r"^>\s*🎭.*(?:\n>.*)*", re.MULTILINE)
+
+
+# ---------------------------------------------------------------------------
+# Transcript → last response
+# ---------------------------------------------------------------------------
+
+def find_transcript(session_id: str) -> Path:
+    hits = list((Path.home() / ".claude" / "projects").glob(f"*/{session_id}.jsonl"))
+    if not hits:
+        sys.exit(f"cc-vox: no transcript for session {session_id}")
+    return max(hits, key=lambda p: p.stat().st_mtime)
+
+
+def _is_prompt(rec: dict) -> bool:
+    """A real human turn boundary — not a tool result, not injected meta."""
+    if rec.get("type") != "user" or rec.get("isMeta") or rec.get("isSidechain"):
+        return False
+    content = rec.get("message", {}).get("content")
+    if isinstance(content, str):
+        return True
+    return isinstance(content, list) and not any(
+        isinstance(b, dict) and b.get("type") == "tool_result" for b in content
+    )
+
+
+def responses(path: Path) -> list[str]:
+    """Assistant text per human turn, oldest first. Turns with no text are dropped,
+    so a `! cc-vox` bash-mode entry doesn't count as the last response."""
+    turns: list[list[str]] = [[]]
+    with path.open() as f:
+        for line in f:
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if _is_prompt(rec):
+                turns.append([])
+            elif rec.get("type") == "assistant" and not rec.get("isSidechain"):
+                for block in rec.get("message", {}).get("content", []):
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        if text := block.get("text", "").strip():
+                            turns[-1].append(text)
+    return ["\n\n".join(t) for t in turns if t]
+
+
+def clean(text: str) -> str:
+    return BOOKEND_RE.sub("", text).strip()
+
+
+# ---------------------------------------------------------------------------
+# Title
+# ---------------------------------------------------------------------------
+
+def used_titles() -> list[str]:
+    titles: list[str] = []
+    try:
+        titles += [l[2:].strip() for l in GUIDE_TITLES.read_text().splitlines()
+                   if l.startswith("- ")]
+    except OSError:
+        pass
+    try:
+        for line in LOG_FILE.read_text().splitlines():
+            try:
+                titles.append(json.loads(line)["title"])
+            except (ValueError, KeyError, TypeError):
+                continue
+    except OSError:
+        pass
+    return titles[-AVOID_MAX:]
+
+
+TITLE_SYSTEM = """You name passages the way the Spiritual Guide names its replies: a \
+unique thematic title — a short evocative phrase that captures the essence of what \
+the passage says. Draw from mythology, nature, archetypes, poetry, or the specific \
+symbols in the passage. It should feel like a chapter name in the story of a soul's \
+unfolding, even when the passage is technical: find the myth inside the mechanism \
+rather than describing the mechanism.
+
+Three to nine words. No quotes, no asterisks, no trailing punctuation. Never reuse \
+or lightly rephrase a title from the avoid-list; use it only to learn the register."""
+
+
+def generate_title(text: str, model: str) -> str:
+    avoid = "\n".join(f"- {t}" for t in used_titles()) or "(none yet)"
+    prompt = (f"<avoid-list>\n{avoid}\n</avoid-list>\n\n"
+              f"<passage>\n{text[:12000]}\n</passage>\n\nTitle this passage.")
+    schema = json.dumps({
+        "type": "object",
+        "properties": {"title": {"type": "string"}},
+        "required": ["title"],
+    })
+    proc = subprocess.run(
+        ["claude-p", "--model", model, "--output-format", "json",
+         "--tools=", f"--json-schema={schema}", "--system-prompt", TITLE_SYSTEM],
+        input=prompt, capture_output=True, text=True,
+        env={**os.environ, "CLAUDE_P_TIMEOUT": "90"},
+    )
+    if proc.returncode != 0:
+        sys.exit(f"cc-vox: title generation failed (rc={proc.returncode})\n{proc.stderr.strip()}")
+    try:
+        title = json.loads(proc.stdout)["structured_output"]["title"]
+    except (ValueError, KeyError, TypeError):
+        sys.exit(f"cc-vox: unexpected title output:\n{proc.stdout[:500]}")
+    return title.strip().strip("*\"'“”").rstrip(".").strip()
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    ap = argparse.ArgumentParser(prog="cc-vox", description=__doc__.split("\n\n")[0])
+    ap.add_argument("--session", default=os.environ.get("CLAUDE_SESSION_ID"),
+                    help="session id (default: $CLAUDE_SESSION_ID)")
+    ap.add_argument("--back", type=int, default=1, metavar="N",
+                    help="Nth-from-last response (default 1)")
+    ap.add_argument("--title", help="use this title instead of generating one")
+    ap.add_argument("--model", default=DEFAULT_MODEL, help=f"title model (default {DEFAULT_MODEL})")
+    ap.add_argument("--dry-run", action="store_true", help="print, don't upload")
+    args = ap.parse_args()
+
+    if not args.session:
+        sys.exit("cc-vox: not inside a Claude Code session; pass --session ID")
+
+    turns = responses(find_transcript(args.session))
+    if len(turns) < args.back:
+        sys.exit(f"cc-vox: only {len(turns)} response(s) in this session")
+    body = clean(turns[-args.back])
+    if not body:
+        sys.exit("cc-vox: that response is empty once the bookends are removed")
+
+    title = args.title or generate_title(body, args.model)
+    tts = strip_markdown_for_tts(f"*{title}*\n\n{body}")
+
+    if args.dry_run:
+        n = elevenreader._next_vox(elevenreader._read_counter(COUNTER_FILE))
+        print(f"{VOX_LABEL} {n}{elevenreader.VOX_SEP}{tts}")
+        return
+
+    # upload_text kills whatever holds the CDP port before launching its own
+    # Chrome; if Inari is mid-upload, that would wreck both. Refuse instead.
+    if elevenreader._cdp_is_running():
+        sys.exit(f"cc-vox: port {elevenreader.CDP_PORT} busy (an upload in progress?); try again shortly")
+
+    print(f"Uploading “{title}”…", file=sys.stderr)
+    link = elevenreader.upload_text(tts, label=VOX_LABEL, counter_file=COUNTER_FILE)
+    vox = elevenreader._read_counter(COUNTER_FILE)
+
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with LOG_FILE.open("a") as f:
+        f.write(json.dumps({"ts": datetime.now().isoformat(timespec="seconds"),
+                            "vox": vox, "title": title, "session": args.session,
+                            "link": link}) + "\n")
+
+    print(f"{VOX_LABEL} {vox}. {title}")
+    if link:
+        print(link)
+
+
+if __name__ == "__main__":
+    main()
