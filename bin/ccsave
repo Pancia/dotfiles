@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Save current Claude Code session to ~/Cloud/cc-sessions/
 # Usage: ccsave [title]
+# Inside the vault it also writes a readable copy to claude-chats/ via akr-chat.
 set -euo pipefail
 
 if [ -z "${CLAUDE_SESSION_ID:-}" ]; then
@@ -37,6 +38,14 @@ if [ -f "$jsonl" ]; then
     mkdir -p "$backup_dir"
     zstd -qf "$jsonl" -o "$backup_dir/$id.jsonl.zst"
 fi
+
+# Inside the vault, also file a readable transcript into claude-chats/ (akr-chat).
+# A failure there must not undo the save above, hence the `|| echo`.
+case "$(pwd | tr '[:upper:]' '[:lower:]')/" in
+    */vaults/the-akashic-records/*)
+        akr-chat --session "$id" ${title:+--title "$title"} \
+            || echo "ccsave: transcript not filed (akr-chat failed); session still saved" >&2 ;;
+esac
 
 if [ -n "$title" ]; then
     echo "Saved session: $id ($timestamp — $title)"

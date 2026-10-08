@@ -376,7 +376,7 @@ open after an edit may show the cached menu and the next one is current. `rebuil
 | `z` | Jump to directory |
 | `astro` | Astrological transit tracker |
 | `ccpu` | Run claude wrapper with /cc:pending-updates (auto-detects jj/git repo) |
-| `ccsave [title]` | Save current Claude Code session to `~/Cloud/cc-sessions/` (autogenerates title if omitted) |
+| `ccsave [title]` | Save current Claude Code session to `~/Cloud/cc-sessions/` (autogenerates title if omitted); inside the AKR vault it also writes a readable markdown copy to `claude-chats/` via `akr-chat` |
 | `ccs list` / `ccs resume` | List/pick sessions, including crashed ones (titled — see below) |
 | `ccs prune [--dry-run]` | Archive crashed entries with no surviving transcript, backup, or saved record |
 | `commit-mine -m MSG` | Commit only *this* Claude session's edits when sessions share the working copy; `--diff` to preview, `--also PATH` for a Bash-made delete/rename |
