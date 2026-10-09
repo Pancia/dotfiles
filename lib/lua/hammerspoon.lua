@@ -159,10 +159,10 @@ local sanctuary = nil and engage("seeds.sanctuary", {})
 -- After that it behaves like a plain fixed curfew at 23:00.
 local curfew = nil and engage("seeds.curfew", {
     shift = {
-        start = {year = 2026, month = 9, day = 27},
-        from = {hour = 3, minute = 0},
+        start = {year = 2026, month = 10, day = 1},
+        from = {hour = 23, minute = 0},
         target = {hour = 23, minute = 0},
-        stepMinutes = 30,
+        stepMinutes = 10,
     },
     resetTime = {hour = 8, minute = 0},
     holdDuration = 15
