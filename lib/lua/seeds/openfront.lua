@@ -5,6 +5,7 @@
 -- Paced like a hand, not a metronome: every press is held, every step is followed by a
 -- gap, and each of those is drawn fresh from a normal distribution fitted to a Karabiner
 -- recording of doing it manually (~375ms per cycle). `pace` scales all of it.
+-- "blast" mode is the opposite: all six events at once, every `blastInterval`.
 --
 -- Why Hammerspoon and not Karabiner: Karabiner can remap a press, but it cannot run a
 -- loop for as long as a chord is held. An eventtap plus a timer can.
@@ -13,7 +14,8 @@
 -- title), so number keys and clicks everywhere else are untouched even when it's on.
 --
 -- Not engaged from hammerspoon.lua, same as seeds.scrollblock. Lazily required over IPC:
---     hs -c 'require("seeds.openfront").toggle()'
+--     hs -c 'require("seeds.openfront").toggle()'            -- your pace
+--     hs -c 'require("seeds.openfront").toggle("blast")'     -- full blast
 --     hs -c 'require("seeds.openfront").setPace(0.8)'    -- 0.8 = 20% faster than by hand
 --     hs -c 'require("seeds.openfront").simulate(500)'   -- what the timing works out to
 -- A full Hammerspoon reload resets it to OFF.
@@ -28,6 +30,8 @@ obj.timing = {
     clickHold = {90, 15, 60, 105},
 }
 obj.pace = 1.0                 -- multiplies every delay; < 1 is faster
+obj.mode = "human"             -- or "blast"
+obj.blastInterval = 0.06       -- seconds per cycle in blast mode
 obj.titlePattern = "openfront" -- plain, case-insensitive substring of the window title
 
 obj._tap = nil
@@ -101,6 +105,14 @@ local function runStep(i)
         obj._tap:start()
         return stopLoop()
     end
+    if obj.mode == "blast" then
+        local key, pos = obj._digit, hs.mouse.absolutePosition()
+        for _ = 1, 2 do postKey(key, true); postKey(key, false) end
+        postMouse(types.leftMouseDown, pos)
+        postMouse(types.leftMouseUp, pos)
+        obj._timer = hs.timer.doAfter(obj.blastInterval, function() runStep(1) end)
+        return
+    end
     local step = STEPS[i]
     local gap = sample(step.gap)
     local hold = math.min(sample(step.hold), gap - 0.010)
@@ -164,16 +176,20 @@ local function onEvent(ev)
 end
 
 local function cycleMs()
+    if obj.mode == "blast" then return math.floor(obj.blastInterval * 1000 + 0.5) end
     local m = 0
     for _, step in ipairs(STEPS) do m = m + obj.timing[step.gap][1] end
     return math.floor(m * obj.pace + 0.5)
 end
 
+local function modeLabel()
+    return obj.mode == "blast" and "full blast" or "your pace"
+end
+
 local function showIndicator()
-    if obj._menubar then return end
-    obj._menubar = hs.menubar.new()
+    if not obj._menubar then obj._menubar = hs.menubar.new() end
     if not obj._menubar then return end
-    obj._menubar:setTitle("⚔️")
+    obj._menubar:setTitle(obj.mode == "blast" and "⚔️🔥" or "⚔️")
     obj._menubar:setTooltip("OpenFront spam is armed — click to turn off")
     obj._menubar:setClickCallback(function() obj.off() end)
 end
@@ -189,7 +205,8 @@ function obj.isOn()
     return obj._tap ~= nil and obj._tap:isEnabled()
 end
 
-function obj.on()
+function obj.on(mode)
+    obj.mode = mode or obj.mode
     if not obj._tap then
         obj._tap = hs.eventtap.new({
             types.keyDown, types.keyUp,
@@ -199,7 +216,7 @@ function obj.on()
     obj._digit, obj._eatMouseUp = nil, false
     obj._tap:start()
     showIndicator()
-    hs.alert.show(string.format("⚔️ OpenFront spam armed (~%dms/cycle)", cycleMs()), 1.2)
+    hs.alert.show(string.format("⚔️ OpenFront spam armed — %s (~%dms/cycle)", modeLabel(), cycleMs()), 1.2)
     return "on"
 end
 
@@ -212,8 +229,11 @@ function obj.off()
     return "off"
 end
 
-function obj.toggle()
-    if obj.isOn() then return obj.off() else return obj.on() end
+-- Same mode again turns it off; the other mode switches to it.
+function obj.toggle(mode)
+    mode = mode or "human"
+    if obj.isOn() and obj.mode == mode then return obj.off() end
+    return obj.on(mode)
 end
 
 function obj.setPace(pace)
@@ -222,8 +242,8 @@ function obj.setPace(pace)
 end
 
 function obj.status()
-    return string.format("%s, pace %.2f, ~%dms per cycle", obj.isOn() and "on" or "off",
-        obj.pace, cycleMs())
+    return string.format("%s, %s, ~%dms per cycle", obj.isOn() and "on" or "off",
+        modeLabel(), cycleMs())
 end
 
 -- Draw n cycles from the timing model without posting anything.

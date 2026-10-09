@@ -126,7 +126,8 @@
         "c": ["calendar", {"interactive": "agenda 24"}],
         "l": ["LOCK IT DOWN", "launch-lock-screen-dialog"],
         "m": ["Toggle mouse scroll", "hs -c 'require(\"seeds.scrollblock\").toggle()'"],
-        "o": ["Toggle OpenFront spam", "hs -c 'require(\"seeds.openfront\").toggle()'"]
+        "o": ["Toggle OpenFront spam", "hs -c 'require(\"seeds.openfront\").toggle()'"],
+        "b": ["Toggle OpenFront spam (full blast)", "hs -c 'require(\"seeds.openfront\").toggle(\"blast\")'"]
     },
     "t": {
         "_desc": "+macOS settings",
