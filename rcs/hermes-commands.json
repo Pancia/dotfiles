@@ -125,7 +125,8 @@
         "p": ["Save to Pinterest", {"interactive": "cd ~/private/pancia && _bin/pinterest_save"}],
         "c": ["calendar", {"interactive": "agenda 24"}],
         "l": ["LOCK IT DOWN", "launch-lock-screen-dialog"],
-        "m": ["Toggle mouse scroll", "hs -c 'require(\"seeds.scrollblock\").toggle()'"]
+        "m": ["Toggle mouse scroll", "hs -c 'require(\"seeds.scrollblock\").toggle()'"],
+        "o": ["Toggle OpenFront spam", "hs -c 'require(\"seeds.openfront\").toggle()'"]
     },
     "t": {
         "_desc": "+macOS settings",
