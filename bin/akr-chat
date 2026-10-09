@@ -1,0 +1,327 @@
+#!/usr/bin/env python3
+"""akr-chat — save a Claude Code conversation into the vault as a readable log.
+
+`ccsave` calls this automatically when run inside the vault, so you rarely need it
+directly. (ccsave bookmarks the session for `ccs resume` and backs up the raw
+JSONL; this is the human-readable copy, kept next to guide-chats/.)
+
+Writes ~/Vaults/the-akashic-records/claude-chats/YYYY-MM-DD-<title>.md in the
+same shape as guide-chats/: a `# YYYY-MM-DD` heading per day, then
+`## HH:MM — User Message` / `## HH:MM — Claude Reply` sections.
+
+    akr-chat                   this session ($CLAUDE_SESSION_ID), or the newest vault session
+    akr-chat --session ID      a specific session
+    akr-chat --pick            choose from recent vault sessions (fzf)
+    akr-chat --dry-run         print the markdown, write nothing
+
+Safe to re-run: one file per session, found again by the `session:` line in its
+header, so a later save rewrites it in place (even if you renamed the file).
+
+Kept: your messages (pasted text, image references) and Claude's prose replies.
+Slash commands and `! cmd` bash-mode entries become one italic line each (the latter
+as `*! cmd → first line of output*`).
+Dropped: thinking, tool calls and results, hook/system injections, subagent
+traffic, and the compaction summary (the turns it summarizes are still in the
+transcript, so they are kept in full). Files Claude wrote or edited are listed
+(through the Write/Edit tools; edits made with
+shell commands aren't seen) in one italic line under the reply that touched them.
+"""
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
+
+VAULT = Path.home() / "Vaults" / "the-akashic-records"
+OUT_DIR = VAULT / "claude-chats"
+PROJECTS = Path.home() / ".claude" / "projects"
+# Claude Code keys the project dir on the cwd path, and the vault is reached
+# under both ~/vaults and ~/Vaults; match either.
+VAULT_PROJECT_GLOB = "*[vV]aults-the-akashic-records"
+
+STRIP_TAGS = re.compile(r"<(system-reminder|local-command-stdout|local-command-stderr)>.*?</\1>", re.S)
+PASTE_OPEN = re.compile(r'<pasted_content[^>]*>\n?')
+PASTE_CLOSE = re.compile(r'\n?</pasted_content[^>]*>')
+COMMAND = re.compile(r"<command-name>(.*?)</command-name>.*?<command-args>(.*?)</command-args>", re.S)
+WRITE_TOOLS = {"Write", "Edit", "NotebookEdit"}
+# `! cmd` bash-mode entries arrive as two user records: the input, then its output.
+# They are collapsed into one italic line: *! cmd → first line of output*.
+BASH_INPUT = re.compile(r"<bash-input>(.*?)</bash-input>", re.S)
+BASH_OUTPUT = re.compile(r"<bash-(stdout|stderr)>(.*?)</bash-\1>", re.S)
+ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+BASH_OUT_MAX = 120
+
+
+# ---------------------------------------------------------------------------
+# Finding the transcript
+# ---------------------------------------------------------------------------
+
+def vault_transcripts() -> list[Path]:
+    paths = [p for d in PROJECTS.glob(VAULT_PROJECT_GLOB) for p in d.glob("*.jsonl")]
+    return sorted(paths, key=lambda p: p.stat().st_mtime, reverse=True)
+
+
+def find_transcript(session_id: str) -> Path:
+    hits = list(PROJECTS.glob(f"*/{session_id}.jsonl"))
+    if not hits:
+        sys.exit(f"akr-chat: no transcript for session {session_id}")
+    return max(hits, key=lambda p: p.stat().st_mtime)
+
+
+def ai_title(path: Path) -> str:
+    title = ""
+    with path.open() as f:
+        for line in f:
+            if '"ai-title"' in line or '"custom-title"' in line:
+                try:
+                    rec = json.loads(line)
+                except ValueError:
+                    continue
+                # A title you set yourself wins over the generated one.
+                if rec.get("type") == "custom-title" and rec.get("customTitle"):
+                    return rec["customTitle"]
+                title = rec.get("aiTitle") or title
+    return title
+
+
+def pick() -> Path:
+    rows = []
+    for p in vault_transcripts()[:60]:
+        when = datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+        rows.append(f"{p.stem}\t{when}\t{ai_title(p) or '(untitled)'}")
+    try:
+        proc = subprocess.run(["fzf", "--with-nth=2..", "--delimiter=\t", "--prompt=save> "],
+                              input="\n".join(rows), capture_output=False,
+                              stdout=subprocess.PIPE, text=True)
+    except FileNotFoundError:
+        sys.exit("akr-chat: --pick needs fzf")
+    if proc.returncode != 0 or not proc.stdout.strip():
+        sys.exit(1)
+    return find_transcript(proc.stdout.split("\t", 1)[0])
+
+
+# ---------------------------------------------------------------------------
+# Transcript → turns
+# ---------------------------------------------------------------------------
+
+def local_time(ts: str) -> datetime:
+    return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone()
+
+
+def user_text(content) -> str:
+    """The human-typed part of a user record, or "" if it isn't a human turn."""
+    if isinstance(content, str):
+        parts = [content]
+    elif isinstance(content, list):
+        if any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
+            return ""
+        parts = []
+        for b in content:
+            if not isinstance(b, dict):
+                continue
+            if b.get("type") == "text":
+                parts.append(b.get("text", ""))
+            elif b.get("type") == "image":
+                parts.append("[image]")
+    else:
+        return ""
+    text = "\n\n".join(parts)
+    if m := BASH_INPUT.search(text):
+        return f"*! {_italic_safe(m.group(1).strip())}*"
+    if m := COMMAND.search(text):
+        args = m.group(2).strip()
+        return f"*{m.group(1).strip()}{' ' + args if args else ''}*"
+    text = STRIP_TAGS.sub("", text)
+    text = PASTE_CLOSE.sub("", PASTE_OPEN.sub("", text))
+    return text.strip()
+
+
+def _italic_safe(s: str) -> str:
+    return s.replace("*", r"\*")
+
+
+def bash_output_line(text: str) -> str | None:
+    """For a bash-mode output record: its first non-empty line (stdout preferred,
+    else stderr), shortened. None if the record isn't bash output at all."""
+    if not text.lstrip().startswith("<bash-"):
+        return None
+    streams = {m.group(1): ANSI.sub("", m.group(2)) for m in BASH_OUTPUT.finditer(text)}
+    if not streams:
+        return None
+    for name in ("stdout", "stderr"):
+        for line in streams.get(name, "").splitlines():
+            if line := line.strip():
+                if len(line) > BASH_OUT_MAX:
+                    line = line[:BASH_OUT_MAX - 1].rstrip() + "…"
+                return _italic_safe(line)
+    return ""
+
+
+def turns(path: Path) -> list[dict]:
+    out: list[dict] = []
+    reply: dict | None = None
+    with path.open() as f:
+        for line in f:
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            if rec.get("isSidechain") or rec.get("isMeta") or rec.get("isCompactSummary"):
+                continue
+            kind, ts = rec.get("type"), rec.get("timestamp")
+            if not ts:
+                continue
+            content = rec.get("message", {}).get("content")
+
+            if kind == "user":
+                text = user_text(content)
+                if not text or text.startswith("[Request interrupted"):
+                    continue
+                if (line := bash_output_line(text)) is not None:
+                    prev = out[-1] if out else None
+                    if line and prev and prev.get("bash") and "→" not in prev["text"]:
+                        prev["text"] = prev["text"][:-1] + f" → {line}*"
+                    continue
+                out.append({"role": "user", "time": local_time(ts), "text": text,
+                             "bash": text.startswith("*! ")})
+                reply = None
+
+            elif kind == "assistant" and isinstance(content, list):
+                for b in content:
+                    if not isinstance(b, dict):
+                        continue
+                    if b.get("type") == "text" and (t := b.get("text", "").strip()):
+                        if reply is None:
+                            reply = {"role": "claude", "time": local_time(ts), "text": [], "files": []}
+                            out.append(reply)
+                        reply["text"].append(t)
+                    elif b.get("type") == "tool_use" and b.get("name") in WRITE_TOOLS:
+                        fp = (b.get("input") or {}).get("file_path") or (b.get("input") or {}).get("notebook_path")
+                        if fp:
+                            if reply is None:
+                                reply = {"role": "claude", "time": local_time(ts), "text": [], "files": []}
+                                out.append(reply)
+                            if fp not in reply["files"]:
+                                reply["files"].append(fp)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Turns → markdown
+# ---------------------------------------------------------------------------
+
+def short_path(fp: str) -> str:
+    # The vault is reached as both ~/vaults and ~/Vaults (case-insensitive APFS),
+    # so compare case-folded rather than trusting resolve() to canonicalize.
+    for base, label in ((VAULT, ""), (Path.home(), "~/")):
+        prefix = str(base) + "/"
+        if fp.lower().startswith(prefix.lower()):
+            return label + fp[len(prefix):]
+    return fp
+
+
+def demote(text: str) -> str:
+    """Push a message's own headings two levels down, so a reply's `## Section`
+    can't be mistaken for the `## HH:MM — ...` turn headings. Code fences are skipped."""
+    out, fenced = [], False
+    for line in text.split("\n"):
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        elif not fenced and re.match(r"#{1,4} ", line):
+            line = "##" + line
+        out.append(line)
+    return "\n".join(out)
+
+
+def render(session_id: str, title: str, ts: list[dict]) -> str:
+    first = ts[0]["time"]
+    lines = [
+        "---",
+        f"session: {session_id}",
+        f"title: {title or '(untitled)'}",
+        f"started: {first.strftime('%Y-%m-%d %H:%M')}",
+        f"saved: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        f"resume: claude --resume {session_id}",
+        "---",
+    ]
+    day = None
+    for t in ts:
+        d = t["time"].strftime("%Y-%m-%d")
+        if d != day:
+            lines += ["", f"# {d}"]
+            day = d
+        hm = t["time"].strftime("%H:%M")
+        if t["role"] == "user":
+            lines += ["", f"## {hm} — User Message", "", demote(t["text"])]
+        else:
+            lines += ["", f"## {hm} — Claude Reply"]
+            if t["text"]:
+                lines += ["", demote("\n\n".join(t["text"]))]
+            if t["files"]:
+                lines += ["", "*Files written: " + ", ".join(f"`{short_path(f)}`" for f in t["files"]) + "*"]
+    return "\n".join(lines) + "\n"
+
+
+def slugify(s: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")[:60].rstrip("-")
+
+
+def existing_file(session_id: str) -> Path | None:
+    needle = f"session: {session_id}"
+    for p in OUT_DIR.glob("*.md"):
+        try:
+            with p.open() as f:
+                if any(needle == next(f, "").strip() for _ in range(3)):
+                    return p
+        except OSError:
+            continue
+    return None
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(prog="akr-chat", description=__doc__.split("\n\n")[0])
+    ap.add_argument("--session", help="session id (default: $CLAUDE_SESSION_ID, else newest vault session)")
+    ap.add_argument("--pick", action="store_true", help="choose a recent vault session with fzf")
+    ap.add_argument("--title", help="title for a new file's name (default: Claude Code's session title)")
+    ap.add_argument("--dry-run", action="store_true", help="print the markdown instead of writing it")
+    args = ap.parse_args()
+
+    if args.pick:
+        path = pick()
+    elif sid := (args.session or os.environ.get("CLAUDE_SESSION_ID")):
+        path = find_transcript(sid)
+    else:
+        found = vault_transcripts()
+        if not found:
+            sys.exit("akr-chat: no vault sessions found; pass --session ID")
+        path = found[0]
+
+    session_id = path.stem
+    title = args.title or ai_title(path)
+    ts = turns(path)
+    if not ts:
+        sys.exit("akr-chat: nothing to save in that session")
+    md = render(session_id, title, ts)
+
+    if args.dry_run:
+        sys.stdout.write(md)
+        return
+
+    OUT_DIR.mkdir(exist_ok=True)
+    target = existing_file(session_id)
+    if target is None:
+        stem = ts[0]["time"].strftime("%Y-%m-%d") + "-" + (slugify(title) or session_id[:8])
+        target = OUT_DIR / f"{stem}.md"
+        if target.exists():  # same title, same day, different session
+            target = OUT_DIR / f"{stem}-{session_id[:8]}.md"
+    target.write_text(md)
+    n_user = sum(t["role"] == "user" for t in ts)
+    print(f"akr-chat: {n_user} messages → {short_path(str(target))}")
+
+
+if __name__ == "__main__":
+    main()
