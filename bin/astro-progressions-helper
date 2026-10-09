@@ -60,9 +60,18 @@ def _birth_str(b):
 def cmd_progressed(req):
     from immanuel import charts
     from immanuel.const import calc
-    from immanuel.setup import settings
 
-    settings.mc_progression_method = calc.NAIBOD
+    # immanuel >= 1.6 replaced the global `immanuel.setup.settings` with a per-chart
+    # Config object; older versions only have the global.
+    try:
+        from immanuel.settings import Config
+        config = Config()
+        config.mc_progression_method = calc.NAIBOD
+        cfg = {'config': config}
+    except ImportError:
+        from immanuel.setup import settings
+        settings.mc_progression_method = calc.NAIBOD
+        cfg = {}
 
     b = req['birth']
     native = charts.Subject(
@@ -70,8 +79,8 @@ def cmd_progressed(req):
         latitude=float(b['lat']),
         longitude=float(b['lng']),
     )
-    natal = charts.Natal(native)
-    progressed = charts.Progressed(native, req['target'], aspects_to=natal)
+    natal = charts.Natal(native, **cfg)
+    progressed = charts.Progressed(native, req['target'], aspects_to=natal, **cfg)
 
     planets = []
     for obj in progressed.objects.values():
