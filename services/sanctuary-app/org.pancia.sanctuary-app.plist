@@ -18,9 +18,13 @@
         <key>RunAtLoad</key>
         <true/>
 
-        <!-- A bool, not {SuccessfulExit: false}: a clean Cmd+Q is exactly what this undoes.
-             Deliberately no WatchPaths: with KeepAlive true the job is always running, so a
-             watched path could never start it, and the unlock response already lives
+        <!-- A bool, not {SuccessfulExit: false}. Since m-073/m-074 Cmd+Q no longer exits
+             (it re-presents the gate, or goes dormant once the gate is passed), so this
+             covers crashes, SIGKILL, the reaper's _exit(1), power loss and a cancelled Log
+             Out or Restart. SuccessfulExit: false would leave Sanctuary dead after another
+             app cancels a log-out, so it stays rejected. Deliberately no WatchPaths: with
+             KeepAlive true the job is always running, so a watched path could never start
+             it, and the unlock response already lives
              in-process (com.apple.screenIsUnlocked, m-061), which KeepAlive keeps alive. -->
         <key>KeepAlive</key>
         <true/>
@@ -42,8 +46,10 @@
         <string>Interactive</string>
 
         <!-- No EnvironmentVariables: SANCTUARY_KIOSK must not be set here. A Release
-             install engages by policy; the variable stays free for drills and for
-             `launchctl setenv SANCTUARY_KIOSK 0`, the off-switch. -->
+             install engages by policy; the variable stays a per-process override for the
+             drills. The off-switch is `just kiosk-off` (m-076), which writes
+             kiosk-preference.json in the state directory: the app reads it at every gate
+             entry, and unlike `launchctl setenv` it survives a reboot. -->
         <key>StandardOutPath</key>
         <string>/Users/anthony/.log/services/sanctuary-app.log</string>
         <key>StandardErrorPath</key>
