@@ -127,7 +127,14 @@
         "l": ["LOCK IT DOWN", "launch-lock-screen-dialog"],
         "m": ["Toggle mouse scroll", "hs -c 'require(\"seeds.scrollblock\").toggle()'"],
         "o": ["Toggle OpenFront spam", "hs -c 'require(\"seeds.openfront\").toggle()'"],
-        "b": ["Toggle OpenFront spam (full blast)", "hs -c 'require(\"seeds.openfront\").toggle(\"blast\")'"]
+        "b": ["Toggle OpenFront spam (full blast)", "hs -c 'require(\"seeds.openfront\").toggle(\"blast\")'"],
+        "k": {
+            "_desc": "+middle mouse key",
+            "k": ["Press any key to bind…", "hs -c 'require(\"seeds.middlemouse\").capture()'"],
+            "o": ["Right ⌥", "hs -c 'require(\"seeds.middlemouse\").bind(\"rightalt\")'"],
+            "`": ["Backtick `", "hs -c 'require(\"seeds.middlemouse\").bind(\"`\")'"],
+            "x": [{"shell:fish": "printf 'Unbind (%s)' (hs -c 'require(\"seeds.middlemouse\").status()')"}, "hs -c 'require(\"seeds.middlemouse\").off()'"]
+        }
     },
     "t": {
         "_desc": "+macOS settings",
