@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
-# Rotate ~/.log/services/inari.log: redact + compress into an archive, then
-# truncate the live log in place.
+# Rotate ~/.log/services/<name>.log (default: inari): redact + compress into an
+# archive, then truncate the live log in place.
+#
+#   rotate-inari-log            ~/.log/services/inari.log    -> archive/inari-<from>_<to>.log.gz
+#   rotate-inari-log inari-cc   ~/.log/services/inari-cc.log -> archive/inari-cc-<from>_<to>.log.gz
+#
+# The Claude Code bot (org.pancia.inari-cc) logs the same Telegram traffic, token
+# shapes included, so it gets the same redaction rather than a second script.
 #
 # Copytruncate, NOT rename: launchd holds an open fd on the plist's
 # StandardOutPath, so `mv` would leave launchd writing into the renamed inode
@@ -12,7 +18,11 @@
 # content. Override the threshold with INARI_LOG_ROTATE_MB.
 set -euo pipefail
 
-LOG="$HOME/.log/services/inari.log"
+NAME="${1:-inari}"
+case "$NAME" in
+    ""|*[!a-z0-9-]*) echo "bad log name: '$NAME' (expected [a-z0-9-]+)" >&2; exit 2 ;;
+esac
+LOG="$HOME/.log/services/$NAME.log"
 ARCHIVE_DIR="$HOME/.log/services/archive"
 THRESHOLD_MB="${INARI_LOG_ROTATE_MB:-26}"
 
@@ -20,7 +30,7 @@ THRESHOLD_MB="${INARI_LOG_ROTATE_MB:-26}"
 
 size_mb=$(( $(stat -f%z "$LOG") / 1024 / 1024 ))
 if [ "$size_mb" -lt "$THRESHOLD_MB" ]; then
-    echo "inari.log is ${size_mb}MB (< ${THRESHOLD_MB}MB) — skipping"
+    echo "$NAME.log is ${size_mb}MB (< ${THRESHOLD_MB}MB) — skipping"
     exit 0
 fi
 
@@ -34,10 +44,10 @@ last=$(tail -n 20000 "$LOG" | grep -oE '^[0-9]{4}-[0-9]{2}-[0-9]{2}' | tail -1 |
 [ -n "$first" ] || first=$(date +%F)
 [ -n "$last" ]  || last=$(date +%F)
 
-out="$ARCHIVE_DIR/inari-${first}_${last}.log.gz"
+out="$ARCHIVE_DIR/$NAME-${first}_${last}.log.gz"
 n=1
 while [ -e "$out" ]; do
-    out="$ARCHIVE_DIR/inari-${first}_${last}-$n.log.gz"
+    out="$ARCHIVE_DIR/$NAME-${first}_${last}-$n.log.gz"
     n=$((n + 1))
 done
 
