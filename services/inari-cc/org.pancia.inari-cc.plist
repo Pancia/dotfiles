@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>org.pancia.inari-cc</string>
+        <key>ProgramArguments</key>
+        <array>
+            <string>/Users/anthony/Vaults/the-akashic-records/tools/inari/bin/claude-code-attend</string>
+        </array>
+        <!-- Restart only after a FAILED exit. claude_code.py exits 0 when
+             CLAUDE_CODE_BOT_TOKEN or TELEGRAM_USER_ID is missing, so an
+             unconfigured bot logs once instead of respawning every 10s. -->
+        <key>KeepAlive</key>
+        <dict>
+            <key>SuccessfulExit</key>
+            <false/>
+        </dict>
+        <key>ThrottleInterval</key>
+        <integer>30</integer>
+        <!-- SIGTERM → SIGKILL grace (launchd default 20s). Shutdown sends a
+             "restarting — turn interrupted" notice, then closes the Claude Code
+             child, whose disconnect alone measured 5.3s with a background task. -->
+        <key>ExitTimeOut</key>
+        <integer>45</integer>
+        <key>RunAtLoad</key>
+        <true/>
+        <key>StandardOutPath</key>
+        <string>/Users/anthony/.log/services/inari-cc.log</string>
+        <key>StandardErrorPath</key>
+        <string>/Users/anthony/.log/services/inari-cc.log</string>
+    </dict>
+</plist>
