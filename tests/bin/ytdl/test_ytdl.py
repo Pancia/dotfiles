@@ -225,7 +225,7 @@ class TestDownloadMedia:
         call = _download_calls(_parse_calls(ytdl_env["log"]))[0]
         out = call[call.index("-o") + 1]
         assert "/Cloud/ytdl/audio/" in out
-        assert "%(channel)s" in out
+        assert "%(channel,uploader)s" in out
         assert "%(title)s" in out
         assert "%(id)s" in out
         # Single video: no playlist segment
@@ -293,6 +293,23 @@ class TestVideoIdExtraction:
         call = _download_calls(_parse_calls(ytdl_env["log"]))[0]
         assert call[-1] == "abc123"
 
+    @pytest.mark.parametrize("url", [
+        "https://youtu.be/dQw4w9WgXcQ?si=xyz",
+        "https://www.youtube.com/shorts/dQw4w9WgXcQ",
+        "https://m.youtube.com/watch?feature=share&v=dQw4w9WgXcQ",
+        "https://www.youtube.com/live/dQw4w9WgXcQ?t=10",
+    ])
+    def test_extracts_id_from_other_url_shapes(self, ytdl_env, url):
+        _run_ytdl(ytdl_env, "audio", url)
+        call = _download_calls(_parse_calls(ytdl_env["log"]))[0]
+        assert call[-1] == "dQw4w9WgXcQ"
+
+    def test_short_link_with_list_is_still_single(self, ytdl_env):
+        _run_ytdl(ytdl_env, "audio", "https://youtu.be/abc123?list=PL123")
+        call = _download_calls(_parse_calls(ytdl_env["log"]))[0]
+        assert call[-1] == "abc123"
+        assert "%(playlist_title)s" not in call[call.index("-o") + 1]
+
 
 # ---------------------------------------------------------------------------
 # Flag parsing
@@ -314,6 +331,60 @@ class TestFlags:
         r = _run_ytdl(ytdl_env, "--quality")
         assert r.returncode != 0
         assert "requires a value" in r.stdout + r.stderr
+
+    @pytest.mark.parametrize("args", [
+        ("video", "best", "abc123"),
+        ("best", "video", "abc123"),
+        ("abc123", "video", "best"),
+        ("--best", "video", "abc123"),
+        ("--quality=best", "video", "abc123"),
+        ("--quiet", "--quality", "best", "video", "abc123"),  # sekhmet's form
+    ])
+    def test_best_quality_spellings(self, ytdl_env, args):
+        r = _run_ytdl(ytdl_env, *args)
+        assert r.returncode == 0, r.stdout + r.stderr
+        call = _download_calls(_parse_calls(ytdl_env["log"]))[0]
+        assert "height<=480" not in call[call.index("-f") + 1]
+        assert call[-1] == "abc123"
+
+    def test_help_exits_zero_without_downloading(self, ytdl_env):
+        for flag in ("-h", "--help"):
+            r = _run_ytdl(ytdl_env, "video", flag)
+            assert r.returncode == 0
+            assert "usage: ytdl" in r.stdout
+            assert "video best" in r.stdout
+        assert _download_calls(_parse_calls(ytdl_env["log"])) == []
+
+    def test_misspelt_keyword_rejected_before_any_prompt(self, ytdl_env):
+        r = _run_ytdl(ytdl_env, "vidoe")
+        assert r.returncode != 0
+        assert "Invalid type or quality 'vidoe'" in r.stderr
+        assert _parse_calls(ytdl_env["log"]) == []
+
+    def test_unknown_option_rejected(self, ytdl_env):
+        r = _run_ytdl(ytdl_env, "--bset", "video", "abc123")
+        assert r.returncode != 0
+        assert "unknown option" in r.stderr
+
+    def test_dash_leading_id_accepted(self, ytdl_env):
+        r = _run_ytdl(ytdl_env, "audio", "-bcdefghij1")
+        assert r.returncode == 0, r.stderr
+        assert _download_calls(_parse_calls(ytdl_env["log"]))[0][-1] == "-bcdefghij1"
+
+    def test_double_dash_forces_word_through_as_video(self, ytdl_env):
+        r = _run_ytdl(ytdl_env, "audio", "--", "lowercaseid")
+        assert r.returncode == 0, r.stderr
+        assert _download_calls(_parse_calls(ytdl_env["log"]))[0][-1] == "lowercaseid"
+
+    def test_two_videos_rejected(self, ytdl_env):
+        r = _run_ytdl(ytdl_env, "audio", "abc123", "def456")
+        assert r.returncode != 0
+        assert "more than one video" in r.stderr
+
+    def test_two_types_rejected(self, ytdl_env):
+        r = _run_ytdl(ytdl_env, "audio", "video", "abc123")
+        assert r.returncode != 0
+        assert "two types" in r.stderr
 
     def test_quiet_flag_does_not_reach_ytdlp(self, ytdl_env):
         _run_ytdl(ytdl_env, "--quiet", "audio", "abc123")
