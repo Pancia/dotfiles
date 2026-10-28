@@ -198,6 +198,13 @@ local battery = engage("seeds.battery", {
   },
 })
 
+local macro = engage("seeds.macro", {
+  -- started from Hermes (Cmd+Space -> x -> g); Cmd+Ctrl+Esc stops (bound only while active)
+  loops = 0,  -- 0 = loop until stopped
+})
+
+local livetranscribe = engage("seeds.livetranscribe", {})
+
 local _engageElapsed = (hs.timer.absoluteTime() - _engageStart) / 1e6
 table.insert(_G._profile, string.format("  seeds: %.1fms", _engageElapsed))
 
@@ -226,6 +233,8 @@ if clipboard then seeds.clipboard = clipboard end
 if cmus then seeds.cmus = cmus end
 if cursor then seeds.cursor = cursor end
 if battery then seeds.battery = battery end
+if macro then seeds.macro = macro end
+if livetranscribe then seeds.livetranscribe = livetranscribe end
 
 local hs_global_modifier = {"cmd", "ctrl"}
 
@@ -276,6 +285,8 @@ local function softReload()
         "seeds.clipboard",
         "seeds.cursor",
         "seeds.battery",
+        "seeds.macro",
+        "seeds.livetranscribe",
     }
 
     for _, modulePath in ipairs(seedModules) do

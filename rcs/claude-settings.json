@@ -237,6 +237,7 @@
     "claude-opus-5-5": { "effortLevel": "high" }
   },
   "alwaysThinkingEnabled": true,
+  "idleCompaction": false,
   "skipDangerousModePermissionPrompt": true,
   "cleanupPeriodDays": 365
 }

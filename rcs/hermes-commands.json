@@ -97,7 +97,7 @@
     },
     "u": {
         "_desc": "+audio tools",
-        "l": ["Live Transcribe", "q live-transcribe"]
+        "l": ["Live Transcribe", "$HOME/dotfiles/bin/live-transcribe-launch"]
     },
     "m": {
         "_desc": "+music",
@@ -134,6 +134,15 @@
             "o": ["Right ⌥", "hs -c 'require(\"seeds.middlemouse\").bind(\"rightalt\")'"],
             "`": ["Backtick `", "hs -c 'require(\"seeds.middlemouse\").bind(\"`\")'"],
             "x": [{"shell:fish": "printf 'Unbind (%s)' (hs -c 'require(\"seeds.middlemouse\").status()')"}, "hs -c 'require(\"seeds.middlemouse\").off()'"]
+        },
+        "g": {
+            "_desc": "+game macro",
+            "_note": ["Stop is the hotkey Cmd+Ctrl+Esc, not a menu entry: see lib/lua/seeds/macro.lua"],
+            "r": ["Record focused window (stop: ⌃⌘⎋)", "hs -c 'require(\"seeds.macro\").record()'"],
+            "p": ["Play, loop forever (stop: ⌃⌘⎋)", "hs -c 'require(\"seeds.macro\").play()'"],
+            "1": ["Play once", "hs -c 'require(\"seeds.macro\").play(1)'"],
+            "0": ["Play 10 loops", "hs -c 'require(\"seeds.macro\").play(10)'"],
+            "i": ["Status", "hs -c 'require(\"seeds.macro\").showStatus()'"]
         }
     },
     "t": {

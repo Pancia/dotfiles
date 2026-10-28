@@ -67,6 +67,8 @@ This ensures that if one seed fails to load, it doesn't crash the entire Hammers
 | **Cmus** | Music player control | - cmus integration<br>- Spotify integration<br>- Visual control panel<br>- Menubar status display |
 | **Monitor** | Activity tracking | - Focus tracking (active window)<br>- Visible windows logging<br>- Activity detection (keyboard/mouse)<br>- JSON log format |
 | **Watch** | Periodic script executor | - Configurable script intervals<br>- Delayed start support<br>- Log file management<br>- Menubar script status |
+| **Macro** | Record & loop input against one window (game grinding) | - Start from Hermes: `Cmd+Space` → `x` → `g` (record / play / status)<br>- `Cmd+Ctrl+Esc` stops (saves a recording); bound only while active<br>- In Shadow PC: `fn+R` / `fn+P` / `fn+1` / `fn+Esc` via Karabiner, since Cmd reaches Windows as the Win key<br>- Stops on app/window/Space change or window move<br>- Releases held keys/buttons on every stop<br>- Saves to `~/.local/share/hammerspoon/macros/` |
+| **Live Transcribe** | Menu bar button for `bin/live-transcribe-launch` | - One click = Alt+Space: 🎙 starts a session, 🔴 stops it and copies the transcript<br>- Seeded to the rightmost third-party slot; Cmd-drag to move it and the position sticks |
 | **HomeBoard** | Visual dashboard | - Video player integration<br>- Dashboard display<br>- (Details in `lib/lua/seeds/homeboard/`) |
 
 ## Global Hotkeys
