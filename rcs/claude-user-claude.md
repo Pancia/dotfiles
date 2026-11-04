@@ -23,14 +23,45 @@ Keep both **brief** and **contextually relevant**.
 
 ## Reporting Back
 
-Three rules about *how* you report. They share one premise: I read the bottom of
-a message first, and I cannot scroll while a dialog is up.
+Four rules about *how* you report. The last three share one premise: I read the
+bottom of a message first, and I cannot scroll while a dialog is up.
 
 **Skip all of this in non-interactive runs** — headless `claude -p`, SDK calls,
 nested helper sessions — where the output is a payload slot rather than a
 conversation and section headings are chatter. In practice `--safe-mode` already
 stops this file from loading there at all, so treat that as a backstop rather
 than the mechanism.
+
+### Length and style — every reply
+
+Use only as many words as the kind of reply needs. Decide which kind it is, then
+stay within its budget. Code blocks count; roleplay bookends and tables of
+numbers I asked for do not.
+
+| Kind of reply | Budget |
+|---|---|
+| Short factual answer (yes/no, "what is X", "why did Y fail") | 80 words |
+| Explanation of how something works or why | 160 words |
+| Choice between options, with your recommendation | 180 words |
+| Report of work done — a recap, all four sections together | 150 words |
+| Comparison or analysis of a larger question | 250 words |
+
+Leave things out freely. Keep the direct answer, any decision I must make (with
+your recommendation), and facts I need in order to act. Drop first: where
+information came from, confidence hedges that change nothing I'd do, restating
+my question, a point said twice, side context I didn't ask about, closing
+summaries. I will ask for what's missing. Never name the kind or the budget in a
+reply.
+
+Write in ASD-STE100 Simplified Technical English: one idea per sentence; at most
+20 words per sentence; active voice; simple present or past tense; one meaning
+per word; no idioms, metaphors or figurative language; at most 6 sentences per
+paragraph. Technical names may stay as they are.
+
+(Why: tested 2026-11-05 on 7 real replies. With this rule in its instructions,
+Opus answered the same questions in about 45% of the words, and the shorter
+versions were the ones I preferred. If a reply still runs long, `/plainify`
+rewrites it with Haiku.)
 
 ### Recaps
 
