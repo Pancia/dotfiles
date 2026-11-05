@@ -98,7 +98,27 @@ if [ -f "$CACHE_FILE" ]; then
   if [ -n "$five_h" ] && [ -n "$seven_d" ]; then
     five_h_colored=$(colorize "${five_h%.*}" 50 20)
     seven_d_colored=$(colorize "${seven_d%.*}" 50 20)
-    rate_info=" (5h:${five_h_colored} 7d:${seven_d_colored})"
+    # Reset times: 5h as a countdown, 7d as weekday + hour (local time).
+    # Computed at render time from the absolute timestamp, so the cache TTL
+    # never makes them stale.
+    read -r five_h_reset seven_d_reset < <(jq -r '
+      def epoch: if . then sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601 else 0 end;
+      "\(.five_hour.resets_at | epoch) \(.seven_day.resets_at | epoch)"' "$CACHE_FILE" 2>/dev/null)
+    now=$(date +%s)
+    five_h_when=""
+    if [ "${five_h_reset:-0}" -gt "$now" ] 2>/dev/null; then
+      # Minutes left, rounded up, so the countdown never undershoots.
+      left=$(( (five_h_reset - now + 59) / 60 ))
+      h=$(( left / 60 )); m=$(( left % 60 ))
+      [ "$h" -gt 0 ] && five_h_when=" ↻${h}h${m}m" || five_h_when=" ↻${m}m"
+    fi
+    seven_d_when=""
+    if [ "${seven_d_reset:-0}" -gt "$now" ] 2>/dev/null; then
+      # Round up to the hour: resets land at :59:59, so 22:59 reads as 23,
+      # and a reset is never shown earlier than it happens.
+      seven_d_when=" ↻$(date -r $(( (seven_d_reset + 3599) / 3600 * 3600 )) '+%a@%Hh')"
+    fi
+    rate_info=" (5h:${five_h_colored}${five_h_when} 7d:${seven_d_colored}${seven_d_when})"
   fi
 fi
 
