@@ -144,6 +144,20 @@ Prefer `trash` over `rm` when deleting files. If `trash` fails, try `rm` as a fa
 
 To trash a file literally named `put`/`list`/`restore`/`help`, use `trash put <name>`.
 
+## Edits made through Bash
+
+The Edit/Write hooks do not see a Bash edit (`sed -i`, `>`, a Python script).
+Bash edits are allowed. After one, do what those hooks would have done:
+
+- **Clojure files** (`.clj`, `.cljs`, `.cljc`, `.edn`): run `clj-paren-repair FILE`.
+- **A repo another live session shares** (the `ccjj nudge` line says so): run
+  `ccjj audit`, then `ccjj claim <path>` for your own changes. Otherwise
+  `commit-mine` leaves them out. `claim` needs `ccjj bash-windows on` in that
+  checkout; it says so when it is off.
+- **rcs/MANIFEST destinations and LaunchAgent plists**: edit the source in
+  `~/dotfiles`. `rcs-sync` repairs a split link after each Bash call and
+  reports it. Tell me about any "adopted" or "CONFLICT" line.
+
 ## Web Search
 
 Prefer the built-in WebSearch tool for web searches. Kagi search (`mcp__kagi__kagi_search_fetch`) is also available as an alternative.

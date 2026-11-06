@@ -92,6 +92,8 @@ ghostty.config -> $HOME/.config/ghostty/config
 
 It runs from three places: interactive fish startup (a real background process — fish cannot background a *function*, so the old `_ENSURE_RCS &` blocked every `fish -c` for ~280ms), the `ensure-rcs` Edit/Write hook, and a `PostToolUse` Bash hook (`rcs-sync --hook`, ~40ms when nothing split) that reports anything it resolved back into the Claude session. `_ENSURE_RCS` remains as a thin fish wrapper. Tests: `tests/hooks/test_rcs_sync.py`.
 
+**Service plists are resolved the same way.** Each installed `~/Library/LaunchAgents/org.pancia.<name>.plist` pairs with `services/<name>/org.pancia.<name>.plist` (the layout `bin/service` uses), so a `sed -i` on either side is repaired or adopted and reported, with a reminder to `service restart <name>`. A plist that is not installed is left alone. The `ensure-rcs` pre hook blocks Edit/Write on MANIFEST destinations and LaunchAgent plists after resolving symlinks and letter case, so `~/.Config/...` or `~/...` spellings are caught too.
+
 ### JS dependency hygiene (pnpm + npm)
 
 Two configs, one policy, covering **different populations**. Both are `rcs/`

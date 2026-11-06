@@ -14,6 +14,11 @@
 #                                repo (reviewable in `jj diff`), then relink
 #   neither, or no record yet -> touch nothing, report a conflict
 #
+# Service plists get the same treatment: each installed
+# ~/Library/LaunchAgents/org.pancia.<name>.plist pairs with
+# services/<name>/org.pancia.<name>.plist (the layout bin/service uses). A
+# plist that is not installed is left alone; installing is `service start`'s job.
+#
 # Usage:
 #   rcs-sync                   sync, report to stderr
 #   rcs-sync --check-unlisted  also warn about rcs/ files missing from MANIFEST
@@ -77,7 +82,9 @@ write_record() { # src hash
     local tmp
     record_file "$1"
     tmp="$REC.tmp.$$"
-    printf '%s %s\n' "$(stat -f '%Fm %z' "$1")" "$2" >"$tmp" && mv -f "$tmp" "$REC"
+    # -L: a source may be a symlink (services/inari-wake-morning/ points into
+    # services/inari/); the record must track the file, not the link.
+    printf '%s %s\n' "$(stat -L -f '%Fm %z' "$1")" "$2" >"$tmp" && mv -f "$tmp" "$REC"
 }
 
 # Replace dst with a hardlink to src by rename, so dst never briefly vanishes
@@ -88,8 +95,12 @@ link() { # src dst
     ln "$1" "$tmp" && mv -f "$tmp" "$2"
 }
 
-resolve_split() { # src dst name
-    local src="$1" dst="$2" name="$3" r_m r_z r_hash= hs hd why
+resolve_split() { # src dst name (repo-relative path of src, for messages)
+    local src="$1" dst="$2" name="$3" r_m r_z r_hash= hs hd why reload= svc
+    # launchd reads a plist only when the agent is loaded.
+    case "$name" in
+        services/*) svc="${name#services/}"; reload=" (launchd keeps the old definition until: service restart ${svc%%/*})" ;;
+    esac
     record_file "$src"
     [ -f "$REC" ] && read -r r_m r_z r_hash <"$REC"
     hs=$(md5 -q "$src")
@@ -99,16 +110,16 @@ resolve_split() { # src dst name
         link "$src" "$dst" && write_record "$src" "$hs"
     elif [ -n "$r_hash" ] && [ "$hd" = "$r_hash" ]; then
         link "$src" "$dst" && write_record "$src" "$hs"
-        note "relinked $dst: rcs/$name was replaced by a new file (sed -i, jj, the Edit tool...), which left the live copy stale; the live copy now has the repo version."
+        note "relinked $dst: $name was replaced by a new file (sed -i, jj, the Edit tool...), which left the live copy stale; the live copy now has the repo version.$reload"
     elif [ -n "$r_hash" ] && [ "$hs" = "$r_hash" ]; then
         # cp writes into src's existing inode, so the repo file stays the one
         # jj tracks; the live copy then becomes a link to it.
         cp "$dst" "$src" && link "$src" "$dst" && write_record "$src" "$hd"
-        note "adopted $dst into rcs/$name: something (usually the app itself) rewrote the live copy; that change is now in the repo -- review with: jj diff rcs/$name"
+        note "adopted $dst into $name: something (an app, or a Bash edit of the live copy) rewrote it; that change is now in the repo -- review with: jj diff $name$reload"
     else
         why="both changed since the last sync"
         [ -z "$r_hash" ] && why="no sync record to tell which side changed"
-        note "CONFLICT rcs/$name vs $dst: $why; left unlinked. Merge the wanted content into rcs/$name, then: ln -f $src $dst"
+        note "CONFLICT $name vs $dst: $why; left unlinked. Merge the wanted content into $name, then: ln -f $src $dst$reload"
     fi
 }
 
@@ -148,9 +159,24 @@ while IFS= read -r line || [ -n "$line" ]; do
     elif [ "$src" -ef "$dst" ]; then
         LINKED+=("$src")
     else
-        SPLIT_SRC+=("$src"); SPLIT_DST+=("$dst"); SPLIT_NAME+=("$name")
+        SPLIT_SRC+=("$src"); SPLIT_DST+=("$dst"); SPLIT_NAME+=("rcs/$name")
     fi
 done <"$MANIFEST"
+
+# Pass 1b: installed service plists. Builtins only (a glob and -ef tests), so
+# the steady state adds no forks.
+for dst in "$HOME/Library/LaunchAgents"/org.pancia.*.plist; do
+    [ -f "$dst" ] || continue # also the unmatched glob
+    full="${dst##*/}"; full="${full%.plist}"
+    name="services/${full#org.pancia.}/$full.plist"
+    src="$DOTFILES/$name"
+    [ -f "$src" ] || continue # not one of ours
+    if [ "$src" -ef "$dst" ]; then
+        LINKED+=("$src")
+    else
+        SPLIT_SRC+=("$src"); SPLIT_DST+=("$dst"); SPLIT_NAME+=("$name")
+    fi
+done
 
 # Pass 2: refresh the record of any linked source whose mtime/size moved (an
 # edit through the link). One stat for all of them; every path exists.
@@ -163,7 +189,7 @@ if [ ${#LINKED[@]} -gt 0 ]; then
         r_m= r_z=
         [ -f "$REC" ] && read -r r_m r_z _ <"$REC"
         [ "$m $z" = "$r_m $r_z" ] || write_record "$src" "$(md5 -q "$src")"
-    done <<<"$(stat -f '%Fm %z' "${LINKED[@]}")"
+    done <<<"$(stat -L -f '%Fm %z' "${LINKED[@]}")"
 fi
 
 # Pass 3: resolve splits.
@@ -191,7 +217,7 @@ case "$MODE" in
         for n in "${NOTES[@]}"; do echo "[rcs-sync] $n" >&2; done
         ;;
     hook)
-        body="[rcs-sync] Hardlinked config pairs (rcs/MANIFEST) had split; resolved as follows. Mention anything adopted or conflicted to the user."
+        body="[rcs-sync] Hardlinked config pairs (rcs/MANIFEST, service plists) had split; resolved as follows. Mention anything adopted or conflicted to the user."
         for n in "${NOTES[@]}"; do
             n=${n//\\/\\\\}
             n=${n//\"/\\\"}

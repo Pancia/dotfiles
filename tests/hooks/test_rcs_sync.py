@@ -194,6 +194,96 @@ class TestHook:
         json.loads(r.stdout)  # conflict note carries both paths
 
 
+class TestServicePlists:
+    """~/Library/LaunchAgents/org.pancia.<name>.plist pairs with
+    services/<name>/org.pancia.<name>.plist, resolved like a MANIFEST pair."""
+
+    @pytest.fixture
+    def plist(self, env):
+        env.src.write_text("x\n")  # keep the MANIFEST pair quiet
+        home = env.dst.parent.parent.parent
+        src = env.rcs.parent / "services" / "demo" / "org.pancia.demo.plist"
+        src.parent.mkdir(parents=True)
+        src.write_text("<plist>v1</plist>\n")
+        dst = home / "Library" / "LaunchAgents" / "org.pancia.demo.plist"
+        dst.parent.mkdir(parents=True)
+        os.link(src, dst)
+        env.run()  # first sync writes the record
+        return src, dst
+
+    def test_linked_plist_is_silent(self, env, plist):
+        assert env.run().stderr == ""
+
+    def test_repo_rewrite_relinks_with_reload_hint(self, env, plist):
+        src, dst = plist
+        replace(src, "<plist>v2</plist>\n")
+        r = env.run()
+        assert linked(src, dst)
+        assert dst.read_text() == "<plist>v2</plist>\n"
+        assert "relinked" in r.stderr
+        assert "services/demo/org.pancia.demo.plist" in r.stderr
+        assert "service restart demo" in r.stderr
+
+    def test_bash_edit_of_live_copy_is_adopted(self, env, plist):
+        """`sed -i` on the LaunchAgents copy: the change lands in the repo."""
+        src, dst = plist
+        replace(dst, "<plist>edited live</plist>\n")
+        r = env.run()
+        assert src.read_text() == "<plist>edited live</plist>\n"
+        assert linked(src, dst)
+        assert "adopted" in r.stderr
+        assert "jj diff services/demo/org.pancia.demo.plist" in r.stderr
+
+    def test_both_changed_is_a_conflict(self, env, plist):
+        src, dst = plist
+        replace(src, "repo\n")
+        replace(dst, "live\n")
+        r = env.run()
+        assert not linked(src, dst)
+        assert "CONFLICT services/demo/org.pancia.demo.plist" in r.stderr
+
+    def test_uninstalled_plist_is_not_installed(self, env, plist):
+        _, dst = plist
+        dst.unlink()
+        assert env.run().stderr == ""
+        assert not dst.exists(), "installing is `service start`'s job"
+
+    def test_symlinked_source_tracks_the_real_file(self, env, plist):
+        """services/<a>/x.plist may be a symlink into services/<b>/. An edit
+        through the link must move the record, or the next repo rewrite reads
+        as a false conflict."""
+        real, dst = plist
+        home = dst.parent.parent.parent
+        alias_dir = env.rcs.parent / "services" / "alias"
+        alias_dir.mkdir()
+        (alias_dir / "org.pancia.alias.plist").symlink_to(real)
+        alias_dst = home / "Library" / "LaunchAgents" / "org.pancia.alias.plist"
+        os.link(real, alias_dst)
+        env.run()
+        with open(dst, "a") as f:  # in place, through the hardlink; mtime and size move
+            f.write("<!-- longer -->\n")
+        env.run()
+        replace(real, "<plist>rewritten</plist>\n")
+        r = env.run()
+        assert "CONFLICT" not in r.stderr
+        assert alias_dst.read_text() == "<plist>rewritten</plist>\n"
+
+    def test_hook_json_carries_plist_note(self, env, plist):
+        _, dst = plist
+        replace(dst, "<plist>edited live</plist>\n")
+        r = env.run("--hook", stdin='{"tool_name":"Bash"}')
+        ctx = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
+        assert "service plists" in ctx
+        assert "service restart demo" in ctx
+
+    def test_foreign_plist_is_ignored(self, env, plist):
+        _, dst = plist
+        other = dst.with_name("org.pancia.not-ours.plist")
+        other.write_text("someone else's\n")
+        assert env.run().stderr == ""
+        assert other.read_text() == "someone else's\n"
+
+
 class TestLocking:
     def test_held_lock_makes_second_run_leave(self, env, tmp_path):
         env.src.write_text("x\n")
