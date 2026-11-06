@@ -1,4 +1,5 @@
 {
+  "cleanupPeriodDays": 365,
   "env": {
     "SHELL": "/opt/homebrew/bin/fish",
     "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
@@ -232,13 +233,44 @@
     "pyright-lsp@claude-plugins-official": true,
     "swift-lsp@claude-plugins-official": true
   },
-  "tui": "fullscreen",
+  "alwaysThinkingEnabled": true,
   "effortLevel": "high",
   "modelSettings": {
-    "claude-opus-5-5": { "effortLevel": "high" }
+    "claude-opus-5-5": {
+      "effortLevel": "high"
+    }
   },
-  "alwaysThinkingEnabled": true,
-  "idleCompaction": false,
+  "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
-  "cleanupPeriodDays": 365
+  "idleCompaction": false,
+  "autoMode": {
+    "environment": [
+      "### Org-wide",
+      "**Organization**: None configured",
+      "**Cloud provider(s)**: None configured",
+      "**Repository visibility**: Mixed. ~/dotfiles (Pancia/dotfiles) is PUBLIC; Pancia/altera is private; check before assuming either way",
+      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+      "**Secrets management**: None configured",
+      "**Default / protected branches**: Default branch is usually `master`; treat it as possibly protected, never force-push or bypass",
+      "**CI/CD deploy targets**: None configured",
+      "**Network posture**: None configured",
+      "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine or CI runner with open internet",
+      "**Source control**: The trusted repos listed under User-specific, and their remotes only",
+      "**Trusted internal domains**: None configured",
+      "**Trusted cloud buckets**: None configured",
+      "**Key internal services**: None configured",
+      "**Internal package registry**: None configured",
+      "**Sensitive data locations & audiences**: any file or store holding personal data, confidential business data, credentials, regulated data, or similarly sensitive material; preserve exact handles when known and share only with audiences cleared at the [named+specifics] bar. Never write secrets or private project detail into ~/dotfiles, which is public",
+      "**Data retention / declassification**: None configured",
+      "**Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment",
+      "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
+      "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
+      "### User-specific",
+      "**Primary use of Claude Code**: personal software development across many repos: dotfiles, personal tooling, and the Altera multi-agent orchestration project",
+      "**Trusted repos**: ~/dotfiles, and repos under ~/projects whose origin is github.com:Pancia/* or the altera-project org, or that have no remote at all. Confidential project material is fine in the private ones; visibility alone never clears secrets into a repo",
+      "**Third-party clones**: repos under ~/projects whose origin belongs to anyone else are reference or contribution checkouts. Local reads, edits, builds and tests are routine; pushing, opening PRs or posting to their remotes is not",
+      "**Org-specific CLIs**: None configured. `alt` (Altera's CLI), `g`, `jj`, `trash`, `service`, `svc`, `cmds`, `claude-p`, `ccjj` and `commit-mine` are personal tooling, routine for this user",
+      "**Routine commands**: build, test, lint and VCS commands (git, jj, make, cmds) inside a trusted repo, including its .alt/worktrees/ and .claude/worktrees/ subdirectories"
+    ]
+  }
 }
