@@ -14,7 +14,8 @@
         "area": "browser",
         "urls": [
             "http://localhost:9630/build/main",
-            "http://localhost:3000/"
+            "http://localhost:3000/",
+            "file:///Users/anthony/projects/work/festivar-webapp/exhibits/index.html"
         ]
     },
     "Tuple": {
@@ -24,8 +25,7 @@
             "area": "iterm",
             "dir": "$HOME/projects/work/festivar-webapp/",
             "tabs": [
-                "@ browser",
-                "@ server",
+                "@ services",
                 "@ vim",
                 "@ claude",
                 "git status"
