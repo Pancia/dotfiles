@@ -86,7 +86,7 @@ nvim/
 | **UI** | vim-airline, undotree, vim-which-key, vim-illuminate | Interface enhancements |
 | **Theme** | onedark.vim, nvim-colorizer.lua | Color scheme and color highlighting |
 | **File Browser** | vimfiler.vim | Directory/file navigation |
-| **Language Support** | vim-svelte-plugin, semshi (Python), fennel.vim, vim-gdscript3 | Language-specific features |
+| **Language Support** | vim-svelte-plugin, fennel.vim, vim-gdscript3 | Language-specific features |
 
 ### Managing Plugins
 

@@ -119,7 +119,6 @@ if !exists('g:vscode')
 
     " PYTHON {{{
     Plug 'hylang/vim-hy'
-    Plug 'numirias/semshi', { 'do': ':UpdateRemotePlugins' }
     " }}}
 
     " RUBY {{{
