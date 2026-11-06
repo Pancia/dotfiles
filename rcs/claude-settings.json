@@ -16,6 +16,8 @@
       "Bash(cmds describe:*)",
       "Read(~/dotfiles/cmds/*)",
       "Edit(~/dotfiles/cmds/*)",
+      "Read(~/Vaults/work-config/*)",
+      "Edit(~/Vaults/work-config/*)",
       "Bash(alt status:*)",
       "Bash(alt help:*)",
       "Bash(alt log:*)",

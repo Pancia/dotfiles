@@ -275,6 +275,19 @@ After each interactive Claude Code session, a background Haiku process reviews t
 
 **Viewing suggestions:** Pending updates appear in `chpwd` output when you cd into a project with pending files (golden/orange highlight). Use `/cc:pending-updates` to automatically find, review, apply, and clean up pending update files in the current directory. Alternatively, manually review files and delete them after applying edits.
 
+### Private per-project config: the work-config vault
+
+This repo is public, so private per-project config (work `cmds.rb`, `svc.conf`)
+lives in **`~/Vaults/work-config`** at `fs-config/<absolute project path>/` — the
+private twin of `cmds/`. `cmds` and the svc tools search it after the public tree;
+`cmds init` puts anything under `~/projects/work/` there.
+
+**Edits there are only backed up when committed in the vault** (a `post-commit`
+hook bundles it to ProtonDrive). After any change, commit in the vault with git
+and check for `post-commit: backup OK`.
+
+Details, traps and restore: [docs/work-config-vault.md](docs/work-config-vault.md).
+
 ### Claude Code Project Artifacts
 
 Files in `.cc/` are Claude Code session artifacts:
@@ -394,6 +407,7 @@ open after an edit may show the cached menu and the next one is current. `rebuil
 | `claude-watchdog` | Run the runaway-claude watchdog by hand (read-only at phase 2). `CW_PHASE=1` log only; `CW_RSS_MB=200 CW_CPU_PCT=5 CW_MIN_AGE=5` to force detection. Normally launchd runs it every 60s |
 | `roleplay-roll` | Pick a roleplay character for the bookends. Runs as a `UserPromptSubmit` hook on every prompt and **fails open** — any error prints nothing and exits 0. `--list` shows the cast, `--check` validates it (duplicate names/emoji, per-character odds, signature-line config). Cast lives in `roleplay/roster.tsv`, deliberately *not* in CLAUDE.md. `ROLEPLAY_CATCHPHRASE=N/M` sets how often a character's famous quote is unlocked (default `1/3`). The whole subsystem is self-contained in `roleplay/` so it can be handed to someone else — `bin/roleplay-roll` is a symlink into it. See [docs/claude-roleplay.md](docs/claude-roleplay.md) |
 | `service` | LaunchAgent manager (list/start/stop/restart/log/status) |
+| `cmds` / work-config vault | Per-directory commands: public `cmds.rb` in `cmds/<path>/`, private ones in `~/Vaults/work-config/fs-config/<path>/`. Commit in the vault after editing — that is the backup. See [docs/work-config-vault.md](docs/work-config-vault.md) |
 | `supervise` / `svc` / `svc-tmux` | Restartable dev services (REPLs, watchers): `supervise <name>` runs one in this pane with keys (`r s c q ?`) and a status bar; `svc` inspects/restarts it from anywhere; `svc-tmux up --wait` is how a script or LLM starts them, in a dedicated `tmux -L svc` server. See `wiki/pages/supervise-svc.md` |
 | `tab-organize windows` | List open browser windows with tab counts |
 | `tab-organize plan [--window ID]` | Generate AI organization plan (editable before execute) |
@@ -753,6 +767,7 @@ vendor approve <name>                  # Approve current state after review
 | [docs/cc-jj-sessions.md](docs/cc-jj-sessions.md) | Session-scoped jj commits for concurrent Claude sessions |
 | [docs/cc-worktree.md](docs/cc-worktree.md) | Per-session worktree isolation: the opt-in marker, Claude Code's native `--worktree`, and why `jj` inside one means the parent repo |
 | [docs/revive.md](docs/revive.md) | Per-pane terminal journal: why the iTerm session GUID is the only identity that survives a reboot, the one-record-per-pane store and the rename that makes a ghost, what `fish_exit` buys, and the two gotchas — iTerm's `tab` class shadowing the AppleScript separator, and a zombie answering `ps` |
+| [docs/work-config-vault.md](docs/work-config-vault.md) | Private per-project config vault: layout, lookup order for `cmds` and the svc tools, the commit-to-back-up rule, the hook's traps (global hooksPath, ignored `.githooks`), restore |
 | [docs/claude-watchdog.md](docs/claude-watchdog.md) | Runaway-headless-`claude` watchdog: phases, classification, bundle redaction, tests |
 | [docs/claude-roleplay.md](docs/claude-roleplay.md) | Claude Code character roleplay: the external roster, two-stage roll, why the cast is not inlined into CLAUDE.md, and the three symlinks that keep `roleplay/` self-contained. A symlink into `roleplay/docs/` |
 | [roleplay/README.md](roleplay/README.md) | Install guide for handing the roleplay system to someone else — written for a stranger, no dotfiles assumed |

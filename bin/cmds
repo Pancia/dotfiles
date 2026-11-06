@@ -6,15 +6,46 @@ require "shellwords"
 $user = %x[whoami].strip
 $pwd = %x[pwd].strip
 
+# Where cmds.rb files live, keyed by absolute directory path. The public tree
+# is in dotfiles; private ones (work projects) are in the work-config vault,
+# which is backed up as a git bundle - see ~/Vaults/work-config/README.md.
+$public_root = "/Users/#{$user}/dotfiles/cmds"
+$vault = "/Users/#{$user}/Vaults/work-config"
+$private_root = "#{$vault}/fs-config"
 $cmds_roots = [
-  "/Users/#{$user}/dotfiles/cmds",
-  "/Users/#{$user}/private/cmds",
+  $public_root,
+  $private_root,
+  "/Users/#{$user}/private/cmds",   # legacy, unbacked-up; superseded by the vault
 ]
+# Logical path first (what `cd` shows, through symlinks), then physical. The
+# svc tools look a project's svc.conf up in the same order.
+# File.realpath also canonicalises case (APFS is case-insensitive: ~/Projects/Work
+# is ~/projects/work). A deleted cwd has no realpath - fall back to the logical one.
+$real_pwd = (File.realpath(Dir.pwd) rescue $pwd)
+$pwd_keys = [$pwd, $real_pwd].uniq
 
-# Resolve cmds.rb: first existing match, or default to first root
-$cmds_file = $cmds_roots.map { |r| "#{r}/#{$pwd}/cmds.rb" }.find { |f| File.file?(f) } ||
-             "#{$cmds_roots.first}/#{$pwd}/cmds.rb"
-$cmds_base_dir = $cmds_roots.first
+# Is this directory a private (work) project? Decided on the canonical physical
+# path, so reaching it through a symlink or with different case can't route a
+# new cmds.rb into the PUBLIC repo.
+def private_dir?
+  work = (File.realpath("/Users/#{$user}/projects/work") rescue "/Users/#{$user}/projects/work")
+  $real_pwd == work || $real_pwd.start_with?("#{work}/")
+end
+
+# Resolve cmds.rb: first existing match, else where a new one should be created
+# (private ones keyed by the canonical path, which the lookup above also tries).
+$cmds_file = $cmds_roots.product($pwd_keys).map { |r, k| "#{r}#{k}/cmds.rb" }.find { |f| File.file?(f) } ||
+             (private_dir? ? "#{$private_root}#{$real_pwd}/cmds.rb" : "#{$public_root}#{$pwd}/cmds.rb")
+$cmds_base_dir = $public_root          # template.rb lives here
+
+# Creating a private cmds.rb needs the vault itself, not just a folder at its path:
+# a `mkdir -p` into a missing vault would block restoring it with `git clone`.
+def ensure_target_writable!
+  if $cmds_file.start_with?("#{$private_root}/") && !File.directory?("#{$vault}/.git")
+    STDERR.puts "cmds: #{$vault} is not a git repo - restore the vault first (see its README)."
+    exit 1
+  end
+end
 
 module EXE
   def self.bash(command, opts={silent: false})
@@ -76,8 +107,9 @@ class CMDS extend CMD
       func_name = args.first
 
       if not File.file? $cmds_file
-        system("mkdir -p $(dirname #{$cmds_file})")
-        system("cp #{$cmds_base_dir}/template.rb #{$cmds_file}")
+        ensure_target_writable!
+        system("mkdir -p #{File.dirname($cmds_file).shellescape}")
+        system("cp #{"#{$cmds_base_dir}/template.rb".shellescape} #{$cmds_file.shellescape}")
       end
 
       if func_name
@@ -171,8 +203,9 @@ class CMDS extend CMD
         puts $cmds_file
         return
       end
+      ensure_target_writable!
       system("mkdir -p #{File.dirname($cmds_file).shellescape}")
-      system("cp #{$cmds_base_dir}/template.rb #{$cmds_file}")
+      system("cp #{"#{$cmds_base_dir}/template.rb".shellescape} #{$cmds_file.shellescape}")
       func_name = args.first
       if func_name
         content = File.read($cmds_file)

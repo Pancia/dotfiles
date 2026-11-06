@@ -72,9 +72,17 @@ original mode comes back on exit (after a `kill -9` of the supervisor, run `rese
 
 ## Per-project config
 
-`supervise`/`svc` are generic. Project specifics come from `.svc.conf` and/or
-`.svc.local.conf` in the project root, sourced in that order (`*.local.*` is
-git-ignored, so use it for personal/uncommitted setup). Define:
+`supervise`/`svc` are generic. Project specifics are sourced, in order, from
+(`lib/svc/conf.sh`):
+
+1. `.svc.conf` in the project root — committed with the project.
+2. `~/Vaults/work-config/fs-config/<project path>/svc.conf` — **private and backed
+   up**: the work-config vault, next to the project's private `cmds.rb`. The path
+   key is tried logical (as `cd` shows it) then physical, the same order `cmds`
+   uses. `SVC_FS_CONFIG` overrides the root.
+3. `.svc.local.conf` in the project root — git-ignored, machine-local overrides.
+
+Festivar's lives in (2). Define:
 
 ```bash
 SVC_SERVICES="server browser test_repl"     # names for `svc status` with no arg

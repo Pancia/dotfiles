@@ -7,19 +7,26 @@ disable-model-invocation: false
 
 # cmds — Per-Directory Command Runner
 
-`cmds` (alias `@`) gives each project directory its own named shell commands (`start`, `test`, `deploy`, etc.) for human use. Command definitions live in Ruby files managed inside the dotfiles repo.
+`cmds` (alias `@`) gives each project directory its own named shell commands (`start`, `test`, `deploy`, etc.) for human use. Command definitions live in Ruby files, in one of two trees keyed by the directory's absolute path.
 
 ## Path Convention
 
-The cmds.rb for any directory lives at:
+The cmds.rb for any directory lives in one of:
 ```
-~/dotfiles/cmds/<absolute-path-of-directory>/cmds.rb
+~/dotfiles/cmds/<absolute-path-of-directory>/cmds.rb                  # public (dotfiles repo)
+~/Vaults/work-config/fs-config/<absolute-path-of-directory>/cmds.rb   # private (work projects)
 ```
 
 Example: for `/Users/anthony/projects/lakshmi/`, the file is:
 ```
 ~/dotfiles/cmds/Users/anthony/projects/lakshmi/cmds.rb
 ```
+
+The first existing match wins (logical path, then physical). A new file goes to
+the private vault for anything under `~/projects/work/`, else to dotfiles. The
+vault is a plain git repo whose commits are backed up to ProtonDrive - **commit
+there after editing a private cmds.rb** (see its README). A project's
+`svc.conf` for supervise/svc sits next to its cmds.rb in the vault.
 
 Run `cmds path` from any directory to get the exact path.
 

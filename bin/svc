@@ -17,9 +17,9 @@
 # Starting is not svc's job: a human runs `supervise` (e.g. via cmds), a script
 # or LLM runs `svc-tmux up`.
 #
-# Run from the project root. Project specifics come from `.svc.conf` and/or
-# `.svc.local.conf` (sourced, in that order; *.local.* is git-ignored so it can
-# hold personal setup). Define there:
+# Run from the project root. Project specifics come from `.svc.conf`, the
+# private vault's fs-config/<project path>/svc.conf, then `.svc.local.conf`
+# (lib/svc/conf.sh). Define there:
 #   SVC_SERVICES="a b c"                 # names for `svc status` with no arg
 #   svc_port_file() { case "$1" in ...esac; }   # name -> readiness/port file (optional)
 #   svc_eval() { ...; }                  # $1=port file; exit 0 if it answers (optional)
@@ -32,7 +32,8 @@ if [ "${1:-}" = "-C" ]; then cd "${2:?svc -C <dir>}"; shift 2; fi
 run_dir=".run"
 
 # Per-project config.
-for _cf in .svc.conf .svc.local.conf; do [ -r "$_cf" ] && . "./$_cf"; done
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/../lib/svc/conf.sh"
+while IFS= read -r _cf; do . "$_cf"; done < <(svc_conf_files)   # top level: see conf.sh
 SVC_SERVICES="${SVC_SERVICES:-}"
 declare -F svc_port_file >/dev/null || svc_port_file() { echo ""; }
 
@@ -158,7 +159,7 @@ cmd_ready() {
 cmd_status() {
   local names="${1:-$SVC_SERVICES}" n pid st last
   if [ -z "$names" ]; then
-    echo "svc: no SVC_SERVICES configured (.svc.conf) and no name given" >&2; exit 2
+    echo "svc: no SVC_SERVICES configured (looked in $(svc_conf_where)) and no name given" >&2; exit 2
   fi
   for n in $names; do
     if pid="$(live_sup "$n")"; then st="running (sup pid $pid)"; else st="not running"; fi

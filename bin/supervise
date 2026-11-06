@@ -39,8 +39,9 @@
 # On an unexpected child exit (crash) the supervisor STOPS, leaving the error on
 # screen and in the log. Pass --keep (before <name>) to auto-respawn on any exit.
 #
-# Per-project config (optional): if a `.svc.conf` and/or `.svc.local.conf` exists
-# in the cwd, it is sourced. Define `svc_port_file <name>` there (echo a readiness
+# Per-project config (optional): `.svc.conf`, the private vault's
+# fs-config/<project path>/svc.conf and `.svc.local.conf`, sourced in that order
+# (lib/svc/conf.sh). Define `svc_port_file <name>` there (echo a readiness
 # file, e.g. an nREPL .nrepl-port) and supervise will clear it on restart/exit so a
 # stale port can't mislead the next client. Without it, supervise is a plain
 # generic supervisor. See `svc` for the rest of the config surface.
@@ -61,11 +62,12 @@ if [ "${1:-}" = "--" ]; then shift; fi
 
 # Per-project config (project specifics live here, not in this script). Read
 # before the command check, so `svc_cmd` can supply the command.
-for _cf in .svc.conf .svc.local.conf; do [ -r "$_cf" ] && . "./$_cf"; done
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/../lib/svc/conf.sh"
+while IFS= read -r _cf; do . "$_cf"; done < <(svc_conf_files)   # top level: see conf.sh
 declare -F svc_port_file >/dev/null || svc_port_file() { echo ""; }
 if [ "$#" -eq 0 ]; then
   _cmd=""; declare -F svc_cmd >/dev/null && _cmd="$(svc_cmd "$name")"
-  [ -n "$_cmd" ] || { echo "supervise: no command given, and no svc_cmd for '$name' in .svc.conf" >&2; exit 2; }
+  [ -n "$_cmd" ] || { echo "supervise: no command given, and no svc_cmd for '$name' (looked in $(svc_conf_where))" >&2; exit 2; }
   set -- bash -c "$_cmd"
 fi
 

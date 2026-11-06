@@ -7,8 +7,9 @@
 #   svc-tmux down [name...]                        stop services hosted here (all by default)
 #   svc-tmux ls                                    session + one line per service
 #
-# Names default to SVC_SERVICES; each needs `svc_cmd <name>` in .svc.conf /
-# .svc.local.conf (the same hook `supervise <name>` uses). Run from the project
+# Names default to SVC_SERVICES; each needs `svc_cmd <name>` in the project's
+# config - .svc.conf, the vault's svc.conf or .svc.local.conf (lib/svc/conf.sh) -
+# the same hook `supervise <name>` uses. Run from the project
 # root. `up --wait` returns only once every service answers (svc's readiness
 # probe), or exits nonzero with the pane's last lines - the form for LLMs.
 #
@@ -32,11 +33,13 @@ TM() { tmux -L "$SOCK" -f "$conf" "$@"; }
 SVC() { "$here/svc" "$@"; }
 die() { echo "svc-tmux: $*" >&2; exit 1; }
 
-for _cf in .svc.conf .svc.local.conf; do [ -r "$_cf" ] && . "./$_cf"; done
+. "$here/../lib/svc/conf.sh"
+while IFS= read -r _cf; do . "$_cf"; done < <(svc_conf_files)   # top level: see conf.sh
 SVC_SERVICES="${SVC_SERVICES:-}"
 SVC_ENV="${SVC_ENV:-}"
 
-root="$(pwd -P)"
+root="$(pwd -P)"     # physical: the session name must not depend on how you cd'd here
+wdir="$PWD"          # logical: windows start here, so svc.conf lookups match cmds'
 S="svc-$(printf '%s' "$(basename "$root")" | tr -c 'A-Za-z0-9_-' '_')-$(printf '%s' "$root" | shasum | cut -c1-6)"
 
 has_session() { TM has-session -t "=$S" 2>/dev/null; }
@@ -74,7 +77,7 @@ new_window() {
   local n="$1" v
   local -a envs=()
   for v in $SVC_ENV; do [ -n "${!v+x}" ] && envs+=(-e "$v=${!v}"); done
-  local cdir; cdir="$(fmt_escape "$root")"
+  local cdir; cdir="$(fmt_escape "$wdir")"
   if has_session; then
     TM new-window -d -t "=$S:" -n "$n" -c "$cdir" ${envs[@]+"${envs[@]}"} -- "$here/supervise" "$n"
     return
@@ -94,7 +97,7 @@ new_window() {
     has_session || die "could not create tmux session $S"
     new_window "$n"; return            # lost a race with a concurrent `up`: join it
   fi
-  TM set -t "=$S:" status-right "#(cd $(fmt_escape "$(sq "$root")") && $(fmt_escape "$(sq "$here/svc")") status --short --tmux) " >/dev/null
+  TM set -t "=$S:" status-right "#(cd $(fmt_escape "$(sq "$wdir")") && $(fmt_escape "$(sq "$here/svc")") status --short --tmux) " >/dev/null
   mkdir -p .run && echo "$S" > .run/tmux-session
 }
 
@@ -149,8 +152,8 @@ cmd_up() {
     shift
   done
   names="$(names_or_default "$@")"
-  [ -n "$names" ] || die "no services: name them, or set SVC_SERVICES in .svc.conf"
-  declare -F svc_cmd >/dev/null || die "no svc_cmd() in .svc.conf / .svc.local.conf"
+  [ -n "$names" ] || die "no services: name them, or set SVC_SERVICES (looked in $(svc_conf_where))"
+  declare -F svc_cmd >/dev/null || die "no svc_cmd() (looked in $(svc_conf_where))"
   for n in $names; do [ -n "$(svc_cmd "$n")" ] || die "svc_cmd has no command for '$n'"; done
 
   up_lock

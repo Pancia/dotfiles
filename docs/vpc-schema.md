@@ -213,7 +213,7 @@ Use an object to set a tab title (shown in the tab bar). The object contains a `
 
 `@` is an alias for `cmds` — the per-directory command runner. A tab command like `"@ start"` runs `cmds start` in the tab's directory.
 
-Commands are defined in `cmds.rb` files stored at `~/dotfiles/cmds/<project-path>/cmds.rb`. See the `/cmds` skill for details on authoring commands.
+Commands are defined in `cmds.rb` files stored at `~/dotfiles/cmds/<project-path>/cmds.rb` (or, for private work projects, `~/Vaults/work-config/fs-config/<project-path>/cmds.rb`). See the `/cmds` skill for details on authoring commands.
 
 ## Path Expansion
 

@@ -30,6 +30,8 @@ SUP = str(DOTFILES / "bin" / "supervise")
 SVC = str(DOTFILES / "bin" / "svc")
 SVC_TMUX = str(DOTFILES / "bin" / "svc-tmux")
 
+needs_tmux = pytest.mark.skipif(shutil.which("tmux") is None, reason="tmux not installed")
+
 SERVE_PY = """\
 import socket, sys, time
 s = socket.socket(); s.bind(("127.0.0.1", 0)); s.listen()
@@ -71,6 +73,16 @@ def make_project(path: Path, mark: str) -> Path:
     (path / "serve.py").write_text(SERVE_PY)
     (path / ".svc.conf").write_text(SVC_CONF.format(mark=mark))
     return path
+
+
+@pytest.fixture(autouse=True)
+def private_fs_config(tmp_path, monkeypatch):
+    """Point the vault lookup at an empty per-test tree: no test may read (or be
+    changed by) the real ~/Vaults/work-config."""
+    root = tmp_path / "fs-config"
+    root.mkdir()
+    monkeypatch.setenv("SVC_FS_CONFIG", str(root))
+    return root
 
 
 class ProjPath(type(Path())):
@@ -398,6 +410,60 @@ def test_request_during_setup_does_not_disable_later_requests(proj):
         sup.wait(15)
 
 
+def linked_project(tmp_path, mark):
+    """A project with its config in the vault tree, reached through a symlink."""
+    real = tmp_path / "real-proj"
+    real.mkdir()
+    (real / "serve.py").write_text(SERVE_PY)
+    link = tmp_path / "link-proj"
+    link.symlink_to(real)
+    return real, link, SVC_CONF.format(mark=mark)
+
+
+@pytest.mark.parametrize("key", ["logical", "physical"])
+def test_vault_svc_conf_is_found_through_a_symlink(tmp_path, private_fs_config, key):
+    mark = f"svcmark-{uuid.uuid4().hex[:10]}"
+    real, link, conf = linked_project(tmp_path, mark)
+    keyed = private_fs_config / str(link if key == "logical" else real).lstrip("/")
+    keyed.mkdir(parents=True)
+    (keyed / "svc.conf").write_text(conf)
+    env = dict(os.environ, PWD=str(link))       # what a shell that cd'd via the link sets
+    out = run([SVC, "status", "--short"], link, env).stdout.strip()
+    assert out == "○ web  ○ worker", out
+
+
+def test_declare_in_a_config_reaches_the_service(proj, private_fs_config):
+    """Configs are sourced at top level: inside a function, `declare` would make
+    the variable local and drop it (and bash 3.2 has no declare -g)."""
+    keyed = private_fs_config / str(proj).lstrip("/")
+    keyed.mkdir(parents=True)
+    (keyed / "svc.conf").write_text("declare -x FROM_DECLARE=kept\n")
+    sup = subprocess.Popen([SUP, "web"], cwd=proj, stdin=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        assert wait_for(lambda: (proj / ".web-env").exists())
+        assert "FROM_DECLARE=kept" in read(proj / ".web-env")
+    finally:
+        sup.terminate()
+        sup.wait(15)
+
+
+@needs_tmux
+def test_svc_tmux_windows_find_a_logically_keyed_vault_conf(tmp_path, private_fs_config, tmux_env):
+    mark = f"svcmark-{uuid.uuid4().hex[:10]}"
+    real, link, conf = linked_project(tmp_path, mark)
+    keyed = private_fs_config / str(link).lstrip("/")
+    keyed.mkdir(parents=True)
+    (keyed / "svc.conf").write_text(conf)
+    env = dict(tmux_env, PWD=str(link))
+    try:
+        r = run([SVC_TMUX, "up", "--wait", "--timeout", "20", "web"], link, env)
+        assert r.returncode == 0, r.stdout + r.stderr
+    finally:
+        run([SVC_TMUX, "down"], link, env)
+        subprocess.run(["pkill", "-f", mark])
+
+
 def test_status_short(proj):
     sup = subprocess.Popen([SUP, "web"], cwd=proj, stdin=subprocess.DEVNULL,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -413,7 +479,6 @@ def test_status_short(proj):
 
 # --- svc-tmux -----------------------------------------------------------------
 
-needs_tmux = pytest.mark.skipif(shutil.which("tmux") is None, reason="tmux not installed")
 
 
 @pytest.fixture
@@ -429,6 +494,8 @@ def tmux_env(tmp_path):
     env.pop("TMUX", None)
     yield env
     subprocess.run(["tmux", "-L", sock, "kill-server"], capture_output=True)
+    # kill-server doesn't always remove the socket file; don't litter /tmp/tmux-UID.
+    Path(f"/private/tmp/tmux-{os.getuid()}/{sock}").unlink(missing_ok=True)
 
 
 def tm(env, *args):

@@ -196,6 +196,12 @@ Projects can have a `cmds.rb` file with shell command shortcuts for human use.
 - `cmds init` — creates a new cmds.rb from template (no editor), prints the path
 - Load the `/cmds` skill for full documentation on reading/writing commands
 
+**Private ones live in a vault, `~/Vaults/work-config`** (`fs-config/<project
+path>/cmds.rb`, next to that project's `svc.conf`), because dotfiles is public.
+**Edits there are only backed up when committed in the vault**: after any change,
+commit there with git and check for `post-commit: backup OK`. Details:
+`~/dotfiles/docs/work-config-vault.md`.
+
 ## Shelling out to Claude (`claude -p`)
 
 Use **`claude-p`** (`~/dotfiles/bin/claude-p`), never bare `claude -p` — in scripts

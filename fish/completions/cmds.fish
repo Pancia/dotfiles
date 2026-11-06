@@ -6,12 +6,16 @@ function __cmds_subcommands
 end
 
 # Get existing function names from current cmds.rb
+# Same roots and key order as bin/cmds: public tree, private vault, legacy
+# ~/private; logical path first, then physical.
 function __cmds_functions
-    for root in "$HOME/dotfiles/cmds" "$HOME/private/cmds"
-        set -l cmds_file "$root/"(pwd)"/cmds.rb"
-        if test -f "$cmds_file"
-            grep -oE 'def [a-z_][a-z0-9_]*' "$cmds_file" 2>/dev/null | string replace 'def ' ''
-            return
+    for root in "$HOME/dotfiles/cmds" "$HOME/Vaults/work-config/fs-config" "$HOME/private/cmds"
+        for key in (pwd) (pwd -P)
+            set -l cmds_file "$root/$key/cmds.rb"
+            if test -f "$cmds_file"
+                grep -oE 'def [a-z_][a-z0-9_]*' "$cmds_file" 2>/dev/null | string replace 'def ' ''
+                return
+            end
         end
     end
 end
