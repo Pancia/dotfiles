@@ -125,17 +125,28 @@ via Bash.
 
      1. **Session only** — commit only the changes from this session,
         leaving unrelated changes in the working copy
-     2. **Everything** — one commit covering all changes, one message
-     3. **Pick** — user specifies which files/concerns to include;
+     2. **Split everything** — commit all changes, as many commits as
+        there are concerns. See "Split mode" below
+     3. **Everything as one** — one commit covering all changes, one message
+     4. **Pick** — user specifies which files/concerns to include;
         you'll use `jj split` (jj) or path-specific `git add` (git)
         to scope the commit
-     4. **Abort** — do nothing, let the user sort it out manually
+
+     `AskUserQuestion` allows at most four options, so there is no
+     **Abort** button: the user types it under "Other", and you then do
+     nothing. Mark one option "(Recommended)": **Split everything** when
+     the other changes look finished, **Session only** when any of them
+     look half-done.
 
      In the question text, list the distinct concerns you detected so the
      user can see what triggered the prompt. Do not proceed to step 3 until
      the user answers. If `$ARGUMENTS` already gave explicit scoping
      instructions, skip this check — the user has already told you the
-     scope.
+     scope. `$ARGUMENTS` of `split` (or "split it up", "all, split as
+     needed") means **Split everything** with no question.
+
+     Do not offer **Split everything** when `ccjj should-scope` exited 0:
+     the other session's changes are in-flight, not yours to commit.
 
 3. **Draft the commit message** following the auto-loaded style template.
 
@@ -196,6 +207,50 @@ via Bash.
 
 8. **Report** using the section below. It is the same four-section shape as
    every other recap; the contents are fixed.
+
+## Split mode
+
+Commit the whole working copy as a series of commits, one per concern.
+
+1. **Read the full diff** (`vcs-status-for-ai --diff`). Group the changes by
+   concern: one commit is one reason to change. Usually that follows file
+   boundaries; split **within a file** only when one file has hunks for
+   two unrelated concerns. Do not over-split: a feature and its doc and
+   its test are one commit, not three.
+2. **Order the groups** so each commit stands on its own: a helper before
+   its caller, a rename before what uses the new name. When nothing
+   depends on anything, put the most self-contained groups first.
+3. **Show the plan before committing**: each planned subject line with
+   its paths (and "partial" for a file split by hunk). If the user asked
+   for split mode by argument, go ahead after showing it. If you chose
+   it through the scope question, go ahead too — the user already said
+   yes. Stop and ask only when a grouping is genuinely unclear (for
+   example, one hunk could belong to either of two commits).
+4. **Commit each group in order**, writing a full message per commit with
+   the style template:
+   - **Whole files, jj**: `jj commit <paths...> -m "<msg>"`. The rest of
+     the diff moves into the new `@`, ready for the next group.
+   - **Whole files, git**: `git add <paths...>` then `git commit`.
+   - **Part of a file, jj**: never `jj split -i` (it hangs). Save the
+     file's full content to the scratchpad, write the file **in place**
+     (`cat tmp > file`, so a hardlinked `rcs/` file stays linked) with
+     only this group's hunks applied to its `@-` version, then
+     `jj commit <paths...> -m "<msg>"`, then write the saved full content
+     back. Run `jj diff <file>` after: it must show exactly the hunks
+     still to come.
+   - **Part of a file, git**: write a patch with only this group's hunks
+     and `git apply --cached` it, then commit. Never `git add -p` (it
+     hangs).
+5. **Verify after the last commit**: the working copy must be empty
+   (`jj status` / `git status`) apart from anything you said you would
+   leave. If a file is left over, show it rather than folding it into
+   the last commit.
+6. **Bookmark**: advance `master`/`main` once, to the last commit, and
+   only where the repo's CLAUDE.md says to advance it.
+
+In the report, **Result** names the number of commits. **Summary** lists
+each commit as `<change id> <subject>` with its paths, which takes the
+place of the single landed-paths bullet.
 
 ## Report
 
