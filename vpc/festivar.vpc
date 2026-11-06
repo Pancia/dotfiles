@@ -1,41 +1,23 @@
 {
     "yabai": {
-        "enabled": true,
-        "layout": {
-            "template": [
-                "board browser browser iterm iterm",
-                "board browser browser iterm iterm",
-                "board browser browser iterm iterm",
-                "board browser browser iterm iterm"
-            ]
-        }
+        "enabled": true
     },
     "Google Chrome": {
-        "area": "browser",
+        "grid": "1:3:1:0:2:1",
         "urls": [
             "http://localhost:9630/build/main",
             "http://localhost:3000/",
             "file:///Users/anthony/projects/work/festivar-webapp/exhibits/index.html"
         ]
     },
-    "Tuple": {
-    },
     "iTerm2": [
         {
-            "area": "iterm",
+            "grid": "1:3:0:0:2:1",
             "dir": "$HOME/projects/work/festivar-webapp/",
             "tabs": [
+                "vim $HOME/Vaults/the-akashic-records/work-festivar.md",
                 "@ services",
-                "@ vim",
-                "@ claude",
-                "git status"
-            ]
-        },
-        {
-            "area": "board",
-            "dir": "$HOME/Vaults/the-akashic-records/",
-            "tabs": [
-                "vim work-festivar.md"
+                "@ claude"
             ]
         }
     ]
