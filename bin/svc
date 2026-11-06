@@ -3,12 +3,19 @@
 # This is the LLM/tool-facing surface. It never STARTS a service (you own that);
 # it only inspects, restarts, or stops one that's already supervised.
 #
+#   svc [-C <dir>] <subcommand> ...   run as if from <dir> (the project root)
 #   svc status [<name>]      pid / alive / readiness + prev exit
+#   svc status --short [--tmux]   one line, state files only (cheap; for status bars)
 #   svc logs   <name> [-n N] tail .run/<name>.log (the captured crash output)
-#   svc restart <name>       SIGHUP the supervisor -> respawn in your terminal pane
+#   svc restart <name>       respawn the child in place (its pane), wait until serving
 #   svc stop    <name>       SIGTERM the supervisor -> stop it
-#   svc suspend <name>       SIGUSR1 -> drain the child & HOLD (frees its RAM)
+#   svc suspend <name>       drain the child & HOLD (frees its RAM)
 #   svc resume  <name>       SIGUSR2 -> respawn the held child
+#
+# Requests go as .run/<name>.req + SIGUSR1 to a "p2" supervisor (pidfile field 3),
+# or the old signals (HUP = restart, USR1 = suspend) to one started before that.
+# Starting is not svc's job: a human runs `supervise` (e.g. via cmds), a script
+# or LLM runs `svc-tmux up`.
 #
 # Run from the project root. Project specifics come from `.svc.conf` and/or
 # `.svc.local.conf` (sourced, in that order; *.local.* is git-ignored so it can
@@ -21,6 +28,7 @@
 # Bash-3.2-safe.
 set -euo pipefail
 
+if [ "${1:-}" = "-C" ]; then cd "${2:?svc -C <dir>}"; shift 2; fi
 run_dir=".run"
 
 # Per-project config.
@@ -38,8 +46,22 @@ live_sup() {
   [ -n "$pid" ] || return 1
   kill -0 "$pid" 2>/dev/null || return 1
   cmd="$(ps -p "$pid" -o command= 2>/dev/null || true)"
-  # Trailing space: 'repl' must not match 'supervise test_repl'.
-  case "$cmd" in *"supervise $name "*) echo "$pid"; return 0 ;; *) return 1 ;; esac
+  # Trailing space: 'repl' must not match 'supervise test_repl'; "$cmd " so a name
+  # that is the last argv (`supervise server`, command from svc_cmd) matches too.
+  case "$cmd " in *"supervise $name "*|*"supervise --keep $name "*) echo "$pid"; return 0 ;; *) return 1 ;; esac
+}
+
+# Send a request to a live supervisor. $1 name, $2 pid, $3 restart|suspend.
+send_req() {
+  local name="$1" pid="$2" req="$3" proto
+  proto="$(awk '{print $3}' "$run_dir/$name.pid" 2>/dev/null || true)"
+  if [ "$proto" = p2 ]; then
+    echo "$req" > "$run_dir/$name.req"; kill -USR1 "$pid"
+  elif [ "$req" = restart ]; then
+    kill -HUP "$pid"                 # pre-p2 supervisor: HUP meant restart
+  else
+    kill -USR1 "$pid"                # pre-p2: USR1 meant suspend
+  fi
 }
 
 port_value() {  # echo numeric port from the name's port file, or empty
@@ -83,7 +105,10 @@ ready_state() {  # echo up|down|wedged|suspended|n/a for a name
   # supervisor is stale and must not mask the real (down) state.
   if [ -e "$run_dir/$name.suspended" ] && live_sup "$name" >/dev/null 2>&1; then echo "suspended"; return; fi
   port="$(port_value "$name")"
-  [ -n "$port" ] || { echo "n/a"; return; }
+  if [ -z "$port" ]; then
+    if [ -n "$(svc_port_file "$name")" ]; then echo "down"; else echo "n/a"; fi   # configured but absent
+    return
+  fi
   if ! port_up "$port"; then echo "down"; return; fi
   if declare -F svc_eval >/dev/null; then
     if responsive "$name"; then echo "up"; else echo "wedged"; fi
@@ -93,11 +118,41 @@ ready_state() {  # echo up|down|wedged|suspended|n/a for a name
 }
 
 # 0 if the (new) instance is actually serving - used to confirm a restart.
+# A configured port file that is missing means NOT serving yet: supervise deletes
+# it on every restart, and the service rewrites it once it listens.
 confirmed() {
+  [ -n "$(svc_port_file "$1")" ] && [ -z "$(port_value "$1")" ] && return 1
   if declare -F svc_eval >/dev/null; then responsive "$1"; return; fi
   local p; p="$(port_value "$1")"
   [ -n "$p" ] && { port_up "$p"; return; }
   return 0   # no readiness probe configured: gen-advance alone is the signal
+}
+
+# One line for a status bar, from state files only (no eval probe, no TCP).
+cmd_status_short() {
+  local tmux=0 n st sym col out="" pf
+  [ "${1:-}" = "--tmux" ] && tmux=1
+  for n in $SVC_SERVICES; do
+    if ! live_sup "$n" >/dev/null 2>&1; then sym="○"; col=red
+    elif [ -e "$run_dir/$n.suspended" ]; then sym="◌"; col=colour244
+    else
+      sym="●"; col=green
+      for pf in $(svc_port_file "$n"); do [ -r "$pf" ] || { sym="◐"; col=yellow; }; done
+    fi
+    if [ "$tmux" = 1 ]; then out="$out#[fg=$col]$sym#[default] $n  "; else out="$out$sym $n  "; fi
+  done
+  printf '%s\n' "${out%  }"
+}
+
+# Exit 0 iff <name> is supervised, not suspended, and serving. For svc-tmux --wait.
+cmd_ready() {
+  local name="${1:?svc _ready <name>}" pf
+  live_sup "$name" >/dev/null 2>&1 || return 1
+  [ -e "$run_dir/$name.suspended" ] && return 1
+  local cp; cp="$(awk '{print $2}' "$run_dir/$name.gen" 2>/dev/null || true)"
+  [ -n "$cp" ] && kill -0 "$cp" 2>/dev/null || return 1      # the child, not just its supervisor
+  for pf in $(svc_port_file "$name"); do [ -r "$pf" ] || return 1; done   # skip the eval until a port exists
+  confirmed "$name"
 }
 
 cmd_status() {
@@ -128,12 +183,12 @@ gen_of() {  # echo the supervisor's current spawn generation, or empty
 cmd_restart() {
   local name="${1:?svc restart <name>}" pid before now i
   if ! pid="$(live_sup "$name")"; then
-    echo "svc: '$name' is not running - start it yourself (e.g. cmds $name)." >&2
+    echo "svc: '$name' is not running - start it: svc-tmux up --wait $name (or by hand: cmds $name)." >&2
     exit 1
   fi
   before="$(gen_of "$name")"
-  echo "svc: restarting '$name' (HUP $pid)..."
-  kill -HUP "$pid"
+  echo "svc: restarting '$name' (pid $pid)..."
+  send_req "$name" "$pid" restart
   # Restart-complete requires BOTH: the supervisor spawned a NEW instance
   # (generation advanced -> not the dying old process) AND that instance is
   # actually serving (a real probe, not a TCP connect a corpse could satisfy).
@@ -173,8 +228,8 @@ cmd_suspend() {
   if [ -e "$run_dir/$name.suspended" ]; then
     echo "svc: '$name' already suspended."; return 0
   fi
-  echo "svc: suspending '$name' (USR1 $pid)..."
-  kill -USR1 "$pid"
+  echo "svc: suspending '$name' (pid $pid)..."
+  send_req "$name" "$pid" suspend
   for i in $(seq 1 40); do   # ~20s; marker is written only after the child is reaped
     [ -e "$run_dir/$name.suspended" ] && { echo "svc: '$name' suspended (child stopped, RAM freed)."; return 0; }
     sleep 0.5
@@ -195,7 +250,7 @@ cmd_resume() {
   if pid="$(live_sup "$name")"; then
     echo "svc: resuming '$name' (USR2 $pid)..."; kill -USR2 "$pid"
   else
-    echo "svc: '$name' marked suspended but its supervisor is gone - clearing stale marker; start it yourself (e.g. cmds $name)." >&2
+    echo "svc: '$name' marked suspended but its supervisor is gone - clearing stale marker; start it: svc-tmux up $name." >&2
     rm -f "$run_dir/$name.suspended"
   fi
   return 0
@@ -203,12 +258,14 @@ cmd_resume() {
 
 sub="${1:-status}"; shift || true
 case "$sub" in
-  status)  cmd_status "${1:-}" ;;
+  status)  if [ "${1:-}" = --short ]; then shift; cmd_status_short "$@"; else cmd_status "${1:-}"; fi ;;
+  _ready)  cmd_ready "$@" ;;
+  _live)   live_sup "${1:?svc _live <name>}" ;;
   logs)    cmd_logs "$@" ;;
   restart) cmd_restart "$@" ;;
   stop)    cmd_stop "$@" ;;
   suspend) cmd_suspend "$@" ;;
   resume)  cmd_resume "$@" ;;
-  -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;
+  -h|--help|help) sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) echo "usage: svc {status [name]|logs <name> [-n N]|restart <name>|stop <name>|suspend <name>|resume <name>}" >&2; exit 2 ;;
 esac

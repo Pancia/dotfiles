@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # supervise - run a long-lived dev process in YOUR terminal, but let an LLM/tool
-# restart it on demand. You start it (e.g. via `cmds`), so the process stays
-# owned by this terminal: your TTY, your Ctrl-C, output in your pane. An
-# out-of-band `svc restart <name>` sends SIGHUP, which respawns the child in place.
+# restart it on demand. You start it (e.g. via `cmds`, or `svc-tmux up`), so the
+# process stays owned by this terminal: your TTY, your Ctrl-C, output in your
+# pane. An out-of-band `svc restart <name>` respawns the child in place.
 #
 #   supervise [--keep] <name> -- <command> [args...]
+#   supervise [--keep] <name>      # command from `svc_cmd <name>` in .svc.conf, via bash -c
+# `svc_setup <name>`, if defined, runs once in the supervisor before the first
+# spawn; its exports reach every respawn (credentials, JAVA_HOME, ...).
 #
 # State (all under .run/ of the cwd):
 #   .run/<name>.pid     "PID COOKIE" of THIS supervisor (cookie = start epoch)
@@ -12,10 +15,26 @@
 #   .run/<name>.log     teed child stdout+stderr (also streamed live to the pane)
 #   .run/<name>.status  last terminal exit, e.g. "rc=1 <date>"
 #   .run/<name>.stdin   FIFO feeding the child's stdin (see below)
+#   .run/<name>.req     a pending request for SIGUSR1: "restart" or "suspend"
+#   .run/<name>.lock    held for a few ms while checking/claiming the pidfile
 #
-# Signals:
-#   SIGHUP            restart the child in place (used by `svc restart`)
+# Signals (protocol "p2", advertised as the pidfile's 3rd field):
+#   SIGUSR1           act on .run/<name>.req: restart, or suspend (no file = suspend)
+#   SIGUSR2           resume a suspended child
+#   SIGHUP            the terminal went away (pane/tab/tmux window closed): stop
 #   SIGINT/SIGTERM    your Ctrl-C - kill child and exit (tears the service down)
+# Every exit path drains the child's process group first, so no exit - a dead
+# tty, a set -e failure - can leave the service orphaned and invisible to `svc`.
+# (Before p2, SIGHUP meant restart; `svc` still uses that for older supervisors.)
+#
+# Keys and status bar (when run in a terminal; SUPERVISE_KEYS=0 turns both off):
+#   r restart · s suspend/resume · c clear screen · q quit · ? or / help panel
+# Inside tmux (svc-tmux) `q` suspends instead: the window is the service's home,
+# so stopping it keeps the window and r/s start it again. Ctrl-C still exits.
+# The bottom row of the pane shows state, pid, uptime and port, kept there by a
+# scroll region.
+# A key reader in the supervisor's own (foreground) process group sends the same
+# signals `svc` does, so a key press and `svc restart` take the identical path.
 #
 # On an unexpected child exit (crash) the supervisor STOPS, leaving the error on
 # screen and in the log. Pass --keep (before <name>) to auto-respawn on any exit.
@@ -37,13 +56,22 @@ set -m
 
 keep=0
 if [ "${1:-}" = "--keep" ]; then keep=1; shift; fi
-name="${1:?usage: supervise [--keep] <name> -- <command...>}"; shift
+name="${1:?usage: supervise [--keep] <name> [-- <command...>]}"; shift
 if [ "${1:-}" = "--" ]; then shift; fi
-[ "$#" -ge 1 ] || { echo "supervise: no command given" >&2; exit 2; }
 
-# Per-project config (project specifics live here, not in this script).
+# Per-project config (project specifics live here, not in this script). Read
+# before the command check, so `svc_cmd` can supply the command.
 for _cf in .svc.conf .svc.local.conf; do [ -r "$_cf" ] && . "./$_cf"; done
 declare -F svc_port_file >/dev/null || svc_port_file() { echo ""; }
+if [ "$#" -eq 0 ]; then
+  _cmd=""; declare -F svc_cmd >/dev/null && _cmd="$(svc_cmd "$name")"
+  [ -n "$_cmd" ] || { echo "supervise: no command given, and no svc_cmd for '$name' in .svc.conf" >&2; exit 2; }
+  set -- bash -c "$_cmd"
+fi
+
+# Pane output that must never kill the supervisor: when the terminal is gone the
+# write fails, and under set -e a bare `echo >&2` would exit mid-restart.
+say() { printf '%s\n' "$*" >&2 2>/dev/null || true; }
 
 run_dir=".run"
 mkdir -p "$run_dir"
@@ -53,14 +81,17 @@ statusfile="$run_dir/$name.status"
 genfile="$run_dir/$name.gen"
 stdinfifo="$run_dir/$name.stdin"
 suspendfile="$run_dir/$name.suspended"   # present iff currently suspended (held)
+reqfile="$run_dir/$name.req"
+lockdir="$run_dir/$name.lock"
 
 is_supervise() {  # $1 = pid - true if it's a live `supervise <name>`
   local pid="$1" cmd
   [ -n "$pid" ] || return 1
   kill -0 "$pid" 2>/dev/null || return 1
   cmd="$(ps -p "$pid" -o command= 2>/dev/null || true)"
-  # Require a trailing space so e.g. name 'repl' can't match 'supervise test_repl'.
-  case "$cmd" in *"supervise $name "*) return 0 ;; *) return 1 ;; esac
+  # Trailing space so 'repl' can't match 'supervise test_repl'; "$cmd " so a
+  # name that is the LAST argv (`supervise server`, no command) still matches.
+  case "$cmd " in *"supervise $name "*|*"supervise --keep $name "*) return 0 ;; *) return 1 ;; esac
 }
 
 port_up() {  # $1 = numeric port
@@ -82,16 +113,30 @@ clear_ports() {
   done
 }
 
-# Single-instance guard: don't clobber a live supervisor's pidfile.
+# Single-instance guard: check-and-claim the pidfile under a lock, so two starts
+# racing (svc-tmux up vs. a human's `cmds server`) can't both pass the check. The
+# lock is held for milliseconds; one older than ~5s is a start that died holding it.
+[ -w "$run_dir" ] || { echo "supervise: $run_dir is not writable" >&2; exit 1; }
+# The pidfile below makes us visible to `svc` before the real handlers exist; a
+# request in that gap would otherwise KILL us (USR1/USR2 default = terminate).
+# Ignored until then - the first spawn is a fresh start anyway.
+trap '' USR1 USR2
+_i=0
+until mkdir "$lockdir" 2>/dev/null; do
+  _i=$((_i + 1))
+  if [ "$_i" -ge 50 ]; then rmdir "$lockdir" 2>/dev/null || true; _i=0; fi
+  sleep 0.1
+done
 if [ -r "$pidfile" ]; then
   existing="$(awk '{print $1}' "$pidfile" 2>/dev/null || true)"
   if is_supervise "$existing"; then
+    rmdir "$lockdir" 2>/dev/null || true
     echo "supervise: '$name' already running (pid $existing) - refusing to start a second." >&2
     exit 1
   fi
 fi
-
-echo "$$ $(date +%s)" > "$pidfile"
+echo "$$ $(date +%s) p2" > "$pidfile"
+rmdir "$lockdir" 2>/dev/null || true
 rm -f "$suspendfile"   # clear any stale suspend marker (e.g. from a SIGKILLed prior hold)
 : > "$logfile"   # truncate once at startup so the log can't grow unbounded
 
@@ -104,7 +149,19 @@ rm -f "$suspendfile"   # clear any stale suspend marker (e.g. from a SIGKILLed p
 rm -f "$stdinfifo"; mkfifo "$stdinfifo"
 exec 9<>"$stdinfifo"   # hold the FIFO open (r+w) so the child never sees EOF
 
-cleanup() { exec 9>&- 2>/dev/null || true; rm -f "$pidfile" "$genfile" "$stdinfifo" "$suspendfile"; }
+cleanup() {
+  trap '' HUP INT TERM USR1 USR2
+  drain_group || true                # whatever the exit path, never orphan the child
+  exec 9>&- 2>/dev/null || true
+  if [ -n "${keys_pid:-}" ]; then   # reap it BEFORE restoring: a dying `read -n1`
+    kill "$keys_pid" 2>/dev/null || true     # puts back the tty mode it saved, which
+    wait "$keys_pid" 2>/dev/null || true     # would undo a restore made too early
+  fi
+  # `set +m`: under job control stty would run in its own process group, which is
+  # not the tty's foreground group, so its tcsetattr fails (EINTR via SIGTTOU).
+  [ -n "${tty_saved:-}" ] && { set +m; bar_off; stty "$tty_saved" < /dev/tty 2>/dev/null; } || true   # bar_off: fallback if the reader died
+  rm -f "$pidfile" "$genfile" "$stdinfifo" "$suspendfile" "$reqfile"
+}
 trap cleanup EXIT
 
 child=""
@@ -114,7 +171,7 @@ suspend=0
 # Drain the child's WHOLE process group: TERM it, wait for every member to die
 # (shutdown hooks can take seconds), escalate to KILL, then reap the leader.
 drain_group() {
-  [ -n "$child" ] || return 0
+  [ -n "${child:-}" ] || return 0
   kill -TERM "-$child" 2>/dev/null || true
   local i=0
   while kill -0 "-$child" 2>/dev/null; do        # group still has members?
@@ -125,30 +182,216 @@ drain_group() {
   set +e; wait "$child" 2>/dev/null; set -e       # reap the leader
 }
 
-on_hup() {
+take_req() {      # echo the pending USR1 request (consumed), empty if none
+  local req=""
+  [ -r "$reqfile" ] && { read -r req < "$reqfile" 2>/dev/null || true; }
+  rm -f "$reqfile"
+  echo "$req"
+}
+# Restart: USR1 is masked through drain+respawn, so a second request can't
+# interleave; re-armed by the main loop.
+on_restart() {
   restart=1
-  trap '' HUP                       # mask further HUP through drain+respawn
+  [ -n "$child" ] || return 0        # before the first spawn: nothing to stop
+  trap '' USR1
   kill -TERM "-$child" 2>/dev/null || true
 }
-# `svc suspend` (USR1): cleanly drain the child to free its RAM, then HOLD until
-# `svc resume`. Unlike a crash this is intentional, so the supervisor stays alive
-# in your pane and respawns the child on resume. Mask HUP so a stray `svc restart`
-# mid-suspend can't fight the hold (it'd block until resume); re-armed after.
+# Suspend: cleanly drain the child to free its RAM, then HOLD until resume.
+# Unlike a crash this is intentional, so the supervisor stays alive in your pane
+# and respawns the child on resume.
 on_suspend() {
+  [ -n "$child" ] || return 0        # before the first spawn: ignore (see loop top)
   suspend=1
-  trap '' HUP
+  trap '' USR1
   kill -TERM "-$child" 2>/dev/null || true
 }
-on_resume() { suspend=0; }          # `svc resume` (USR2): drop out of the hold loop
+on_usr1() { case "$(take_req)" in restart) on_restart ;; suspend) on_suspend ;; esac; }   # empty/unknown: no-op
+# While held: a restart (or resume) request respawns; another suspend is a no-op.
+on_usr1_held() { case "$(take_req)" in restart|resume) suspend=0 ;; esac; }
+on_resume() { suspend=0; }          # USR2: drop out of the hold loop
 on_stop() {
   trap '' HUP INT TERM USR1 USR2    # ignore further signals while we tear down
   drain_group                       # never exit while the child is still alive
+  child=""
   exit 0
 }
-trap on_hup HUP
-trap on_suspend USR1
+trap on_usr1 USR1
 trap on_resume USR2
-trap on_stop INT TERM
+trap on_stop HUP INT TERM           # HUP = the terminal is gone: nothing to show output to
+
+# Once-per-supervisor setup from the project config: `svc_setup <name>` runs HERE,
+# in the supervisor's own shell, so what it exports (credentials, JAVA_HOME)
+# reaches every respawn without redoing it - a restart must not re-login to a
+# password manager. After the single-instance claim, so a refused duplicate
+# start never runs it. set -u is off for it: config code isn't written for it.
+# set -e stays ON: a failing step (e.g. a credential fetch) stops the start
+# visibly instead of launching a service with half its environment. It runs in a
+# subshell-free context, so it must not `cd` (every .run/ path is relative).
+if declare -F svc_setup >/dev/null; then
+  say "[supervise] $name: svc_setup..."
+  _pwd="$PWD"
+  set +u; svc_setup "$name"; set -u
+  [ "$PWD" = "$_pwd" ] || cd "$_pwd"
+fi
+
+# --- Interactive keys -------------------------------------------------------
+# The child's stdin is the FIFO, so typing in the pane never reached it - the tty
+# just echoed it. Instead, put the tty in no-echo single-key mode and run a small
+# reader that turns keys into the same signals `svc` sends to this supervisor.
+#
+# The reader is started with job control OFF so it stays in THIS (foreground)
+# process group and may read the tty. It still briefly becomes "background"
+# whenever bash hands the terminal to a foreground job (`sleep`/`rm` during a
+# drain, under `set -m`); ignoring TTIN/TTOU makes a read there fail with EIO
+# instead of stopping the reader for good, and it just retries.
+keys_pid=""
+tty_saved=""
+# --- Status bar and help panel ---------------------------------------------------
+# The bottom of the pane is reserved with a scroll region (DECSTBM): child output
+# scrolls in rows 1..N-H and the reader draws in rows N-H+1..N - normally H=1, the
+# bar; with `?` H grows to hold the help panel. Every draw is one write wrapped in
+# save/restore-cursor, so it never moves the child's cursor. The reader owns all of
+# it: it polls once a second, redraws on any change and re-reserves on resize. A
+# child that resets the scroll region itself (full-screen TUIs) would scroll over
+# the bar; a REPL or server log does not.
+BAR_H=2          # rows reserved normally: a separator rule + the bar
+in_tmux=0; [ -n "${TMUX:-}" ] && in_tmux=1   # q = stop-and-keep-the-window there
+PANEL_H=6        # rows reserved while the help panel is open (titled rule, 4 of help, bar)
+# Reserve the bottom $2 rows of $1, given $3 currently reserved. Growing first
+# scrolls the output up by the difference (the newlines), so no line is covered.
+bar_reserve() {
+  local rows="$1" want="$2" have="$3" grow i nl=""
+  grow=$((want - have))
+  if [ "$grow" -gt 0 ]; then
+    for ((i = 0; i < grow; i++)); do nl="$nl\n"; done
+    printf "$nl\033[%dA" "$grow" > /dev/tty
+  fi
+  printf '\0337\033[1;%dr\0338' "$((rows - want))" > /dev/tty
+  if [ "$grow" -lt 0 ]; then     # shrinking: blank the rows handed back to output
+    printf '\0337' > /dev/tty
+    for ((i = rows - have + 1; i <= rows - want; i++)); do printf '\033[%d;1H\033[2K' "$i" > /dev/tty; done
+    printf '\0338' > /dev/tty
+  fi
+}
+bar_off() {     # $1 = rows reserved (default BAR_H): full-screen region, those rows cleared
+  local rows i h="${1:-$BAR_H}"; rows="$(stty size < /dev/tty 2>/dev/null | awk '{print $1}')"
+  [ -n "$rows" ] || return 0
+  printf '\0337\033[r' > /dev/tty
+  for ((i = rows - h + 1; i <= rows; i++)); do printf '\033[%d;1H\033[2K' "$i" > /dev/tty; done
+  printf '\0338' > /dev/tty
+}
+fmt_age() {
+  local s="$1"
+  if [ "$s" -lt 60 ]; then echo "${s}s"
+  elif [ "$s" -lt 3600 ]; then echo "$((s / 60))m"
+  else echo "$((s / 3600))h$(( (s % 3600) / 60 ))m"; fi
+}
+# Echo "<colour> <text>" for the bar's state segment.
+bar_state() {
+  local g="" cp="" pf p port="" up=1
+  [ -r "$genfile" ] && read -r g cp < "$genfile" 2>/dev/null || true
+  if [ -e "$suspendfile" ]; then
+    if [ "$in_tmux" = 1 ]; then echo "90 stopped · r or s to start"; else echo "90 suspended · r or s to resume"; fi
+    return
+  fi
+  if [ -z "$cp" ] || ! kill -0 "$cp" 2>/dev/null; then echo "33 stopping..."; return; fi
+  for pf in $(svc_port_file "$name"); do       # supervise clears these on restart and
+    [ -r "$pf" ] || { up=0; continue; }        # the service rewrites them once serving
+    p="$(tr -d '[:space:]' < "$pf" 2>/dev/null || true)"
+    case "$p" in ''|*[!0-9]*) up=0 ;; *) port="$port $p" ;; esac
+  done
+  if [ "$up" = 0 ]; then echo "33 starting · pid $cp"; return; fi
+  echo "32 up · pid $cp${port:+ · port$port}"
+}
+# $1 rows, $2 cols, $3 uptime text, $4 note (a key's pending action), $5 panel 0|1
+bar_draw() {
+  local st colour text plain keys out row g rule
+  rule="$(printf '%*s' "$2" '' | sed 's/ /─/g')"   # full-width; autowrap-off clips any excess
+  st="$(bar_state)"; colour="${st%% *}"; text="${st#* }"
+  [ -n "$4" ] && { colour=33; text="$4"; }
+  local q="q quit"; [ "$in_tmux" = 1 ] && q="q stop"
+  if [ "$5" = 1 ]; then keys="? or esc: close help"; else keys="r restart  s suspend  c clear  $q  ? help"; fi
+  plain=" $name  ● $text${3:+ · $3}   $keys"
+  [ "${#plain}" -gt "$2" ] && [ "$5" != 1 ] && keys="r s c q ?"   # narrow pane: terse keys
+  # ?7l = autowrap off, so an over-long line is clipped instead of wrapping
+  out="$(printf '\0337\033[?7l\033[%d;1H\033[2K\033[7m %s \033[0m \033[%sm●\033[0m %s%s   \033[2m%s\033[0m' \
+    "$1" "$name" "$colour" "$text" "${3:+ · $3}" "$keys")"
+  if [ "$5" != 1 ]; then          # separator between the output and the bar
+    out="$out$(printf '\033[%d;1H\033[2K\033[2m%s\033[0m' $(($1 - 1)) "$rule")"
+  else                            # panel open: its titled top rule is the separator
+    g="$(awk '{print $1}' "$genfile" 2>/dev/null || true)"
+    row=$(($1 - PANEL_H + 1))
+    out="$out$(printf '\033[%d;1H\033[2K\033[2m%s\033[0m' "$row" "── supervise $name · gen ${g:-?} · log $logfile $rule")"
+    out="$out$(printf '\033[%d;1H\033[2K  \033[1mr\033[0m  restart (resumes if suspended)    \033[1ms\033[0m  suspend / resume' $((row + 1)))"
+    if [ "$in_tmux" = 1 ]; then
+      out="$out$(printf '\033[%d;1H\033[2K  \033[1mc\033[0m  clear the screen                  \033[1mq\033[0m  stop %s, keep this window (Ctrl-C closes it)' $((row + 2)) "$name")"
+    else
+      out="$out$(printf '\033[%d;1H\033[2K  \033[1mc\033[0m  clear the screen                  \033[1mq\033[0m  quit - stops %s and the supervisor' $((row + 2)) "$name")"
+    fi
+    out="$out$(printf '\033[%d;1H\033[2K  Typing never reaches the process - drive it over nREPL / its socket.' $((row + 3)))"
+    out="$out$(printf '\033[%d;1H\033[2K  From any shell: \033[1msvc\033[0m status|logs|restart|suspend|resume|stop %s' $((row + 4)) "$name")"
+  fi
+  printf '%s\033[?7h\0338' "$out" > /dev/tty
+}
+key_loop() {
+  trap '' TTIN TTOU
+  exec 9>&-                        # don't hold the child's FIFO open past our parent
+  local k rc rows="" cols="" r c g="" last_g="" since=$SECONDS age prev="" now tick=0
+  local panel=0 have=0 want note="" note_sig="" note_t=0 sig
+  trap 'bar_off "$have"; exit 0' TERM   # the supervisor's cleanup TERMs us, then waits
+  while :; do
+    # --- layout: (re)reserve the bottom rows on resize or panel toggle ---
+    read -r r c < <(stty size < /dev/tty 2>/dev/null) || true
+    case "$r" in ''|*[!0-9]*) r="" ;; *) [ "$r" -gt "$PANEL_H" ] || r="" ;; esac   # no size / too short: no bar
+    want=$BAR_H; [ "$panel" = 1 ] && want=$PANEL_H
+    if [ -n "$r" ] && { [ "$r" != "$rows" ] || [ "$c" != "$cols" ]; }; then
+      [ -n "$rows" ] && [ "$r" -lt "$rows" ] && have=$want   # shrink: content reflowed anyway
+      rows="$r"; cols="$c"; bar_reserve "$rows" "$want" "$have"; have=$want; prev=""
+    elif [ -n "$rows" ] && [ "$want" != "$have" ]; then
+      bar_reserve "$rows" "$want" "$have"; have=$want; prev=""
+    fi
+    # --- state ---
+    g="$(awk '{print $1}' "$genfile" 2>/dev/null || true)"
+    [ "$g" != "$last_g" ] && { last_g="$g"; since=$SECONDS; }
+    sig="$g"; if [ -e "$suspendfile" ]; then sig="$g:s"; fi   # not $(...): set -e
+    # a key's note ("restarting...") shows until the state it asked for arrives
+    [ -n "$note" ] && { [ "$sig" != "$note_sig" ] || [ $((SECONDS - note_t)) -ge 30 ]; } && note=""
+    age=""; [ -e "$suspendfile" ] || age="$(fmt_age $((SECONDS - since)))"
+    now="$(bar_state) $age $note $panel"
+    tick=$((tick + 1))
+    if [ -n "$rows" ] && { [ "$now" != "$prev" ] || [ $((tick % 5)) = 0 ]; }; then
+      bar_draw "$rows" "$cols" "$age" "$note" "$panel"; prev="$now"   # periodic redraw self-heals
+    fi
+    # --- one key, or time out after 1s ---
+    k=""; rc=0                     # `|| rc=` - the reader inherits set -e
+    IFS= read -r -t 1 -n1 k < /dev/tty 2>/dev/null || rc=$?
+    if [ "$rc" != 0 ]; then
+      kill -0 $$ 2>/dev/null || exit 0
+      [ "$rc" -gt 128 ] || sleep 0.2   # >128 = timeout; else EIO, don't spin
+      continue
+    fi
+    note_sig="$sig"; note_t=$SECONDS
+    case "$k" in
+      r) if [ -e "$suspendfile" ]; then note="resuming..."; kill -USR2 $$
+         else note="restarting..."; echo restart > "$reqfile"; kill -USR1 $$; fi ;;
+      s) if [ -e "$suspendfile" ]; then note="resuming..."; kill -USR2 $$
+         else note="suspending..."; echo suspend > "$reqfile"; kill -USR1 $$; fi ;;
+      c) printf '\033[H\033[2J\033[3J' > /dev/tty; prev="" ;;   # wipes the bar too: redraw
+      q) if [ "$in_tmux" = 0 ]; then note="stopping..."; kill -TERM $$
+         elif [ ! -e "$suspendfile" ]; then note="stopping..."; echo suspend > "$reqfile"; kill -USR1 $$; fi ;;
+      '?'|/|h) panel=$((1 - panel)) ;;
+      $'\033') panel=0 ;;          # Esc (arrow keys start with one too - harmless)
+    esac
+  done
+}
+if [ "${SUPERVISE_KEYS:-1}" != 0 ] && [ -t 0 ] && tty_saved="$(stty -g < /dev/tty 2>/dev/null)"; then
+  set +m                           # see cleanup: stty must share our process group
+  stty -echo -icanon min 1 time 0 < /dev/tty 2>/dev/null || true
+  key_loop & keys_pid=$!
+  set -m
+else
+  tty_saved=""
+fi
 
 gen=0
 while :; do
@@ -157,25 +400,32 @@ while :; do
   # set, so we skip the spawn and go straight back to waiting on the SAME child
   # rather than starting a duplicate.
   if [ -z "$child" ]; then
-    restart=0
+    # Every spawn starts from a known state: USR1 armed (a handler may have masked
+    # it), no stale restart/suspend flag from a request that raced the spawn.
+    restart=0; suspend=0
+    trap on_usr1 USR1
     gen=$((gen + 1))
     # Tee to the pane AND the log; $! is the command (not tee) - relied on for signalling.
     # stdin <- held-open FIFO so a REPL read blocks instead of taking SIGTTIN on the tty.
     "$@" < "$stdinfifo" > >(tee -a "$logfile") 2>&1 &
     child=$!
     echo "$gen $child" > "$genfile"
-    echo "[supervise] $name pid=$child (gen $gen) - 'svc restart $name' to restart" >&2
+    if [ -n "$keys_pid" ]; then
+      say "[supervise] $name pid=$child (gen $gen)"
+    else
+      say "[supervise] $name pid=$child (gen $gen) - 'svc restart $name' to restart"
+    fi
   fi
 
   set +e; wait "$child"; rc=$?; set -e   # returns immediately when a trap fires
 
   if [ "$restart" = 1 ]; then
+    say "[supervise] restarting $name..."   # before the drain, which can take seconds
     drain_group
-    child=""; suspend=0    # respawn; clear any stray suspend (a HUP+USR1 race could
-                           # leave suspend=1, which would self-suspend the new child)
+    child=""; suspend=0    # respawn; clear any stray suspend (a restart+suspend race
+                           # could leave suspend=1, which would self-suspend the new child)
     clear_ports force      # clean absence->presence edge for the new instance
-    echo "[supervise] restarting $name..." >&2
-    trap on_hup HUP        # re-arm for the next restart
+    trap on_usr1 USR1      # re-arm for the next request
     continue
   fi
 
@@ -190,11 +440,12 @@ while :; do
     # marker/hold and just respawn, so we never flash a marker svc could misread.
     if [ "$suspend" = 1 ]; then
       : > "$suspendfile"                            # state marker for `svc status`
-      echo "[supervise] $name suspended; 'svc resume $name' to respawn." >&2
+      say "[supervise] $name suspended; press s (or 'svc resume $name') to respawn."
+      trap on_usr1_held USR1                        # a restart request resumes
       while [ "$suspend" = 1 ]; do sleep 5 & wait $! 2>/dev/null || true; done  # signal-interruptible hold, ~0 CPU
       rm -f "$suspendfile"
     fi
-    trap on_hup HUP; trap on_suspend USR1           # re-arm (on_suspend had masked HUP)
+    trap on_usr1 USR1                               # re-arm (on_suspend had masked it)
     continue                                        # child="" -> loop top respawns
   fi
 
@@ -208,7 +459,7 @@ while :; do
 
   if [ "$keep" = 1 ]; then
     child=""
-    echo "[supervise] $name exited (rc=$rc); respawning (--keep)..." >&2
+    say "[supervise] $name exited (rc=$rc); respawning (--keep)..."
     continue
   fi
 
@@ -216,6 +467,7 @@ while :; do
   # so the next client fails fast instead of hitting a stale port.
   echo "rc=$rc $(date '+%Y-%m-%d %H:%M:%S')" > "$statusfile"
   clear_ports
-  echo "[supervise] $name exited (rc=$rc); supervisor stopping." >&2
+  child=""                                  # drained above; cleanup has nothing to do
+  say "[supervise] $name exited (rc=$rc); supervisor stopping."
   exit "$rc"
 done

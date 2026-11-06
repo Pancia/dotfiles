@@ -394,6 +394,7 @@ open after an edit may show the cached menu and the next one is current. `rebuil
 | `claude-watchdog` | Run the runaway-claude watchdog by hand (read-only at phase 2). `CW_PHASE=1` log only; `CW_RSS_MB=200 CW_CPU_PCT=5 CW_MIN_AGE=5` to force detection. Normally launchd runs it every 60s |
 | `roleplay-roll` | Pick a roleplay character for the bookends. Runs as a `UserPromptSubmit` hook on every prompt and **fails open** — any error prints nothing and exits 0. `--list` shows the cast, `--check` validates it (duplicate names/emoji, per-character odds, signature-line config). Cast lives in `roleplay/roster.tsv`, deliberately *not* in CLAUDE.md. `ROLEPLAY_CATCHPHRASE=N/M` sets how often a character's famous quote is unlocked (default `1/3`). The whole subsystem is self-contained in `roleplay/` so it can be handed to someone else — `bin/roleplay-roll` is a symlink into it. See [docs/claude-roleplay.md](docs/claude-roleplay.md) |
 | `service` | LaunchAgent manager (list/start/stop/restart/log/status) |
+| `supervise` / `svc` / `svc-tmux` | Restartable dev services (REPLs, watchers): `supervise <name>` runs one in this pane with keys (`r s c q ?`) and a status bar; `svc` inspects/restarts it from anywhere; `svc-tmux up --wait` is how a script or LLM starts them, in a dedicated `tmux -L svc` server. See `wiki/pages/supervise-svc.md` |
 | `tab-organize windows` | List open browser windows with tab counts |
 | `tab-organize plan [--window ID]` | Generate AI organization plan (editable before execute) |
 | `tab-organize check [plan-file]` | Validate a plan and show what it will do, with tab titles |
@@ -623,6 +624,7 @@ immediately because it still asserted the pre-XDG `~/.tmux.conf` destination.
 | `fish` | `trash` | pytest | **pytest, not fishtape** — drives `fish -c` and asserts on output; needs the `fish` binary |
 | `hooks` | `ensure-rcs` | pytest | runs `rcs/claude-ensure-rcs-hook.sh` |
 | `roleplay` | `roleplay` | pytest | drives the bash script as a subprocess; no deps. Tests live in `roleplay/tests/`, reached via the `tests/roleplay` symlink |
+| `svc` | `supervise`, `svc-tmux` | pytest | needs `pyte` (+ `tmux`, else those tests skip). pty-rendered status bar, orphan checks via `ps`, a private tmux socket per test |
 
 `busted` and `fishtape` runners exist in `RUNNERS` but no component uses them.
 

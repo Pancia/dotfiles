@@ -243,8 +243,8 @@ Two **unrelated** systems, both on PATH from `~/dotfiles/bin/`. Pick by lifetime
 
 | | `service` | `supervise` / `svc` |
 |---|---|---|
-| Backend | launchd (`org.pancia.*`) | my terminal |
-| Lifetime | persistent, survives reboot/logout | dies with the shell that started it |
+| Backend | launchd (`org.pancia.*`) | my terminal, or the `tmux -L svc` server |
+| Lifetime | persistent, survives reboot/logout | dies with its pane / tmux window |
 | Declared in | `~/dotfiles/services/<name>/` (plist + script) | `.svc.conf` / `.svc.local.conf` in the project |
 | Logs | `~/.log/services/<name>.log` | `.run/<name>.log` |
 
@@ -273,19 +273,25 @@ hanging in `less +GF`; `-q` strips known polling noise — **only successful**
 Telegram `getUpdates` responses, so failed polls (502 / 429 / 409, and the
 "terminated by other getUpdates request" duplicate-instance alarm) still show.
 Unlike `svc`, **starting is allowed** here — launchd owns these, not my terminal.
+(`svc` services are started with `svc-tmux up`, below.)
 
 Full docs: `~/dotfiles/wiki/pages/service.md`
 
 ### `supervise` / `svc` — ephemeral terminal-owned dev processes
 
 `supervise` and `svc` run long-lived dev
-processes that stay **owned by my terminal** while an LLM can **restart** them on
-demand. I start one with `supervise <name> -- <cmd>` (usually a `cmds` entry); an
-LLM uses `svc status|logs|restart|stop <name>` to inspect/restart it — but
-**never starts one itself** (if `svc restart` says "not running", ask me — or check
-whether it's a `service` after all). Per-project
-services are declared in `.svc.conf` / `.svc.local.conf` (`SVC_SERVICES`,
-`svc_port_file`, optional `svc_eval`).
+processes in a terminal pane while an LLM can **restart** them on demand. I start
+one with `supervise <name>` (usually a `cmds` entry); an LLM uses
+`svc status|logs|restart|suspend|resume|stop <name>` to inspect/control it.
+
+**To start one, an LLM uses `svc-tmux up --wait <name>`** — never `supervise`
+directly (it would belong to the LLM's shell and die with it). That runs it in a
+dedicated tmux server I can `svc-tmux attach` to, and exits nonzero with the
+pane's last lines if it fails to come up. It needs `svc_cmd` in the project's
+config; without one, ask me. Stop only what you started (`svc-tmux down <name>`).
+If `svc` reports "not running", also check whether it's a `service` after all.
+Per-project services are declared in `.svc.conf` / `.svc.local.conf`
+(`SVC_SERVICES`, `svc_port_file`, optional `svc_eval`, `svc_cmd`, `SVC_ENV`).
 
 Full docs (read if you need the config format, restart/crash semantics, or to add
 it to a project): `~/dotfiles/wiki/pages/supervise-svc.md`

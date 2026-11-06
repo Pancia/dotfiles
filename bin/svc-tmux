@@ -1,0 +1,241 @@
+#!/usr/bin/env bash
+# svc-tmux - host this project's `supervise` services in a dedicated tmux server,
+# so a script or an LLM can start them and you can see them all in one place.
+#
+#   svc-tmux up [--wait] [--timeout S] [name...]   start what isn't running (idempotent)
+#   svc-tmux attach                                attach to this project's session
+#   svc-tmux down [name...]                        stop services hosted here (all by default)
+#   svc-tmux ls                                    session + one line per service
+#
+# Names default to SVC_SERVICES; each needs `svc_cmd <name>` in .svc.conf /
+# .svc.local.conf (the same hook `supervise <name>` uses). Run from the project
+# root. `up --wait` returns only once every service answers (svc's readiness
+# probe), or exits nonzero with the pane's last lines - the form for LLMs.
+#
+# Design (see .cc/PLAN-svc-tmux.md in ~/dotfiles):
+# - Own server: `tmux -L svc -f lib/svc/tmux.conf`; your normal tmux is untouched.
+# - Scrubbed env: whoever starts the tmux server fixes every window's base env,
+#   so the server starts with the caller's env MINUS session-bound variables
+#   (CLAUDE*, CCS_*, AI_AGENT, TMUX*, terminal-session ids). Not an allowlist:
+#   tool config like XDG_CONFIG_HOME (where clojure finds ~/.config/clojure)
+#   must survive. Names in SVC_ENV="A B" are copied into each new window.
+# - One session per project: svc-<dir>-<hash of realpath>, always targeted with
+#   `=` (exact match), so same-named or prefix-named projects can't collide.
+# - One window per service, running `supervise <name>` in the project root.
+#   `supervise` itself refuses a second instance, wherever the first one runs.
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+SOCK="${SVC_TMUX_SOCKET:-svc}"
+conf="${SVC_TMUX_CONF:-$here/../lib/svc/tmux.conf}"   # override: tests, which skip your tmux.conf
+TM() { tmux -L "$SOCK" -f "$conf" "$@"; }
+SVC() { "$here/svc" "$@"; }
+die() { echo "svc-tmux: $*" >&2; exit 1; }
+
+for _cf in .svc.conf .svc.local.conf; do [ -r "$_cf" ] && . "./$_cf"; done
+SVC_SERVICES="${SVC_SERVICES:-}"
+SVC_ENV="${SVC_ENV:-}"
+
+root="$(pwd -P)"
+S="svc-$(printf '%s' "$(basename "$root")" | tr -c 'A-Za-z0-9_-' '_')-$(printf '%s' "$root" | shasum | cut -c1-6)"
+
+has_session() { TM has-session -t "=$S" 2>/dev/null; }
+# "<window_id> <live|dead> <pane_pid>" for the window named $1, a live one first;
+# empty if none. Windows are then targeted by id: a name can be ambiguous.
+window_info() {
+  has_session || return 0
+  TM list-windows -t "=$S" -F '#{window_name} #{window_id} #{pane_dead} #{pane_pid}' 2>/dev/null |
+    awk -v n="$1" '$1 == n { st = ($3 == 1 ? "dead" : "live"); l = $2 " " st " " $4
+                             if (st == "live") { print l; found = 1; exit } if (!d) d = l }
+                   END { if (!found && d) print d }'
+}
+window_state() { window_info "$1" | awk '{print $2}'; }
+window_pid()   { window_info "$1" | awk '{print $3}'; }
+window_id()    { window_info "$1" | awk '{print $1}'; }
+fmt_escape()   { printf '%s' "${1//#/##}"; }      # tmux expands #{...} in -c and status-right
+sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }   # sh single-quote
+
+# Serialise `up` per project: two concurrent runs would otherwise both see "no
+# window" and both create one. Same scheme as supervise's pidfile lock.
+up_lock() {
+  mkdir -p .run
+  local i=0
+  until mkdir .run/svc-tmux.lock 2>/dev/null; do
+    i=$((i + 1)); [ "$i" -ge 300 ] && die "another svc-tmux up has held .run/svc-tmux.lock for 30s"
+    sleep 0.1
+  done
+  trap 'rmdir .run/svc-tmux.lock 2>/dev/null || true' EXIT
+}
+names_or_default() {
+  if [ "$#" -gt 0 ]; then echo "$*"; else echo "$SVC_SERVICES"; fi
+}
+
+new_window() {
+  local n="$1" v
+  local -a envs=()
+  for v in $SVC_ENV; do [ -n "${!v+x}" ] && envs+=(-e "$v=${!v}"); done
+  local cdir; cdir="$(fmt_escape "$root")"
+  if has_session; then
+    TM new-window -d -t "=$S:" -n "$n" -c "$cdir" ${envs[@]+"${envs[@]}"} -- "$here/supervise" "$n"
+    return
+  fi
+  # First window creates the session - and, if no svc server runs yet, the
+  # server, whose global environment is then the caller's minus these.
+  local -a unset_args=()
+  for v in $(compgen -e); do
+    case "$v" in
+      CLAUDE*|CCS_*|AI_AGENT|TMUX|TMUX_*|TERM_SESSION_ID|ITERM_SESSION_ID|ITERM_PROFILE|\
+      WINDOWID|SECURITYSESSIONID|OLDPWD|SHLVL|VIRTUAL_ENV|COLUMNS|LINES)
+        unset_args+=(-u "$v") ;;
+    esac
+  done
+  if ! env ${unset_args[@]+"${unset_args[@]}"} tmux -L "$SOCK" -f "$conf" \
+       new-session -d -s "$S" -n "$n" -c "$cdir" -x 200 -y 50 ${envs[@]+"${envs[@]}"} -- "$here/supervise" "$n"; then
+    has_session || die "could not create tmux session $S"
+    new_window "$n"; return            # lost a race with a concurrent `up`: join it
+  fi
+  TM set -t "=$S:" status-right "#(cd $(fmt_escape "$(sq "$root")") && $(fmt_escape "$(sq "$here/svc")") status --short --tmux) " >/dev/null
+  mkdir -p .run && echo "$S" > .run/tmux-session
+}
+
+# Wait until every name in $1 serves, polling them together; a pane that dies
+# fails at once with its last lines. $2 = deadline ($SECONDS). 0 iff all came up.
+# "Serves" must hold for SETTLE seconds on the same generation: a service with no
+# readiness probe is "ready" the moment its child exists, so without this a
+# command that crashes on startup would be reported up.
+SETTLE=2
+wait_ready() {
+  local pending="$1" deadline="$2" n left fail=0 since g
+  local -a first=()          # "name:gen:$SECONDS" of the first ready sighting
+  while :; do
+    left=""
+    for n in $pending; do
+      if SVC _ready "$n"; then
+        g="$(awk '{print $1}' .run/"$n".gen 2>/dev/null || true)"
+        since="$(printf '%s\n' ${first[@]+"${first[@]}"} | awk -F: -v k="$n:$g" '$1":"$2 == k { print $3; exit }')"
+        if [ -z "$since" ]; then first+=("$n:$g:$SECONDS"); left="$left $n"
+        elif [ $((SECONDS - since)) -ge "$SETTLE" ]; then printf '  %-12s up\n' "$n"
+        else left="$left $n"; fi
+      elif [ "$(window_state "$n")" = dead ] && ! SVC _live "$n" >/dev/null 2>&1; then
+        echo "svc-tmux: '$n' exited while starting. Last lines of its pane:" >&2
+        TM capture-pane -p -t "$(window_id "$n")" -S -25 2>/dev/null | sed '/^$/d' | tail -20 >&2 || true
+        fail=1
+      else left="$left $n"; fi
+    done
+    pending="$left"
+    [ -n "$pending" ] || break
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      for n in $pending; do
+        echo "svc-tmux: '$n' not serving after the timeout. svc status / svc logs $n:" >&2
+        SVC status "$n" >&2 || true
+        SVC logs "$n" -n 20 >&2 || true
+      done
+      return 1
+    fi
+    sleep 1
+  done
+  return "$fail"
+}
+
+cmd_up() {
+  local wait=0 timeout=180 n st names sup
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --wait) wait=1 ;;
+      --timeout) timeout="${2:?--timeout needs seconds}"; shift ;;
+      -*) die "unknown flag $1" ;;
+      *) break ;;
+    esac
+    shift
+  done
+  names="$(names_or_default "$@")"
+  [ -n "$names" ] || die "no services: name them, or set SVC_SERVICES in .svc.conf"
+  declare -F svc_cmd >/dev/null || die "no svc_cmd() in .svc.conf / .svc.local.conf"
+  for n in $names; do [ -n "$(svc_cmd "$n")" ] || die "svc_cmd has no command for '$n'"; done
+
+  up_lock
+  echo "svc-tmux: session $S (tmux -L $SOCK; svc-tmux attach)"
+  for n in $names; do
+    st="$(window_state "$n")"
+    if sup="$(SVC _live "$n")"; then
+      if [ "$st" = live ] && [ "$(window_pid "$n")" = "$sup" ]; then
+        printf '  %-12s running\n' "$n"
+      else
+        printf '  %-12s running elsewhere (pid %s) - left alone\n' "$n" "$sup"
+        [ "$st" = dead ] && TM kill-window -t "$(window_id "$n")" 2>/dev/null || true
+      fi
+      continue
+    fi
+    case "$st" in
+      dead) TM respawn-pane -t "$(window_id "$n")" ;;   # never -k: that HUPs a live pane
+      live) ;;                                # supervise still starting up
+      *)    new_window "$n" ;;
+    esac
+    printf '  %-12s started\n' "$n"
+  done
+
+  [ "$wait" = 1 ] || return 0
+  wait_ready "$names" $((SECONDS + timeout))
+}
+
+cmd_down() {
+  local n names sup i
+  if [ "$#" -gt 0 ]; then names="$*"
+  else names="$(has_session && TM list-windows -t "=$S" -F '#{window_name}' || true)"; fi
+  for n in $names; do
+    if sup="$(SVC _live "$n")"; then
+      if [ "$(window_pid "$n")" != "$sup" ]; then
+        printf '  %-12s runs outside this session - not stopped (svc stop %s)\n' "$n" "$n"
+        continue
+      fi
+      SVC stop "$n" >/dev/null
+      for ((i = 0; i < 150; i++)); do SVC _live "$n" >/dev/null 2>&1 || break; sleep 0.1; done
+      SVC _live "$n" >/dev/null 2>&1 && printf '  %-12s still draining after 15s - closing its window anyway\n' "$n"
+    fi
+    while [ -n "$(window_id "$n")" ]; do TM kill-window -t "$(window_id "$n")" 2>/dev/null || break; done
+    printf '  %-12s down\n' "$n"
+  done
+  rm -f .run/tmux-session 2>/dev/null || true
+  has_session || return 0
+  # Session empty of live panes -> gone (remain-on-exit keeps dead ones around).
+  if ! TM list-panes -s -t "=$S:" -F '#{pane_dead}' 2>/dev/null | grep -q 0; then
+    TM kill-session -t "=$S" 2>/dev/null || true
+  else
+    echo "$S" > .run/tmux-session
+  fi
+}
+
+cmd_ls() {
+  local n names sup where st
+  if has_session; then echo "svc-tmux: session $S (tmux -L $SOCK)"; else echo "svc-tmux: no session for this project"; fi
+  names="$SVC_SERVICES"
+  if has_session; then
+    for n in $(TM list-windows -t "=$S" -F '#{window_name}'); do
+      case " $names " in *" $n "*) ;; *) names="$names $n" ;; esac
+    done
+  fi
+  for n in $names; do
+    where="-"; st="$(window_state "$n")"
+    if sup="$(SVC _live "$n")"; then
+      if [ "$st" = live ] && [ "$(window_pid "$n")" = "$sup" ]; then where="tmux"; else where="elsewhere"; fi
+    elif [ "$st" = dead ]; then where="tmux (pane dead)"
+    fi
+    printf '%s  [%s]\n' "$(SVC status "$n")" "$where"
+  done
+}
+
+cmd_attach() {
+  has_session || die "no session for this project - svc-tmux up first"
+  exec env -u TMUX tmux -L "$SOCK" -f "$conf" attach -t "=$S"   # nests if run inside tmux
+}
+
+sub="${1:-ls}"; shift || true
+case "$sub" in
+  up)     cmd_up "$@" ;;
+  down)   cmd_down "$@" ;;
+  ls)     cmd_ls ;;
+  attach) cmd_attach ;;
+  session) echo "$S" ;;
+  -h|--help|help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) echo "usage: svc-tmux {up [--wait] [--timeout S] [name...]|attach|down [name...]|ls}" >&2; exit 2 ;;
+esac

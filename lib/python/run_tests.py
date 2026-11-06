@@ -77,6 +77,15 @@ COMPONENTS = {
         "aliases": ["ensure-rcs"],
         "source_path": "rcs",
     },
+    # supervise / svc / svc-tmux, driven as real processes: pty + pyte for the
+    # in-pane bar, `ps` for orphans, a private tmux socket per test. Needs tmux
+    # for the svc-tmux tests (skipped without it).
+    "svc": {
+        "runner": "pytest",
+        "deps": ["pyte"],
+        "aliases": ["supervise", "svc-tmux"],
+        "source_path": "bin/supervise",
+    },
     # Future components (tests don't exist yet):
     # "lib/lua": {
     #     "runner": "busted",
