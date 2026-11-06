@@ -428,10 +428,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     // In-window controls.
     private var micPopup: NSPopUpButton!
+    private var optionsPopup: NSPopUpButton!   // ⚙ pull-down holding every toggle
+    // Inline copies of the same toggles, shown only while the top bar has room for them.
     private var tsCheck: NSButton!
     private var refCheck: NSButton!
     private var pasteCheck: NSButton!
-    private var debugCheck: NSButton!
+    private var enterCheck: NSButton!
     private var completeButton: NSButton!
     private var cancelButton: NSButton!
 
@@ -458,6 +460,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             "pref.timestamps": true,
             "pref.copyAsReference": false,
             "pref.autoPaste": false,
+            "pref.autoEnter": false,
             "pref.showDebug": false,
         ])
 
@@ -604,7 +607,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             contentRect: NSRect(x: 0, y: 0, width: w, height: h),
             styleMask: [.titled, .closable, .resizable, .utilityWindow, .nonactivatingPanel],
             backing: .buffered, defer: false)
-        panel.title = panelTitle()
+        refreshTitle()
         panel.level = .floating
         panel.isFloatingPanel = true
         // Redundant next to the canBecomeKey override, kept as a second line of defence:
@@ -624,7 +627,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let content = panel.contentView!
         let barH: CGFloat = 38   // mic-meter footer strip at the bottom
         let topH: CGFloat = 40   // control bar (checkboxes + buttons) at the top
-        panel.contentMinSize = NSSize(width: 520, height: topH + barH + 200)
+        // 300pt is what the footer needs (mic button + compact meter); the top bar needs
+        // ~250. 72pt of transcript is about three lines at 22pt.
+        panel.contentMinSize = NSSize(width: 300, height: topH + barH + 72)
 
         // Middle: transcript scroll, inset by the top control bar AND the bottom footer.
         let scroll = NSScrollView(frame: NSRect(x: 0, y: barH, width: content.bounds.width, height: content.bounds.height - barH - topH))
@@ -658,18 +663,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         sep.autoresizingMask = [.width, .maxYMargin]
         content.addSubview(sep)
 
-        // The Debug toggle rides at the right end of this bar rather than in the top
-        // control row: at the default 586pt window that row is already full, and a
-        // fourth checkbox there would clip Cancel/Complete.
-        //
-        // The mic picker is here for the same reason, and is a 44pt icon-only pull-down
-        // for a second one: this strip's real tenant is the meter, which measures 396pt
-        // at rest and 436pt at a five-digit chunk count, so a popup wide enough to show a
-        // device NAME would truncate it — the name goes in the panel title instead. What
-        // makes it fit at all is that the button TAKES OVER the meter's leading "🎙 "
-        // (33pt) rather than adding to it, and dbgW drops to what Debug actually measures
-        // (64pt) from a long-stale 86. Net cost to the meter: 5pt.
-        let dbgW: CGFloat = 70
+        // The mic picker is a 44pt icon-only pull-down: this strip's real tenant is the
+        // meter, so a popup wide enough to show a device NAME would truncate it — the
+        // name goes in the panel title instead. The button TAKES OVER the meter's
+        // leading "🎙 " rather than adding to it.
         let micW: CGFloat = 44
         let micH: CGFloat = 22
         let mic = NSPopUpButton(frame: NSRect(x: 4, y: (barH - micH) / 2, width: micW, height: micH),
@@ -684,7 +681,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
         let sfH: CGFloat = 24
         let sfX: CGFloat = 4 + micW + 6
-        let sf = NSTextField(frame: NSRect(x: sfX, y: (barH - sfH) / 2, width: content.bounds.width - sfX - dbgW - 6, height: sfH))
+        let sf = NSTextField(frame: NSRect(x: sfX, y: (barH - sfH) / 2, width: content.bounds.width - sfX - 6, height: sfH))
         sf.isEditable = false
         sf.isSelectable = false
         sf.isBordered = false
@@ -694,24 +691,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         sf.usesSingleLineMode = true
         sf.lineBreakMode = .byTruncatingTail
         sf.stringValue = "waiting for audio…"
+        sf.toolTip = "Mic level · speech state · audio chunks sent to the transcriber"
         sf.autoresizingMask = [.width, .maxYMargin]
         content.addSubview(sf)
         statusField = sf
 
-        // Pinned to the right edge (minXMargin), so the status field keeps all the
-        // slack as the window widens.
         showDebug = UserDefaults.standard.bool(forKey: "pref.showDebug")
-        let dbgH: CGFloat = 20
-        let dbg = NSButton(checkboxWithTitle: "Debug", target: self, action: #selector(toggleDebug(_:)))
-        dbg.font = NSFont.systemFont(ofSize: 12)
-        dbg.state = showDebug ? .on : .off
-        dbg.frame = NSRect(x: content.bounds.width - dbgW - 6, y: (barH - dbgH) / 2, width: dbgW, height: dbgH)
-        dbg.autoresizingMask = [.minXMargin, .maxYMargin]
-        content.addSubview(dbg)
-        debugCheck = dbg
 
-        // Top control bar: 3 checkboxes (left) + Cancel/Complete (right).
+        // Top control bar: ⚙ options (left) + Cancel/Complete (right).
         buildControlBar(in: content, topH: topH)
+        refreshTitle()   // again: buildControlBar just seeded the output mode
 
         // Remember the last position/size across launches. Once the autosave
         // name is set, AppKit persists the frame (keyed to the bundle id) on every
@@ -731,7 +720,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
 
-    // Top strip: 3 checkboxes left, Cancel/Complete right. A programmatic NSStackView
+    // Top strip: ⚙ options left, Cancel/Complete right. A programmatic NSStackView
     // keeps translatesAutoresizingMask=true, so positioning it by frame + mask is legal
     // while it lays out its ARRANGED subviews via constraints.
     private func buildControlBar(in content: NSView, topH: CGFloat) {
@@ -743,21 +732,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         bar.distribution = .gravityAreas               // leading pinned left, trailing right
         bar.spacing = 10
         bar.edgeInsets = NSEdgeInsets(top: 4, left: 12, bottom: 4, right: 12)
+        // Responsive: when the bar is too narrow, the stack DETACHES the lowest-visibility
+        // checkboxes instead of widening the window. Low clipping resistance is what lets
+        // the window win; at the default (required) the stack forces the panel wider.
+        bar.detachesHiddenViews = true
+        bar.setClippingResistancePriority(.defaultLow, for: .horizontal)
 
-        func check(_ title: String, _ on: Bool, _ action: Selector) -> NSButton {
-            let b = NSButton(checkboxWithTitle: title, target: self, action: action)
-            b.font = NSFont.systemFont(ofSize: 13)     // NOT tiny .small next to 22pt transcript
-            b.state = on ? .on : .off
-            return b
-        }
         // The hotkey's mode wins; the registered defaults only cover a bare launch with
         // no --mode (opening the .app straight from Finder).
         let d = UserDefaults.standard
         showTimestamps  = launchMode?.wantsTimestamps ?? d.bool(forKey: "pref.timestamps")
         copyAsReference = launchMode?.wantsReference  ?? d.bool(forKey: "pref.copyAsReference")
-        tsCheck    = check("Timestamps",             showTimestamps,                  #selector(toggleTimestamps(_:)))
-        refCheck   = check("Copy as file reference", copyAsReference,                 #selector(togglePrefRef(_:)))
-        pasteCheck = check("Auto-paste (⌘V)",        d.bool(forKey: "pref.autoPaste"), #selector(togglePrefPaste(_:)))
+
+        // Every toggle lives in one pull-down, so the window can go down to ~300pt wide.
+        // When it is wider, checkboxes for the same toggles fill the space next to it.
+        // The panel title also carries the output options (see panelTitle).
+        let opts = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 44, height: 22), pullsDown: true)
+        opts.font = NSFont.systemFont(ofSize: 13)
+        opts.toolTip = "Options"
+        optionsPopup = opts
+        rebuildOptionsMenu()
+        opts.menu?.delegate = self   // rebuilt on open, so checkmarks track the hotkey mode
+        opts.setContentHuggingPriority(.required, for: .horizontal)   // else it soaks up slack
+
+        func check(_ title: String, _ action: Selector, _ tip: String) -> NSButton {
+            let b = NSButton(checkboxWithTitle: title, target: self, action: action)
+            b.font = NSFont.systemFont(ofSize: 13)     // NOT tiny .small next to 22pt transcript
+            b.toolTip = tip
+            return b
+        }
+        tsCheck    = check("Timestamps",     #selector(toggleTimestamps),
+                           "Keep [HH:MM:SS] timestamps in the view and the copied text")
+        refCheck   = check("File reference", #selector(togglePrefRef),
+                           "Copy a `read <path>` reference to the saved transcript instead of the text")
+        pasteCheck = check("Auto-paste",     #selector(togglePrefPaste),
+                           "On Complete, switch back to the previous app and press ⌘V")
+        enterCheck = check("+ Enter",        #selector(togglePrefEnter),
+                           "After auto-paste, also press Return (submits in Claude Code, sends in chat apps)")
 
         completeButton = NSButton(title: "Complete", target: self, action: #selector(completeAction))
         completeButton.bezelStyle = .rounded
@@ -770,9 +781,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         cancelButton = NSButton(title: "Cancel", target: self, action: #selector(cancelSession))
         cancelButton.bezelStyle = .rounded
 
-        bar.addView(tsCheck, in: .leading)
-        bar.addView(refCheck, in: .leading)
-        bar.addView(pasteCheck, in: .leading)
+        bar.addView(opts, in: .leading)
+        // Visibility order as the bar narrows: Timestamps goes first (the transcript shows
+        // it anyway), then File reference, then the Auto-paste/+ Enter pair together.
+        for (b, pri) in [(tsCheck!, 250), (refCheck!, 300), (pasteCheck!, 400), (enterCheck!, 400)] {
+            bar.addView(b, in: .leading)
+            bar.setVisibilityPriority(NSStackView.VisibilityPriority(Float(pri)), for: b)
+        }
+        bar.setCustomSpacing(4, after: pasteCheck)     // reads as a sub-option of Auto-paste
+        syncToggleViews()
         bar.addView(cancelButton, in: .trailing)
         bar.addView(completeButton, in: .trailing)     // Complete rightmost
         content.addSubview(bar)
@@ -787,38 +804,113 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     // The active device rides in the title bar because the footer strip it is picked
     // from has to keep its width for the meter. Recomputed on every switch.
-    private func panelTitle() -> String { "Live Transcribe — " + micDevice }
+    // Every title change goes through here. A never-key panel draws its title in the
+    // dim inactive colour, so recolour AppKit's own title field each time. Found by
+    // walking the titlebar view; if a future macOS renames it, the title is just dim.
+    private func refreshTitle() {
+        panel.title = panelTitle()
+        guard let titlebar = panel.standardWindowButton(.closeButton)?.superview else { return }
+        func fields(_ v: NSView) -> [NSTextField] {
+            if let tf = v as? NSTextField { return [tf] }
+            return v.subviews.flatMap(fields)
+        }
+        fields(titlebar).forEach { $0.textColor = Palette.normal }
+    }
+
+    // Checkbox states follow the model, so the menu and the inline checkboxes agree.
+    private func syncToggleViews() {
+        let d = UserDefaults.standard
+        let paste = d.bool(forKey: "pref.autoPaste")
+        tsCheck?.state    = showTimestamps ? .on : .off
+        refCheck?.state   = copyAsReference ? .on : .off
+        pasteCheck?.state = paste ? .on : .off
+        enterCheck?.state = d.bool(forKey: "pref.autoEnter") ? .on : .off
+        enterCheck?.isEnabled = paste && !finishing
+        refreshTitle()
+    }
+
+    // The output options come before the device so a narrow window truncates the device
+    // name, not them. Timestamps is left out: the transcript itself shows that one.
+    private func panelTitle() -> String {
+        var tags: [String] = []
+        if copyAsReference { tags.append("ref") }
+        let d = UserDefaults.standard
+        if d.bool(forKey: "pref.autoPaste") { tags.append(d.bool(forKey: "pref.autoEnter") ? "paste+⏎" : "paste") }
+        let opts = tags.isEmpty ? "" : " · " + tags.joined(separator: " · ")
+        return "Live Transcribe" + opts + " — " + micDevice
+    }
+
+    // A pull-down's item 0 is its button title and is never listed, so the toggles
+    // start at index 1 (same pattern as the mic picker).
+    private func rebuildOptionsMenu() {
+        guard let menu = optionsPopup?.menu else { return }
+        menu.removeAllItems()
+        menu.autoenablesItems = false
+        menu.addItem(NSMenuItem(title: "⚙︎", action: nil, keyEquivalent: ""))
+        let d = UserDefaults.standard
+        let paste = d.bool(forKey: "pref.autoPaste")
+        func item(_ title: String, _ on: Bool, _ action: Selector, tip: String, enabled: Bool = true) {
+            let i = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            i.target = self
+            i.state = on ? .on : .off
+            i.toolTip = tip
+            i.isEnabled = enabled && !finishing
+            menu.addItem(i)
+        }
+        item("Timestamps", showTimestamps, #selector(toggleTimestamps),
+             tip: "Keep [HH:MM:SS] timestamps in the view and the copied text")
+        item("File reference", copyAsReference, #selector(togglePrefRef),
+             tip: "Copy a `read <path>` reference to the saved transcript instead of the text")
+        item("Auto-paste", paste, #selector(togglePrefPaste),
+             tip: "On Complete, switch back to the previous app and press ⌘V")
+        item("    + Enter", d.bool(forKey: "pref.autoEnter"), #selector(togglePrefEnter),
+             tip: "After auto-paste, also press Return (submits in Claude Code, sends in chat apps)",
+             enabled: paste)   // its state persists; it just can't act without paste
+        menu.addItem(.separator())
+        item("Debug", showDebug, #selector(toggleDebug),
+             tip: "Show the engine's startup chatter in the transcript")
+    }
 
     private func setControlsEnabled(_ on: Bool) {
-        [micPopup, tsCheck, refCheck, pasteCheck, debugCheck, completeButton, cancelButton].forEach { $0?.isEnabled = on }
+        [micPopup, optionsPopup, tsCheck, refCheck, pasteCheck, completeButton, cancelButton].forEach { $0?.isEnabled = on }
+        enterCheck?.isEnabled = on && pasteCheck?.state == .on
     }
 
     // Neither of these persists any more: the launch mode reseeds them every session, so
     // a stored value could only ever be stale. They are session overrides, and the
     // `touched` flag is what protects them from the stop hotkey re-asserting its mode.
-    @objc private func toggleTimestamps(_ s: NSButton) {
-        showTimestamps = (s.state == .on)
+    @objc private func toggleTimestamps() {
+        showTimestamps.toggle()
         tsTouched = true
+        syncToggleViews()
         rerenderTranscript()
     }
 
-    @objc private func togglePrefRef(_ s: NSButton) {
-        copyAsReference = (s.state == .on)
+    @objc private func togglePrefRef() {
+        copyAsReference.toggle()
         refTouched = true
+        syncToggleViews()
     }
 
-    @objc private func toggleDebug(_ s: NSButton) {
-        showDebug = (s.state == .on)
+    @objc private func toggleDebug() {
+        showDebug.toggle()
         UserDefaults.standard.set(showDebug, forKey: "pref.showDebug")
         rerenderTranscript()
     }
 
-    @objc private func togglePrefPaste(_ s: NSButton) {
-        let on = (s.state == .on)
+    @objc private func togglePrefPaste() {
+        let on = !UserDefaults.standard.bool(forKey: "pref.autoPaste")
         UserDefaults.standard.set(on, forKey: "pref.autoPaste")
+        syncToggleViews()
         // Prompt for Accessibility now (app is active). The grant lands async and
         // usually needs a relaunch, so triggering it here beats prompting mid-stop.
         if on, !CGPreflightPostEventAccess() { _ = CGRequestPostEventAccess() }
+    }
+
+    @objc private func togglePrefEnter() {
+        let d = UserDefaults.standard
+        d.set(!d.bool(forKey: "pref.autoEnter"), forKey: "pref.autoEnter")
+        syncToggleViews()
     }
 
     @objc private func completeAction() { finish(cancelled: false, userInitiated: true) }
@@ -894,9 +986,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
-        // Two menus share this delegate. The popup's has no "Hide Panel" at index 0, so
+        // Three menus share this delegate. The popup's has no "Hide Panel" at index 0, so
         // the status-menu maintenance below would rewrite its button title.
         if let popup = micPopup, menu === popup.menu { rebuildMicPopup(); return }
+        if let popup = optionsPopup, menu === popup.menu { rebuildOptionsMenu(); return }
         rebuildMicSubmenu()
         rebuildRecentSubmenu()
         menu.item(at: 0)?.title = panel.isVisible ? "Hide Panel" : "Show Panel"
@@ -1001,7 +1094,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
         micDevice = name
         UserDefaults.standard.set(name, forKey: "pref.micDevice")
-        panel.title = panelTitle()
+        refreshTitle()
 
         if idle {
             statusField?.stringValue = "starting on \(name)…"
@@ -1286,8 +1379,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             statusField.stringValue = plain
             return
         }
-        let cells = plain[fillR].map { $0 == "#" ? Character("█") : Character("░") }
-        let bar = "▐" + String(cells) + "▌"
         let stateText = String(plain[stateR])
         let chunks = String(plain[chunkR])
 
@@ -1303,10 +1394,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             word = "speech"; color = Palette.compSource
         }
 
+        // The bar grows with the footer: as many cells as fit beside the text, between
+        // 8 (still readable at ~300pt) and 24 (wider looked absurd spanning the strip). The engine sends 20
+        // cells, so a wider bar is resampled — same level, finer drawing.
+        let suffix = NSMutableAttributedString()
+        suffix.append(NSAttributedString(string: " \(word)", attributes: [.font: statusFontBold, .foregroundColor: color]))
+        suffix.append(NSAttributedString(string: " · \(chunks)", attributes: [.font: statusFont, .foregroundColor: Palette.dim]))
+        let cellW = ("█" as NSString).size(withAttributes: [.font: statusFont]).width
+        let capsW = ("▐▌" as NSString).size(withAttributes: [.font: statusFont]).width
+        // Reserve a FIXED suffix width (the widest word, a 5-digit count), not this
+        // update's: else the bar would jump a cell each time "sound"/"speech" swaps or
+        // the count gains a digit.
+        let reserveW = NSAttributedString(string: " speech · 99999", attributes: [.font: statusFontBold]).size().width
+        let room = statusField.bounds.width - reserveW - capsW - 8   // 8: field padding
+        let cellCount = min(24, max(8, cellW > 0 ? Int(room / cellW) : 8))
+        let raw = plain[fillR]
+        let filled = raw.isEmpty ? 0
+            : Int((Double(raw.filter { $0 == "#" }.count) / Double(raw.count) * Double(cellCount)).rounded())
+        let bar = "▐" + String(repeating: "█", count: filled)
+                      + String(repeating: "░", count: cellCount - filled) + "▌"
+
         let s = NSMutableAttributedString()
         s.append(NSAttributedString(string: bar, attributes: [.font: statusFont, .foregroundColor: color]))
-        s.append(NSAttributedString(string: "  \(word)", attributes: [.font: statusFontBold, .foregroundColor: color]))
-        s.append(NSAttributedString(string: "  · sent \(chunks)", attributes: [.font: statusFont, .foregroundColor: Palette.dim]))
+        s.append(suffix)
         statusField.attributedStringValue = s
     }
 
@@ -1530,7 +1640,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private func pollFrontmost(_ app: NSRunningApplication, attempts: Int) {
         if NSWorkspace.shared.frontmostApplication == app {
             postCommandV()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { [weak self] in self?.terminateNow() }
+            guard UserDefaults.standard.bool(forKey: "pref.autoEnter") else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { [weak self] in self?.terminateNow() }
+                return
+            }
+            // Give the target time to take the paste before Return arrives. A large
+            // bracketed paste into a terminal, or an Electron/web field, can still be
+            // inserting when a back-to-back keystroke lands, and Return would then submit
+            // a partial message. Re-check frontmost: if focus moved, don't press Return.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                if NSWorkspace.shared.frontmostApplication == app { self?.postReturn() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { [weak self] in self?.terminateNow() }
+            }
             return
         }
         if attempts <= 0 { terminateNow(); return }
@@ -1546,6 +1667,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let up   = CGEvent(keyboardEventSource: src, virtualKey: v, keyDown: false)
         down?.flags = .maskCommand
         up?.flags = .maskCommand   // set on both — some apps check the modifier on key-up
+        down?.post(tap: .cgSessionEventTap)
+        up?.post(tap: .cgSessionEventTap)
+    }
+
+    private func postReturn() {
+        let src = CGEventSource(stateID: .combinedSessionState)
+        let ret: CGKeyCode = 0x24   // kVK_Return
+        let down = CGEvent(keyboardEventSource: src, virtualKey: ret, keyDown: true)
+        let up   = CGEvent(keyboardEventSource: src, virtualKey: ret, keyDown: false)
+        // Clear flags explicitly: the combined source carries any modifier still held —
+        // e.g. Alt from the Alt+Space stop — and Alt/Shift+Return means "newline, don't
+        // send" in Claude Code and most chat apps.
+        down?.flags = []
+        up?.flags = []
         down?.post(tap: .cgSessionEventTap)
         up?.post(tap: .cgSessionEventTap)
     }

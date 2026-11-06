@@ -54,7 +54,7 @@ class LiveTranscriber:
             "base": "ggml-base.bin",
             "small": "ggml-small.bin",
             "medium": "ggml-medium.bin",
-            "large": "ggml-large-v3-turbo.bin",
+            "large": "ggml-large-v3-turbo-q5_0.bin",   # 5-bit: ~0.6G RAM vs 1.7G f16, same speed (benchmarked 2026-11-06)
         }
 
         model_file = model_map.get(model_size, f"ggml-{model_size}.bin")
@@ -871,7 +871,7 @@ def main():
     parser.add_argument("--model", "-m",
                        default="large",
                        choices=["tiny", "base", "small", "medium", "large"],
-                       help="Whisper model size (default: large, uses large-v3-turbo)")
+                       help="Whisper model size (default: large, uses large-v3-turbo q5_0)")
     parser.add_argument("--mic-device",
                        help="Microphone device ID or name substring (use --list-devices to see options)")
     parser.add_argument("--computer-device",

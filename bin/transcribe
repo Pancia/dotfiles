@@ -11,7 +11,7 @@
 # upload the moment that config grew a `status is-interactive` guard.
 # services/wget_server/script.sh already hardcodes this same path.
 
-set model_path "$HOME/.local/share/whisper-cpp/models/ggml-large-v3-turbo.bin"
+set model_path "$HOME/.local/share/whisper-cpp/models/ggml-large-v3-turbo-q5_0.bin"
 set vad_model_path "$HOME/.local/share/whisper-cpp/models/silero-v6.2.0.ggml"
 
 # Parse arguments
@@ -25,7 +25,7 @@ for arg in $argv
         case '--help' '-h'
             echo "Usage: transcribe [--no-file] <audio_file>"
             echo ""
-            echo "Transcribe audio/video using whisper-cpp (large-v3-turbo)"
+            echo "Transcribe audio/video using whisper-cpp (large-v3-turbo q5_0)"
             echo ""
             echo "Options:"
             echo "  --no-file  Don't create transcript file, only print to stdout"
@@ -48,7 +48,7 @@ end
 if not test -f "$model_path"
     echo "Error: model not found: $model_path" >&2
     echo "Download it with:" >&2
-    echo "  curl -L -o $model_path https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin" >&2
+    echo "  curl -L -o $model_path https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin" >&2
     exit 1
 end
 

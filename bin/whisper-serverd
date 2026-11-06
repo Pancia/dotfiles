@@ -47,7 +47,7 @@ MODEL_MAP = {
     "base": "ggml-base.bin",
     "small": "ggml-small.bin",
     "medium": "ggml-medium.bin",
-    "large": "ggml-large-v3-turbo.bin",
+    "large": "ggml-large-v3-turbo-q5_0.bin",   # 5-bit: ~0.6G RAM vs 1.7G f16, same speed (benchmarked 2026-11-06)
 }
 VAD_MODEL = MODEL_DIR / "silero-v6.2.0.ggml"
 
