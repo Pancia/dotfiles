@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Claude Code statusline script
 # Reads JSON from stdin, outputs formatted status line
-# Caches rate limit API calls to /tmp/claude-rate-limits.json (60s TTL)
+# Rate limits come from stdin (.rate_limits) when Claude Code sends them;
+# otherwise from the OAuth usage API, cached in /tmp/claude-rate-limits.json
+# (300s TTL, 300s backoff after a failure)
 
 CACHE_FILE="/tmp/claude-rate-limits.json"
 CACHE_TTL=300
@@ -54,73 +56,103 @@ if [ -n "$usage" ]; then
   context_info=$(colorize "$usage" 25 10)
 fi
 
-# --- Rate limits (cached API call) ---
+# --- Rate limits ---
+# Both sources normalize to the same variables: five_h / seven_d (percent,
+# empty = window unknown) and five_h_reset / seven_d_reset (epoch seconds,
+# 0 = unknown). The formatting below is shared.
 rate_info=""
-refresh_cache=false
+five_h="" seven_d="" five_h_reset=0 seven_d_reset=0
 
-if [ -f "$CACHE_FILE" ]; then
-  cache_age=$(( $(date +%s) - $(stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0) ))
-  [ "$cache_age" -ge "$CACHE_TTL" ] && refresh_cache=true
-else
-  refresh_cache=true
-fi
+# Live values from stdin. Absent on a session's first render, and either
+# window can be absent on its own.
+{ read -r five_h; read -r five_h_reset; read -r seven_d; read -r seven_d_reset; } < <(
+  echo "$input" | jq -r '
+    (.rate_limits.five_hour.used_percentage // ""),
+    ((.rate_limits.five_hour.resets_at // 0) | floor),
+    (.rate_limits.seven_day.used_percentage // ""),
+    ((.rate_limits.seven_day.resets_at // 0) | floor)' 2>/dev/null)
 
-if $refresh_cache; then
-  # Skip if in backoff period from a previous failure
-  if [ -f "$BACKOFF_FILE" ]; then
-    backoff_age=$(( $(date +%s) - $(stat -f %m "$BACKOFF_FILE" 2>/dev/null || echo 0) ))
-    [ "$backoff_age" -lt "$BACKOFF_TTL" ] && refresh_cache=false
+# Fallback: cached API call, only when stdin carried neither window.
+if [ -z "$five_h" ] && [ -z "$seven_d" ]; then
+  refresh_cache=false
+
+  if [ -f "$CACHE_FILE" ]; then
+    cache_age=$(( $(date +%s) - $(stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0) ))
+    [ "$cache_age" -ge "$CACHE_TTL" ] && refresh_cache=true
+  else
+    refresh_cache=true
   fi
-fi
 
-if $refresh_cache; then
-  rm -f "$BACKOFF_FILE"
-  token=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null \
-    | python3 -c "import sys,json; print(json.load(sys.stdin)['claudeAiOauth']['accessToken'])" 2>/dev/null)
-  if [ -n "$token" ]; then
-    result=$(curl -s --max-time 3 "https://api.anthropic.com/api/oauth/usage" \
-      -H "Authorization: Bearer $token" \
-      -H "anthropic-beta: oauth-2025-04-20" \
-      -H "User-Agent: claude-code/2.1.74" 2>/dev/null)
-    if echo "$result" | jq -e '.five_hour' > /dev/null 2>&1; then
-      echo "$result" > "$CACHE_FILE"
+  if $refresh_cache; then
+    # Skip if in backoff period from a previous failure
+    if [ -f "$BACKOFF_FILE" ]; then
+      backoff_age=$(( $(date +%s) - $(stat -f %m "$BACKOFF_FILE" 2>/dev/null || echo 0) ))
+      [ "$backoff_age" -lt "$BACKOFF_TTL" ] && refresh_cache=false
+    fi
+  fi
+
+  if $refresh_cache; then
+    rm -f "$BACKOFF_FILE"
+    token=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null \
+      | python3 -c "import sys,json; print(json.load(sys.stdin)['claudeAiOauth']['accessToken'])" 2>/dev/null)
+    if [ -n "$token" ]; then
+      result=$(curl -s --max-time 3 "https://api.anthropic.com/api/oauth/usage" \
+        -H "Authorization: Bearer $token" \
+        -H "anthropic-beta: oauth-2025-04-20" \
+        -H "User-Agent: claude-code/2.1.74" 2>/dev/null)
+      if echo "$result" | jq -e '.five_hour' > /dev/null 2>&1; then
+        echo "$result" > "$CACHE_FILE"
+      else
+        touch "$BACKOFF_FILE"
+      fi
     else
       touch "$BACKOFF_FILE"
     fi
-  else
-    touch "$BACKOFF_FILE"
   fi
-fi
 
-if [ -f "$CACHE_FILE" ]; then
-  five_h=$(jq -r '.five_hour.utilization // empty' "$CACHE_FILE" 2>/dev/null)
-  seven_d=$(jq -r '.seven_day.utilization // empty' "$CACHE_FILE" 2>/dev/null)
-  if [ -n "$five_h" ] && [ -n "$seven_d" ]; then
-    five_h_colored=$(colorize "${five_h%.*}" 50 20)
-    seven_d_colored=$(colorize "${seven_d%.*}" 50 20)
-    # Reset times: 5h as a countdown, 7d as weekday + hour (local time).
-    # Computed at render time from the absolute timestamp, so the cache TTL
-    # never makes them stale.
-    read -r five_h_reset seven_d_reset < <(jq -r '
-      def epoch: if . then sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601 else 0 end;
-      "\(.five_hour.resets_at | epoch) \(.seven_day.resets_at | epoch)"' "$CACHE_FILE" 2>/dev/null)
-    now=$(date +%s)
-    five_h_when=""
-    if [ "${five_h_reset:-0}" -gt "$now" ] 2>/dev/null; then
-      # Minutes left, rounded up, so the countdown never undershoots.
-      left=$(( (five_h_reset - now + 59) / 60 ))
-      h=$(( left / 60 )); m=$(( left % 60 ))
-      [ "$h" -gt 0 ] && five_h_when=" ↻${h}h${m}m" || five_h_when=" ↻${m}m"
+  if [ -f "$CACHE_FILE" ]; then
+    five_h=$(jq -r '.five_hour.utilization // empty' "$CACHE_FILE" 2>/dev/null)
+    seven_d=$(jq -r '.seven_day.utilization // empty' "$CACHE_FILE" 2>/dev/null)
+    if [ -n "$five_h" ] && [ -n "$seven_d" ]; then
+      read -r five_h_reset seven_d_reset < <(jq -r '
+        def epoch: if . then sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601 else 0 end;
+        "\(.five_hour.resets_at | epoch) \(.seven_day.resets_at | epoch)"' "$CACHE_FILE" 2>/dev/null)
+    else
+      # The cache path shows nothing unless both windows are present.
+      five_h="" seven_d=""
     fi
-    seven_d_when=""
-    if [ "${seven_d_reset:-0}" -gt "$now" ] 2>/dev/null; then
-      # Round up to the hour: resets land at :59:59, so 22:59 reads as 23,
-      # and a reset is never shown earlier than it happens.
-      seven_d_when=" ↻$(date -r $(( (seven_d_reset + 3599) / 3600 * 3600 )) '+%a@%Hh')"
-    fi
-    rate_info=" (5h:${five_h_colored}${five_h_when} 7d:${seven_d_colored}${seven_d_when})"
   fi
+fi  # end cache fallback
+
+# Percentages become integers by truncation, the same for both sources.
+five_h="${five_h%.*}"
+seven_d="${seven_d%.*}"
+
+# Reset times: 5h as a countdown, 7d as weekday + hour (local time).
+# Computed at render time from the absolute timestamp, so the cache TTL
+# never makes them stale.
+now=$(date +%s)
+rate_parts=""
+if [ -n "$five_h" ]; then
+  five_h_when=""
+  if [ "${five_h_reset:-0}" -gt "$now" ] 2>/dev/null; then
+    # Minutes left, rounded up, so the countdown never undershoots.
+    left=$(( (five_h_reset - now + 59) / 60 ))
+    h=$(( left / 60 )); m=$(( left % 60 ))
+    [ "$h" -gt 0 ] && five_h_when=" ↻${h}h${m}m" || five_h_when=" ↻${m}m"
+  fi
+  rate_parts="5h:$(colorize "$five_h" 50 20)${five_h_when}"
 fi
+if [ -n "$seven_d" ]; then
+  seven_d_when=""
+  if [ "${seven_d_reset:-0}" -gt "$now" ] 2>/dev/null; then
+    # Round up to the hour: resets land at :59:59, so 22:59 reads as 23,
+    # and a reset is never shown earlier than it happens.
+    seven_d_when=" ↻$(date -r $(( (seven_d_reset + 3599) / 3600 * 3600 )) '+%a@%Hh')"
+  fi
+  rate_parts="${rate_parts:+$rate_parts }7d:$(colorize "$seven_d" 50 20)${seven_d_when}"
+fi
+[ -n "$rate_parts" ] && rate_info=" (${rate_parts})"
 
 # --- Model & Agent ---
 model=$(echo "$input" | jq -r '.model.display_name // ""')
