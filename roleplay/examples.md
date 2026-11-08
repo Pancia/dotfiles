@@ -4,7 +4,8 @@ Worked examples of openers and closers for every character in
 [`roster.tsv`](roster.tsv) — 80 across 9 universes.
 
 **This file is a reference, not context.** It is deliberately *not* loaded into
-`~/.claude/CLAUDE.md` and nothing reads it at runtime; the whole point of the
+`~/.claude/CLAUDE.md` and the hook never reads it (`roleplay-say`, the terminal
+command, reads the rolled character's entries); the whole point of the
 external-roster design is that a prompt carries one line, not the cast. Read it
 when adding a character, when a universe starts sounding samey, or to see what
 "in character but not quoting the famous line" looks like in practice.

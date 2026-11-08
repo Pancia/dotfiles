@@ -126,7 +126,8 @@ appear.
 |---|---|
 | `bin/roleplay-roll` | the hook. bash + awk, no dependencies |
 | `roster.tsv` | the cast. Add characters here |
-| `examples.md` | 235 worked bookends, 4–5 per character. **Not read at runtime** — a style reference for you |
+| `bin/roleplay-say` | rolls a character and has a cheap model write its line, from a plain terminal |
+| `examples.md` | 235 worked bookends, 4–5 per character. A style reference for you. The hook never reads it; `roleplay-say` reads one character's entries |
 | `docs/claude-roleplay.md` | the design: why two-stage rolls, why the roster is external, the failure modes |
 | `snippets/` | the two things you paste into your own Claude config |
 | `tests/` | 43 pytest tests driving the script as a subprocess. `pytest tests/` |
@@ -138,7 +139,17 @@ roleplay-roll             # hook JSON envelope (what Claude Code calls)
 roleplay-roll --plain     # just the character line, for eyeballing
 roleplay-roll --list      # the whole roster, grouped by universe
 roleplay-roll --check     # validate: counts, per-character odds, duplicate names/emoji
+
+roleplay-say                       # roll, and have a cheap model write the line
+roleplay-say fixing the login bug  # ...about this. Words are optional context
+roleplay-say --closer shipped it   # a closer instead of an opener
+git diff | roleplay-say -          # context from stdin, only with an explicit -
+roleplay-say -m sonnet tests pass  # another model. The default is haiku
 ```
+
+`roleplay-say` is the one piece that needs more than bash and awk: `claude-p` and
+`jq` on your PATH. Unlike the hook it fails loudly, with a message on stderr and
+exit 1.
 
 ## Adding a character
 
