@@ -295,8 +295,15 @@ Details, traps and restore: [docs/work-config-vault.md](docs/work-config-vault.m
 Files in `.cc/` are Claude Code session artifacts:
 - `pending-updates-<ts>-<id>.md` — suggested CLAUDE.md edits from session reviews
 - `PLAN-*.md` — session plans and design documents
+- reports, reviews, patches and useful reproduction scripts
 
-Tracked in git via `!.cc` in `gitignore_global`.
+Tracked in git via `!.cc` in `git/gitignore_global`, and this repo is public, so
+everything there gets published on the next push.
+
+`.cc/private/` is the exception: `.cc/private/` in the same file ignores it in
+every repo. It survives a reboot, unlike the session scratchpad, but no commit
+includes it, so it has no backup and no history. Use it for anything private,
+such as quotes from session transcripts.
 
 ## Quick Reference
 

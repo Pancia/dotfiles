@@ -28,7 +28,6 @@ import datetime
 import fcntl
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -1172,7 +1171,13 @@ def cmd_commit(args):
     # `--also target.txt` -- exit 0, the link left uncommitted, and the target
     # (possibly carrying a peer's edit) taken wholesale instead. A link whose
     # target is outside the repo died "outside the repo" instead.
-    also = [rel_literal(os.path.join(caller_cwd, p)) for p in args.also]
+    #
+    # Only the last component stays literal. A symlinked DIRECTORY on the way
+    # there must resolve: jj tracks `real/f.txt`, so `ln/f.txt` matches nothing
+    # and the commit reports success having taken nothing.
+    also = [rel_literal(os.path.join(
+                os.path.realpath(os.path.dirname(os.path.join(caller_cwd, p))),
+                os.path.basename(p))) for p in args.also]
 
     # Outermost: excludes ai_jj_commit / `g run ci`, which use this same lockdir.
     acquire_shared_lock()
@@ -1944,24 +1949,22 @@ def keep_unreplayed(archived, jdir, replayed):
     (same session id) or the agent itself while commit-mine ran in the
     background -- was archived without ever being committed. Reproduced: the
     edit stayed on disk, the session's next commit said "nothing recorded".
-    .owner and .last come back too: .owner keeps liveness answerable, and .last
-    keeps the next Bash window anchored instead of losing one call to a fresh
-    baseline.
+
+    Records only. .last must not come back: commit-mine is itself a Bash call,
+    so its hook would open a window from the old @ over edits this commit just
+    took, and the next commit would stop with exit 5 on files already in @-.
+    .owner must not come back either: after a resume it names the dead process,
+    and an absent .owner lets the next hook stamp the live one.
     """
     back = [n for n in record_names(archived) if n not in replayed]
-    keep = [n for n in (".owner", ".last") if os.path.exists(os.path.join(archived, n))]
-    if not back and not keep:
+    if not back:
         return
     os.makedirs(jdir, mode=0o700, exist_ok=True)
     for n in back:
         os.replace(os.path.join(archived, n), os.path.join(jdir, n))
-    for n in keep:
-        if not os.path.exists(os.path.join(jdir, n)):
-            shutil.copy2(os.path.join(archived, n), os.path.join(jdir, n))
-    if back:
-        print("note: %d edit(s) recorded while this commit ran were not part of\n"
-              "  it; they stay live for the next commit-mine." % len(back),
-              file=sys.stderr)
+    print("note: %d edit(s) recorded while this commit ran were not part of\n"
+          "  it; they stay live for the next commit-mine." % len(back),
+          file=sys.stderr)
 
 
 def other_live_sessions(me):

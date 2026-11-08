@@ -4,6 +4,7 @@
 !.nojekyll
 !.github/
 !.cc
+.cc/private/
 .DS_Store
 .lein-repl-history
 .nrepl-history

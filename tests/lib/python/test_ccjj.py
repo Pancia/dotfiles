@@ -2177,3 +2177,56 @@ def test_an_edit_recorded_during_the_commit_stays_live(repo, tmp_path):
     r = repo.run("commit", "-m", "y", sid="S1")
     assert r.returncode == 0, r.stderr
     assert repo.show("b.txt") == b"B\n"
+
+
+def test_next_commit_does_not_stop_on_files_the_last_commit_took(repo):
+    """A restored .last let commit-mine's own Bash hook open a window over the
+    edits it had just committed, so the next commit exited 5 naming them."""
+    repo.write("a.txt", "a\n")
+    repo.write("b.txt", "b\n")
+    repo.commit("base")
+    _optin(repo)
+    open(os.path.join(repo.root, ".jj", "ccjj-contended"), "w").close()
+    _bash(repo, "S1", tuid="t1")
+    _hook_edit(repo, "S1", "a.txt", "a", "A")
+    r = repo.run("commit", "-m", "first", sid="S1")
+    assert r.returncode == 0, r.stderr
+    _bash(repo, "S1", tuid="t2")          # commit-mine's own PostToolUse
+    _hook_edit(repo, "S1", "b.txt", "b", "B")
+    r = repo.run("commit", "-m", "second", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert repo.show("b.txt") == b"B\n"
+
+
+def test_commit_does_not_restore_a_dead_owner(repo):
+    """After a resume .owner names the dead process. A commit used to clear it,
+    so the next hook stamped the live one; restoring it kept the session
+    "ended" and let a peer take the whole-copy route over its work."""
+    repo.write("f.txt", "f\n")
+    repo.write("g.txt", "g\n")
+    repo.commit("base")
+    _hook_edit(repo, "S1", "f.txt", "f", "F")
+    # The first commit runs the once-a-day prune, which would hide the defect.
+    r = repo.run("commit", "-m", "first", sid="S1")
+    assert r.returncode == 0, r.stderr
+    _hook_edit(repo, "S1", "g.txt", "g", "G")
+    _owner(repo, "S1", "1", "Thu Jan  1 00:00:00 1970")
+    r = repo.run("commit", "-m", "second", sid="S1")
+    assert r.returncode == 0, r.stderr
+    owner = os.path.join(repo.journal, repo.root.replace("/", "_"), "S1", ".owner")
+    assert not os.path.exists(owner)
+
+
+def test_also_through_a_directory_symlink_commits_the_real_file(repo):
+    """Only the last component stays literal. jj tracks real/f.txt, so
+    `--also ln/f.txt` matched nothing and still reported success."""
+    os.makedirs(os.path.join(repo.root, "real"))
+    repo.write("real/f.txt", "old\n")
+    repo.write("mine.txt", "m\n")
+    os.symlink("real", os.path.join(repo.root, "ln"))
+    repo.commit("base")
+    repo.write("real/f.txt", "new\n")
+    _hook_edit(repo, "S1", "mine.txt", "m", "M")
+    r = repo.run("commit", "-m", "x", "--also", "ln/f.txt", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert repo.show("real/f.txt") == b"new\n"

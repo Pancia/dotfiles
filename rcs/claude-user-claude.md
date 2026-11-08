@@ -139,6 +139,9 @@ scratchpad.
   throwaway test repos, copies of source trees and raw command output.
 - **Subagents:** give the `.cc/` path in the brief for any report or patch.
 - `.cc/` is tracked, so do not put large or generated trees there.
+- **Privacy:** `.cc/` files get committed, and some repos are public. Put private
+  material in `.cc/private/`, such as quotes from my transcripts. Git ignores that
+  folder in every repo, so it is safe from a push. It also has no backup.
 
 ## Web Search
 
