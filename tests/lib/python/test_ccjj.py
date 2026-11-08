@@ -263,15 +263,80 @@ def test_new_file_keeps_its_own_exec_bit(repo):
 
 # ------------------------------------------------------------ bytes and naming
 
+def _hook_edit_crlf(repo, sid, rel, old, new):
+    """An Edit of a CRLF file, in the shape Claude Code really reports it:
+    every string normalized to LF, while the disk keeps CRLF (checked against
+    a real Edit). A record with CRLF in `original` cannot come from the hook."""
+    p = os.path.join(repo.root, rel)
+    disk = open(p, "rb").read()
+    orig = disk.replace(b"\r\n", b"\n").decode()
+    open(p, "wb").write(orig.replace(old, new, 1).replace("\n", "\r\n").encode())
+    payload = json.dumps({
+        "tool_name": "Edit", "session_id": sid, "tool_use_id": "t",
+        "tool_input": {"file_path": p, "old_string": old, "new_string": new},
+        "tool_response": {"oldString": old, "newString": new, "originalFile": orig,
+                          "replaceAll": False, "structuredPatch": [{"lines": ["x"]}]}})
+    subprocess.run([sys.executable, CCJJ, "record-edit"], input=payload,
+                   capture_output=True, text=True,
+                   env={**os.environ, "CC_JJ_JOURNAL": repo.journal})
+
+
 def test_crlf_survives_byte_exact(repo):
     repo.write("w.txt", b"alpha\r\nbeta\r\ngamma\r\n")
     repo.commit("base")
-    repo.write("w.txt", b"alpha\r\nBETA\r\ngamma\r\n")
-    repo.record("S1", "w.txt", old="beta", new="BETA",
-                original="alpha\r\nbeta\r\ngamma\r\n")
+    _hook_edit_crlf(repo, "S1", "w.txt", "beta", "BETA")
 
-    assert repo.run("commit", "-m", "crlf", sid="S1").returncode == 0
+    r = repo.run("commit", "-m", "crlf", sid="S1")
+    assert r.returncode == 0, r.stderr
     assert repo.show("w.txt") == b"alpha\r\nBETA\r\ngamma\r\n"
+
+
+def test_multiline_edit_of_a_crlf_file_replays(repo):
+    """A multi-line `old` holds LF and the committed file holds CRLF, so it
+    never matched, and the error blamed a Bash change that did not happen."""
+    repo.write("w.txt", b"alpha\r\nbeta\r\ngamma\r\n")
+    repo.commit("base")
+    _hook_edit_crlf(repo, "S1", "w.txt", "alpha\nbeta", "alpha\nBETA\nnew")
+
+    r = repo.run("commit", "-m", "crlf", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert repo.show("w.txt") == b"alpha\r\nBETA\r\nnew\r\ngamma\r\n"
+
+
+def test_edit_inserting_lines_into_crlf_does_not_mix_endings(repo):
+    repo.write("w.txt", b"alpha\r\nbeta\r\n")
+    repo.commit("base")
+    _hook_edit_crlf(repo, "S1", "w.txt", "beta", "beta\nadded")
+
+    r = repo.run("commit", "-m", "crlf", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert repo.show("w.txt") == b"alpha\r\nbeta\r\nadded\r\n"
+
+
+def test_an_lf_file_is_left_alone(repo):
+    repo.write("w.txt", "alpha\nbeta\n")
+    repo.commit("base")
+    _hook_edit(repo, "S1", "w.txt", "alpha\nbeta", "alpha\nBETA")
+
+    r = repo.run("commit", "-m", "lf", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert repo.show("w.txt") == b"alpha\nBETA\n"
+
+
+def test_an_empty_payload_jj_did_not_take_is_rolled_back(repo):
+    """`jj file show` prints nothing for an absent path, so an empty payload
+    compared equal and was reported verified while not in the commit."""
+    repo.write(".gitignore", "ignored.txt\n")
+    repo.write("mine.txt", "m\n")
+    repo.commit("base")
+    repo.write("ignored.txt", "")
+    _hook_write(repo, "S1", "ignored.txt", "")
+    _hook_edit(repo, "S1", "mine.txt", "m", "M")
+
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "did not take" in r.stderr
+    assert repo.show("mine.txt") == b"m\n"
 
 
 def test_non_utf8_does_not_crash(repo):
@@ -1368,21 +1433,129 @@ def test_claim_refuses_a_deletion_and_points_at_also(repo):
     assert "--also" in r.stderr
 
 
-def test_claim_refuses_when_the_session_also_edited_the_file(repo):
-    """The claimed blob already contains those edits, so replaying both would
-    apply them twice -- silently duplicating a hunk for an insertion-shaped
-    Edit, which is the commonest shape."""
+def test_claim_replaces_the_sessions_own_edits_without_applying_them_twice(repo):
+    """A claimed blob contains those edits already. Replaying both duplicates a
+    hunk for an insertion-shaped Edit, the commonest shape, and refusing made a
+    cycle: commit said "claim it" and claim said "commit first"."""
     _optin(repo)
     repo.write("f.txt", "a\n")
     repo.commit("base")
     _bash(repo)
-    repo.write("f.txt", "a\nadded-by-edit\n")
-    repo.record("S1", "f.txt", old="a\n", new="a\nadded-by-edit\n", original="a\n")
-    _bash(repo)
+    _hook_edit(repo, "S1", "f.txt", "a\n", "a\nadded-by-edit\n")
+    with open(os.path.join(repo.root, "f.txt"), "a") as fh:
+        fh.write("added-by-bash\n")
+    _bash(repo, tuid="t2")
+    assert repo.run("commit", "-m", "x", sid="S1").returncode == 5
 
     r = repo.run("claim", "f.txt", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert "added-by-bash" in r.stdout              # the reader sees the diff
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert repo.show("f.txt") == b"a\nadded-by-edit\nadded-by-bash\n"
+
+
+def test_claim_dry_run_over_edits_changes_nothing(repo):
+    _optin(repo)
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    _bash(repo)
+    _hook_edit(repo, "S1", "f.txt", "a", "A")
+    _bash(repo, tuid="t2")
+    d = os.path.join(repo.journal, repo.root.replace("/", "_"), "S1")
+    before = sorted(n for n in os.listdir(d) if n.endswith(".json"))
+    r = repo.run("claim", "f.txt", "-n", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert "dry run" in r.stdout
+    assert sorted(n for n in os.listdir(d) if n.endswith(".json")) == before
+
+
+def test_superseded_records_are_kept_in_forgotten(repo):
+    _optin(repo)
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    _bash(repo)
+    _hook_edit(repo, "S1", "f.txt", "a", "A")
+    _bash(repo, tuid="t2")
+    d = os.path.join(repo.journal, repo.root.replace("/", "_"), "S1")
+    name = next(n for n in os.listdir(d) if n.endswith(".json"))
+    assert repo.run("claim", "f.txt", sid="S1").returncode == 0
+    assert os.path.exists(os.path.join(d, "forgotten", name))
+    assert not os.path.exists(os.path.join(d, name))
+
+
+def test_second_claim_on_one_file_works(repo):
+    """Claim #1's own record used to block claim #2, with no Edit involved."""
+    _optin(repo)
+    repo.write("f.txt", "one\n")
+    repo.commit("base")
+    _bash(repo)
+    repo.write("f.txt", "two\n")
+    _bash(repo, tuid="t2")
+    assert repo.run("claim", "f.txt", sid="S1").returncode == 0
+    repo.write("f.txt", "three\n")
+    _bash(repo, tuid="t3")
+    r = repo.run("claim", "f.txt", sid="S1")
+    assert r.returncode == 0, r.stderr
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert repo.show("f.txt") == b"three\n"
+
+
+def test_an_edit_after_a_superseding_claim_replays_on_top(repo):
+    _optin(repo)
+    repo.write("f.txt", "a\nb\n")
+    repo.commit("base")
+    _bash(repo)
+    _hook_edit(repo, "S1", "f.txt", "a", "A")
+    _bash(repo, tuid="t2")
+    assert repo.run("claim", "f.txt", sid="S1").returncode == 0
+    _hook_edit(repo, "S1", "f.txt", "b", "B")
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert repo.show("f.txt") == b"A\nB\n"
+
+
+def test_superseding_claim_still_respects_a_peers_stake(repo):
+    _optin(repo)
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    _bash(repo)
+    _hook_edit(repo, "S1", "f.txt", "a", "A")
+    repo.record("S2", "f.txt", old="a", new="A", original="a\n")
+    _owner(repo, "S2", str(os.getpid()), _my_lstart())
+    _bash(repo, tuid="t2")
+    r = repo.run("claim", "f.txt", sid="S1")
     assert r.returncode == 1
-    assert "twice" in r.stderr
+    assert "also claimed" in r.stderr
+
+
+def test_also_is_rolled_back_when_jj_does_not_take_the_path(repo):
+    """An ignored path selects nothing. With another path the commit is not
+    empty, so it reported success having taken nothing for --also."""
+    repo.write(".gitignore", "ignored.txt\n")
+    repo.write("mine.txt", "m\n")
+    repo.commit("base")
+    repo.write("ignored.txt", "x\n")
+    _hook_edit(repo, "S1", "mine.txt", "m", "M")
+    r = repo.run("commit", "-m", "x", "--also", "ignored.txt", sid="S1")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "--also did not take" in r.stderr
+    assert repo.show("mine.txt") == b"m\n"          # rolled back
+
+
+def test_also_delete_and_symlink_pass_the_check(repo):
+    repo.write("gone.txt", "g\n")
+    repo.write("target.txt", "t\n")
+    repo.write("mine.txt", "m\n")
+    repo.commit("base")
+    os.remove(os.path.join(repo.root, "gone.txt"))
+    os.symlink("target.txt", os.path.join(repo.root, "link"))
+    _hook_edit(repo, "S1", "mine.txt", "m", "M")
+    r = repo.run("commit", "-m", "x", "--also", "gone.txt", "--also", "link", sid="S1")
+    assert r.returncode == 0, r.stderr
+    files = repo.jj_("file", "list", "-r", "@-").stdout.split()
+    assert "gone.txt" not in files and "link" in files
 
 
 def test_claim_warns_when_a_live_session_shares_the_path(repo):
@@ -1678,7 +1851,7 @@ def test_also_refuses_a_path_a_live_session_is_working_on(repo):
     ok = repo.run("commit", "-m", "mine plus g", "--also", "g.txt", sid="S1",
                   extra=["--force"])
     assert ok.returncode == 0, ok.stderr
-    assert "unverified" in ok.stdout                     # not called "verified"
+    assert "matched to the working copy" in ok.stdout    # not "committed and verified"
 
 
 def test_non_utf8_content_does_not_block_the_journal(repo):

@@ -953,10 +953,11 @@ def anchored_replace(target, original, old, new, path, label):
             "  `sed -i`, a heredoc, a script that rewrote it. Those are not\n"
             "  journaled, so replaying only the recorded edits cannot rebuild the\n"
             "  file, and a later edit anchors on text that is missing. Check with\n"
-            "  `ccjj audit`. Otherwise another session changed the same region, or\n"
-            "  your base moved. Either way: resolve by hand, or commit this path\n"
-            "  wholesale with `--also %s` if nobody else is working on it."
-            % (path, label, old, path, path))
+            "  `ccjj audit`. If the Bash change is yours, `ccjj claim %s` replaces\n"
+            "  your records with the file as it is now. Otherwise another session\n"
+            "  changed the same region, or your base moved: resolve by hand, or\n"
+            "  commit this path wholesale with `--also %s` if nobody else is on it."
+            % (path, label, old, path, path, path))
     if n > 1:
         # Grow the window from SMALL to large and take the first width that
         # isolates one site. Match count is monotonically non-increasing in
@@ -1068,6 +1069,13 @@ def build(records, present, pinned):
                 continue
             ob = old.encode("utf-8", "surrogateescape")
             nb = new.encode("utf-8", "surrogateescape")
+
+            # Edit reports a CRLF file with every line ending normalized to LF
+            # (verified on a real Edit), and writes CRLF back to disk. Replayed
+            # as recorded, a multi-line `old` never matched and died blaming
+            # Bash, and a multi-line `new` put LF lines into a CRLF file.
+            if original is not None and b"\r\n" in content and b"\r" not in original:
+                original, ob, nb = (x.replace(b"\n", b"\r\n") for x in (original, ob, nb))
 
             if original is not None:
                 if already_applied(content, original, ob, nb):
@@ -1411,6 +1419,7 @@ def cmd_commit(args):
                     "  Nothing committed; re-run." % (pinned[:12], parent_id()[:12]), 4)
 
             paths = sorted(set(mine) | set(also))
+            also_wanted = {p: disk_state(p) for p in also}
             before_op = jj("op", "log", "--no-graph", "-T", "id", "--limit", "1",
                            "--ignore-working-copy").stdout.decode().strip()
             c = jj("--config", "merge-tools.ccjj.program=%s" % tool,
@@ -1456,8 +1465,12 @@ def cmd_commit(args):
             # it discards the payload, makes an empty commit and reports success.
             # Without this the journal would then be consumed and the work
             # rendered unattributable.
+            # The file-type check is for an empty payload: `jj file show` prints
+            # nothing for an absent path too, so b"" == b"" passed having
+            # committed nothing.
             bad = [p for p, want in mine.items()
-                   if jj("file", "show", "-r", "@-", fs(p), check=False).stdout != want]
+                   if jj("file", "show", "-r", "@-", fs(p), check=False).stdout != want
+                   or (not want and file_type_at("@-", p) != "file")]
             if bad:
                 rollback(before_op)
                 die("the commit did not take for: %s\n"
@@ -1470,6 +1483,18 @@ def cmd_commit(args):
                     "  uncommitted work is not held hostage by them. (`ccjj disown`\n"
                     "  drops ALL of them, which also strands that other work.)"
                     % (", ".join(bad), before_op[:12], " ".join(bad)))
+
+            # jj selects nothing for an --also path it does not track (ignored,
+            # or a new file over snapshot.max-new-file-size), and the commit
+            # still succeeds when another path made it non-empty.
+            bad = [p for p, want in also_wanted.items() if not at_parent_is(p, want)]
+            if bad:
+                rollback(before_op)
+                die("--also did not take for: %s\n"
+                    "  Rolled back to operation %s; nothing was committed.\n"
+                    "  The path changed during the commit, or jj does not track it\n"
+                    "  (ignored, or a new file over its size limit -- `jj st` warns)."
+                    % (", ".join(bad), before_op[:12]))
 
     # Only now that the content is verified present is the journal retired, and
     # moved out of the live namespace rather than renamed beside it so that
@@ -1497,9 +1522,10 @@ def cmd_commit(args):
         print("committed and verified %d path(s): %s"
               % (len(verified), ", ".join(verified)))
     if also:
-        # Deliberately a separate line: --also paths never go through the byte
-        # verification, so calling them "verified" was a false statement.
-        print("took %d path(s) wholesale, unverified: %s"
+        # A separate line: these are checked against the disk, not against a
+        # replay of this session's edits, so they prove less. The peer check
+        # is what stands between them and another session's bytes.
+        print("took %d path(s) wholesale, matched to the working copy: %s"
               % (len(also), ", ".join(sorted(also))))
     unclaimed, _, _, _ = survey()
     if unclaimed:
@@ -1522,6 +1548,33 @@ def working_copy_bytes(path):
             return fh.read()
     except OSError:
         return None
+
+
+def disk_state(path):
+    """(kind, bytes) of an --also path on disk; kind is None when absent.
+
+    A directory returns "dir", which at_parent_is accepts unchecked: --also on
+    one takes everything under it. A symlink's target is not compared, because
+    `jj file show` returns nothing for a symlink.
+    """
+    full = os.path.join(ROOT, path)
+    if os.path.islink(full):
+        return ("symlink", None)
+    if os.path.isdir(full):
+        return ("dir", None)
+    if not os.path.exists(full):
+        return (None, None)
+    return ("file", working_copy_bytes(path))
+
+
+def at_parent_is(path, want):
+    kind, data = want
+    if kind == "dir":
+        return True
+    at = file_type_at("@-", path) or None
+    if at != kind:
+        return False
+    return kind != "file" or file_bytes("@-", path) == data
 
 
 def file_bytes(rev, path):
@@ -1619,14 +1672,14 @@ def cmd_claim(args):
 
     # Replaying a claimed whole-file blob AND the edits already inside it would
     # apply the edits twice -- silently, for the commonest (insertion-shaped)
-    # Edit, which duplicates a hunk rather than failing to match.
-    mine_here = [r for r in load_records(jdir)
-                 if r.get("path") and rec_rel(r) == path]
-    if mine_here:
-        die("%s already has %d recorded Edit/Write record(s) in this session.\n"
-            "  Claiming the window as well would apply those edits twice.\n"
-            "  Commit them first, then re-run any Bash change to that file."
-            % (path, len(mine_here)), 1)
+    # Edit, which duplicates a hunk rather than failing to match. Refusing that
+    # made a cycle: commit said "claim it", claim said "commit first".
+    earlier = [n for n in record_names(jdir)
+               for r in load_records(jdir, [n])
+               if r.get("path") and rec_rel(r) == path]
+    if earlier:
+        supersede_records(jdir, path, earlier, span, args.dry_run)
+        return
 
     # Narrow to the tightest run of windows that actually changed this path, so
     # the claim carries as little foreign content as it can.
@@ -1658,21 +1711,61 @@ def cmd_claim(args):
         print("(dry run -- nothing recorded)")
         return
 
+    # Sorts at the window's own time, so a later Edit to the same file replays
+    # on top of it rather than underneath.
+    write_claim(jdir, path, original, content, [before_id, after_id],
+                wins[max(hi - 1, 0)]["t_ns"])
+    print("claimed %s (%s..%s) -- it will be included by `commit-mine`."
+          % (path, before_id[:12], after_id[:12]))
+
+
+def write_claim(jdir, path, original, content, window, t_ns, **extra):
     rec = {"schema": SCHEMA, "tool": "Write", "path": os.path.join(ROOT, path),
            "old": None, "new": None, "replace_all": False,
            "content": base64.b64encode(content).decode(),
            "original": base64.b64encode(original).decode() if original is not None else None,
            "encoding": "base64", "claimed": True,
-           "window": [before_id, after_id],
-           "t_ns": wins[max(hi - 1, 0)]["t_ns"]}
-    # Sorts at the window's own time, so a later Edit to the same file replays
-    # on top of it rather than underneath.
-    name = "%019d-%d.json" % (rec["t_ns"], os.getpid())
+           "window": window, "t_ns": t_ns, **extra}
+    name = "%019d-%d.json" % (t_ns, os.getpid())
     fd = os.open(os.path.join(jdir, name), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w") as fh:
         json.dump(rec, fh)
-    print("claimed %s (%s..%s) -- it will be included by `commit-mine`."
-          % (path, before_id[:12], after_id[:12]))
+
+
+def supersede_records(jdir, path, names, span, dry_run):
+    """Replace this session's records for `path` with one whole-file claim.
+
+    The working copy holds the Edits and the Bash change together, and @- is
+    what they all sit on, so "@- to disk" is the exact delta. The caller has
+    already refused a path another session has a stake in, and the printed diff
+    is the check on anything else. The old records go to forgotten/, like
+    `ccjj forget`, before the new one is written: a crash between the two then
+    loses a record the working copy still covers, instead of applying it twice.
+    """
+    if os.path.islink(os.path.join(ROOT, path)):
+        die("%s is now a symlink on disk; refusing to claim it." % path, 1)
+    content = working_copy_bytes(path)
+    if content is None:
+        die("could not read %s from the working copy; nothing claimed." % path, 1)
+    kind = file_type_at("@-", path)
+    if kind not in ("file", ""):
+        die("%s is a %s in @-; refusing to claim it." % (path, kind), 1)
+    original = file_bytes("@-", path) if kind else None
+
+    print(unified(original, content, path), end="")
+    if dry_run:
+        print("(dry run -- nothing recorded; would replace %d record(s))" % len(names))
+        return
+
+    forgotten = os.path.join(jdir, "forgotten")
+    os.makedirs(forgotten, mode=0o700, exist_ok=True)
+    for n in names:
+        os.replace(os.path.join(jdir, n), os.path.join(forgotten, n))
+    # Now, not a window's time: these bytes are the disk as of this moment.
+    write_claim(jdir, path, original, content, list(span), time.time_ns(),
+                superseded=names)
+    print("claimed %s, replacing %d earlier record(s) with the file as it is now.\n"
+          "  It will be included by `commit-mine`." % (path, len(names)))
 
 
 def peers_with_a_stake(path, me, cov=None):

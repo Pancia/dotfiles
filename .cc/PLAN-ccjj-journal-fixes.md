@@ -9,11 +9,16 @@
 | 2. `ccjj forget <path>` | Done, `f3b3153b` |
 | 3. Bug 1 `applied()` | Done, `37fb347f` |
 | 4. Bug 3 existence filter | Done, `37fb347f` (`drop_vanished`) |
-| 5. Byte-verify `--also`; superseding `claim` | **Open.** Review §2.14 and §2.15. The claim/commit cycle still exists |
-| 6. Test work | **Open.** All three items below remain |
+| 5. Byte-verify `--also`; superseding `claim` | Done. The claim/commit cycle is gone |
+| 6. Test work | Done. The claim test is inverted, a new test runs `claim` end to end, and the CRLF test uses the shape the hook really produces |
 
-Also open: the replay-time reconciler and CRLF counterpart from bug 1. Line numbers
-below are from 2026-08-15 and are stale. The rest of this file is the original plan.
+The CRLF replay from bug 1 is done. The replay-time reconciler was not built: on
+2026-11-08 none of the 821 Edit records in live and archived journals had the
+mismatch, new records cannot have it, and `ccjj forget` covers any that do.
+
+Nothing in this plan is open. Line numbers below are from 2026-08-15 and are stale.
+The rest of this file is the original plan. Other ccjj work is listed in
+`.cc/ccjj-review-2026-11-07.md`.
 
 ---
 

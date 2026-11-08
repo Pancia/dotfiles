@@ -77,8 +77,11 @@ unclaimed Bash-window paths.
 Two cases are deliberately **not** `4`, because they are not retryable: a payload
 that jj would not select (`the commit did not take`) exits `1`, since re-running
 reproduces it exactly; and an empty commit exits `2`. `--also` paths are taken
-wholesale and are reported on their own line as **unverified**, because they never
-pass through the byte check.
+wholesale and reported on their own line. After the commit each one must match the
+working copy as it was just before: bytes for a file, presence for a delete, type
+for a symlink. A mismatch rolls the commit back, which catches a path jj does not
+track. It proves less than the byte check on replayed edits, so the peer check is
+still what keeps another session's bytes out.
 
 ## Known limitations
 
@@ -213,10 +216,15 @@ in the loop.
 | Case | Why |
 |---|---|
 | symlink, directory | `jj file show` exits **0 with empty stdout** for both, so claiming would write a zero-byte regular file over it — and the byte verification would compare `b""` to `b""` and pass. Checked at the span *and* re-checked at the narrowed endpoints, which can differ. |
-| a path this session also `Edit`ed | The claimed blob already contains those edits; replaying both applies them twice, which for an insertion-shaped edit **duplicates a hunk silently**. |
 | a path a live session claims — by an `Edit` record **or a Bash window of its own** | Its bytes are in your window. `--force` after reading the diff. |
 | a path that did not exist when the window opened, but does in `@-` | Another session committed it in between; taking the window wholesale would revert them, and the diff shown would not mention it. |
 | delete, rename | Whole-path changes have no hunks to split; routed to `--also`. |
+
+A path this session also `Edit`ed is **not** refused. A claimed blob already holds
+those edits, so replaying both would apply them twice, and refusing made a cycle:
+`commit` said "claim it" and `claim` said "commit first". Instead `claim` shows the
+diff from `@-` to the file as it is now, moves the path's records to `forgotten/`,
+and writes one whole-file record. The same route handles a second claim on a file.
 
 Claimed content is stored **base64**, because it comes off disk rather than out
 of a JSON tool payload and need not be UTF-8. `merge3` short-circuits when the

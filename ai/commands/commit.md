@@ -78,8 +78,10 @@ and claim only what you know you did:
 
 For a deletion or rename made with Bash, skip `claim` and use
 `commit-mine -m "msg" --also <old> --also <new>`. `--also` takes a path
-**wholesale** and is never byte-verified, so use it only for whole-path changes,
-never for a content edit to a file someone else may be working on.
+**wholesale**, so use it only for whole-path changes, never for a content edit
+to a file someone else may be working on. For a file with both your Edits and
+a Bash change, use `ccjj claim`: it replaces the records with the file as it is
+now.
 
 If `@- has moved` appears, something outside `ccjj` committed — `audit` names the
 exact `jj op restore <id>` to undo it. Report that to the user before doing
