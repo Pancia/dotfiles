@@ -1,5 +1,22 @@
 # ccjj: three journal bugs, one plan
 
+## Status (2026-11-08)
+
+| Step in "Suggested order" | State |
+|---|---|
+| Reproduce the `--also` peer leak | Done. Confirmed in `.cc/ccjj-review-2026-11-07.md` §2.2 |
+| 1. `peers_with_a_stake()` | Done, `37fb347f` |
+| 2. `ccjj forget <path>` | Done, `f3b3153b` |
+| 3. Bug 1 `applied()` | Done, `37fb347f` |
+| 4. Bug 3 existence filter | Done, `37fb347f` (`drop_vanished`) |
+| 5. Byte-verify `--also`; superseding `claim` | **Open.** Review §2.14 and §2.15. The claim/commit cycle still exists |
+| 6. Test work | **Open.** All three items below remain |
+
+Also open: the replay-time reconciler and CRLF counterpart from bug 1. Line numbers
+below are from 2026-08-15 and are stale. The rest of this file is the original plan.
+
+---
+
 Three independent bugs in `lib/python/ccjj.py`, all found by hitting them in real
 commits. Each was worked around the same way — **hand-deleting a journal record**
 — which is itself the finding: no CLI removes one, while two `die()` messages

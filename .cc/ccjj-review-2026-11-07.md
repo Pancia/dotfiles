@@ -12,8 +12,8 @@ hooks with payloads shaped like Claude Code's. The one command run against the r
 repo was a read-only `ccjj audit`, which takes a jj snapshot the way every hook
 already does.
 
-The patch is `.cc/ccjj-review-fixes.patch`. It covers `lib/python/ccjj.py` and
-`tests/lib/python/test_ccjj.py`. The repro scripts were in a scratchpad that a reboot
+The patch landed in commit `37fb347f`, and the patch file was then removed. It
+covered `lib/python/ccjj.py` and `tests/lib/python/test_ccjj.py`. The repro scripts were in a scratchpad that a reboot
 erased.
 
 ---
