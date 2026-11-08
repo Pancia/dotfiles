@@ -10,9 +10,9 @@ Three pieces:
 | Piece | File | Role |
 |---|---|---|
 | Prompt section | `rcs/claude-user-claude.md` → `~/.claude/CLAUDE.md` | format rules only, ~34 lines, **constant size** |
-| Roster | `roleplay/roster.tsv` | the cast — 57 characters across 6 universes |
+| Roster | `roleplay/roster.tsv` | the cast — 80 characters across 9 universes — and the odds weights |
 | Hook | `roleplay/bin/roleplay-roll`, wired in `rcs/claude-settings.json` | rolls, and injects the chosen character |
-| Examples | `roleplay/examples.md` | style reference — 235 worked bookends, 4–5 per character. **Not read at runtime** |
+| Examples | `roleplay/examples.md` | style reference — 333 worked bookends, 4–5 per character. **Not read at runtime** |
 
 ---
 
@@ -72,7 +72,8 @@ Delimiter is `|`, surrounding whitespace is trimmed (so columns can be padded fo
 readability), lines starting with `#` are comments, and lines with fewer than 4
 fields are skipped. The 5th field is the character's one famous quote — see
 [Signature lines](#signature-lines) below. Most characters have no such line and
-simply omit it.
+simply omit it. Lines starting with `@` set odds — see
+[Weights](#weights) below.
 
 **Careful with comments:** the leading-`#` rule is the *only* thing keeping a
 comment out of the cast. A comment that documents the format —
@@ -87,8 +88,11 @@ fields, so the field-count guard does not catch it. A test pins this specificall
 | `GHOST IN THE SHELL` | 7 — Major Kusanagi, Batou, Togusa, Tachikoma, Puppet Master, Laughing Man, Kuze Hideo |
 | `GURREN LAGANN` | 8 — Simon, Kamina, Lordgenome (Spiral King), Leeron, Rossiu, Viral, Yoko, Nia |
 | `PANTHEON` | 14 — Ishtar, Ereshkigal, Shiva, Shakti, Prometheus, Hephaestus, Aphrodite, Mars, Odin, Freya, Loki, Lila, Maya, Lakshmi |
-| `ZODIAC` | 12 — the signs |
 | `TAROT` | 10 — 6 major arcana + 4 court cards |
+| `FAVORITES` | 11 rows, 10 characters — Holo (Spice & Wolf), Malfoid (a female Draco Malfoy), Ahri (League of Legends), Tenka Izumo (Chained Soldier), Asuna Ichinose (Blue Archive), Houshou Marine (two rows, with and without innuendo, weighted separately), Charlie Morningstar (Hazbin Hotel), Artoria Pendragon as Saber and as Lancer (Fate), Sayuri Ninomiya (Silver Plan to Redo From JK) |
+| `THE LEGEND OF ZELDA` | 5 — Breath of the Wild, Twilight Princess, Tetra, Sheik, Skyward Sword |
+| `STEEL MAGNOLIAS` | 7 — Maggie Greene, Bonnie MacFarlane, Charlotte La Bouff, Blanche Devereaux, Julia Sugarbaker, Sadie Adler, Cass |
+| `ZODIAC` | 12 — the signs |
 
 `PANTHEON` spans five mythologies rather than one canon, which is why it is not
 called `FATE`. Ishtar and Ereshkigal keep their Fate/Grand Order characterization;
@@ -109,31 +113,59 @@ Two universes are harvested from prompts that already existed in `ai/prompts/`:
 
 ## Two-stage selection
 
-`roleplay-roll` picks a **universe at even odds**, then a character within it.
+`roleplay-roll` picks a **universe**, then a character within it.
 
-Under a flat roll across all 57 entries, the zodiac, tarot and pantheon groups
-would be 63% of everything and any single 40K character would land under 2% of the
-time. Two-stage holds every universe at 1/6 however lopsided the groups get, so
-you can add 40 more tarot cards without burying the Techpriest.
+Under a flat roll across every row, the biggest groups would take most of the
+rolls: with 57 characters, the zodiac, tarot and pantheon groups were 63% of
+everything. Two-stage holds each universe at its own share however lopsided the
+groups get, so you can add 40 more tarot cards without burying the Techpriest.
 
 The cost: **per-character odds are not equal across universes.** A small universe
 over-represents each of its members.
 
-| Universe | Members | Each |
-|---|---|---|
-| `WARHAMMER 40K` | 6 | 2.78% ← most likely |
-| `GHOST IN THE SHELL` | 7 | 2.38% |
-| `GURREN LAGANN` | 8 | 2.08% |
-| `TAROT` | 10 | 1.67% |
-| `ZODIAC` | 12 | 1.39% |
-| `PANTHEON` | 14 | 1.19% ← least likely |
+| Universe | Members | Weight | Each |
+|---|---|---|---|
+| `THE LEGEND OF ZELDA` | 5 | 2 | 3.40% |
+| `FAVORITES` | 11 rows | 3 | 2.04% (Marine Uncut 6.13% ← most likely, Marine 1.02%) |
+| `STEEL MAGNOLIAS` | 7 | 2 | 2.43% |
+| `WARHAMMER 40K` | 6 | 1 | 1.42% |
+| `GHOST IN THE SHELL` | 7 | 1 | 1.22% |
+| `GURREN LAGANN` | 8 | 1 | 1.06% |
+| `PANTHEON` | 14 | 1 | 0.61% |
+| `TAROT` | 10 | 0.5 | 0.43% |
+| `ZODIAC` | 12 | 0.25 | 0.18% ← least likely |
 
-The Techpriest is ~2.3x likelier to appear than Lakshmi. Universe variety was judged
-the thing worth protecting; to flatten the spread, **grow the small universes**
-rather than switching to a flat roll — that spread was 4.7x when `GURREN LAGANN`
-had only 3 members, and adding five closed it to 2.3x. `roleplay-roll --check`
-recomputes this table from the file, so verify against that rather than trusting
-the numbers here.
+`roleplay-roll --check` recomputes this table from the file, so verify against
+that rather than trusting the numbers here.
+
+### Weights
+
+Both stages are weighted. A weight is a share relative to its peers, and anything
+not named weighs 1:
+
+```
+@universe  | ZODIAC | 0        # never rolls
+@universe  | TAROT  | 2        # twice the share of a universe at 1
+@character | Holo   | 0.5      # half the share of her universe's members at 1
+```
+
+(The trailing comments above are for this page. A real weight line has exactly
+three fields.)
+
+- **A `@character` weight divides its universe's share.** It cannot grow it. To see
+  a lone character more often, raise the `@universe` weight instead.
+- **A one-member universe needs a weight.** At 1 it receives a whole universe's
+  share, so that one character would appear as often as all 40K characters combined.
+- **Weight 0 keeps the row.** It takes a character or universe out of rotation and
+  is reversed by editing one number.
+- **A universe whose members are all at 0 is skipped at stage 1.** Otherwise a roll
+  could land on it and find nobody.
+- **A weight of 1 is the old even roll, exactly.** The weighted pick takes one
+  `rand()` and lands where the even pick did, so existing seeds are unaffected. A
+  test pins this.
+- **Bad weight lines fail open.** A malformed value leaves the weight at 1. `--check`
+  reports malformed lines and names that match nothing, because a misspelled name
+  would otherwise have no effect and give no sign of it.
 
 ---
 

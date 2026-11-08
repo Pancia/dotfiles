@@ -12,7 +12,8 @@ prompt. The technical content in between is written normally.
 > 🎭 «Togusa» 🔍 GHOST IN THE SHELL — Case closed. Filed the report.
 ```
 
-57 characters across 6 universes. Costs one line of context per prompt, not 57.
+Dozens of characters across several universes, with adjustable odds. Costs one
+line of context per prompt, not one per character.
 
 This directory is **self-contained**: copy it anywhere and it works. Nothing in it
 reads a path outside itself.
@@ -27,7 +28,7 @@ subsystem is ~2,200 lines and fits in one context.
 
 **Read in this order.** `docs/claude-roleplay.md` first: it is the *why*, and
 almost every decision below has a paragraph there explaining what it cost to
-learn. Then `bin/roleplay-roll` (187 lines, bash + awk). Then skim `examples.md`
+learn. Then `bin/roleplay-roll` (bash + awk). Then skim `examples.md`
 — it is the only artifact that conveys what "in character but *not* quoting the
 famous line" actually reads like, which is the hard part of the design and the
 part a reimplementation usually misses. `README.md` and `tests/` are the least
@@ -54,11 +55,12 @@ interesting here; they serve installers and regressions.
 - **Do not seed the RNG from time-of-day.** awk's `srand()` with no argument has
   one-second resolution, so two prompts sent in the same second get the same
   character. Seed from something per-process (`$RANDOM` here).
-- **Two-stage selection is deliberate.** Universe at even odds, *then* character
-  within it. A flat roll across all entries lets one large group swallow the
+- **Two-stage selection is deliberate.** Universe first, *then* character within
+  it. A flat roll across all entries lets one large group swallow the
   distribution — 63%, in the cast that prompted this. The tradeoff is that
-  per-character odds are then unequal across groups; that is the accepted cost,
-  and the fix is growing small groups rather than flattening the roll.
+  per-character odds are then unequal across groups; that is the accepted cost.
+  `@universe` and `@character` weight lines in the roster tilt either stage, and
+  everything weighs 1 by default.
 - **Ration the famous quote, do not ban it.** An unconditional ban was the first
   design and it was too blunt — the problem was never the quote, only that it
   appeared *every single time*. Roll for it (1/3 default) and tell the model which

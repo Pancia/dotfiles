@@ -202,6 +202,155 @@ def test_every_character_in_a_universe_is_reachable(roster):
 
 
 # --------------------------------------------------------------------------
+# Weights: @universe and @character lines tilt the two stages.
+# --------------------------------------------------------------------------
+
+
+def _names(p, runs):
+    """Roll `runs` times and count the character names that came up."""
+    return Counter(
+        run("--plain", roster=p).stdout.split("»")[0].lstrip("«") for _ in range(runs)
+    )
+
+
+def test_universe_weight_tilts_stage_one(roster):
+    p = roster("@universe | A | 9\nA | Heavy | X | a\nB | Light | Y | b\n")
+    n = _names(p, 200)
+    # Expect ~180 of 200 at 9:1, against ~100 if the weight is ignored.
+    assert 150 < n["Heavy"] < 200, n
+
+
+def test_universe_weight_can_be_fractional(roster):
+    p = roster("@universe | B | 0.25\nA | Heavy | X | a\nB | Light | Y | b\n")
+    n = _names(p, 200)
+    # Expect ~160 of 200 at 1:0.25.
+    assert 130 < n["Heavy"] < 190, n
+
+
+def test_character_weight_tilts_stage_two(roster):
+    p = roster("@character | Heavy | 9\nU | Heavy | X | a\nU | Light | Y | b\n")
+    n = _names(p, 200)
+    assert 150 < n["Heavy"] < 200, n
+
+
+def test_character_weight_does_not_change_the_universe_share(roster):
+    """A member weight divides its universe's share. It must not grow that share."""
+    p = roster(
+        "@character | Heavy | 50\n"
+        "A | Heavy | X | a\nA | Light | Y | b\n"
+        "B | Other | Z | c\n"
+    )
+    n = _names(p, 240)
+    # B is half of all rolls however A divides its half internally.
+    assert 80 < n["Other"] < 160, n
+
+
+def test_universe_weight_zero_never_rolls(roster):
+    p = roster("@universe | B | 0\nA | On | X | a\nB | Off | Y | b\n")
+    assert set(_names(p, 60)) == {"On"}
+
+
+def test_first_listed_universe_at_weight_zero_never_rolls(roster):
+    """A zero at index 1 is the boundary case for the running-total comparison."""
+    p = roster("@universe | A | 0\nA | Off | X | a\nB | On | Y | b\n")
+    assert set(_names(p, 60)) == {"On"}
+
+
+def test_character_weight_zero_never_rolls(roster):
+    p = roster("@character | Off | 0\nU | On | X | a\nU | Off | Y | b\n")
+    assert set(_names(p, 60)) == {"On"}
+
+
+def test_universe_with_every_member_off_is_not_picked(roster):
+    """Stage 1 must skip it, or a roll lands on a universe with nobody to offer."""
+    p = roster("@character | Off | 0\nA | Off | X | a\nB | On | Y | b\n")
+    assert set(_names(p, 60)) == {"On"}
+
+
+def test_every_weight_zero_is_silent(roster):
+    r = run(roster=roster("@universe | A | 0\nA | Off | X | a\n"))
+    assert r.returncode == 0
+    assert r.stdout == ""
+
+
+def test_weight_lines_can_follow_the_rows(roster):
+    p = roster("A | On | X | a\nB | Off | Y | b\n@universe | B | 0\n")
+    assert set(_names(p, 60)) == {"On"}
+
+
+def test_weight_lines_never_become_characters(roster):
+    """A line with enough pipes for a row must still be read as a weight line."""
+    p = roster("@universe | A | 1 | extra | fields\nA | Real | X | a\n")
+    assert set(_names(p, 20)) == {"Real"}
+
+
+def test_explicit_weight_of_one_changes_no_seeded_roll(roster):
+    """Weight 1 must be the old even roll exactly, so old seeds land the same."""
+    rows = "\n".join(f"U{i % 4} | Name{i} | X | traits" for i in range(20)) + "\n"
+    weights = "".join(f"@universe | U{i} | 1\n" for i in range(4))
+    outs = []
+    for text in (rows, weights + rows):
+        p = roster(text)
+        outs.append([run("--plain", roster=p, seed=s).stdout for s in range(1, 25)])
+    assert outs[0] == outs[1]
+    assert len(set(outs[0])) > 1
+
+
+@pytest.mark.parametrize("bad", ["abc", "-1", "", "1e3", "1.2.3"])
+def test_malformed_weight_stays_at_one_and_is_reported(roster, bad):
+    p = roster(f"@universe | A | {bad}\nA | Left | X | a\nB | Right | Y | b\n")
+    assert set(_names(p, 40)) == {"Left", "Right"}
+    assert "BAD WEIGHT LINE" in run("--check", roster=p).stdout
+
+
+def test_unknown_directive_is_reported(roster):
+    p = roster("@group | A | 2\nA | Left | X | a\n")
+    assert "BAD WEIGHT LINE" in run("--check", roster=p).stdout
+
+
+def test_check_reports_a_misspelled_universe(roster):
+    out = run("--check", roster=roster("@universe | NOPE | 2\nA | Left | X | a\n")).stdout
+    assert "UNKNOWN UNIVERSE IN WEIGHT: NOPE" in out
+
+
+def test_check_reports_a_misspelled_character(roster):
+    out = run("--check", roster=roster("@character | Nope | 2\nA | Left | X | a\n")).stdout
+    assert "UNKNOWN CHARACTER IN WEIGHT: Nope" in out
+
+
+def test_check_reports_when_nothing_can_roll(roster):
+    out = run("--check", roster=roster("@universe | A | 0\nA | Off | X | a\n")).stdout
+    assert "NOTHING CAN ROLL" in out
+
+
+def test_check_prints_weighted_odds(roster):
+    p = roster(
+        "@universe | B | 3\n@character | Big | 3\n"
+        "A | Big | X | a\nA | Small | Y | b\nB | Other | Z | c\n"
+    )
+    out = run("--check", roster=p).stdout
+    # A is 1/4 of rolls and B is 3/4. Within A, Big takes 3/4 and Small 1/4.
+    assert "A  (2 members, 25.00% of rolls, weight 1)" in out
+    assert "B  (1 members, 75.00% of rolls, weight 3)" in out
+    assert re.search(r"18\.75%\s+X Big", out), out
+    assert re.search(r" 6\.25%\s+Y Small", out), out
+    assert re.search(r"75\.00%\s+Z Other", out), out
+
+
+def test_list_marks_what_is_off(roster):
+    p = roster("@universe | B | 0\nA | On | X | a\nB | Off | Y | b\n")
+    out = run("--list", roster=p).stdout
+    assert "B  (1)   [off]" in out
+    assert "1 of them are off" in out
+
+
+def test_ampersand_in_a_universe_survives_the_hook(roster):
+    r = run(roster=roster("SPICE & WOLF | Holo | X | apples\n"))
+    payload = json.loads(r.stdout)
+    assert "SPICE & WOLF" in payload["hookSpecificOutput"]["additionalContext"]
+
+
+# --------------------------------------------------------------------------
 # Signature lines: the 5th field, and the ROLEPLAY_CATCHPHRASE roll that
 # decides whether it is unlocked. Replaces an earlier unconditional ban.
 # --------------------------------------------------------------------------
@@ -334,13 +483,21 @@ def test_real_roster_is_valid():
     assert r.returncode == 0
     assert "DUPLICATE" not in r.stdout, r.stdout
     assert "no duplicate names or emoji" in r.stdout
+    for problem in ("UNKNOWN", "BAD WEIGHT", "NOTHING CAN ROLL"):
+        assert problem not in r.stdout, r.stdout
 
 
 def test_real_roster_rows_have_four_or_five_fields():
-    """4 fields, or 5 when the character declares a signature line."""
+    """4 fields, or 5 when the character declares a signature line.
+
+    Weight lines are the exception, and have exactly 3."""
     bad = []
     for n, line in enumerate(REAL_ROSTER.read_text(encoding="utf-8").splitlines(), 1):
         if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line.lstrip().startswith("@"):
+            if len(line.split("|")) != 3:
+                bad.append(f"line {n}: {line!r}")
             continue
         if len(line.split("|")) not in (4, 5):
             bad.append(f"line {n}: {line!r}")

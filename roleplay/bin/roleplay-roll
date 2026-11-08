@@ -5,9 +5,10 @@
 # Runs as a UserPromptSubmit hook on EVERY prompt in EVERY project, and prints a
 # hook JSON envelope naming one character from ../roster.tsv.
 #
-# Two-stage: a UNIVERSE is chosen at even odds, then a character within it. See
-# the header comment in the roster for why, and for the per-character odds that
-# choice implies.
+# Two-stage: a UNIVERSE is chosen by weight, then a character within it, also by
+# weight. Everything weighs 1 unless an @universe or @character line in the roster
+# says otherwise, and weight 0 means it never rolls. See the header comment in the
+# roster for why, and `--check` for the odds that result.
 #
 # THIS SCRIPT FAILS OPEN, DELIBERATELY. Missing roster, unreadable file, broken
 # awk, empty result — every failure path prints nothing and exits 0. A hook that
@@ -99,8 +100,39 @@ fi
 
 awk_prog='
 function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+# Index into w[1..n], chosen in proportion to the weights. Takes exactly one
+# rand(), and with all weights equal it lands where int(rand() * n) + 1 would, so
+# an unweighted roster rolls what it always did for a given seed. A zero weight
+# adds nothing to the running total, so r < c can never select it. The last
+# positive index is the fallback for floating-point rounding at the top end.
+function wpick(w, n,    i, sum, r, c, last) {
+    sum = 0
+    for (i = 1; i <= n; i++) sum += w[i]
+    r = rand() * sum
+    c = 0
+    for (i = 1; i <= n; i++) {
+        if (w[i] <= 0) continue
+        last = i
+        c += w[i]
+        if (r < c) return i
+    }
+    return last
+}
 BEGIN { FS = "|"; srand(seed); nu = 0 }
 /^[ \t]*#/ { next }
+# Weight lines. These can sit anywhere in the file, because they are applied in
+# END. A malformed one leaves the weight at 1 and is reported by --check.
+/^[ \t]*@/ {
+    dk = trim($1); dn = trim($2); dv = trim($3)
+    if (NF != 3 || dn == "" || dv !~ /^[0-9]*\.?[0-9]+$/ ||
+        (dk != "@universe" && dk != "@character"))
+        badw[++nbadw] = trim($0)
+    else if (dk == "@universe")
+        uw[dn] = dv + 0
+    else
+        cw[dn] = dv + 0
+    next
+}
 NF < 4 { next }
 {
     u = trim($1); n = trim($2); e = trim($3); t = trim($4)
@@ -119,18 +151,43 @@ NF < 4 { next }
 END {
     if (nu == 0) exit 1
 
+    # Resolve weights. A universe whose members all weigh 0 has nobody to offer,
+    # so it must weigh 0 at stage 1 too, or a roll could land on it and find no one.
+    wsum = 0
+    for (i = 1; i <= nu; i++) {
+        u = uname[i]
+        usum[u] = 0
+        for (k = 1; k <= count[u]; k++) {
+            cwt[u, k] = (name[u, k] in cw) ? cw[name[u, k]] : 1
+            usum[u] += cwt[u, k]
+        }
+        ueff[i] = (usum[u] > 0) ? ((u in uw) ? uw[u] : 1) : 0
+        wsum += ueff[i]
+    }
+
     if (mode == "list" || mode == "check") {
+        off = 0
         for (i = 1; i <= nu; i++) {
             u = uname[i]
+            uodds = (wsum > 0) ? ueff[i] / wsum : 0
             if (mode == "check")
-                printf "%s  (%d members, %.2f%% each)\n", u, count[u], 100.0 / nu / count[u]
+                printf "%s  (%d members, %.2f%% of rolls, weight %g)\n", u, count[u], 100 * uodds, ueff[i]
             else
-                printf "%s  (%d)\n", u, count[u]
-            for (k = 1; k <= count[u]; k++)
-                printf "    %s %s%s\n", emo[u, k], name[u, k],
-                       (sig[u, k] != "" ? "   [sig: " sig[u, k] "]" : "")
+                printf "%s  (%d)%s\n", u, count[u], (ueff[i] > 0 ? "" : "   [off]")
+            for (k = 1; k <= count[u]; k++) {
+                codds = (usum[u] > 0) ? uodds * cwt[u, k] / usum[u] : 0
+                if (codds == 0) off++
+                wnote = (cwt[u, k] == 0) ? "   [off]" : \
+                        ((cwt[u, k] != 1) ? sprintf("   [weight %g]", cwt[u, k]) : "")
+                snote = (sig[u, k] != "") ? "   [sig: " sig[u, k] "]" : ""
+                if (mode == "check")
+                    printf "    %5.2f%%  %s %s%s%s\n", 100 * codds, emo[u, k], name[u, k], wnote, snote
+                else
+                    printf "    %s %s%s%s\n", emo[u, k], name[u, k], wnote, snote
+            }
         }
         printf "\n%d characters across %d universes\n", total, nu
+        if (off > 0) printf "%d of them are off (weight 0) and never roll\n", off
         if (mode == "check") {
             if (sig_den > 0)
                 printf "signature lines: %d characters have one, unlocked %d/%d of rolls (%.0f%%)\n",
@@ -141,13 +198,23 @@ END {
             for (d in dupname) { printf "DUPLICATE NAME:  %s\n", d; bad = 1 }
             for (d in dupemo)  { printf "DUPLICATE EMOJI: %s\n", d; bad = 1 }
             if (!bad) printf "no duplicate names or emoji\n"
+            # A misspelled name in a weight line would otherwise do nothing, silently.
+            for (x in uw) if (!(x in seen))    printf "UNKNOWN UNIVERSE IN WEIGHT: %s\n", x
+            for (x in cw) if (!(x in namedup)) printf "UNKNOWN CHARACTER IN WEIGHT: %s\n", x
+            for (i = 1; i <= nbadw; i++)       printf "BAD WEIGHT LINE: %s\n", badw[i]
+            if (wsum <= 0) printf "NOTHING CAN ROLL: every weight is 0\n"
         }
         exit 0
     }
 
-    # Stage 1: universe at even odds. Stage 2: character within it.
-    u = uname[int(rand() * nu) + 1]
-    k = int(rand() * count[u]) + 1
+    # Every weight 0 means there is nothing to pick. Fail open, like any other
+    # empty result.
+    if (wsum <= 0) exit 1
+
+    # Stage 1: universe by weight. Stage 2: character within it, by weight.
+    u = uname[wpick(ueff, nu)]
+    for (k = 1; k <= count[u]; k++) mw[k] = cwt[u, k]
+    k = wpick(mw, count[u])
     # The guillemets and em-dash are literal UTF-8 in the program text. awk moves
     # them through as opaque bytes, which is portable; \xNN escapes are not (BSD
     # awk on macOS does not read them the way gawk does).
