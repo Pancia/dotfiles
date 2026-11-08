@@ -101,6 +101,23 @@ class TestAdoption:
         assert banner.exists(), "the marker still appears, for the prompt glyph"
         assert banner.read_text() == "", "but there is nothing worth interrupting for"
 
+    def test_a_banner_survives_later_crashes_that_ran_nothing(self, pane, store):
+        pane("AGAIN-0001").run(["echo one", "sleep 60"])          # dies mid-command
+        pane("AGAIN-0001").run([])                                # restored, dies idle
+        out = pane("AGAIN-0001").run(["exit"])                    # restored again
+
+        banner = store / "pending" / "AGAIN-0001"
+        assert "sleep 60" in banner.read_text()
+        assert "sleep 60" in out, "the second restart still says what the pane was for"
+
+    def test_a_later_crash_with_commands_replaces_the_banner(self, pane, store):
+        pane("NEWER-0001").run(["sleep 61"])
+        pane("NEWER-0001").run(["sleep 62"])
+        pane("NEWER-0001").run(["exit"])
+
+        text = (store / "pending" / "NEWER-0001").read_text()
+        assert "running  sleep 62" in text
+
     def test_a_live_owner_is_not_robbed_of_its_pane(self, pane, store):
         """A nested interactive shell must not adopt the outer shell's record."""
         live = store / "live"

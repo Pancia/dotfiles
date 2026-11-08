@@ -125,7 +125,7 @@ not:
 
 | Moment | Action |
 |---|---|
-| shell start | adopt any orphan (one `ps` confirms its owner is really dead), render its banner, then write a fresh header |
+| shell start | adopt any orphan (one `ps` confirms its owner is really dead), render its banner unless it ran nothing, then write a fresh header |
 | `fish_preexec` | append the command |
 | `fish_postexec` | append its exit status and duration |
 | `cd` | append the directory (called from `chpwd_hook`) |
@@ -140,6 +140,13 @@ median age 38 days).
 
 A shell that finds the orphan's owner still *alive* is a nested shell, and does
 not journal at all — two writers would interleave into one record.
+
+**A shell that ran nothing does not replace the banner.** A restored pane usually
+sits at its prompt until the next crash, so its record is empty. The pane's last
+real banner stays in `pending/` and prints again, and bare `revive`, `revive here`
+and `revive dismiss here` skip the empty ghosts to match it. The banner ends when
+the pane is dismissed, picked up, or dies again with commands in its record.
+`revive prune` drops a banner when it prunes that pane's last ghost with commands.
 
 ### Record format
 

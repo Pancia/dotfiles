@@ -30,15 +30,48 @@ function cache --description 'Manage cached command execution'
     end
 end
 
+# The most any one of the lists below prints before "... N more"
+set -g __chpwd_list_max 5
+
+function _printCapped --description 'Print a list up to the limit, then how many were left out'
+    set -l total (count $argv)
+    test $total -gt 0; or return
+    if test $total -le $__chpwd_list_max
+        printf '%s\n' $argv
+        return
+    end
+    printf '%s\n' $argv[1..$__chpwd_list_max]
+    echo (set_color brblack)"  ... "(math $total - $__chpwd_list_max)" more"(set_color normal)
+end
+
+function _newestFiles --description 'Print paths, most recently modified first'
+    test (count $argv) -gt 0; or return
+    # -d: a directory named PLAN-* is one entry, not a listing of its contents
+    command ls -td -- $argv
+end
+
+function _newestRows --description 'Sort ccs list rows by their last timestamp, newest first'
+    for row in $argv
+        set -l stamp (string replace -rf '.*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}).*' '$1' -- $row)
+        printf '%s\t%s\n' "$stamp" "$row"
+    end | command sort -rs -t \t -k1,1 | command cut -f2-
+end
+
+function showTryOutReminder --description 'Tools worth remembering to try'
+    echo "Remember to try out:"
+    echo "scooter (find&replace), yazi(tui file manager), lazygit"
+    echo "music ai_import, ii(ai_inbox), ..."
+end
+
 function showTodos --description 'Show TODO files if present'
     string match -q '*/dotfiles*' (pwd); and return
     if test -f TODO.wiki
         echo "&> TODO.wiki:"
-        cat TODO.wiki
+        _printCapped (cat TODO.wiki)
     end
     if test -f wiki/TODO.wiki
         echo "&> wiki/TODO.wiki:"
-        cat wiki/TODO.wiki
+        _printCapped (cat wiki/TODO.wiki)
     end
 end
 
@@ -53,15 +86,26 @@ function listVims --description 'List available vim sessions'
     set -l VIMS (vims list)
     if test -n "$VIMS"
         echo "&> VIMS:"
-        echo "$VIMS"
+        _printCapped $VIMS
     end
 end
 
 function listClaudeSessions --description 'List Claude sessions if present'
-    set -l sessions (ccs list)
-    if test -n "$sessions"
-        echo "&> Claude sessions:"
-        printf '%s\n' $sessions
+    set -l lines (ccs list)
+    test -n "$lines"; or return
+    echo "&> Claude sessions:"
+    # ccs prints sections separated by blank lines, each a header and its rows.
+    # The trailing '' closes the last section. Capped per section so a long
+    # Open list cannot push Saved off the end.
+    set -l section
+    for line in $lines ''
+        if test -n "$line"
+            set -a section $line
+        else if test (count $section) -gt 0
+            printf '%s\n' $section[1]
+            _printCapped (_newestRows $section[2..-1])
+            set section
+        end
     end
 end
 
@@ -77,9 +121,7 @@ function showPlans --description 'List PLAN-* files in .cc directory'
     set -l plans (find .cc -maxdepth 1 -name 'PLAN-*' 2>/dev/null)
     if test -n "$plans"
         echo "&> Plans:"
-        for plan in $plans
-            echo "  $plan"
-        end
+        _printCapped "  "(_newestFiles $plans)
     end
 end
 
@@ -87,9 +129,7 @@ function showFixmes --description 'List FIXME* files in .cc directory'
     set -l fixmes (find .cc -maxdepth 1 -name 'FIXME*' 2>/dev/null)
     if test -n "$fixmes"
         echo (set_color --bold d75f5f)"&> FIXMEs:"(set_color normal)
-        for fixme in $fixmes
-            echo "  $fixme"
-        end
+        _printCapped "  "(_newestFiles $fixmes)
     end
 end
 

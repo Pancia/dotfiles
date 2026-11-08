@@ -398,13 +398,25 @@ def collect(include_ccs: bool = True) -> list[Entry]:
     return out
 
 
+def pane_ghost(items: list[Entry], key: str) -> Entry | None:
+    """The ghost that speaks for a pane: its latest death that did anything.
+
+    A restored pane left at its prompt dies again with an empty record, and the
+    banner keeps showing the last real one. `revive` has to agree with it.
+    """
+    mine = [e for e in items if key and e.rec.pane_key == key]   # newest first
+    for e in mine:
+        if e.rec.interesting or e.claude:
+            return e
+    return mine[0] if mine else None
+
+
 def resolve(items: list[Entry], target: str) -> Entry | None:
     """`here` or a 1-based number -> that ghost, with the error printed if none."""
     if target == "here":
-        key = this_pane_key()
-        for e in items:                 # newest first, so a pane that died twice
-            if key and e.rec.pane_key == key:   # comes back as its latest death
-                return e
+        hit = pane_ghost(items, this_pane_key())
+        if hit is not None:
+            return hit
         print("This pane has no ghost.", file=sys.stderr)
         return None
     try:
@@ -450,11 +462,10 @@ def render_list(tty: bool) -> int:
 
 def render_here(key: str, tty: bool) -> int:
     c, dim, off = colour(tty)
-    mine = [e for e in collect() if e.rec.pane_key == key]
-    if not mine:
+    e = pane_ghost(collect(), key)
+    if e is None:
         print("This pane has no ghost.")
         return 1
-    e = mine[0]
     rec = e.rec
     print(f"{c}⟲ Before it died, this pane was in {tilde(rec.cwd) or '?'}{off}")
     if rec.running:
@@ -547,13 +558,23 @@ def cmd_dismiss(target: str) -> int:
 def cmd_prune(days: int) -> int:
     cutoff = time.time() - days * 86400
     gone = 0
+    pruned: set[str] = set()
     for rec in ghosts():
         if rec.mtime < cutoff:
             try:
                 rec.path.unlink()
                 gone += 1
+                if rec.interesting:
+                    pruned.add(rec.pane_key)
             except OSError:
                 pass
+    # A banner outlives idle crashes, so it must not outlive its ghost too
+    left = {rec.pane_key for rec in ghosts() if rec.interesting}
+    for key in pruned - left:
+        try:
+            (root() / "pending" / key).unlink()
+        except OSError:
+            pass
     print(f"Pruned {gone} ghost(s) older than {days} days.")
     return 0
 

@@ -155,9 +155,8 @@ if status is-interactive
 
     # Only show reminders in a real terminal (not hs.execute, etc.)
     if isatty stdout
-        echo "Remember to try out:"
-        echo "scooter (find&replace), yazi(tui file manager), lazygit"
-        echo "music ai_import, ii(ai_inbox), ..."
+        # 1440 minutes: at most once a day, across every pane
+        cache global try-out-reminder 1440 showTryOutReminder
 
         # What this pane was doing before it died. Pre-rendered at adoption, so
         # this is a file test and a read -- no fork, no python.

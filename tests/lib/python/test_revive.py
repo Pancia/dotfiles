@@ -321,6 +321,40 @@ class TestThisPane:
         assert revive.cmd_get("here") == 0
         assert capsys.readouterr().out.split("\t")[1] == "/mine"
 
+    def test_get_here_skips_later_deaths_that_ran_nothing(self, in_pane, capsys):
+        import os
+        write_record(in_pane / "ghosts" / f"{G}-100.rec", {"guid": G, "cwd": "/busy"},
+                     [("cmd", "real work")])
+        idle = write_record(in_pane / "ghosts" / f"{G}-200.rec", {"guid": G, "cwd": "/idle"})
+        os.utime(idle, (time.time() + 60, time.time() + 60))
+        assert revive.cmd_get("here") == 0
+        assert capsys.readouterr().out.split("\t")[1] == "/busy"
+
+    def test_get_here_falls_back_to_an_idle_ghost(self, in_pane, capsys):
+        write_record(in_pane / "ghosts" / f"{G}-200.rec", {"guid": G, "cwd": "/idle"})
+        assert revive.cmd_get("here") == 0
+        assert capsys.readouterr().out.split("\t")[1] == "/idle"
+
+    def test_prune_drops_the_banner_with_the_last_real_ghost(self, in_pane):
+        import os
+        old = write_record(in_pane / "ghosts" / f"{G}-100.rec", {"guid": G}, [("cmd", "x")])
+        os.utime(old, (1000, 1000))
+        write_record(in_pane / "ghosts" / f"{G}-200.rec", {"guid": G})   # recent, idle
+        (in_pane / "pending").mkdir(parents=True, exist_ok=True)
+        (in_pane / "pending" / G).write_text("banner")
+        assert revive.cmd_prune(30) == 0
+        assert not (in_pane / "pending" / G).exists()
+
+    def test_prune_keeps_the_banner_while_a_real_ghost_remains(self, in_pane):
+        import os
+        old = write_record(in_pane / "ghosts" / f"{G}-100.rec", {"guid": G}, [("cmd", "x")])
+        os.utime(old, (1000, 1000))
+        write_record(in_pane / "ghosts" / f"{G}-200.rec", {"guid": G}, [("cmd", "y")])
+        (in_pane / "pending").mkdir(parents=True, exist_ok=True)
+        (in_pane / "pending" / G).write_text("banner")
+        assert revive.cmd_prune(30) == 0
+        assert (in_pane / "pending" / G).exists()
+
     def test_a_tmux_pane_does_not_claim_its_windows_ghost(self, in_pane, monkeypatch, capsys):
         write_record(in_pane / "ghosts" / f"{G}-100.rec", {"guid": G}, [("cmd", "x")])
         monkeypatch.setenv("TMUX", "/tmp/tmux-501/default,1,0")

@@ -230,7 +230,15 @@ function _revive_start --description 'Claim this pane, adopting whatever its pre
             # `exec` keeps both the pid and the start time, so a shell reload is
             # not a crash — roll the record over, but do not announce it.
             if test "$prev_pid" != "$fish_pid"; or test "$prev_lstart" != "$lstart"
-                _revive_render_banner $ghost >$pending
+                # A shell that died without running anything has nothing to add,
+                # so the pane's last real story stands. Overwriting it here is
+                # what lost the banner on every crash after the first.
+                set -l banner (_revive_render_banner $ghost)
+                if test (count $banner) -gt 0
+                    printf '%s\n' $banner >$pending
+                else if not test -s $pending
+                    true >$pending
+                end
             end
         end
     end
