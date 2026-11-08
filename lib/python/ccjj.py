@@ -326,7 +326,10 @@ def stamp_owner(jdir):
     owning `claude` process (verified).
     """
     owner = os.path.join(jdir, ".owner")
-    if os.path.exists(owner):
+    # A dead owner is replaced, because `--resume` keeps the session id in a new
+    # process. Written once, the session read as "ended" while it worked: prune
+    # retired it, and a peer's should-scope took the whole-copy route over it.
+    if os.path.exists(owner) and owner_alive(jdir):
         return
     pid = os.environ.get("CLAUDE_PID", "")
     if not pid:
@@ -468,6 +471,53 @@ def session_is_live(jdir):
     return owner_alive(jdir) and journal_age_hours(jdir) < STALE_HOURS
 
 
+def absorb_same_process(root, sid):
+    """Move this process's journals from earlier session ids into `sid`.
+
+    `/clear` and compaction give the same `claude` process a new session id, and
+    the journal is keyed by that id. The earlier edits then belonged to a "live
+    peer" that was really this session: commit-mine left them out and still
+    reported "verified", audit said all-clear, and --also refused them.
+
+    Moving the files once, at every entry point, keeps the rest of the tool
+    unaware of rotation. Record names are t_ns-pid, so the order survives. A
+    journal past STALE_HOURS stays put: session_is_live already ignores those,
+    and an old abandoned edit must not start blocking commits. Returns the ids
+    taken. Hooks call this too, so it must never raise.
+    """
+    pid = os.environ.get("CLAUDE_PID", "")
+    base = os.path.join(journal_root(), repo_key(root))
+    taken = []
+    if not pid or not sid or not os.path.isdir(base):
+        return taken
+    me = os.path.join(base, sid)
+    for other in sorted(os.listdir(base)):
+        d = os.path.join(base, other)
+        if other in ("archive", sid) or not os.path.isdir(d):
+            continue
+        try:
+            owner_pid = open(os.path.join(d, ".owner")).read().partition("\t")[0]
+            if owner_pid != pid or not session_is_live(d):
+                continue
+            os.makedirs(me, mode=0o700, exist_ok=True)
+            for n in os.listdir(d):
+                if n.endswith(".json") or n.endswith(".win"):
+                    os.replace(os.path.join(d, n), os.path.join(me, n))
+            taken.append(other)
+            # The earlier base wins: drift since then must stay visible.
+            if os.path.exists(os.path.join(d, ".base")):
+                os.replace(os.path.join(d, ".base"), os.path.join(me, ".base"))
+            for n in (".owner", ".last"):
+                if os.path.exists(os.path.join(d, n)):
+                    os.remove(os.path.join(d, n))
+            os.rmdir(d)
+        except OSError:
+            # Another hook in this process got there first, or a late write
+            # from the old id refilled the directory. The next call finishes.
+            pass
+    return taken
+
+
 # ------------------------------------------------------------- record-edit hook
 
 def cmd_record_edit(_args):
@@ -543,6 +593,7 @@ def cmd_record_edit(_args):
 
     d = os.path.join(journal_root(), repo_key(root), sid)
     os.makedirs(d, mode=0o700, exist_ok=True)
+    absorb_same_process(root, sid)
     stamp_owner(d)
     stamp_base(d, root)
     # One file per record, O_EXCL. Appending to a shared .jsonl interleaved
@@ -623,6 +674,7 @@ def cmd_bash_window(_args):
 
     d = os.path.join(journal_root(), repo_key(root), sid)
     os.makedirs(d, mode=0o700, exist_ok=True)
+    absorb_same_process(root, sid)
     stamp_owner(d)
     stamp_base(d, root)
 
@@ -758,6 +810,7 @@ def cmd_nudge(_args):
     if not root:
         return
     me = payload.get("session_id") or ""
+    absorb_same_process(root, me)
 
     base = os.path.join(journal_root(), repo_key(root))
     others = []
@@ -1153,6 +1206,9 @@ def cmd_commit(args):
 
     caller_cwd = os.getcwd()
     jdir = os.path.join(journal_root(), repo_key(ROOT), sid)
+    for old in absorb_same_process(ROOT, sid):
+        print("note: including this process's edits from before /clear or "
+              "compaction (session %s)." % old[:8], file=sys.stderr)
     # The exact set replayed, so retirement can leave anything newer live.
     loaded = record_names(jdir)
     records = load_records(jdir, loaded)
@@ -1506,6 +1562,7 @@ def cmd_claim(args):
     if not sid:
         die("no --session and CLAUDE_SESSION_ID is unset")
     jdir = os.path.join(journal_root(), repo_key(ROOT), sid)
+    absorb_same_process(ROOT, sid)
     wins = load_windows(jdir)
     if not wins:
         hint = ("  No Bash calls have been recorded yet for this session."
@@ -1881,6 +1938,7 @@ def cmd_audit(args):
     if os.path.isdir(os.path.join(os.path.expanduser("~/.local/state/ai-jj-commit"),
                                   repo_key(ROOT) + ".lock")):
         die("a commit is in progress here; retry in a moment.", 4)
+    absorb_same_process(ROOT, args.session or os.environ.get("CLAUDE_SESSION_ID", ""))
     unclaimed, claims, stale, drifted = survey()
     if args.porcelain:
         sys.stdout.write("\0".join(unclaimed))
@@ -2006,6 +2064,7 @@ def cmd_should_scope(args):
     # so its own commit-mine later reports "nothing recorded". Whether anyone
     # ELSE is here is the whole question; with nothing of mine recorded the
     # scoped commit says so (exit 2) and points at `claim`, which is correct.
+    absorb_same_process(ROOT, sid)
     others = other_live_sessions(sid)
     if not others:
         sys.exit(1)
@@ -2080,6 +2139,7 @@ def cmd_forget(args):
         die("no --session and CLAUDE_SESSION_ID is unset")
 
     jdir = os.path.join(journal_root(), repo_key(ROOT), sid)
+    absorb_same_process(ROOT, sid)
     if not os.path.isdir(jdir):
         die("no journal for session %s in this repo" % sid[:8], 2)
 

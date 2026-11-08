@@ -312,6 +312,17 @@ was touched within 12 hours. Both halves are needed: `/clear` and compaction
 rotate the session id inside the *same* process, so a pre-`/clear` journal keeps a
 live owner pid forever and would otherwise claim its paths indefinitely.
 
+**The new id takes over the earlier journal.** Every hook and command first moves
+the records and windows of any live journal owned by this same process into the
+current session (`absorb_same_process`). `commit-mine` prints a note when it does.
+Before this, the earlier edits counted as a live peer: the commit left them out and
+still reported "verified". A journal past the 12-hour limit is left alone, so an
+old abandoned edit cannot start blocking commits.
+
+**`--resume` keeps the session id in a new process**, so `.owner` is rewritten when
+the recorded process has ended. If the id ever does change across a resume, the old
+journal has a dead owner and is not taken over.
+
 Only a live session's claim suppresses a warning. A dead session's paths are
 exactly what you want to hear about — nobody is going to commit them.
 

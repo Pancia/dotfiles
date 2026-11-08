@@ -22,6 +22,13 @@ CCJJ = os.path.join(DOTFILES, "lib", "python", "ccjj.py")
 pytestmark = pytest.mark.skipif(shutil.which("jj") is None, reason="jj not installed")
 
 
+@pytest.fixture(autouse=True)
+def _no_inherited_claude_pid(monkeypatch):
+    """Under Claude Code every hook here would inherit one owner, and the
+    sessions in these tests would merge as one process's rotated ids."""
+    monkeypatch.delenv("CLAUDE_PID", raising=False)
+
+
 class Repo:
     """A throwaway jj repo with an isolated journal."""
 
@@ -2230,3 +2237,96 @@ def test_also_through_a_directory_symlink_commits_the_real_file(repo):
     r = repo.run("commit", "-m", "x", "--also", "ln/f.txt", sid="S1")
     assert r.returncode == 0, r.stderr
     assert repo.show("real/f.txt") == b"new\n"
+
+
+def _two_files(repo):
+    repo.write("f.txt", "f\n")
+    repo.write("g.txt", "g\n")
+    repo.commit("base")
+
+
+def test_commit_after_compaction_includes_the_earlier_edits(repo, monkeypatch):
+    """A new session id in the same process made the earlier edits a "live
+    peer": commit-mine left them out and still reported "verified"."""
+    monkeypatch.setenv("CLAUDE_PID", str(os.getpid()))
+    _two_files(repo)
+    _hook_edit(repo, "PRE", "f.txt", "f", "F")
+    _hook_edit(repo, "POST", "g.txt", "g", "G")
+    assert repo.run("should-scope", "-q", sid="POST").returncode == 1
+    r = repo.run("commit", "-m", "x", sid="POST")
+    assert r.returncode == 0, r.stderr
+    assert repo.show("f.txt") == b"F\n"
+    assert repo.show("g.txt") == b"G\n"
+
+
+def test_commit_straight_after_compaction_finds_the_earlier_edits(repo, monkeypatch):
+    """commit-mine can be the first call under the new id, before any hook."""
+    monkeypatch.setenv("CLAUDE_PID", str(os.getpid()))
+    _two_files(repo)
+    _hook_edit(repo, "PRE", "f.txt", "f", "F")
+    r = repo.run("commit", "-m", "x", sid="POST")
+    assert r.returncode == 0, r.stderr
+    assert "before /clear or compaction" in r.stderr
+    assert repo.show("f.txt") == b"F\n"
+
+
+def test_claim_after_compaction_sees_the_earlier_bash_window(repo, monkeypatch):
+    monkeypatch.setenv("CLAUDE_PID", str(os.getpid()))
+    _two_files(repo)
+    _optin(repo)
+    _bash(repo, "PRE", tuid="t1")
+    repo.write("f.txt", "bash\n")
+    _bash(repo, "PRE", tuid="t2")
+    r = repo.run("claim", "f.txt", sid="POST")
+    assert r.returncode == 0, r.stderr
+    r = repo.run("commit", "-m", "x", sid="POST")
+    assert r.returncode == 0, r.stderr
+    assert repo.show("f.txt") == b"bash\n"
+
+
+def test_another_process_journal_is_not_absorbed(repo, monkeypatch):
+    monkeypatch.setenv("CLAUDE_PID", str(os.getpid()))
+    _two_files(repo)
+    peer = subprocess.Popen(["sleep", "120"])
+    try:
+        lstart = subprocess.run(["ps", "-o", "lstart=", "-p", str(peer.pid)],
+                                capture_output=True, text=True).stdout.strip()
+        repo.record("PEER", "f.txt", old="f", new="F", original="f\n")
+        _owner(repo, "PEER", str(peer.pid), lstart)
+        repo.write("f.txt", "F\n")
+        _hook_edit(repo, "POST", "g.txt", "g", "G")
+        assert repo.run("should-scope", "-q", sid="POST").returncode == 0
+        r = repo.run("commit", "-m", "x", sid="POST")
+        assert r.returncode == 0, r.stderr
+        assert repo.show("f.txt") == b"f\n"          # the peer's work not taken
+    finally:
+        peer.kill()
+        peer.wait()
+
+
+def test_journal_past_the_stale_limit_is_not_absorbed(repo, monkeypatch):
+    """An abandoned edit from long before a /clear must not rejoin commits."""
+    monkeypatch.setenv("CLAUDE_PID", str(os.getpid()))
+    _two_files(repo)
+    _hook_edit(repo, "PRE", "f.txt", "f", "F")
+    d = os.path.join(repo.journal, repo.root.replace("/", "_"), "PRE")
+    old = time.time() - 13 * 3600
+    for n in os.listdir(d):
+        os.utime(os.path.join(d, n), (old, old))
+    _hook_edit(repo, "POST", "g.txt", "g", "G")
+    r = repo.run("commit", "-m", "x", sid="POST")
+    assert r.returncode == 0, r.stderr
+    assert repo.show("f.txt") == b"f\n"
+    assert repo.show("g.txt") == b"G\n"
+
+
+def test_resumed_session_replaces_its_dead_owner(repo, monkeypatch):
+    """--resume keeps the session id in a new process. A written-once .owner
+    read as "ended" while the session worked."""
+    monkeypatch.setenv("CLAUDE_PID", str(os.getpid()))
+    _two_files(repo)
+    _hook_edit(repo, "S1", "f.txt", "f", "F")
+    _owner(repo, "S1", "1", "Thu Jan  1 00:00:00 1970")
+    _hook_edit(repo, "S1", "g.txt", "g", "G")
+    owner = os.path.join(repo.journal, repo.root.replace("/", "_"), "S1", ".owner")
+    assert open(owner).read().startswith(str(os.getpid()) + "\t")
