@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# shadow-hang-trace — record what blocks the Shadow PC client when it stops taking input.
+#
+# macOS logs "slow hid response (N)" (via spindump) when an app is slow to take
+# keyboard/mouse events. This keeps a rolling Instruments recording of the Shadow
+# client (Time Profiler + Hangs + Thread State Trace) and saves the last $WINDOW of
+# it a moment after each such stall, so the trace contains the stall.
+#
+#   shadow-hang-trace            # start before or during a Shadow session; ends when Shadow quits
+#   MAX=3 WINDOW=30s shadow-hang-trace
+#
+# Output: ~/.local/state/shadow-hangs/  (stall-*.trace, stalls.log)
+# Ctrl-C saves the current window as manual-*.trace.
+# Each saved trace is ~0.5 GB. Open one with: open <file>.trace
+set -u
+
+PROC="${PROC:-ShadowPCDisplay}"
+OUT="${SHADOW_HANG_DIR:-$HOME/.local/state/shadow-hangs}"
+WINDOW="${WINDOW:-20s}"
+MAX="${MAX:-5}"
+# Test hook: override the log predicate (e.g. to match `logger` output).
+PRED="${PRED:-process == \"spindump\" AND eventMessage CONTAINS \"$PROC [\" AND eventMessage CONTAINS \"slow hid response\"}"
+
+mkdir -p "$OUT"
+STALLS="$OUT/stalls.log"
+
+echo "waiting for $PROC ..."
+until pid=$(pgrep -x "$PROC" | head -1); do sleep 2; done
+echo "$PROC pid $pid — recording (window $WINDOW, up to $MAX captures). Output: $OUT"
+
+xpid="" xstart=0 xfile="" n=0 lpid="" wpid="" fifo=""
+
+start_trace() {
+  xfile="$OUT/.live-$$.trace"
+  rm -rf "$xfile"
+  xcrun xctrace record --template 'Time Profiler' --instrument 'Hangs' \
+    --instrument 'Thread State Trace' --attach "$pid" --window "$WINDOW" \
+    --output "$xfile" >"$OUT/xctrace.log" 2>&1 &
+  xpid=$! xstart=$SECONDS
+}
+
+stop_trace() { # $1 = name to keep it under; empty = discard
+  [ -n "$xpid" ] || return 0
+  kill -INT "$xpid" 2>/dev/null
+  wait "$xpid" 2>/dev/null
+  xpid=""
+  if [ -n "${1:-}" ] && [ -e "$xfile" ]; then
+    mv "$xfile" "$OUT/$1.trace" && echo "saved $OUT/$1.trace"
+  else
+    rm -rf "$xfile"
+  fi
+}
+
+cleanup() {
+  trap - INT TERM EXIT
+  stop_trace "${1:-}"
+  [ -n "$lpid" ] && kill "$lpid" 2>/dev/null
+  [ -n "$wpid" ] && kill "$wpid" 2>/dev/null
+  [ -n "$fifo" ] && rm -f "$fifo"
+}
+trap 'cleanup "manual-$(date +%Y%m%d-%H%M%S)"; exit 130' INT TERM
+trap 'cleanup ""' EXIT
+
+fifo=$(mktemp -u "${TMPDIR:-/tmp}/shadow-hang.XXXXXX")
+mkfifo "$fifo"
+/usr/bin/log stream --style compact --predicate "$PRED" >"$fifo" 2>/dev/null &
+lpid=$!
+# End the run when the client quits.
+( while kill -0 "$pid" 2>/dev/null; do sleep 5; done; kill "$lpid" 2>/dev/null ) &
+wpid=$!
+
+start_trace
+while IFS= read -r line; do
+  case "$line" in *"slow hid response ("*) ;; *) continue ;; esac
+  when=$(awk '{print $1, $2}' <<<"$line")
+  dur=$(sed -nE 's/.*slow hid response \(([0-9.]+)\).*/\1/p' <<<"$line")
+  echo "$when $dur" >>"$STALLS"
+  echo "stall $when ${dur}s"
+  # Skip stalls in the first seconds of a recording: the window would not cover them.
+  if [ -n "$xpid" ] && (( SECONDS - xstart >= 8 )); then
+    sleep 2 # let the window run past the end of the stall
+    n=$((n + 1))
+    stop_trace "stall-$(date +%Y%m%d-%H%M%S)-${dur}s"
+    if (( n < MAX )); then start_trace; else echo "reached MAX=$MAX captures; still logging stalls"; fi
+  fi
+done <"$fifo"
+
+echo "$PROC exited — done. Stalls logged in $STALLS"
