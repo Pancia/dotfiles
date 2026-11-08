@@ -162,6 +162,20 @@ Bash edits are allowed. After one, do what those hooks would have done:
   `~/dotfiles`. `rcs-sync` repairs a split link after each Bash call and
   reports it. Tell me about any "adopted" or "CONFLICT" line.
 
+## Where to put work files
+
+macOS empties `/private/tmp` at reboot, and the session scratchpad is inside it.
+This rule overrides the default that sends all intermediate output to the
+scratchpad.
+
+- **Keep in `.cc/` at the project root:** anything that I or a later session may
+  want. Examples are reports, reviews, patches, plans and useful reproduction
+  scripts. Create `.cc/` if it does not exist. Use a descriptive file name.
+- **Keep in the scratchpad:** only files that cost nothing to lose. Examples are
+  throwaway test repos, copies of source trees and raw command output.
+- **Subagents:** give the `.cc/` path in the brief for any report or patch.
+- `.cc/` is tracked, so do not put large or generated trees there.
+
 ## Web Search
 
 Prefer the built-in WebSearch tool for web searches. Kagi search (`mcp__kagi__kagi_search_fetch`) is also available as an alternative.

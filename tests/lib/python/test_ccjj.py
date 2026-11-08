@@ -991,13 +991,19 @@ def test_should_scope_accepts_when_another_session_is_live(repo):
     assert repo.run("should-scope", "-q", sid="S1").returncode == 0
 
 
-def test_should_scope_declines_with_no_records_of_my_own(repo):
+def test_should_scope_accepts_with_no_records_of_my_own(repo):
+    """A session with nothing recorded (Bash-only work, or none) must still be
+    scoped while a peer is live. Declining sent ai_jj_commit and /cc:commit
+    down the whole-copy path: `jj commit` took the peer's unfinished edit under
+    this session's message, and `retire-all` archived the peer's journal."""
     repo.write("f.txt", "a\n")
     repo.commit("base")
     repo.record("OTHER", "f.txt", old="a", new="A", original="a\n")
     _owner(repo, "OTHER", str(os.getpid()), _my_lstart())
 
-    assert repo.run("should-scope", "-q", sid="NEW").returncode == 1
+    assert repo.run("should-scope", "-q", sid="NEW").returncode == 0
+    r = repo.run("commit", "-m", "x", sid="NEW")
+    assert r.returncode == 2 and "nothing recorded" in r.stderr
 
 
 def test_retire_all_clears_every_journal(repo):
@@ -1659,7 +1665,7 @@ def test_also_refuses_a_path_a_live_session_is_working_on(repo):
 
     r = repo.run("commit", "-m", "mine plus g", "--also", "g.txt", sid="S1")
     assert r.returncode == 1, r.stdout
-    assert "live session is" in r.stderr
+    assert "another session has" in r.stderr and "S2 (live)" in r.stderr
     assert repo.show("g.txt") == b"g\n"                  # their work not taken
 
     ok = repo.run("commit", "-m", "mine plus g", "--also", "g.txt", sid="S1",
@@ -1946,3 +1952,228 @@ def test_forget_stops_a_deleted_throwaway_being_resurrected(repo):
     assert ok.returncode == 0, ok.stderr
     assert repo.show("keep.txt") == b"KEEP\n"
     assert repo.show("probe.py") is None
+
+
+# ------------------------------------------- review 2026-11-07: regressions
+#
+# Each of these was reproduced against the unpatched tool first. Every
+# hook payload below is the shape Claude Code sends, so no test asserts on a
+# record the real hook cannot produce.
+
+def _hook_edit(repo, sid, rel, old, new, req_old=None, req_new=None):
+    """Apply an Edit on disk and fire the real record-edit hook.
+
+    req_old/req_new are what the agent ASKED for, when Edit normalized it."""
+    p = os.path.join(repo.root, rel)
+    orig = open(p).read()
+    open(p, "w").write(orig.replace(old, new, 1))
+    payload = json.dumps({
+        "tool_name": "Edit", "session_id": sid, "tool_use_id": "t",
+        "tool_input": {"file_path": p, "old_string": req_old or old,
+                       "new_string": req_new or new},
+        "tool_response": {"oldString": old, "newString": new,
+                          "originalFile": orig, "replaceAll": False,
+                          "structuredPatch": [{"lines": ["x"]}]}})
+    subprocess.run([sys.executable, CCJJ, "record-edit"], input=payload,
+                   capture_output=True, text=True,
+                   env={**os.environ, "CC_JJ_JOURNAL": repo.journal})
+
+
+def _hook_write(repo, sid, rel, content):
+    p = os.path.join(repo.root, rel)
+    orig = open(p).read() if os.path.exists(p) else None
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    open(p, "w").write(content)
+    payload = json.dumps({
+        "tool_name": "Write", "session_id": sid, "tool_use_id": "t",
+        "tool_input": {"file_path": p, "content": content},
+        "tool_response": {"type": "create" if orig is None else "update",
+                          "content": content, "originalFile": orig,
+                          "structuredPatch": []}})
+    subprocess.run([sys.executable, CCJJ, "record-edit"], input=payload,
+                   capture_output=True, text=True,
+                   env={**os.environ, "CC_JJ_JOURNAL": repo.journal})
+
+
+def _ended(repo, sid):
+    _owner(repo, sid, "99999999", "Mon Jan  1 00:00:00 2001")
+
+
+def test_record_takes_the_applied_strings_not_the_requested_ones(repo):
+    """Edit normalizes the request (curly quotes) before applying it, so
+    tool_input.old_string is not in originalFile and the record was poisoned:
+    "journal record ... is inconsistent", the whole commit refused."""
+    repo.write("q.txt", 'say "hi"\n')
+    repo.commit("base")
+    _hook_edit(repo, "S1", "q.txt", 'say "hi"', 'say "HI"',
+               req_old="say “hi”", req_new="say “HI”")
+    r = repo.run("commit", "-m", "q", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert repo.show("q.txt") == b'say "HI"\n'
+
+
+def test_also_refuses_a_bash_only_peers_path(repo):
+    """--also checked live peers' RECORDS only; a Bash-only peer's bytes were
+    committed under your message, exit 0, while `claim` refused by name."""
+    _optin(repo)
+    repo.write("peer.txt", "p\n")
+    repo.write("mine.txt", "m\n")
+    repo.commit("base")
+    _bash(repo, "S1")
+    _bash(repo, "S2")
+    repo.write("peer.txt", "p-S2-UNFINISHED\n")
+    _bash(repo, "S2")
+    _bash(repo, "S1")
+    _hook_edit(repo, "S1", "mine.txt", "m", "M")
+    r = repo.run("commit", "-m", "x", "--also", "peer.txt", "--no-claim", sid="S1")
+    assert r.returncode == 1, r.stdout
+    assert "S2 (live)" in r.stderr
+    assert repo.show("peer.txt") == b"p\n"
+
+
+def test_also_refuses_an_ended_peers_uncommitted_path(repo):
+    repo.write("peer.txt", "p\n")
+    repo.write("mine.txt", "m\n")
+    repo.commit("base")
+    _hook_edit(repo, "S2", "peer.txt", "p", "p-S2-UNFINISHED")
+    _ended(repo, "S2")
+    _hook_edit(repo, "S1", "mine.txt", "m", "M")
+    r = repo.run("commit", "-m", "x", "--also", "peer.txt", sid="S1")
+    assert r.returncode == 1, r.stdout
+    assert "S2 (ended)" in r.stderr
+    assert repo.show("peer.txt") == b"p\n"
+
+
+def test_claim_checks_peers_before_redirecting_a_delete_to_also(repo):
+    """The delete/rename redirect sat ABOVE claim's peer check, so for exactly
+    the operations --also exists for, claim printed an --also command that
+    nothing had checked -- and following it deleted a live peer's work."""
+    _optin(repo)
+    repo.write("peer.txt", "p\n")
+    repo.commit("base")
+    _bash(repo, "S1")
+    _bash(repo, "S2")
+    repo.write("peer.txt", "p-S2-UNFINISHED\n")
+    _bash(repo, "S2")
+    os.remove(os.path.join(repo.root, "peer.txt"))
+    _bash(repo, "S1")
+    r = repo.run("claim", "peer.txt", sid="S1")
+    assert r.returncode == 1
+    assert "also claimed by" in r.stderr and "--also" not in r.stderr
+
+
+def test_also_names_a_symlink_not_its_target(repo):
+    """rel() realpaths, so `--also link` became `--also target.txt`: exit 0,
+    the link never committed."""
+    repo.write("target.txt", "t\n")
+    repo.write("mine.txt", "m\n")
+    repo.commit("base")
+    os.symlink("target.txt", os.path.join(repo.root, "link"))
+    _hook_edit(repo, "S1", "mine.txt", "m", "M")
+    r = repo.run("commit", "-m", "x", "--also", "link", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert "link" in repo.jj_("file", "list", "-r", "@-").stdout.split()
+
+
+def test_edit_then_bash_delete_does_not_resurrect_the_file(repo):
+    """Edit, then `rm`: exit 0, "committed and verified", and the deleted file
+    put back into history."""
+    repo.write("gone.txt", "one\ntwo\n")
+    repo.write("keep.txt", "k\n")
+    repo.commit("base")
+    _hook_edit(repo, "S1", "gone.txt", "one", "ONE")
+    _hook_edit(repo, "S1", "keep.txt", "k", "K")
+    os.remove(os.path.join(repo.root, "gone.txt"))
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode == 1
+    assert "--also gone.txt" in r.stderr and "ccjj forget gone.txt" in r.stderr
+    assert repo.show("gone.txt") == b"one\ntwo\n"          # nothing committed
+    ok = repo.run("commit", "-m", "x", "--also", "gone.txt", sid="S1")
+    assert ok.returncode == 0, ok.stderr
+    assert "gone.txt" not in repo.jj_("file", "list", "-r", "@-").stdout.split()
+
+
+def test_write_then_delete_of_a_new_file_is_skipped_not_wedged(repo):
+    repo.write("keep.txt", "k\n")
+    repo.commit("base")
+    _hook_edit(repo, "S1", "keep.txt", "k", "K")
+    _hook_write(repo, "S1", "tmp.txt", "throwaway\n")
+    _hook_write(repo, "S1", "empty.txt", "")
+    os.remove(os.path.join(repo.root, "tmp.txt"))
+    os.remove(os.path.join(repo.root, "empty.txt"))
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert "empty.txt" not in r.stdout          # was "committed and verified"
+    files = repo.jj_("file", "list", "-r", "@-").stdout.split()
+    assert "tmp.txt" not in files and "empty.txt" not in files
+    assert repo.show("keep.txt") == b"K\n"
+
+
+def test_recreated_new_file_does_not_commit_the_superseded_version(repo):
+    """Write v1, rm, re-create v2 via Bash: v1 was committed over v2, exit 0."""
+    repo.write("keep.txt", "k\n")
+    repo.commit("base")
+    _hook_write(repo, "S1", "probe.txt", "SECRET v1\n")
+    os.remove(os.path.join(repo.root, "probe.txt"))
+    repo.write("probe.txt", "v2 via bash\n")
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode == 1
+    assert "--also probe.txt" in r.stderr
+    assert "probe.txt" not in repo.jj_("file", "list", "-r", "@-").stdout.split()
+
+
+def test_bash_created_then_edited_file_names_the_way_out(repo):
+    """Heredoc then Edit -- a common agent shape -- refused the whole commit
+    with only a 1MiB explanation, while `claim` refused too."""
+    repo.write("keep.txt", "k\n")
+    repo.commit("base")
+    repo.write("new.sh", "echo hi\n")                       # cat > new.sh <<EOF
+    _hook_edit(repo, "S1", "new.sh", "echo hi", "echo hello")
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode == 1
+    assert "--also new.sh" in r.stderr and "heredoc" in r.stderr
+    ok = repo.run("commit", "-m", "x", "--also", "new.sh", sid="S1")
+    assert ok.returncode == 0, ok.stderr
+    assert repo.show("new.sh") == b"echo hello\n"
+
+
+def test_commit_does_not_erase_another_sessions_drift(repo):
+    """refresh_bases rewrote every .base, so after a stray whole-copy commit
+    swept S2's work, S1's next commit-mine made audit forget it happened."""
+    repo.write("a.txt", "a\n")
+    repo.write("b.txt", "b\n")
+    repo.commit("base")
+    _hook_edit(repo, "S2", "b.txt", "b", "B")
+    repo.commit("stray whole-copy commit")
+    _hook_edit(repo, "S1", "a.txt", "a", "A")
+    assert "has moved" in repo.run("audit", sid="S1").stderr
+    assert repo.run("commit", "-m", "x", sid="S1").returncode == 0
+    assert "has moved" in repo.run("audit", sid="S1").stderr
+
+
+def test_an_edit_recorded_during_the_commit_stays_live(repo, tmp_path):
+    """retire() moved the whole directory, so a record written between
+    load_records() and retire() was archived without being committed."""
+    repo.write("a.txt", "a\n")
+    repo.write("b.txt", "b\n")
+    repo.commit("base")
+    _hook_edit(repo, "S1", "a.txt", "a", "A")
+    stub = tmp_path / "slow"
+    stub.mkdir()
+    (stub / "jj").write_text(
+        '#!/bin/bash\nfor a in "$@"; do [ "$a" = commit ] && sleep 2 && break; done\n'
+        'exec %s "$@"\n' % shutil.which("jj"))
+    (stub / "jj").chmod(0o755)
+    p = subprocess.Popen(
+        [sys.executable, CCJJ, "commit", "-m", "x"], cwd=repo.root,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        env={**os.environ, "CC_JJ_JOURNAL": repo.journal, "CLAUDE_SESSION_ID": "S1",
+             "PATH": str(stub) + os.pathsep + os.environ["PATH"]})
+    time.sleep(1.0)
+    _hook_edit(repo, "S1", "b.txt", "b", "B")              # a subagent, mid-commit
+    _, err = p.communicate()
+    assert p.returncode == 0, err
+    assert repo.show("b.txt") == b"b\n"
+    r = repo.run("commit", "-m", "y", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert repo.show("b.txt") == b"B\n"

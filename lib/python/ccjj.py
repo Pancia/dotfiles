@@ -28,6 +28,7 @@ import datetime
 import fcntl
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -378,11 +379,17 @@ def read_base(jdir):
         return ""
 
 
-def refresh_bases(new_base):
-    """After ccjj itself moves @-, re-baseline every live session.
+def refresh_bases(new_base, old_base=None):
+    """After ccjj itself moves @-, re-baseline the sessions that were current.
 
     Without this, our own commit would look to every other session like someone
     else moving the base underneath them.
+
+    With old_base, ONLY sessions whose base was old_base move. Rewriting every
+    .base unconditionally erased drift that had already happened: a stray
+    `jj commit` sweeps session B's work, `ccjj audit` correctly reports B's base
+    moved -- and the next commit-mine from A overwrote B's .base and audit went
+    back to "nothing unclaimed", the evidence gone. Reproduced.
     """
     base = os.path.join(journal_root(), repo_key(ROOT))
     if not os.path.isdir(base):
@@ -390,6 +397,8 @@ def refresh_bases(new_base):
     for sid in os.listdir(base):
         d = os.path.join(base, sid)
         if sid == "archive" or not os.path.isdir(d):
+            continue
+        if old_base is not None and read_base(d) not in ("", old_base):
             continue
         try:
             with open(os.path.join(d, ".base"), "w") as fh:
@@ -504,15 +513,27 @@ def cmd_record_edit(_args):
     if rp == ".." or rp.startswith(".." + os.sep) or os.path.isabs(rp):
         rp = None   # a genuine escape: a leaf symlink out of the repo
 
+    def applied(res_key, in_key):
+        # What the tool APPLIED, not what it was asked for. Edit normalizes the
+        # request against the file before applying it (curly quotes, escapes),
+        # so tool_input.old_string need not occur in originalFile at all -- and
+        # anchored_replace then dies "inconsistent record" on a perfectly good
+        # edit. tool_response echoes the applied strings, which are substrings
+        # of originalFile by construction (657/657 in the transcripts on disk;
+        # the request form failed 1/657). Fall back for payloads without them.
+        v = tres.get(res_key)
+        return v if isinstance(v, str) else tin.get(in_key)
+
+    ra = tres.get("replaceAll")
     record = {
         "schema": SCHEMA,
         "tool": payload["tool_name"],
         "path": path,
         "rel": rp,
-        "old": tin.get("old_string"),
-        "new": tin.get("new_string"),
-        "content": tin.get("content"),
-        "replace_all": bool(tin.get("replace_all")),
+        "old": applied("oldString", "old_string"),
+        "new": applied("newString", "new_string"),
+        "content": applied("content", "content"),
+        "replace_all": ra if isinstance(ra, bool) else bool(tin.get("replace_all")),
         # The text this edit was actually applied to. Without it the replay can
         # only match by first occurrence, which patched the wrong site whenever
         # the committed file held the old text more than once.
@@ -781,11 +802,18 @@ def cmd_nudge(_args):
 
 # ------------------------------------------------------------------- rebuilding
 
-def load_records(jdir):
+def record_names(jdir):
+    try:
+        return sorted(n for n in os.listdir(jdir) if n.endswith(".json"))
+    except OSError:
+        return []
+
+
+def load_records(jdir, names=None):
     if not os.path.isdir(jdir):
         return []
     out = []
-    for name in sorted(os.listdir(jdir)):
+    for name in (record_names(jdir) if names is None else names):
         if not name.endswith(".json"):
             continue
         fp = os.path.join(jdir, name)
@@ -852,10 +880,21 @@ def anchored_replace(target, original, old, new, path, label):
     n = target.count(old)
     if n == 0:
         if not target:
-            die("%s is not in @- at all, so there is nothing to apply your edit to.\n"
-                "  If the file is larger than `snapshot.max-new-file-size` (1MiB by\n"
-                "  default) jj refused to snapshot it -- `jj st` shows the warning.\n"
-                "  Commit it another way, or raise the limit." % path)
+            # The 1MiB explanation used to be the ONLY one offered, and it is the
+            # rare case. The common one: the agent created the file with a Bash
+            # heredoc (or a peer created it with Write) and then Edited it, so no
+            # record of THIS session holds the file's creation. `claim` refuses
+            # (the path has records) and this refusal took every other path in
+            # the commit down with it, naming no way out.
+            die("%s is not in @- and no record of yours creates it, so there is\n"
+                "  nothing to apply your edit to. Usually the file was created\n"
+                "  outside Edit/Write -- a Bash heredoc, `cp`, a generator -- or by\n"
+                "  another session's Write, and then edited here.\n"
+                "  If the whole file is yours:  commit-mine -m \"msg\" --also %s\n"
+                "  If another session made it: let it commit first.\n"
+                "  (Rarely: the file exceeds `snapshot.max-new-file-size`, 1MiB by\n"
+                "  default, and jj refused to snapshot it -- `jj st` warns.)"
+                % (path, path))
         die("conflict: cannot place your edit to %s (%s).\n"
             "  The reconstruction does not contain %r.\n"
             "  Most often this means YOU also changed %s through Bash -- a\n"
@@ -1018,6 +1057,68 @@ def build(records, present, pinned):
     return mine
 
 
+def drop_vanished(records, present):
+    """Reconcile records with the filesystem BEFORE build(), which never looks.
+
+    The journal is append-only and a Bash `rm` is journaled nowhere, so nothing
+    subtracts a record whose file is gone. build() seeds only from @-, so:
+      Write + rm, path new     -> payload for a file that no longer exists; jj
+                                  selects nothing; "the commit did not take",
+                                  which blames something else and wedges the
+                                  WHOLE session commit (an empty Write instead
+                                  "verified" a file that is not in the commit)
+      Edit + rm, path in @-    -> exit 0, "committed and verified", and the
+                                  deleted file RESURRECTED in history
+    Ordering matters: this runs on the records build() will replay, after
+    --also has removed its paths, so `--also <deleted path>` still works.
+    """
+    out, vanished = [], {}
+    for r in records:
+        p = r.get("path") and rec_rel(r)
+        if p and not os.path.lexists(os.path.join(ROOT, p)):
+            vanished.setdefault(p, []).append(r)
+            continue
+        out.append(r)
+    resurrect = sorted(p for p in vanished if p in present)
+    if resurrect:
+        die("%s: deleted from the working copy after you edited it, outside\n"
+            "  Edit/Write. Replaying your edits would put the file back.\n"
+            "  To commit the deletion:      commit-mine -m \"msg\" --also %s\n"
+            "  To leave it uncommitted:     ccjj forget %s"
+            % (", ".join(resurrect), " --also ".join(resurrect),
+               " ".join(resurrect)), 1)
+    for p in sorted(vanished):
+        print("note: %s was created and then deleted in this session; its %d\n"
+              "  record(s) are skipped." % (p, len(vanished[p])), file=sys.stderr)
+    return out
+
+
+def check_new_files_against_disk(mine, present, sid):
+    """A path new in this session must reconstruct to what is on disk.
+
+    Write v1, `rm`, re-create v2 through Bash: the v1 record still replays,
+    and v1 -- a deleted probe, a scratch credential -- was committed over what
+    is on disk, exit 0, "verified", because verification checks transcription,
+    not correspondence to reality. For a path absent from @- the only
+    legitimate difference is a PEER editing the new file, which leaves a stake.
+    Paths already in @- are left to the Bash-window check below.
+    """
+    bad = []
+    for p, want in mine.items():
+        if p in present:
+            continue
+        have = working_copy_bytes(p)
+        if have is not None and have != want and not peers_with_a_stake(p, sid):
+            bad.append(p)
+    if bad:
+        die("%s: new in this session, but what is on disk now is not what your\n"
+            "  Edit/Write records rebuild -- it was rewritten or re-created\n"
+            "  outside them. Committing would commit the recorded version.\n"
+            "  To take the file exactly as it is now:  --also %s\n"
+            "  To leave it out:                        ccjj forget %s"
+            % (", ".join(bad), " --also ".join(bad), " ".join(bad)), 1)
+
+
 def parent_exec_bits(paths):
     """Executable bit for each path as it exists in @-.
 
@@ -1053,13 +1154,25 @@ def cmd_commit(args):
 
     caller_cwd = os.getcwd()
     jdir = os.path.join(journal_root(), repo_key(ROOT), sid)
-    records = load_records(jdir)
+    # The exact set replayed, so retirement can leave anything newer live.
+    loaded = record_names(jdir)
+    records = load_records(jdir, loaded)
     if not records and not args.also:
-        die("nothing recorded for session %s" % sid, 2)
+        hint = ""
+        if load_windows(jdir):
+            hint = ("\n  This session has Bash windows, though: `ccjj audit` lists what\n"
+                    "  they changed, and `ccjj claim <path>` takes one as yours.")
+        die("nothing recorded for session %s%s" % (sid, hint), 2)
 
     # --also is spelled by whoever is standing in some directory, so it resolves
     # against that, not the repo root.
-    also = [rel(os.path.join(caller_cwd, p)) for p in args.also]
+    #
+    # rel_literal, not rel: --also names a PATH, and for a symlink that is the
+    # link itself. rel() realpaths, so `--also link` silently became
+    # `--also target.txt` -- exit 0, the link left uncommitted, and the target
+    # (possibly carrying a peer's edit) taken wholesale instead. A link whose
+    # target is outside the repo died "outside the repo" instead.
+    also = [rel_literal(os.path.join(caller_cwd, p)) for p in args.also]
 
     # Outermost: excludes ai_jj_commit / `g run ci`, which use this same lockdir.
     acquire_shared_lock()
@@ -1096,17 +1209,22 @@ def cmd_commit(args):
                     "  --also is resolved against the directory you are standing in\n"
                     "  (%s), not the repo root." % (p, caller_cwd))
         if also and not args.force:
-            # --also takes a path WHOLESALE, so a live session's unfinished work
-            # in it lands under your message with no hunk-level split. `claim`
-            # refuses the identical situation by name; this did not even look.
-            contested = sorted({p for p in also for t in other_live_sessions(sid)
-                                if p in claims_of(t)})
+            # --also takes a path WHOLESALE, so a peer's unfinished work in it
+            # lands under your message with no hunk-level split. This used to
+            # check live peers' RECORDS only, strictly weaker than `claim` on
+            # both axes: a Bash-only peer, or an ended-but-uncommitted one, had
+            # its bytes committed (or, for a delete, destroyed) at exit 0 --
+            # reproduced, and reachable by following claim's own printed advice.
+            cov = window_coverage()
+            contested = {p: stakes for p in also
+                         for stakes in [peers_with_a_stake(p, sid, cov)] if stakes}
             if contested:
-                die("--also would take these wholesale, but a live session is\n"
-                    "  working on them: %s\n"
+                die("--also would take these wholesale, but another session has\n"
+                    "  a stake in them:\n%s\n"
                     "  Their unfinished work would be committed under your message.\n"
                     "  Re-run with --force only if you are sure."
-                    % ", ".join(contested), 1)
+                    % "\n".join("    %s  (%s)" % (p, describe_stakes(s))
+                                for p, s in sorted(contested.items())), 1)
 
         # --also takes a path WHOLESALE, so its journal records must NOT also be
         # replayed. Without this, `--also <path>` could never rescue a path whose
@@ -1127,7 +1245,9 @@ def cmd_commit(args):
                     pass
             scoped.append(r)
 
+        scoped = drop_vanished(scoped, present)
         mine = build(scoped, present, pinned)
+        check_new_files_against_disk(mine, present, sid)
         if not mine and not also:
             die("nothing to commit", 2)
 
@@ -1284,27 +1404,32 @@ def cmd_commit(args):
                     "  Most likely those paths have no working-copy change to select\n"
                     "  from, because something outside this session already committed\n"
                     "  them. Re-running reproduces this exactly -- it is not transient.\n"
-                    "  `ccjj audit` shows whether @- moved; `ccjj disown %s` drops this\n"
-                    "  session's records so its OTHER, still-uncommitted work is not\n"
-                    "  held hostage by them."
-                    % (", ".join(bad), before_op[:12], sid[:8]))
+                    "  `ccjj audit` shows whether @- moved. `ccjj forget %s` drops\n"
+                    "  just those paths' records, so the session's OTHER, still-\n"
+                    "  uncommitted work is not held hostage by them. (`ccjj disown`\n"
+                    "  drops ALL of them, which also strands that other work.)"
+                    % (", ".join(bad), before_op[:12], " ".join(bad)))
 
     # Only now that the content is verified present is the journal retired, and
     # moved out of the live namespace rather than renamed beside it so that
     # "scan every claim" sweeps cannot pick it up again. Via retire(), which
     # uniquifies -- the inline version here silently did nothing on a session's
     # SECOND commit of the same day, and the third then failed unrecoverably.
-    if os.path.isdir(jdir) and not retire(jdir, sid, "committed"):
-        print("warning: could not archive the journal for %s; its records will\n"
-              "  be replayed again by the next commit. Move %s aside by hand."
-              % (sid[:8], jdir), file=sys.stderr)
+    if os.path.isdir(jdir):
+        dest = retire(jdir, sid, "committed")
+        if not dest:
+            print("warning: could not archive the journal for %s; its records will\n"
+                  "  be replayed again by the next commit. Move %s aside by hand."
+                  % (sid[:8], jdir), file=sys.stderr)
+        else:
+            keep_unreplayed(dest, jdir, set(loaded))
 
     # We moved @- ourselves, so re-baseline the other live sessions -- otherwise
     # our own commit reads to them as someone else moving the base.
     now = jj("log", "--no-graph", "-T", "commit_id", "-r", "@-",
              "--ignore-working-copy", check=False)
     if now.returncode == 0:
-        refresh_bases(now.stdout.decode().strip())
+        refresh_bases(now.stdout.decode().strip(), old_base=pinned)
 
     verified = sorted(mine)
     if verified:
@@ -1396,6 +1521,22 @@ def cmd_claim(args):
             "  `ccjj audit` lists what they did change." % path, 2)
     status, src, tgt, kind = entry
 
+    # BEFORE the delete/rename redirects. Those print an `--also` command, and
+    # when this check sat below them it was never reached for exactly the
+    # operations --also exists for: a delete of a Bash-only peer's file was
+    # handed straight to --also, which (then) did not look either.
+    cov = window_coverage()
+    stakes = {}
+    for p in {path, src, tgt} - {None}:
+        stakes.update(peers_with_a_stake(p, sid, cov))
+    if stakes and not args.force:
+        die("%s is also claimed by session(s) %s.\n"
+            "  The window's content therefore includes their edits, and claiming\n"
+            "  it would commit their work under your name. Re-run with --force\n"
+            "  only if the diff below is genuinely all yours.\n%s"
+            % (path, describe_stakes(stakes),
+               unified(file_bytes(span[0], path), file_bytes(span[1], path), path)), 1)
+
     if status == "removed":
         die("%s was deleted inside a Bash window.\n"
             "  A whole-path change has no hunks to split, so commit it with:\n"
@@ -1449,25 +1590,6 @@ def cmd_claim(args):
     original, content = blobs[lo], blobs[hi]
     if content is None:
         die("could not read %s at %s; nothing claimed." % (path, after_id[:12]), 1)
-    # A peer's stake in this path can be an Edit record OR a Bash window of
-    # their own -- checking only records let a Bash-only peer's work be claimed
-    # and committed under someone else's name with no warning at all.
-    cov = window_coverage()
-    live = set(other_live_sessions(sid))
-    base_dir = os.path.join(journal_root(), repo_key(ROOT))
-    peers = [d for d in (os.listdir(base_dir) if os.path.isdir(base_dir) else [])
-             if d not in ("archive", sid)
-             and os.path.isdir(os.path.join(base_dir, d))]
-    others = [s for s in sorted(peers)
-              if path in claims_of(s) or s in cov.get(path, ())]
-    if others and not args.force:
-        die("%s is also claimed by session(s) %s.\n"
-            "  The window's content therefore includes their edits, and claiming\n"
-            "  it would commit their work under your name. Re-run with --force\n"
-            "  only if the diff below is genuinely all yours.\n%s"
-            % (path, ", ".join("%s (%s)" % (s[:8], "live" if s in live else "ended")
-                               for s in others),
-               unified(original, content, path)), 1)
 
     print(unified(original, content, path), end="")
     if args.dry_run:
@@ -1489,6 +1611,34 @@ def cmd_claim(args):
         json.dump(rec, fh)
     print("claimed %s (%s..%s) -- it will be included by `commit-mine`."
           % (path, before_id[:12], after_id[:12]))
+
+
+def peers_with_a_stake(path, me, cov=None):
+    """{session id: "live"|"ended"} for every OTHER session with a stake in path.
+
+    The one definition used by both `claim` and `--also`. A stake is an
+    Edit/Write record OR a Bash window of the peer's own, and an ENDED peer
+    counts too: its uncommitted work is the ordinary residue of a session that
+    exited without committing, and taking it wholesale is just as wrong. The two
+    callers used to disagree on both axes, and --also -- the weaker one -- is
+    where claim's refusals send you.
+    """
+    cov = window_coverage() if cov is None else cov
+    base_dir = os.path.join(journal_root(), repo_key(ROOT))
+    if not os.path.isdir(base_dir):
+        return {}
+    live = set(other_live_sessions(me))
+    out = {}
+    for s in sorted(os.listdir(base_dir)):
+        if s in ("archive", me) or not os.path.isdir(os.path.join(base_dir, s)):
+            continue
+        if path in claims_of(s) or s in cov.get(path, ()):
+            out[s] = "live" if s in live else "ended"
+    return out
+
+
+def describe_stakes(stakes):
+    return ", ".join("%s (%s)" % (s[:8], how) for s, how in sorted(stakes.items()))
 
 
 def claims_of(sid):
@@ -1783,7 +1933,35 @@ def retire(jdir, sid, reason):
         if n > 1000:
             return False
     os.rename(jdir, dest)
-    return True
+    return dest
+
+
+def keep_unreplayed(archived, jdir, replayed):
+    """Move back to the live journal what the commit did not replay.
+
+    retire() moves the whole directory, and the record-edit hook takes no lock,
+    so an Edit that landed between load_records() and retire() -- a subagent
+    (same session id) or the agent itself while commit-mine ran in the
+    background -- was archived without ever being committed. Reproduced: the
+    edit stayed on disk, the session's next commit said "nothing recorded".
+    .owner and .last come back too: .owner keeps liveness answerable, and .last
+    keeps the next Bash window anchored instead of losing one call to a fresh
+    baseline.
+    """
+    back = [n for n in record_names(archived) if n not in replayed]
+    keep = [n for n in (".owner", ".last") if os.path.exists(os.path.join(archived, n))]
+    if not back and not keep:
+        return
+    os.makedirs(jdir, mode=0o700, exist_ok=True)
+    for n in back:
+        os.replace(os.path.join(archived, n), os.path.join(jdir, n))
+    for n in keep:
+        if not os.path.exists(os.path.join(jdir, n)):
+            shutil.copy2(os.path.join(archived, n), os.path.join(jdir, n))
+    if back:
+        print("note: %d edit(s) recorded while this commit ran were not part of\n"
+              "  it; they stay live for the next commit-mine." % len(back),
+              file=sys.stderr)
 
 
 def other_live_sessions(me):
@@ -1817,10 +1995,14 @@ def cmd_should_scope(args):
     sid = args.session or os.environ.get("CLAUDE_SESSION_ID", "")
     if not sid:
         sys.exit(1)
-    mine = os.path.join(journal_root(), repo_key(ROOT), sid)
-    if not os.path.isdir(mine) or not any(n.endswith(".json")
-                                          for n in os.listdir(mine)):
-        sys.exit(1)
+    # Deliberately NOT gated on this session having records of its own. That
+    # gate sent a session with only Bash work (or none) down the whole-copy
+    # path while a peer was live: ai_jj_commit and /cc:commit then `jj commit`
+    # the ENTIRE working copy -- the peer's unfinished edits included, under
+    # this session's message -- and `retire-all` archives the peer's journal,
+    # so its own commit-mine later reports "nothing recorded". Whether anyone
+    # ELSE is here is the whole question; with nothing of mine recorded the
+    # scoped commit says so (exit 2) and points at `claim`, which is correct.
     others = other_live_sessions(sid)
     if not others:
         sys.exit(1)
