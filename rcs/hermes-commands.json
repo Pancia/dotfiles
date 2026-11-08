@@ -44,7 +44,8 @@
         "s": ["View Screenshots", "finder-here $HOME/Screenshots"],
         "t": ["View transcripts", "finder-here $HOME/transcripts"],
         "w": ["View Downloads", "finder-here $HOME/Downloads"],
-        "y": ["View YTDL", "finder-here $HOME/Downloads/ytdl/"]
+        "y": ["View YTDL", "finder-here $HOME/Downloads/ytdl/"],
+        ".": ["Toggle hidden files", "toggleHiddenFiles"]
     },
     "r": {
         "_desc": "+AKR",
