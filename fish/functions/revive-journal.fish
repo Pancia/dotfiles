@@ -114,6 +114,7 @@ function _revive_render_banner --description 'Format a ghost record as the start
     set -l closed
     set -l parts
     set -l one
+    set -l own no
     while read -l line
         set parts (string split -m1 \t -- $line)
         test (count $parts) -eq 2; or continue
@@ -126,10 +127,17 @@ function _revive_render_banner --description 'Format a ghost record as the start
             case lstart
                 set lstart "$one"
             case cmd
-                set -a cmds "$one"
-                set -a closed no
+                # `revive` itself is not what the pane was for. Same rule as
+                # OWN_COMMAND in lib/python/revive.py; the two must agree.
+                if string match -qr '^revive(\s+[\w.-]+)*$' -- "$one"
+                    set own yes
+                else
+                    set own no
+                    set -a cmds "$one"
+                    set -a closed no
+                end
             case done
-                test (count $closed) -gt 0; and set closed[-1] yes
+                test $own = no; and test (count $closed) -gt 0; and set closed[-1] yes
         end
     end <$ghost
 
@@ -140,6 +148,15 @@ function _revive_render_banner --description 'Format a ghost record as the start
     set -l when (stat -f '%Sm' -t '%b %e %H:%M' $ghost 2>/dev/null | string trim)
     set -l shown (string replace -r "^$HOME" '~' -- "$cwd")
     echo (set_color --bold d7871f)"⟲ Before it died, this pane was in $shown"(set_color normal)(set_color brblack)"  (last active $when)"(set_color normal)
+    # History first, oldest to newest, so what gets revived sits next to the hint
+    if test (count $cmds) -gt 1
+        set -l first (math (count $cmds) - 3)
+        test $first -lt 1; and set first 1
+        echo "  recent:"
+        for c in $cmds[$first..-2]
+            echo "    $c"
+        end
+    end
     if test "$closed[-1]" = no
         echo "    running  $cmds[-1]"
     else
@@ -150,14 +167,6 @@ function _revive_render_banner --description 'Format a ghost record as the start
     test -n "$bare"; or set bare "$guid"
     set -l title (_revive_claude_title "$bare" "$lstart")
     test -n "$title"; and echo "    ⎈ \"$title\""
-    if test (count $cmds) -gt 1
-        set -l first (math (count $cmds) - 3)
-        test $first -lt 1; and set first 1
-        echo "  recent:"
-        for c in $cmds[$first..-2]
-            echo "    $c"
-        end
-    end
     # Bare `revive` picks up this pane, so the banner needs no ghost number —
     # which it could not know anyway: numbering is only settled at listing time
     set -l what "pick this up"

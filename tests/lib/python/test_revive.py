@@ -4,6 +4,7 @@ The journal is written by fish; these tests build records by hand, which is also
 the point: the reader has to survive whatever a power cut left on disk.
 """
 
+import os
 import time
 from urllib.parse import quote
 
@@ -81,6 +82,33 @@ class TestRecord:
         rec = revive.Record(p)
         assert rec.guid == "G6"
         assert rec.running == "ls"
+
+    def test_revive_is_not_part_of_the_story(self, store):
+        p = write_record(store / "ghosts" / "G8-100.rec", {"guid": "G8"},
+                         [("cmd", "make"), ("done", "0 5"), ("cmd", "revive")])
+        rec = revive.Record(p)
+        assert [h["cmd"] for h in rec.history] == ["make"]
+        assert rec.running == "", "an unfinished `revive` is not what the pane was doing"
+
+    def test_the_done_of_a_revive_does_not_close_the_command_before_it(self, store):
+        p = write_record(store / "ghosts" / "G9-100.rec", {"guid": "G9"},
+                         [("cmd", "sleep 60"), ("cmd", "revive ls"), ("done", "0 5")])
+        assert revive.Record(p).running == "sleep 60"
+
+    def test_a_picked_up_command_takes_the_done_of_its_revive(self, store):
+        p = write_record(store / "ghosts" / "G10-100.rec", {"guid": "G10"},
+                         [("cmd", "revive"), ("cmd", "make"), ("done", "2 5")])
+        rec = revive.Record(p)
+        assert rec.running == ""
+        assert rec.history[-1]["code"] == "2"
+
+    @pytest.mark.parametrize("cmd,own", [
+        ("revive", True), ("  revive  ", True), ("revive 3", True),
+        ("revive dismiss --all", True), ("revive prune --days 3", True),
+        ("revive && make", False), ("reviver", False), ("echo revive", False),
+    ])
+    def test_what_counts_as_revive_itself(self, cmd, own):
+        assert (revive.OWN_COMMAND.fullmatch(cmd) is not None) is own
 
     def test_an_empty_record_is_ignored_entirely(self, store):
         (store / "ghosts").mkdir(parents=True)
@@ -280,6 +308,31 @@ def in_pane(store, monkeypatch):
 
 
 class TestThisPane:
+    def test_a_pane_whose_last_shell_only_ran_revive_speaks_for_the_real_ghost(
+            self, store, monkeypatch, capsys):
+        monkeypatch.setenv("ITERM_SESSION_ID", f"w1t11p0:{G}")
+        monkeypatch.setattr(revive, "ccs_entries", lambda: [])
+        write_record(store / "ghosts" / f"{G}-100.rec", {"guid": G, "cwd": "/real"},
+                     [("cmd", "make test")])
+        newer = write_record(store / "ghosts" / f"{G}-200.rec", {"guid": G, "cwd": "/x"},
+                             [("cmd", "revive")])
+        os.utime(newer, (time.time() + 60, time.time() + 60))
+        assert revive.cmd_get("here") == 0
+        fields = capsys.readouterr().out.rstrip("\n").split("\t")
+        assert fields[1] == "/real"
+        assert fields[3] == "make test", "and `revive` is never offered back"
+
+    def test_here_prints_what_gets_revived_after_the_history(
+            self, store, monkeypatch, capsys):
+        monkeypatch.setattr(revive, "ccs_entries", lambda: [])
+        write_record(store / "ghosts" / f"{G}-100.rec", {"guid": G, "cwd": "/real"},
+                     [("cmd", "one"), ("done", "0 1"), ("cmd", "two"), ("done", "0 1"),
+                      ("cmd", "three")])
+        assert revive.render_here(G, tty=False) == 0
+        out = capsys.readouterr().out
+        assert out.index("one") < out.index("two") < out.index("running  three")
+        assert out.count("three") == 1, "the revived command is not also in recent"
+
     def test_the_session_join_is_bounded_by_the_dead_shell(self, in_pane, monkeypatch):
         """An older crash in the same pane is not this ghost's session.
 

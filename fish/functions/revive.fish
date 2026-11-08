@@ -64,6 +64,16 @@ function _revive_pick --description 'Pick up a ghost: cd there, then resume its 
     # ghost that has already been picked up
     _revive_py dismiss $target >/dev/null
 
+    # The journal saw only `revive`, which its readers ignore, and the ghost was
+    # just dismissed — so without this a crash from here on leaves no story at all
+    set -l story "$cmd"
+    if test -n "$session"; and test -f "$entry"
+        set story "my-claude-code-wrapper --resume $session"
+    end
+    if test -n "$story"; and functions -q _revive_append
+        _revive_append cmd "$story"
+    end
+
     if test -n "$cwd"; and test -d "$cwd"
         cd "$cwd"
         echo (set_color brblack)"cd $cwd"(set_color normal)
@@ -110,6 +120,7 @@ function _revive_usage --description 'Show revive usage'
         "  revive help             Show this help" \
         "" \
         "Notes:" \
+        "  rr is an abbreviation for revive." \
         "  A pane is identified by its iTerm session GUID, which survives a reboot." \
         "  Panes with no journal record but a crashed Claude session are listed too," \
         "  which is the only source for panes older than the journal itself." \

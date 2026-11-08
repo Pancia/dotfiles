@@ -11,11 +11,11 @@ predecessor left and says so.
 
 ```
 ⟲ Before it died, this pane was in ~/vaults/the-akashic-records  (last active Aug 27 00:07)
-    running  my-claude-code-wrapper --process-label akr-assistant …
-    ⎈ "Explore creative project directions"
   recent:
     jj diff
     ./scripts/score-day.py --today
+    running  my-claude-code-wrapper --process-label akr-assistant …
+    ⎈ "Explore creative project directions"
     revive to resume that session · revive ls for every pane · revive dismiss here
 ```
 
@@ -26,7 +26,7 @@ with the system prompt, model and process label it was launched with.
 
 | Command | What it does |
 |---|---|
-| `revive` | Pick up **this** pane's ghost; the listing below if it has none |
+| `revive` (or the `rr` abbreviation) | Pick up **this** pane's ghost; the listing below if it has none |
 | `revive ls` | Panes that left a record behind, grouped by the live window/tab/pane tree, this one marked |
 | `revive <n>` | Pick one up: `cd` there, then resume its Claude session, or offer its command |
 | `revive here` | This pane's ghost in full, with its last ten commands |
@@ -147,6 +147,14 @@ real banner stays in `pending/` and prints again, and bare `revive`, `revive her
 and `revive dismiss here` skip the empty ghosts to match it. The banner ends when
 the pane is dismissed, picked up, or dies again with commands in its record.
 `revive prune` drops a banner when it prunes that pane's last ghost with commands.
+
+**`revive` is not part of a pane's story.** Both readers drop `revive` commands
+from a record, along with their `done` lines, so a shell that only ran `revive`
+counts as idle. Before this, a crash after `revive` left a ghost whose command
+was `revive`, and picking that up offered to run `revive` again, which walked
+back through the pane's older ghosts. Picking up dismisses the ghost, so
+`_revive_pick` first journals what it is about to run as a `cmd` line. A crash
+during the picked-up work then leaves that work as the new ghost's story.
 
 ### Record format
 

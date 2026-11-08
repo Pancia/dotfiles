@@ -45,6 +45,18 @@ def _fish_available():
         pytest.skip("fish is not on PATH")
 
 
+@pytest.fixture
+def revive_init(tmp_path):
+    """Load the revive command into a pane, with iTerm unreachable."""
+    stub = tmp_path / "stubs"
+    stub.mkdir()
+    osa = stub / "osascript"
+    osa.write_text("#!/bin/sh\nexit 1\n")
+    osa.chmod(0o755)
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return f"set -gx PATH {stub} $PATH\nsource {root}/fish/functions/revive.fish\n"
+
+
 @pytest.mark.usefixtures("_fish_available")
 class TestJournal:
     def test_a_crashed_pane_leaves_its_commands_behind(self, pane, store):
@@ -117,6 +129,29 @@ class TestAdoption:
 
         text = (store / "pending" / "NEWER-0001").read_text()
         assert "running  sleep 62" in text
+
+    def test_the_banner_ends_with_what_gets_revived(self, pane, store):
+        pane("ORDER-0001").run(["echo one", "echo two", "sleep 60"])
+        pane("ORDER-0001").run(["exit"])
+
+        text = (store / "pending" / "ORDER-0001").read_text()
+        assert text.index("echo one") < text.index("echo two") < text.index("running  sleep 60")
+
+    def test_a_shell_that_only_ran_revive_keeps_the_real_banner(self, pane, store, revive_init):
+        pane("OWN-0001").run(["sleep 61"])
+        pane("OWN-0001", extra_init=revive_init).run(["revive ls"])
+        pane("OWN-0001").run(["exit"])
+
+        assert "running  sleep 61" in (store / "pending" / "OWN-0001").read_text()
+
+    def test_a_crash_during_a_picked_up_command_keeps_that_command(self, pane, store, revive_init):
+        pane("PICK-0001").run(["sleep 61"])
+        pane("PICK-0001", extra_init=revive_init).run(["revive", "y"])   # dies in the re-run
+        pane("PICK-0001").run(["exit"])
+
+        text = (store / "pending" / "PICK-0001").read_text()
+        assert "running  sleep 61" in text
+        assert "running  revive" not in text
 
     def test_a_live_owner_is_not_robbed_of_its_pane(self, pane, store):
         """A nested interactive shell must not adopt the outer shell's record."""

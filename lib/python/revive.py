@@ -52,6 +52,11 @@ def root() -> Path:
 
 SCALARS = {"guid", "wtp", "pid", "lstart", "term", "cwd"}
 
+# `revive` itself is never what a pane was for: offering it back only walks the
+# pane's older ghosts. Plain words only, so `revive && make` still counts. Same
+# rule as _revive_render_banner in revive-journal.fish; the two must agree.
+OWN_COMMAND = re.compile(r"\s*revive(?:\s+[\w.-]+)*\s*")
+
 
 class Record:
     def __init__(self, path: Path):
@@ -73,6 +78,7 @@ class Record:
         lines = raw.split("\n")
         if raw and not raw.endswith("\n"):
             lines = lines[:-1]          # a torn final line: drop it, keep the rest
+        own = False                     # the latest cmd was `revive`: its done is not news
         for line in lines:
             if not line or "\t" not in line:
                 continue
@@ -80,8 +86,11 @@ class Record:
             if key in SCALARS:
                 self.fields[key] = unquote(value)
             elif key == "cmd":
-                self.history.append({"cmd": unquote(value), "code": None, "ms": None})
-            elif key == "done" and self.history:
+                cmd = unquote(value)
+                own = OWN_COMMAND.fullmatch(cmd) is not None
+                if not own:
+                    self.history.append({"cmd": cmd, "code": None, "ms": None})
+            elif key == "done" and self.history and not own:
                 bits = unquote(value).split()
                 self.history[-1]["code"] = bits[0] if bits else None
                 self.history[-1]["ms"] = bits[1] if len(bits) > 1 else None
@@ -468,15 +477,18 @@ def render_here(key: str, tty: bool) -> int:
         return 1
     rec = e.rec
     print(f"{c}⟲ Before it died, this pane was in {tilde(rec.cwd) or '?'}{off}")
-    if rec.running:
-        print(f"    running  {elide(rec.running)}")
-    if e.claude and e.claude["title"]:
-        print(f"    ⎈ \"{e.claude['title']}\"")
-    recent = rec.recent()
+    # History first, oldest to newest, so what gets revived sits next to the hint
+    recent = rec.recent()[:-1]
     if recent:
         print("  recent:")
         for cmd in recent:
             print(f"    {elide(cmd)}")
+    if rec.running:
+        print(f"    running  {elide(rec.running)}")
+    elif rec.last:
+        print(f"    last     {elide(rec.last)}")
+    if e.claude and e.claude["title"]:
+        print(f"    ⎈ \"{e.claude['title']}\"")
     what = "resume that Claude session" if e.claude and e.claude["session_id"] \
         else "pick it up"
     print(f"{dim}  revive to {what} · revive dismiss here{off}")

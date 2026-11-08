@@ -11,3 +11,4 @@ abbr -a :q exit
 abbr -a ii ai_inbox
 abbr -a tt tab-organize
 abbr -a gg 'g run'
+abbr -a rr revive
