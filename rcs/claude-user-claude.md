@@ -58,6 +58,10 @@ Write in ASD-STE100 Simplified Technical English: one idea per sentence; at most
 per word; no idioms, metaphors or figurative language; at most 6 sentences per
 paragraph. Technical names may stay as they are.
 
+Give times in my local time zone (America/Denver: MST/MDT), never UTC. Convert
+timestamps from logs, events and APIs before reporting them; say "MST" only when
+the zone could be unclear.
+
 (Why: tested 2026-11-05 on 7 real replies. With this rule in its instructions,
 Opus answered the same questions in about 45% of the words, and the shorter
 versions were the ones I preferred. If a reply still runs long, `/plainify`
