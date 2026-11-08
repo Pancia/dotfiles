@@ -188,6 +188,15 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "reply-style-nudge",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -232,8 +241,7 @@
     "command": "claude-statusline"
   },
   "enabledPlugins": {
-    "pyright-lsp@claude-plugins-official": true,
-    "swift-lsp@claude-plugins-official": true
+    "pyright-lsp@claude-plugins-official": true
   },
   "alwaysThinkingEnabled": true,
   "effortLevel": "high",

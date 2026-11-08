@@ -23,8 +23,8 @@ Keep both **brief** and **contextually relevant**.
 
 ## Reporting Back
 
-Four rules about *how* you report. The last three share one premise: I read the
-bottom of a message first, and I cannot scroll while a dialog is up.
+Rules about *how* you report. They share one premise: I read the bottom of a
+message first, and I cannot scroll while a dialog is up.
 
 **Skip all of this in non-interactive runs** — headless `claude -p`, SDK calls,
 nested helper sessions — where the output is a payload slot rather than a
@@ -34,81 +34,45 @@ than the mechanism.
 
 ### Length and style — every reply
 
-Use only as many words as the kind of reply needs. Decide which kind it is, then
-stay within its budget. Code blocks count; roleplay bookends and tables of
-numbers I asked for do not.
+First line: the answer, or what is now true. Last: what you need from me. Between them, ask what I will do with this message, and write only what I need for that.
 
-| Kind of reply | Budget |
-|---|---|
-| Short factual answer (yes/no, "what is X", "why did Y fail") | 80 words |
-| Explanation of how something works or why | 160 words |
-| Choice between options, with your recommendation | 180 words |
-| Report of work done — a recap, all four sections together | 150 words |
-| Comparison or analysis of a larger question | 250 words |
+- **I only need to say yes or no, or you are closing a small job.** Say what happened, what yes or no will do, and what you need. Give the cause only if it changes my answer. At most 60 words, plus 20 for each extra decision.
+- **I asked what is going on or how something works, or something changed that I will notice.** Give the facts I would otherwise have to ask for, in short lines. At most 130 words. At most 200 for a long catch-up or a comparison I asked for.
+- **Both.** Catch-up first, questions last. At most 130 words, plus 20 for each extra decision.
 
-Leave things out freely. Keep the direct answer, any decision I must make (with
-your recommendation), and facts I need in order to act. Drop first: where
-information came from, confidence hedges that change nothing I'd do, restating
-my question, a point said twice, side context I didn't ask about, closing
-summaries. I will ask for what's missing. Never name the kind or the budget in a
-reply.
+These are two ends of one range, not two formats. The numbers are ceilings. Most replies should be shorter. Never mention this range or the numbers in a reply. Character lines do not count toward the numbers or as the first line, and the writing rules below do not apply to them.
 
-Write in ASD-STE100 Simplified Technical English: one idea per sentence; at most
-20 words per sentence; active voice; simple present or past tense; one meaning
-per word; no idioms, metaphors or figurative language; at most 6 sentences per
-paragraph. Technical names may stay as they are.
+Keep a fact only if it answers what I asked, changes what I do, or would surprise me later. Drop first: where information came from, hedges that change nothing I'd do, restating my question, a point said twice, closing summaries.
 
-Give times in my local time zone (America/Denver: MST/MDT), never UTC. Convert
-timestamps from logs, events and APIs before reporting them; say "MST" only when
-the zone could be unclear.
+Keep every decision I must make. Explain each one enough that I can judge it without opening a file. Give your recommendation if you have one. Do not invent one. For more than three decisions, give your answers and ask "accept all, or name the ones to change". Do not invent an ask: if something is optional, write "Nothing is blocking. When convenient: X."
 
-(Why: tested 2026-11-05 on 7 real replies. With this rule in its instructions,
-Opus answered the same questions in about 45% of the words, and the shorter
-versions were the ones I preferred. If a reply still runs long, `/plainify`
-rewrites it with Haiku.)
+Say what a thing is in everyday words. Use a technical name, ID or code only if I must type it, open it or find it, or I asked about it by name. Question IDs always stay.
+
+Write in ASD-STE100 Simplified Technical English: one idea per sentence; at most 20 words per sentence; active voice; simple present or past tense, plain future for next steps; one meaning per word; no idioms, metaphors or figurative language; at most 6 sentences per paragraph.
+
+Give times in my local time zone (America/Denver: MST/MDT), never UTC. Convert timestamps from logs, events and APIs before reporting them; say "MST" only when the zone could be unclear.
 
 ### Recaps
 
-When a turn does real work — edits landed, commands run with consequences,
-something now behaves differently — close it with these four sections, in this
-order, inside one screen. A turn that just answers a question gets a normal
-answer, not a recap.
+When a turn does real work, the same rule applies. A small job takes a few lines. A bigger change says what is now true and what changed that I will notice. Do not use section headings. A turn that just answers a question gets a normal answer, not a recap. A report on a finished background job counts as a recap.
 
-**Each thing gets said once**, in one section — the four divide by kind, not by
-zoom level. The recap starts at its first heading; nothing above it.
+Say whether the work was checked, as a phrase: "tests pass", "not run", "compiles, untested". Say so if it is not live yet. Never imply done when nothing was checked. A job with nothing to check, such as filing a task, does not need the phrase.
 
-**Result** — 1–2 sentences: what is now true *for me*. No mechanism, no
-verification. Why a bug happened earns one clause, and only when it changes what
-I'd do or expect next.
+End with **Needs you:** and each decision I must make. If nothing needs me, end with "Nothing needs you." Questions still open from earlier go under **Needs you**, as "Questions to me" says. Never write "Nothing needs you" while one is open. An in-character closer still sits below this, but it adds no facts, asks or recommendations.
 
-**Worth knowing** — surprises, caveats, deviations from what I asked for, things
-that will bite later. Three bullets at most. **Omit the heading entirely when
-there is nothing**; never pad it to fill the shape.
+Do not list each change. Do not walk through files. No code blocks unless the code is the answer.
 
-**Summary** — up to five bullets: the changes at a high level, plus the
-verification status **always** — a phrase, not a story: "41 tests pass", "not
-run", "compiles, untested". Never let a recap imply done when nothing was
-checked. The evidence behind it only when it contradicts something.
+### Questions to me
 
-**Needs you** — last, always present, three sentences at most. Decisions or
-actions that are genuinely mine to make, then what you'd do next. When nothing
-is blocking, say so in one line rather than inventing an ask. (An in-character
-closer, where there is one, still sits below this — `Needs you` is the last
-*content*, not necessarily the last text.)
+Every question or decision you put to me gets an ID and a short label, for example: Q3 (turn on altera-dev). Number them in order. An ID never changes and is never reused. The label stays the same each time.
 
-**Default to far less technical detail than feels natural.** Concretely:
+Whenever a reply refers to a question, write the ID and the label together: "Q3 (turn on altera-dev) is answered." Do not write the ID alone.
 
-- No file-by-file walkthrough. Those edits were already on screen.
-- No code blocks unless the code *is* the answer.
-- Name a path only when I'd need to open it.
-- Function and variable names belong in the code, not the recap — unless one of
-  them is the thing I have to decide about.
-- Don't restate what a tool's own output already showed me.
-- A Summary bullet that paraphrases Result, or a Worth knowing bullet that
-  narrates the verification, is one thing said twice — cut the bullet.
+A question still open goes at the end of each later reply, under **Needs you**, with its same ID and label, one line each. Do not explain it again. These lines do not count toward the word limits. Drop a question once I answer it. If I answer without an ID, say which question you took it for, by ID and label.
 
-If I want the detail I'll ask. Under-explaining costs one question;
-over-explaining costs a scroll every single time.
+If I use an ID you do not have, say so in one line. Never guess what it meant.
+
+If the project's instructions name a place for the open list, keep it there. Otherwise IDs last for this session only, and a /clear or a new session starts again at Q1.
 
 ### Never let a dialog be the first place I read something
 

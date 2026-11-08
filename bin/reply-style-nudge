@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+# reply-style-nudge: UserPromptSubmit hook for the Altera liaison only.
+# Puts the reply rules next to each prompt and reports the last reply's size.
+# Makes no model call. Fails open: on any error it prints nothing and exits 0.
+import json, os, re, sys
+
+FLAG_WORDS = 150  # the limit is 130 or 200 by kind, and the hook cannot tell the kind
+FLAG_IDS = 3
+
+NOTE = ("[Reply style] First line: the answer, in everyday words. Last: what you need "
+        "from me. Use an ID or internal name only if I must type it, open it or find "
+        "it. Limits: 60 words for a yes or no, 130 to catch up. Each question gets a "
+        "lasting ID and label, such as Q3 (short name); repeat open ones at the end.")
+
+def score(text):
+    text = "\n".join(l for l in text.split("\n") if not l.startswith("> 🎭"))
+    text = re.sub(r"```.*?```", " ", text, flags=re.S)
+    ids = re.findall(r"\b[mwr]-\d+\b|\b[A-PR-Z]\d{1,2}[a-d]?\b", text)
+    plain = re.sub(r"^\s*(#+|[-*])\s+", "", text, flags=re.M).replace("**", "")
+    return len(plain.split()), len(ids)
+
+def read_transcript(path):
+    """Return (entrypoint, last assistant text) from the end of the transcript."""
+    with open(path, "rb") as f:
+        f.seek(0, 2)
+        f.seek(max(0, f.tell() - 2_000_000))
+        lines = f.read().decode("utf-8", "ignore").split("\n")
+    entry, reply = "", ""
+    for line in reversed(lines):
+        try:
+            d = json.loads(line)
+        except ValueError:
+            continue
+        entry = entry or d.get("entrypoint", "")
+        if not reply and d.get("type") == "assistant" and not d.get("isSidechain"):
+            content = d.get("message", {}).get("content")
+            if isinstance(content, list):
+                parts = [b["text"] for b in content if b.get("type") == "text"]
+                if parts:
+                    reply = parts[-1]
+        if entry and reply:
+            break
+    return entry, reply
+
+try:
+    # ALT_AGENT_ID is inherited by child processes, so recons started by the
+    # liaison have it too. The transcript's entrypoint tells them apart.
+    if os.environ.get("ALT_AGENT_ID") != "liaison-01":
+        sys.exit(0)
+    data = json.load(sys.stdin)
+    entry, reply = read_transcript(data.get("transcript_path", ""))
+    if entry != "cli":
+        sys.exit(0)
+    note = NOTE
+    if reply:
+        words, ids = score(reply)
+        if words > FLAG_WORDS or ids > FLAG_IDS:
+            note += f" Last reply: {words} words, {ids} IDs. Shorter unless I asked for detail."
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "UserPromptSubmit", "additionalContext": note}}))
+except Exception:
+    pass
+sys.exit(0)
