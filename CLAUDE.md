@@ -239,6 +239,10 @@ mechanism, and why each guard exists, in [docs/cc-jj-sessions.md](docs/cc-jj-ses
 
 ### Crashed Session Titles (ccs)
 
+Every `claude` started through the wrapper registers an entry in
+`$XDG_STATE_HOME/claude-sessions/open/`. A clean exit deletes it, so an entry whose
+process is gone marks a crash. Resuming one moves it to `archive/`, which `ccs old` lists.
+
 `ccs list` shows crashed sessions with real titles, not just `crashed <date>`. A crash is
 usually power loss, so nothing can run afterwards — the title has to already be on disk:
 
@@ -304,6 +308,21 @@ everything there gets published on the next push.
 every repo. It survives a reboot, unlike the session scratchpad, but no commit
 includes it, so it has no backup and no history. Use it for anything private,
 such as quotes from session transcripts.
+
+### Warm Whisper Server with Idle TTL (whisper-serverd)
+
+`bin/whisper-serverd` keeps a `whisper-server` loaded between `live-transcribe` runs, so
+repeat startups skip the 8-20s model load. `live-transcribe` touches a heartbeat file
+while it runs, and the supervisor reaps the server after `--idle-ttl` seconds without one.
+
+```bash
+whisper-serverd ensure --model large --port 8178 --idle-ttl 300   # start or adopt, wait until ready
+whisper-serverd status [--port 8178]                              # report state as JSON
+whisper-serverd stop                                              # kill the server and supervisor
+```
+
+`whisper-serverd supervise` is the internal long-lived loop. `live-transcribe` uses the
+warm server by default; `--server-url` or `--ephemeral` overrides that.
 
 ## Quick Reference
 
@@ -399,7 +418,8 @@ open after an edit may show the cached menu and the next one is current. `rebuil
 | `astro` | Astrological transit tracker |
 | `ccpu` | Run claude wrapper with /cc:pending-updates (auto-detects jj/git repo) |
 | `ccsave [title]` | Save current Claude Code session to `~/Cloud/cc-sessions/` (autogenerates title if omitted); inside the AKR vault it also writes a readable markdown copy to `claude-chats/` via `akr-chat` |
-| `ccs list` / `ccs resume` | List/pick sessions, including crashed ones (titled — see below) |
+| `ccs list` / `ccs resume` | List/pick this directory's sessions: saved, running and crashed (titled — see below). Picking a running one switches to its pane |
+| `ccs old` / `ccs archive` | List this directory's archived sessions (already resumed, or pruned) |
 | `ccs prune [--dry-run]` | Archive crashed entries with no surviving transcript, backup, or saved record |
 | `commit-mine -m MSG` | Commit only *this* Claude session's edits when sessions share the working copy; `--diff` to preview, `--also PATH` for a Bash-made delete/rename |
 | `ccjj audit` | List working-copy changes no session claims (the Bash blind spot) |
@@ -690,7 +710,7 @@ The wrapper auto-syncs on `claude` launch: if `.cc-config` exists, uses that; ot
 | **Hammerspoon** | macOS automation | `lib/lua/` |
 | **Karabiner** | Keyboard customization | `rcs/karabiner.json` |
 | **Yabai** | Window tiling | (via VPC workspaces) |
-| **Astro** | Astrological transits | `bin/astro`, `~/.local/share/astro/` |
+| **Astro** | Natal charts, transits, progressions, zodiacal releasing | `bin/astro`, `~/.local/share/astro/` |
 | **uv** | Python package manager & venv tool | `fish/conf.d/uv.fish` |
 
 ### Hours Calculation
