@@ -17,6 +17,7 @@
         "clj-start":        "~/dotfiles/ai/commands/clj-start.md",
         "cc:pending-updates":  "~/dotfiles/ai/commands/pending-updates.md",
         "cc:commit":        "~/dotfiles/ai/commands/commit.md",
+        "cc:retro":         "~/dotfiles/ai/commands/retro.md",
         "prompt:build":     "~/dotfiles/ai/commands/prompt-build.md"
     },
 
@@ -24,7 +25,7 @@
         "#GLOBAL": {
             "skills": ["cmds", "fish"],
             "agents": ["critique", "doc-writer", "optimizer"],
-            "commands": ["cc:pending-updates", "cc:commit", "prompt:build"]
+            "commands": ["cc:pending-updates", "cc:commit", "cc:retro", "prompt:build"]
         },
 
         "#clojure": {
