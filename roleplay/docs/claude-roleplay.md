@@ -1,7 +1,8 @@
 # 🎭 Claude Code Character Roleplay
 
-A personality layer for Claude Code: every response is **bookended** with
-in-character flavor — an **opener** at the top and a **closer** at the bottom —
+A personality layer for Claude Code: the final message of every turn is
+**bookended** with in-character flavor — an **opener** at the top and a
+**closer** at the bottom —
 drawn from a randomly-rolled character. The technical content in between is
 written normally.
 

@@ -1,8 +1,8 @@
 # 🎭 Claude Code Character Roleplay
 
-Every Claude Code response gets **bookended** with in-character flavour — an
-opener at the top, a closer at the bottom — from a character rolled fresh on each
-prompt. The technical content in between is written normally.
+The final message of every Claude Code turn gets **bookended** with in-character
+flavour — an opener at the top, a closer at the bottom — from a character rolled
+fresh on each prompt. The technical content in between is written normally.
 
 ```
 > 🎭 «Togusa» 🔍 GHOST IN THE SHELL — "Old-school approach. Let me read the file first."
