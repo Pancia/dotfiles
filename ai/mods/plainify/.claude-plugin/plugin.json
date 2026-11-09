@@ -1,0 +1,1 @@
+{ "name": "plainify", "version": "0.1.0", "description": "/plainify: rewrite the last reply shorter and plainer with Haiku, shown in a pane", "types": "./types/index.d.ts" }

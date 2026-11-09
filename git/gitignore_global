@@ -3,6 +3,7 @@
 !.gitignore
 !.nojekyll
 !.github/
+!.claude-plugin/
 !.cc
 .cc/private/
 .DS_Store
