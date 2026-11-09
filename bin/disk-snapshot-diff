@@ -99,16 +99,18 @@ parse_snapshot() {
 
 # Build associative arrays from parsed data
 declare -A old_sizes new_sizes
-declare -A sections_seen
+declare -A sections_seen old_sections new_sections
 
 while IFS=$'\t' read -r section path size; do
     old_sizes["$section|$path"]="$size"
     sections_seen["$section"]=1
+    old_sections["$section"]=1
 done < <(parse_snapshot "$OLD")
 
 while IFS=$'\t' read -r section path size; do
     new_sizes["$section|$path"]="$size"
     sections_seen["$section"]=1
+    new_sections["$section"]=1
 done < <(parse_snapshot "$NEW")
 
 # Collect all unique section|path keys
@@ -122,9 +124,17 @@ had_output=false
 while IFS= read -r section; do
     section_lines=()
 
+    # A section added to the scan after OLD was taken has no baseline, so every
+    # entry in it would read as NEW.
+    [[ -n "${old_sections[$section]:-}" && -n "${new_sections[$section]:-}" ]] || continue
+
     while IFS= read -r key; do
         [[ "$key" != "$section|"* ]] && continue
         path="${key#"$section|"}"
+
+        # du walks /System/Volumes/Data, so these two rows count the data
+        # volume twice and their deltas mean nothing.
+        [[ "$section" == "/" && ( "$path" == "/" || "$path" == "/System" ) ]] && continue
 
         old_kb="${old_sizes[$key]:-0}"
         new_kb="${new_sizes[$key]:-0}"

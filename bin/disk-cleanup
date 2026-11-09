@@ -12,6 +12,7 @@ SNAP_DIR="$HOME/.local/share/disk-snapshots"
 SCAN_SCRIPT="$HOME/dotfiles/services/disk-snapshot/script.sh"
 DIFF_BIN="$HOME/dotfiles/bin/disk-snapshot-diff"
 REPORT_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/disk-cleanup"
+NOTES="$SNAP_DIR/cleanup-notes.md"   # private: decisions carried between runs
 
 BASELINE_DAYS=30            # how far back to look for the "before" snapshot
 TOPN=8                      # entries shown per section
@@ -110,7 +111,7 @@ list_snaps() {
 # therefore guarded explicitly, and `failed` is what the caller reports on.
 build_report() {
     local sec root block top kb path base_stem df_target home_re failed=0
-    local _fs size used avail capacity _rest
+    local _fs size used avail capacity _rest used_kb scanned_kb unmeasured_kb
 
     # / is the sealed system volume on modern macOS — the numbers that matter
     # (and the ones that fill up) are on the data volume.
@@ -118,7 +119,26 @@ build_report() {
     [[ -d /System/Volumes/Data ]] && df_target=/System/Volumes/Data
     read -r _fs size used avail capacity _rest < <(df -h "$df_target" | tail -1)
     printf '=== DISK ===\n'
-    printf '  %s free — %s used of %s (%s)\n\n' "$avail" "$used" "$size" "$capacity"
+    printf '  %s free — %s used of %s (%s)\n' "$avail" "$used" "$size" "$capacity"
+
+    # Used space the scan could not attribute: protected folders it cannot
+    # read, root-only data, the Trash. Compares two scan-time numbers, so it
+    # stays honest however old the snapshot is. Only the data-volume rows of
+    # the "/" section count: /System double-counts, /usr and friends are sealed.
+    used_kb="$(awk '$1 == "#" && $2 == "data_volume_used_kb" {print $3; exit}' "$LATEST" || true)"
+    if [[ -n "$used_kb" ]]; then
+        scanned_kb="$(awk -F'\t' '
+            $0 == "=== / ===" {f = 1; next} /^=== /{f = 0}
+            f && $2 ~ /^\/(Applications|Library|Users|opt|private)$/ {t += $1}
+            END {print t + 0}' "$LATEST" || true)"
+        unmeasured_kb=$(( used_kb - scanned_kb ))
+        (( unmeasured_kb < 0 )) && unmeasured_kb=0
+        printf '  unmeasured at scan time: %s of %s used (protected folders, root-only data, Trash)\n' \
+            "$(human_size "$unmeasured_kb")" "$(human_size "$used_kb")"
+    else
+        printf '  unmeasured: not recorded in this snapshot — rerun with --scan\n'
+    fi
+    printf '\n'
 
     printf '  snapshot: %s  (%s days ago)\n' "$LATEST_STEM" "$LATEST_AGE"
     if [[ -n "$BASE" ]]; then
@@ -153,6 +173,7 @@ build_report() {
             -v floor="$FLOOR_KB" -v root="$root" -v topn="$TOPN" '
                 $1 + 0 < floor { next }
                 $2 == root     { next }
+                root == "/" && $2 == "/System" { next }  # counts the data volume twice
                 {
                     for (i = 1; i <= n; i++)
                         if (index($2, kept[i] "/") == 1) next
@@ -257,14 +278,30 @@ fi
 
 # Passed through the environment rather than interpolated into the fish
 # command string, so an apostrophe in any path cannot break the quoting.
-export DISK_CLEANUP_PROMPT="Help me free up disk space on this Mac. Start with \
-the report at ${REPORT} and the full snapshot at ${LATEST} (du output, one \
-section per area, sizes in KB). The older snapshot at ${BASE:-none} is the \
-baseline the growth numbers came from. Investigate the biggest and \
-fastest-growing directories with du/ls to find what is actually in them, then \
-give me a concrete list of deletion candidates with sizes, safest first, and \
-say what each one is. Do not delete anything without asking me, and use trash \
-rather than rm."
+#
+# The prompt holds only general facts because this repo is public. Anything
+# naming private files, apps or decisions goes in $NOTES instead.
+export DISK_CLEANUP_PROMPT="$(cat <<EOF
+Help me free up disk space on this Mac. Start with the report at ${REPORT} and the full snapshot at ${LATEST} (du output, one section per area, sizes in KB). The older snapshot at ${BASE:-none} is the baseline the growth numbers came from. Read ${NOTES} first if it exists: it records what I kept, what was cleared and what tends to come back.
+
+Investigate the biggest and fastest-growing directories with du/ls to find what is actually in them, then give me a concrete list of deletion candidates with sizes, safest first. Say what each one is and whether I can get it back. Do not propose something the notes say I kept, unless it has grown a lot or the reason no longer holds. Do not delete anything without asking me, and use trash rather than rm.
+
+Check these before you trust a number:
+- The snapshot usually runs in the background without access to protected folders. Desktop, Documents, Downloads, Mail, Messages, Photos, Music, app containers and the Trash can be missing or too small. The unmeasured line in the report shows the total. Measure the readable ones directly, and say which ones you cannot read.
+- The / and /System rows in the raw snapshot count the data volume twice. Ignore them.
+- UV_LINK_MODE=hardlink is set, so uv cache files are shared with existing environments. Clearing the cache frees only files with one hard link. Count those, not the du total.
+- Trash frees no space until it is emptied, so say that when you propose it. Cleanup commands such as go clean, uv cache clean and brew cleanup skip the Trash and delete permanently, so ask about those separately.
+- A network mount looks like a folder. Check mount before you treat a folder as local disk, and never delete from a mount.
+- Before you clear a cache or build folder, confirm nothing is using it. List programs with ps -axo pid=,comm=, because pgrep -f also matches the long prompts of running agent sessions. Folders under /private/tmp/claude-501 can belong to live sessions.
+- Before you call a tool or SDK unused, check what actually points at it: PATH, environment variables and project config.
+- Before you trash a build folder, confirm git tracks nothing in it. Read the output, because a folder outside a repository also prints one line.
+- A project with no git remote, or an environment with no dependency list, cannot simply be recreated. Say so.
+
+When the cleanup is finished, do two more things:
+1. Update ${NOTES} with a dated entry, without asking: what I cleared, what I kept and why, what you could not measure, and anything that looks likely to come back.
+2. Review this run. Name what misled you, what the report missed and what cost extra work. Propose specific changes to this prompt and to the program (~/dotfiles/bin/disk-cleanup, ~/dotfiles/bin/disk-snapshot-diff, ~/dotfiles/services/disk-snapshot/script.sh). Make the ones I approve, and test them. The dotfiles repo is public, so private names belong only in the notes file. If nothing needs to change, say so.
+EOF
+)"
 
 cd "$HOME"
 if command -v fish >/dev/null 2>&1; then
