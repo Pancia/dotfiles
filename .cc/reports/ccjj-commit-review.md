@@ -166,7 +166,7 @@ not in it. The committed patch applied to the parent gives files byte-identical 
 committed `ccjj.py` and `test_ccjj.py`. Live `~/.claude/CLAUDE.md` matches the committed
 `rcs/claude-user-claude.md`.
 
-One small item: `.cc/ccjj-review-2026-11-07.md:15-24` and `:589` cite scratchpad files.
+One small item: `.cc/reports/ccjj-review-2026-11-07.md:15-24` and `:589` cite scratchpad files.
 The `repro/` directory is already gone.
 
 ## Question 4: the new CLAUDE.md section

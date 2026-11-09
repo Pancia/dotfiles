@@ -9,7 +9,7 @@
 # (2.76 GB) is an Activity Monitor *footprint* number, and `ps` RSS reads ~1.28x
 # higher than footprint on this machine — the two are not on the same scale. They
 # get re-derived from real observations before any phase that can kill. See
-# docs/claude-watchdog.md and .cc/PLAN-claude-watchdog.md §4c, §7.2, §15 Q4.
+# docs/claude-watchdog.md and .cc/plans/PLAN-claude-watchdog.md §4c, §7.2, §15 Q4.
 
 # ---------------------------------------------------------------------------
 # Phase — what the watchdog is allowed to DO. Not a threshold.

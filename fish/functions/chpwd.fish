@@ -117,8 +117,9 @@ function showPendingUpdates --description 'Show pending CLAUDE.md update suggest
     end
 end
 
-function showPlans --description 'List PLAN-* files in .cc directory'
-    set -l plans (find .cc -maxdepth 1 -name 'PLAN-*' 2>/dev/null)
+function showPlans --description 'List PLAN-* files in .cc/plans and the top of .cc'
+    # The top of .cc too: projects that have not moved their plans still list them
+    set -l plans (find .cc .cc/plans -maxdepth 1 -name 'PLAN-*' 2>/dev/null)
     if test -n "$plans"
         echo "&> Plans:"
         _printCapped "  "(_newestFiles $plans)

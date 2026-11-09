@@ -133,8 +133,15 @@ This rule overrides the default that sends all intermediate output to the
 scratchpad.
 
 - **Keep in `.cc/` at the project root:** anything that I or a later session may
-  want. Examples are reports, reviews, patches, plans and useful reproduction
-  scripts. Create `.cc/` if it does not exist. Use a descriptive file name.
+  want. Use a descriptive file name, and create the folder if it does not exist.
+  Put each file in one of these folders, not at the top of `.cc/`:
+  - `.cc/plans/`: plans and design documents, named `PLAN-<topic>.md`.
+  - `.cc/reports/`: reviews, audits, verdicts and other findings.
+  - `.cc/scripts/`: reproduction scripts and one-off scripts.
+  - `.cc/misc/`: only what fits none of the above, such as patches, mockups and
+    folders of mixed files.
+  - Only `pending-updates-*.md` and `FIXME*` files stay at the top, because tools
+    look for them there.
 - **Keep in the scratchpad:** only files that cost nothing to lose. Examples are
   throwaway test repos, copies of source trees and raw command output.
 - **Subagents:** give the `.cc/` path in the brief for any report or patch.

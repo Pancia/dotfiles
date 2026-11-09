@@ -14,8 +14,8 @@ function dashboard-parts --description 'Collect dashboard indicator parts for th
         test $cmds_count -gt 0; and set -a parts "@"
     end
 
-    # P = PLAN-* files in .cc/
-    set -l plan_count (find .cc -maxdepth 1 -name 'PLAN-*' 2>/dev/null | count)
+    # P = PLAN-* files in .cc/plans/ or the top of .cc/
+    set -l plan_count (find .cc .cc/plans -maxdepth 1 -name 'PLAN-*' 2>/dev/null | count)
     test $plan_count -gt 0; and set -a parts "P"
 
     # ⚑ = FIXME* files in .cc/

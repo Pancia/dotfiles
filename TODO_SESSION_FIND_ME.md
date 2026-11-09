@@ -26,9 +26,9 @@
 
 Summary
 
-  - Landed: .cc/PLAN-ccjj-journal-fixes.md (commit xpoykmuv)
+  - Landed: .cc/plans/PLAN-ccjj-journal-fixes.md (commit xpoykmuv)
   - Modified, uncommitted: lib/python/ccjj.py, tests/lib/python/test_ccjj.py, bin/ccjj, docs/cc-jj-sessions.md, CLAUDE.md, plus the
-  agent's .cc/ccjj-also-leak-verdict.md
+  agent's .cc/reports/ccjj-also-leak-verdict.md
   - Records are moved to <sid>/forgotten/, not deleted — forgetting silently stops edits being committed,so it had to be reversible
   - Both die() messages that said "remove the record" now name ccjj forget
   - No bookmark advanced, nothing pushed
@@ -40,4 +40,4 @@ Summary
   sites. That's a genuine bug fix, not a feature — but it changes safety behaviour in a tool three sessions rely on, so I'd want
   your go-ahead rather than assuming it.
   - The delete/rename redirect ordering should be fixed in the same pass; right now the tool's own adviceis the dangerous path.
-  - rcs/karabiner.json and .cc/PLAN-fish-functions-vcs.md are still other sessions' — untouched.
+  - rcs/karabiner.json and .cc/plans/PLAN-fish-functions-vcs.md are still other sessions' — untouched.

@@ -38,7 +38,7 @@ the post-commit byte check plus rollback, the empty-commit refusal, merge-workin
 refusal, inode-based path containment, `forget` (landed in `f3b3153b`), the nudge,
 and Bash-window recording, narrowing and claim.
 
-**Plan status** (`.cc/PLAN-ccjj-journal-fixes.md`, 2026-08-15). Only one of its six
+**Plan status** (`.cc/plans/PLAN-ccjj-journal-fixes.md`, 2026-08-15). Only one of its six
 steps has landed:
 
 | Plan step | Status in code |
@@ -164,7 +164,7 @@ named route.
 
 ### 2.2 HIGH — `--also` peer-stake check is weaker than `claim`'s, and `claim` routes deletes past its own check
 
-The `.cc/ccjj-also-leak-verdict.md` findings are **re-confirmed on the current code**
+The `.cc/reports/ccjj-also-leak-verdict.md` findings are **re-confirmed on the current code**
 (`r_also.py`):
 
 ```
@@ -489,7 +489,7 @@ journal (§2.9).
 6. `ai/commands/commit.md:88` says "non-zero (the usual case — you are the only
    session here)". That is false when the session has no records of its own (§2.1).
 7. The `~/dotfiles/CLAUDE.md` quick reference for `ccjj forget` points at
-   `.cc/PLAN-ccjj-journal-fixes.md` "for the three bugs that motivated it". All three
+   `.cc/plans/PLAN-ccjj-journal-fixes.md` "for the three bugs that motivated it". All three
    bugs are still open, and the plan's line numbers are stale.
 8. `docs:266-268` lists three deliberate gaps in Bash windows. It omits that a
    window's coverage ends at each commit: `retire()` archives the windows, so Bash
@@ -538,7 +538,7 @@ about 10 in the live state, so roughly 0.5 s.
    is possible under contention.
 7. Housekeeping: §2.9 (commit.md retire), §2.11 (clear contended in prune), §2.12
    (drift walk), and the doc fixes in §3. Then update or archive
-   `.cc/PLAN-ccjj-journal-fixes.md` so it stops describing landed work as open.
+   `.cc/plans/PLAN-ccjj-journal-fixes.md` so it stops describing landed work as open.
 
 ---
 

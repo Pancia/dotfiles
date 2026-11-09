@@ -14,7 +14,7 @@ kill anything.**
 | Log | `~/.log/services/claude-watchdog.log` |
 | Bundles | `~/.local/state/claude-watchdog/incidents/` (`drwx------`, 20 kept) |
 | Tests | `services/claude-watchdog/test/run-tests.sh` |
-| Design | `.cc/PLAN-claude-watchdog.md` |
+| Design | `.cc/plans/PLAN-claude-watchdog.md` |
 
 ## Why it exists
 

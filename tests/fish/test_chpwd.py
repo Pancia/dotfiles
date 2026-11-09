@@ -58,6 +58,31 @@ def test_no_plans_prints_nothing(fish):
     assert fish("showPlans") == ""
 
 
+def test_plans_in_the_plans_folder_are_listed(fish):
+    plans = fish.work / ".cc" / "plans"
+    plans.mkdir()
+    (plans / "PLAN-new.md").write_text("")
+    assert fish("showPlans").splitlines()[1:] == ["  .cc/plans/PLAN-new.md"]
+
+
+def test_plans_from_both_locations_are_merged_newest_first(fish):
+    plans = fish.work / ".cc" / "plans"
+    plans.mkdir()
+    new, old = plans / "PLAN-new.md", fish.work / ".cc" / "PLAN-old.md"
+    for mtime, plan in ((2000, new), (1000, old)):
+        plan.write_text("")
+        os.utime(plan, (mtime, mtime))
+    assert [l.strip() for l in fish("showPlans").splitlines()[1:]] == [
+        ".cc/plans/PLAN-new.md", ".cc/PLAN-old.md"]
+
+
+def test_other_folders_in_cc_are_not_listed_as_plans(fish):
+    misc = fish.work / ".cc" / "misc"
+    misc.mkdir()
+    (misc / "PLAN-stray.md").write_text("")
+    assert fish("showPlans") == ""
+
+
 def test_claude_sessions_are_capped_per_section_and_sorted(fish):
     script = r"""
     function ccs

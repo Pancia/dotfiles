@@ -236,7 +236,7 @@ A `WorktreeCreate` hook that made a real **jj workspace** instead of a git
 worktree is the better feature and remains unbuilt: it is a global hook whose
 failure mode is deletion, it rests on undocumented internals the published docs
 get wrong on at least two points, and it would take over `--worktree` in the 45
-git repos as well as the 6 jj ones. The plan survives at `.cc/PLAN-jj-worktree-hook.md`.
+git repos as well as the 6 jj ones. The plan survives at `.cc/plans/PLAN-jj-worktree-hook.md`.
 
 ## Tests
 

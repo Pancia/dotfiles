@@ -4,7 +4,7 @@
 
 | Step in "Suggested order" | State |
 |---|---|
-| Reproduce the `--also` peer leak | Done. Confirmed in `.cc/ccjj-review-2026-11-07.md` §2.2 |
+| Reproduce the `--also` peer leak | Done. Confirmed in `.cc/reports/ccjj-review-2026-11-07.md` §2.2 |
 | 1. `peers_with_a_stake()` | Done, `37fb347f` |
 | 2. `ccjj forget <path>` | Done, `f3b3153b` |
 | 3. Bug 1 `applied()` | Done, `37fb347f` |
@@ -18,7 +18,7 @@ mismatch, new records cannot have it, and `ccjj forget` covers any that do.
 
 Nothing in this plan is open. Line numbers below are from 2026-08-15 and are stale.
 The rest of this file is the original plan. Other ccjj work is listed in
-`.cc/ccjj-review-2026-11-07.md`.
+`.cc/reports/ccjj-review-2026-11-07.md`.
 
 ---
 

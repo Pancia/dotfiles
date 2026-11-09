@@ -13,7 +13,7 @@
 # root. `up --wait` returns only once every service answers (svc's readiness
 # probe), or exits nonzero with the pane's last lines - the form for LLMs.
 #
-# Design (see .cc/PLAN-svc-tmux.md in ~/dotfiles):
+# Design (see .cc/plans/PLAN-svc-tmux.md in ~/dotfiles):
 # - Own server: `tmux -L svc -f lib/svc/tmux.conf`; your normal tmux is untouched.
 # - Scrubbed env: whoever starts the tmux server fixes every window's base env,
 #   so the server starts with the caller's env MINUS session-bound variables

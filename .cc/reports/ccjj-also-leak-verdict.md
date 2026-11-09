@@ -333,7 +333,7 @@ mention of the peer whose work they just committed or deleted.** It fails open
 and fails silent, which for a tool whose entire purpose is "one session's commit
 never captures another's" is the worst failure mode available. The fix the plan
 already proposes — a single shared `peers_with_a_stake()` used by both
-`--also` and `claim` (`.cc/PLAN-ccjj-journal-fixes.md`, Bug 2, fix 1) — is the
+`--also` and `claim` (`.cc/plans/PLAN-ccjj-journal-fixes.md`, Bug 2, fix 1) — is the
 right shape; it should also move `claim`'s peer check *above* the
 removed/renamed redirects, or the redirect keeps handing users a command that
 was never checked.

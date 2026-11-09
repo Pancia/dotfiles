@@ -347,16 +347,21 @@ is `/mnt/.navidrome`.
 `lib_sort`, **not** the play order, and they ignore `:rand` (0 of 5 next tracks predicted). `save -p -`
 and `save -q -` are exact. Remote `rand` and `clear` act only when focus is on the track window, not
 the left panel, and do nothing silently otherwise: use `win-next`, and verify. cmus rewrites `lib.pl`
-and `cache` on exit, so edit those only while it is closed (`.cc/cmus-repath.py` moves them to a new
+and `cache` on exit, so edit those only while it is closed (`.cc/scripts/cmus-repath.py` moves them to a new
 folder). Preloading and a cmus patch were evaluated and rejected once tuning brought song start under
-2 s: [.cc/REVIEW-cmus-preload-patch.md](.cc/REVIEW-cmus-preload-patch.md).
+2 s: [.cc/reports/REVIEW-cmus-preload-patch.md](.cc/reports/REVIEW-cmus-preload-patch.md).
 
 ### Claude Code Project Artifacts
 
-Files in `.cc/` are Claude Code session artifacts:
-- `pending-updates-<ts>-<id>.md` — suggested CLAUDE.md edits from session reviews
-- `PLAN-*.md` — session plans and design documents
-- reports, reviews, patches and useful reproduction scripts
+Files in `.cc/` are Claude Code session artifacts, sorted by type:
+- `plans/PLAN-*.md` — session plans and design documents
+- `reports/` — reviews, audits and verdicts
+- `scripts/` — reproduction and one-off scripts
+- `misc/` — only what fits none of the above: patches, mockups, folders of mixed files
+- `pending-updates-<ts>-<id>.md` and `FIXME*` stay at the top, because tools look for them there
+
+`chpwd` and the dashboard list plans from both `.cc/plans/` and the top of `.cc/`, so a
+project that has not moved its plans still shows them.
 
 Tracked in git via `!.cc` in `git/gitignore_global`, and this repo is public, so
 everything there gets published on the next push.
@@ -483,7 +488,7 @@ open after an edit may show the cached menu and the next one is current. `rebuil
 | `cc-worktree on\|status\|off` | Opt a repo in to per-session worktree isolation, so two Claude sessions get their own checkouts. **`on` is the whole setup** — once per checkout, permanent; `cc` then appends `--worktree` and Claude Code creates, resumes and removes the worktree itself. `on` also writes a starter `.worktreeinclude` (Claude Code's mechanism for carrying untracked local state across) from what it finds in the repo — small config only, and it *names* `node_modules`/`.venv` as deliberately excluded rather than dropping them silently: `.worktreeinclude` copies and **skips symlinks**, so a copied `node_modules` arrives with no `.bin` and fails as command-not-found. Run your installer in the worktree instead. Inside a worktree of a jj repo, **use `git`** — see above. `cc --no-worktree` opts out for one run. Refuses in `~/dotfiles` — that is what `ccjj` is for. See [docs/cc-worktree.md](docs/cc-worktree.md) |
 | `ccjj bash-windows on\|off\|status` | Opt this checkout into recording Bash windows |
 | `ccjj claim PATH` | Accept a Bash-made change as your own, after reading the diff it prints; `-n` to preview |
-| `ccjj forget PATH` | Drop this session's journal records for a path, when one of them is wedging a commit — an inconsistent record, or a `Write` for a file you since deleted. Records are **moved**, not unlinked (`<journal>/<sid>/forgotten/`), because the edits they describe then silently stop being committed. `-n` to preview. See [.cc/PLAN-ccjj-journal-fixes.md](.cc/PLAN-ccjj-journal-fixes.md) for the three bugs that motivated it |
+| `ccjj forget PATH` | Drop this session's journal records for a path, when one of them is wedging a commit — an inconsistent record, or a `Write` for a file you since deleted. Records are **moved**, not unlinked (`<journal>/<sid>/forgotten/`), because the edits they describe then silently stop being committed. `-n` to preview. See [.cc/plans/PLAN-ccjj-journal-fixes.md](.cc/plans/PLAN-ccjj-journal-fixes.md) for the three bugs that motivated it |
 | `revive` | What each terminal pane was doing before it died. Every interactive fish journals its pane; a pane iTerm restores after a crash adopts its predecessor's record and prints it. Bare `revive` in that pane cds back and **resumes its Claude session with the flags it was launched with** (the wrapper records them in the ccs entry, since `--resume` alone drops `--system-prompt`), or offers a plain command back with a `[Y/n]`. `revive ls` lists every ghost against the live window/tab/pane tree with this pane marked, `revive <n>` picks up another, `revive here` shows this pane's in full, `revive go <n>` focuses it, `revive live` shows what every open pane is doing now, `revive dismiss --all` shuts it up. Keyed on the iTerm session **GUID**, which survives a reboot — the `wNtMpK` prefix in front of it does not. A pane closed on purpose erases its own record, so only an unclean death leaves a ghost. Panes with no record but a crashed Claude session are listed too — the only source for panes older than the journal, bounded to GUIDs iTerm still has open. See [docs/revive.md](docs/revive.md) |
 | `claude-p [flags] [prompt]` | Guarded `claude -p` — hard timeout in its own process group, `.is_error` checking, and `--safe-mode` by default. Drop-in for text/json/stream-json. See below |
 | `plainify [-q QUESTION] < reply` | Rewrite an assistant reply shorter and plainer with Haiku: a word budget by kind of reply plus ASD-STE100 Simplified Technical English. Prompt in `ai/templates/plainify.md`; picked on 2026-11-05 over 12 other approaches on 7 real replies. The `/plainify` mod command (`ai/mods/plainify/`, loaded in every session via `CLAUDE_CODE_PLUGIN_DIRS` in `rcs/claude-settings.json`) calls it on the last reply and shows the result in a pane |

@@ -32,7 +32,7 @@
 #   CW_RSS_MB=200 CW_CPU_PCT=5 CW_MIN_AGE=5 ~/dotfiles/bin/claude-watchdog
 #
 # Full design, and the measurements every number descends from:
-#   .cc/PLAN-claude-watchdog.md   docs/claude-watchdog.md
+#   .cc/plans/PLAN-claude-watchdog.md   docs/claude-watchdog.md
 
 # Not `set -e`: a failed `lsof` or `sample` on one pathological process must not
 # abandon the other candidates in the same run.
