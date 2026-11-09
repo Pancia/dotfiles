@@ -4,6 +4,18 @@ require "shellwords"
 
 class MusicDB
 
+  # For commands that read every audio file. ProtonDrive keeps only placeholders on
+  # disk, so reading them all downloads the whole library. The server mount is read-only.
+  def self.abort_unless_local_library(command)
+    resolve = ->(p) { (File.realpath(p) rescue File.expand_path(p)).chomp("/") }
+    library = resolve.call(ENV.fetch("MUSIC_LIBRARY"))
+    remote = [File.expand_path("~/Library/CloudStorage"), ENV["MUSIC_CLOUD"], ENV["MUSIC_PLAYBACK"]]
+      .compact.map(&resolve)
+    return unless remote.any? { |r| library == r || library.start_with?(r + "/") }
+    abort "music #{command}: refused. $MUSIC_LIBRARY is a cloud or network folder (#{library}), " \
+          "and this command reads every file. Set MUSIC_LIBRARY to a local copy to run it."
+  end
+
   def self.save(music, temp_name = "")
     tmp = Tempfile.new temp_name
     p tmp.path if $options[:verbose]

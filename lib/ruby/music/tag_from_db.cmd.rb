@@ -16,6 +16,7 @@ module MusicCMD
     }
 
     lambda {
+      MusicDB.abort_unless_local_library("tag_from_db")
       workers = $options[:workers] || 4
       music = MusicDB.read
 

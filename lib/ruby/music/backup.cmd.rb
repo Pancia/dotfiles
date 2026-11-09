@@ -13,6 +13,7 @@ module MusicCMD
       cloud = ENV['MUSIC_CLOUD']
       abort "MUSIC_LIBRARY not set" unless lib
       abort "MUSIC_CLOUD not set" unless cloud
+      MusicDB.abort_unless_local_library("backup")
 
       section = ->(title) { puts "", "── #{title} " + "─" * [60 - title.length, 2].max }
       run = ->(env, cmd) {
