@@ -56,9 +56,10 @@ try:
         entry, reply = read_transcript(data.get("transcript_path", ""))
     except OSError:  # the first prompt of a session can come before its transcript
         entry, reply = "", ""
-    # The transcript's entrypoint comes first, because a nested session inherits
-    # CLAUDE_CODE_ENTRYPOINT from its parent.
-    if (entry or os.environ.get("CLAUDE_CODE_ENTRYPOINT")) != "cli":
+    # Claude Code rewrites an inherited "cli" to "sdk-cli" in a headless child, so
+    # the variable describes this process and is checked first. The transcript's
+    # tail can say "cli" on `claude -p --resume`, so it can only veto the note.
+    if os.environ.get("CLAUDE_CODE_ENTRYPOINT") != "cli" or entry not in ("", "cli"):
         sys.exit(0)
     note = FORMAT_NOTE
     # ALT_AGENT_ID is inherited by child processes, so recons started by the

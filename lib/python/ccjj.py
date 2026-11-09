@@ -1457,13 +1457,18 @@ def cmd_commit(args):
             # sessions edited, which `mine` rightly leaves out. Following the
             # printed `ccjj claim` for that last one committed the peer's
             # unfinished hunk under this session's message, exit 0.
+            #
+            # `still` applies only outside `mine`. Records that rebuild something
+            # other than the disk must stop even when the path equals @-: jj has
+            # nothing to select there, so the commit dies with "did not take",
+            # where exit 5 gives a `claim` that works.
             cov = window_coverage()
             still = working_copy_paths()
             peer_edits = peer_record_paths(sid)
             uncovered = [p for p, who in cov.items()
                          if sid in who and who[sid] != OFFERED and p not in also
-                         and (still is None or p in still)
-                         and (p not in mine or mine[p] != working_copy_bytes(p))]
+                         and ((p not in mine and (still is None or p in still))
+                              or (p in mine and mine[p] != working_copy_bytes(p)))]
             loose = sorted(p for p in uncovered if p not in peer_edits)
             shared = {p for p in uncovered if p in mine and p in peer_edits}
             if loose:
@@ -2072,7 +2077,13 @@ def whole_path_changes(sid):
             groups.append((src, tgt))
         elif status == "removed":
             groups.append((tgt,))
-    return groups
+    still = working_copy_paths()
+    if still is None:
+        return groups
+    # A half already committed cannot be named: --also dies on a path that is in
+    # neither the working copy nor @-, so one such half voids the whole command.
+    trimmed = [tuple(p for p in g if p in still) for g in groups]
+    return [g for g in trimmed if g]
 
 
 def also_advice(paths, groups):

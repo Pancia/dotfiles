@@ -299,14 +299,14 @@ body — the user wrote it with you.
 🟢 `LANDED` — the paths that landed: a file list, not line counts (`--summary`,
 not `--stat`).
 
-🔵 `LEFT` — the paths deliberately left behind, and why. Omit it when there are
-none.
-
 🟡 `WATCH` — omit it when there is nothing. It exists for:
 
 - unclaimed paths you decided were **not** yours, and why you left them
 - `@- has moved` — name the `jj op restore <id>` and stop; never run it
 - anything that landed which you were not confident belonged
+
+🔵 `LEFT` — the paths deliberately left behind, and why. Omit it when there are
+none.
 
 **Needs you:** — always present, and after a commit it is rarely empty:
 

@@ -3148,3 +3148,82 @@ def test_who_says_so_when_nobody_has_a_stake(repo):
     r = repo.run("who", "f.txt", sid="S1")
     assert r.returncode == 0
     assert "no session has" in r.stdout
+
+
+# ------------------------- exit 5: a span that holds another session's commit
+
+def _peer_moves_and_commits(repo, sid="S1"):
+    """A peer moves a file and commits, between two of this session's Bash calls."""
+    _optin(repo)
+    repo.write("moved.txt", LONG)
+    repo.write("own.txt", "o\n")
+    repo.write("other.txt", "x\n")
+    repo.commit("base")
+    _bash(repo, sid)
+    os.rename(os.path.join(repo.root, "moved.txt"), os.path.join(repo.root, "dest.txt"))
+    repo.write("other.txt", "peer committed\n")
+    repo.commit("peer commit")
+    _bash(repo, sid, tuid="t2")
+
+
+def test_commit_does_not_stop_on_paths_committed_inside_the_span(repo):
+    _peer_moves_and_commits(repo)
+    _hook_edit(repo, "S1", "own.txt", "o", "O")
+    r = repo.run("commit", "-m", "mine", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert repo.show("own.txt") == b"O\n"
+
+
+def test_uncommitted_bash_change_stops_without_naming_committed_moves(repo):
+    _peer_moves_and_commits(repo)
+    _hook_edit(repo, "S1", "own.txt", "o", "O")
+    repo.write("other.txt", "my bash change\n")
+    _bash(repo, "S1", tuid="t3")
+    r = repo.run("commit", "-m", "mine", sid="S1")
+    assert r.returncode == 5, r.stderr
+    assert "ccjj claim other.txt" in r.stderr, r.stderr
+    assert "moved.txt" not in r.stderr, r.stderr
+    assert "--also" not in r.stderr.replace("--no-claim", ""), r.stderr
+
+
+def test_uncommitted_rename_still_stops_and_names_both_halves(repo):
+    _moved(repo)
+    r = repo.run("commit", "-m", "x", "--also", "sed.txt", sid="S1")
+    assert r.returncode == 5, r.stderr
+    assert "--also old.txt --also new.txt" in _also_line(r.stderr)
+
+
+def test_also_advice_omits_the_half_of_a_move_already_committed(repo):
+    """--also dies on a path in neither the working copy nor @-, so naming the
+    committed half made the whole printed command unusable."""
+    _peer_moves_and_commits(repo)
+    repo.write("dest.txt", LONG + "tail from bash\n")
+    _bash(repo, "S1", tuid="t3")
+    _hook_edit(repo, "S1", "own.txt", "o", "O")
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode == 5, r.stderr
+    line = _also_line(r.stderr)
+    assert "--also moved.txt" not in line, line
+    assert "--also dest.txt" in line, line
+    ok = repo.run("commit", "-m", "x", "--also", "dest.txt", sid="S1")
+    assert ok.returncode == 0, ok.stderr
+    assert repo.show("dest.txt") == (LONG + "tail from bash\n").encode()
+
+
+def test_records_that_differ_from_disk_stop_even_when_the_path_equals_parent(repo):
+    """Filtering this branch on "differs from @-" turned exit 5, with a claim
+    that works, into "the commit did not take" and a rollback."""
+    _optin(repo)
+    repo.write("f.txt", "a\nb\n")
+    repo.write("g.txt", "g\n")
+    repo.commit("base")
+    _bash(repo)
+    _hook_edit(repo, "S1", "f.txt", "a", "A")          # record a->A
+    repo.write("f.txt", "a\nB\n")                       # Bash undoes it, changes b
+    _bash(repo, tuid="t2")
+    repo.commit("peer sweeps whole working copy")      # @- has a\nB, @ == @- for f
+    _bash(repo, tuid="t3")
+    _hook_edit(repo, "S1", "g.txt", "g", "G")
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode == 5, r.stdout + r.stderr
+    assert "ccjj claim f.txt" in r.stderr
