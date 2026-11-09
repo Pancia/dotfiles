@@ -179,7 +179,23 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
 
     # Post-session review: find the session JSONL and review in background
     if test $skip_extras -eq 0; and test -d "$sessions_dir"
-        set -l post_latest (find "$sessions_dir" -maxdepth 1 -name '*.jsonl' -type f -exec stat -f '%m %N' {} + 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+        # The session that just ended, by the id ccsave-hook stamped. "Newest file
+        # in the folder" reviews the wrong conversation whenever another live
+        # session shares this directory, and an older one when this session never
+        # wrote a transcript, so a recorded id with no file means no review.
+        # The newest-file guess remains only for when no hook ran (--safe-mode).
+        set -l post_latest
+        set -l ended_session
+        if test -n "$CCS_ENTRY_FILE"; and test -f "$CCS_ENTRY_FILE"
+            set ended_session (jq -r '.session_id // empty' "$CCS_ENTRY_FILE" 2>/dev/null)
+        end
+        if test -n "$ended_session"
+            if test -f "$sessions_dir/$ended_session.jsonl"
+                set post_latest "$sessions_dir/$ended_session.jsonl"
+            end
+        else
+            set post_latest (find "$sessions_dir" -maxdepth 1 -name '*.jsonl' -type f -exec stat -f '%m %N' {} + 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+        end
         if test -n "$post_latest"
             echo "📋 Reviewing session for CLAUDE.md updates (background)..."
             # This used to be `&>/dev/null`, which threw away the one signal that a
@@ -192,7 +208,11 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
                 tail -n 500 "$review_log" > "$review_log.trim"; and mv "$review_log.trim" "$review_log"
             end
             printf '=== %s %s\n' (date '+%Y-%m-%d %H:%M:%S') "$post_latest" >> "$review_log"
-            fish -c "cc-session-review '$post_latest'" >>"$review_log" 2>&1 &
+            # </dev/null is load-bearing. Otherwise the job keeps the terminal as
+            # stdin, and closing the pane right after quitting revokes it: every
+            # Python in the review then dies at startup with "init_sys_streams:
+            # Bad file descriptor". That was 22 of 49 logged runs.
+            fish -c "cc-session-review '$post_latest'" </dev/null >>"$review_log" 2>&1 &
             disown
 
             # Back up session if it's a saved one

@@ -16,6 +16,7 @@ the code under test ever runs.
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 
 DOTFILES = Path(__file__).resolve().parents[2]
@@ -131,6 +132,9 @@ class Wrapped:
         self.claude_log = self.base / "claude.log"
         self.label_log = self.base / "label.log"
         self.spy_log = self.base / "spy.log"
+        self.review_log = self.base / "review.log"
+        mangled = str(self.root).replace("/", "-").replace(".", "-").replace(":", "-")
+        self.sessions = self.home / ".claude" / "projects" / mangled
         for d in (self.root, self.home, self.stub, self.xdg, self.xdg_config):
             d.mkdir(parents=True, exist_ok=True)
         os.symlink(DOTFILES, self.home / "dotfiles")
@@ -177,7 +181,7 @@ class Wrapped:
                               cwd=str(cwd or self.root), capture_output=True,
                               text=True, env=self.env())
 
-    def run(self, *args, cwd=None, script="", extra_path=""):
+    def run(self, *args, cwd=None, script="", extra_path="", stdin=None, extra_env=None):
         """Run the wrapper once, in its own fish.
 
         PATH is set INSIDE the fish command: fish/conf.d/path.fish re-prepends
@@ -195,7 +199,8 @@ class Wrapped:
             f"my-claude-code-wrapper {argline}\n"
         )
         return subprocess.run(["fish", "-c", code], capture_output=True, text=True,
-                              env=self.env(CLAUDE_STUB_SCRIPT=script))
+                              stdin=stdin,
+                              env=self.env(CLAUDE_STUB_SCRIPT=script, **(extra_env or {})))
 
     def claude_ran_in(self):
         if not self.claude_log.exists():
@@ -316,6 +321,86 @@ class TestNoWorktreeOptOut:
         wrapped.run("--process-label", "mylabel", "--no-worktree")
         assert "mylabel" in wrapped.labels()[0], wrapped.labels()
         assert "--worktree" not in wrapped.claude_argv()[0]
+
+
+REVIEW_STUB = """\
+#!/bin/bash
+# Records which transcript was reviewed and whether stdin is /dev/null.
+if [ /dev/fd/0 -ef /dev/null ]; then in=devnull; else in=other; fi
+echo "$in $1" >> "$REVIEW_STUB_LOG"
+"""
+
+STAMP_SESSION = (
+    "jq --arg id ENDED '.session_id = $id' \"$CCS_ENTRY_FILE\" > \"$CCS_ENTRY_FILE.t\""
+    " && mv \"$CCS_ENTRY_FILE.t\" \"$CCS_ENTRY_FILE\""
+)
+
+
+class TestPostSessionReview:
+    """Which transcript the quit-time review gets, and what it inherits."""
+
+    @pytest.fixture
+    def review(self, tmp_path):
+        w = Wrapped(tmp_path, opt_in=False)
+        stub = w.stub / "cc-session-review"
+        stub.write_text(REVIEW_STUB)
+        stub.chmod(0o755)
+        # The wrapper appends to ~/.log/cc-session-review.log.
+        (w.home / ".log").mkdir()
+        w.sessions.mkdir(parents=True)
+        return w
+
+    @staticmethod
+    def transcripts(w, *names):
+        """Create transcripts, oldest first, so the last name is the newest."""
+        for age, name in enumerate(reversed(names)):
+            p = w.sessions / f"{name}.jsonl"
+            p.write_text("{}\n")
+            stamp = time.time() - 100 * (age + 1)
+            os.utime(p, (stamp, stamp))
+
+    @staticmethod
+    def run_wrapper(w, script=""):
+        return w.run("--no-worktree", script=script, stdin=subprocess.PIPE,
+                     extra_env={"REVIEW_STUB_LOG": str(w.review_log)})
+
+    @staticmethod
+    def reviewed(w):
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            if w.review_log.exists() and w.review_log.read_text().strip():
+                return w.review_log.read_text().split()
+            time.sleep(0.1)
+        pytest.fail("the review never ran")
+
+    def test_reviews_the_session_that_ended_not_the_newest(self, review):
+        """Pins: a second live session in the folder writes a newer transcript,
+        and the newest-file guess reviewed that conversation instead."""
+        self.transcripts(review, "ENDED", "OTHER-LIVE-SESSION")
+        r = self.run_wrapper(review, STAMP_SESSION)
+        assert r.returncode == 0, r.stderr
+        assert self.reviewed(review)[1] == str(review.sessions / "ENDED.jsonl")
+
+    def test_review_does_not_inherit_the_terminal(self, review):
+        """Pins: 22 of 49 runs dying at Python startup. Closing the pane revokes
+        an inherited tty, so stdin must not be whatever the wrapper was given."""
+        self.transcripts(review, "ENDED")
+        self.run_wrapper(review, STAMP_SESSION)
+        assert self.reviewed(review)[0] == "devnull"
+
+    def test_no_transcript_means_no_review(self, review):
+        """A session quit before its first message has no file. Falling through
+        to the newest one would review some earlier conversation."""
+        self.transcripts(review, "SOME-EARLIER-SESSION")
+        r = self.run_wrapper(review, STAMP_SESSION)
+        assert r.returncode == 0, r.stderr
+        assert "Reviewing session" not in r.stdout
+
+    def test_falls_back_to_newest_when_no_hook_stamped(self, review):
+        """--safe-mode disables the SessionStart hook, so no id is recorded."""
+        self.transcripts(review, "OLDER", "NEWEST")
+        self.run_wrapper(review)
+        assert self.reviewed(review)[1] == str(review.sessions / "NEWEST.jsonl")
 
 
 class TestSuppressionCases:
