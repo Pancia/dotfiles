@@ -88,7 +88,7 @@ class MusicDB
         log_dir = File.expand_path("~/.log/music")
         FileUtils.mkdir_p(log_dir)
         log = "#{log_dir}/#{i["id"]}.log"
-        system("ffmpeg -v warning -i $MUSIC_LIBRARY/#{file} #{meta_str} $MUSIC_LIBRARY/#{tmp} 2>&1 | tee -a #{log} && mv $MUSIC_LIBRARY/#{tmp} $MUSIC_LIBRARY/#{file}")
+        system("ffmpeg -v warning -i $MUSIC_LIBRARY/#{file} -c copy #{meta_str} $MUSIC_LIBRARY/#{tmp} 2>&1 | tee -a #{log} && mv $MUSIC_LIBRARY/#{tmp} $MUSIC_LIBRARY/#{file}")
         return :tagged
       end
     end
@@ -174,7 +174,7 @@ class MusicDB
         puts meta_str if $options[:verbose]
         file = i["id"]+".m4a"
         tmp = i["id"]+".tmp.m4a"
-        output = `ffmpeg -v warning -i "$MUSIC_LIBRARY/#{file}" #{meta_str} "$MUSIC_LIBRARY/#{tmp}" 2>&1`
+        output = `ffmpeg -v warning -i "$MUSIC_LIBRARY/#{file}" -c copy #{meta_str} "$MUSIC_LIBRARY/#{tmp}" 2>&1`
         if $?.success? && File.exist?("#{ENV['MUSIC_LIBRARY']}/#{tmp}")
           system("mv \"$MUSIC_LIBRARY/#{tmp}\" \"$MUSIC_LIBRARY/#{file}\"")
           return [:tagged, nil]
