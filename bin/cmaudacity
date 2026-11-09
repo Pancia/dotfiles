@@ -6,4 +6,4 @@ uuid=$(cmus-remote --raw status \
     | xargs basename \
     | sed 's/\..*$//')
 
-open -a audacity $MUSIC_DIR/$uuid.m4a
+open -a audacity "$MUSIC_PLAYBACK/$uuid.m4a"

@@ -72,10 +72,11 @@ service edit <name>       # Edit a service's script and plist
 | `disk-snapshot` | Sun & Wed 3:00 | Create disk usage snapshot to `~/.local/share/disk-snapshots/` |
 | `claude-watchdog` | Every 60s | Watch for a headless `claude` growing without bound. **Observe-only (phase 2): records, bundles forensics, notifies — cannot kill.** See [docs/claude-watchdog.md](docs/claude-watchdog.md) |
 | `bookmark-manager` | Daily 2:00 | Sync browser bookmarks |
-| `music-backup` | Daily 3:00 | Backup music library via `music backup` |
+| `music-backup` | **Off** | `music backup`; its source drive is dead. See "Music streaming" below |
 | `sanctuary` | On demand | Rotate encrypted backup directories |
 | `copyparty` | Startup | Media server for file sharing |
 | `music-mount` | Startup | Read-only `rclone nfsmount` of the server's music at `~/Music/music-server`, for cmus. See "Music streaming" below |
+| `server-check` | Daily 9:00 | Check the Vultr server: Headscale and its certificate, SSH, the disk lock, Navidrome. Silent when healthy; at most one macOS notification. `SERVER_CHECK_DRY=1 services/server-check/script.sh` tests it |
 
 See `service list` for all installed services. `bin/ziplog` can also be run manually with `ziplog --yes` (skips confirmation prompt).
 
@@ -309,9 +310,12 @@ empty folder. When locked, `/mnt` is a plain folder on the unencrypted root disk
 that writes there must first check `mount | grep -q '^/dev/sd2a on /mnt '`.
 
 **`/mnt/MyMusic` is the only copy with an independent lineage** (the USB drive is dead; ProtonDrive
-and restic share a damaged one). Never delete from it. `q remote-sync` is disabled by an `exit 999`
-for a reason: it uses `rsync --delete`, its `Music/MyMusic` source is empty, and `private` is now a
-symlink. Do not re-enable it unchanged.
+and restic share a damaged one). Never delete from it. `q remote-sync` (`~/ProtonDrive/bin/remote-sync`) was
+rebuilt without `--delete` for that reason: never add it back, because its old `Music/MyMusic`
+source is empty.
+
+Syncthing runs Mac to phone over Tailscale: the Mac dials `tcp://100.64.0.2:22000`, and global
+discovery, relays and NAT mapping are off.
 
 **Navidrome** is the OpenBSD package, 0.51.1. No newer OpenBSD build exists. It binds only to
 `100.64.0.3:4533`, and pf allows that port only on `tun0`. Config is `/etc/navidrome.toml`, data
@@ -319,19 +323,36 @@ is `/mnt/.navidrome`.
 - It reports its version as `dev`, so current Feishin in Navidrome mode sends a `missing` filter
   that 0.51 does not have and its pages fail with SQL errors. Add the server as Subsonic/OpenSubsonic.
 - A restart does not start a scan. The schedule is `@every 1h`, counted from the restart.
-- Playlists come from `$MUSIC_CATALOG`: `.cc/navidrome-m3u.py OUTDIR`, copied to
-  `/mnt/MyMusic/playlists/`. Tracks must be in the database first. To re-import, `touch` the files
-  and the folder, then let a scan run. A scan of the whole library takes about 30 minutes or more
-  on this disk, so run one at a time.
+- **`music push` is the route for new tracks** (`lib/ruby/music/push.cmd.rb`; `music -n push` is a
+  dry run). It sends catalog tracks the server lacks from `$MUSIC_CLOUD`, only adding, and rewrites
+  the playlists in `/mnt/MyMusic/playlists/` from `$MUSIC_CATALOG`. It skips files changed in the
+  last 2 minutes, because a track is tagged after it is copied and `--ignore-existing` would keep
+  the untagged one. Navidrome picks changes up at its next hourly scan.
+- Tracks must be in the database before their playlists import correctly. A scan of the whole
+  library takes about 30 minutes or more on this disk, so run one at a time.
 
 **The mount** (`services/music-mount/`) needs the rclone remote `music-server`, which is in
 `~/.config/rclone/rclone.conf` and is not tracked. Homebrew's rclone has no `mount`, but
 `nfsmount` works without root.
+
+**Background jobs use their own keys,** because the normal key has a passphrase and is unavailable
+after a Mac restart until someone logs in. `~/.ssh/music_mount` (the mount) and `~/.ssh/server_check`
+(the daily check) have no passphrase. Both log in as the server user `musicread`, and
+`authorized_keys` limits each one: the first to `sftp-server -R` (read-only), the second to
+`/usr/local/bin/server-health`. `musicread` is in group `_navidrome`, which is how it reads `MyMusic`.
+So any new folder under `/mnt` that holds private data needs group `wheel` and mode 750: new folders
+inherit `/mnt`'s group, `_navidrome`. A forced command breaks rclone's hash probing, so the remote
+needs `shell_type = none` and `disable_hashcheck = true`. Repeated failed SSH logins make the server
+refuse this Mac for a couple of minutes.
 - **`$MUSIC_PLAYBACK` is the mount; `$MUSIC_LIBRARY` must never point at it.** `music backup`
-  (daily, 3:00) copies `$MUSIC_LIBRARY` over ProtonDrive, and the server's files are older.
-- It is read-only, so tools that change audio files (tagging) fail. `music import` still targets
-  the dead `$MUSIC_LIBRARY`. New tracks have no automatic route to the server yet: copy them with
-  `rsync --ignore-existing`, never `--delete`.
+  copies `$MUSIC_LIBRARY` over ProtonDrive, and the server's files are older.
+- It is read-only, so tools that change audio files (tagging) fail. By default `music import` and
+  `import_single` still target the dead `$MUSIC_LIBRARY`, and they add the catalog entry *before*
+  the copy, so a failed copy leaves an entry with no file.
+- The nightly `music-backup` service is off: its source drive is dead, and it had failed 221 of 222
+  runs with `music: command not found` (launchd has no such PATH). Its plist is renamed
+  `*.plist.disabled`, because `_ENSURE_SERVICES` in `fish/config.fish` reinstalls any `services/*/*.plist`
+  on shell startup, so `service stop` or deleting the installed copy does not last.
 - The settings are measured, so do not drop them casually. `--vfs-fast-fingerprint` skips a
   full-file checksum on the server, and `--sftp-idle-timeout 0` with `ServerAliveInterval` in the
   rclone `ssh` line avoids a new SSH login per song. Together they took the first 64 KB of an

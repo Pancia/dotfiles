@@ -20,6 +20,9 @@ OpenBSD 7.8 VPS on Vultr running Headscale (self-hosted Tailscale).
 | Tailscale | - | Joins the tailnet as `vultr`, 100.64.0.3 (`tun0`) |
 | Navidrome | 4533 (Tailscale only) | Music server. Started by `~/bin/mnt`, not at boot. See "Music streaming" in the root CLAUDE.md |
 
+The user `musicread` exists only for two restricted keys used by Mac background jobs. See
+"Music streaming" in the root CLAUDE.md.
+
 ## DNS Records (Porkbun)
 
 ```

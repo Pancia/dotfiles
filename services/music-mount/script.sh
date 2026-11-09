@@ -2,7 +2,9 @@
 # Show the music on the Vultr server as a local folder, for cmus.
 #
 # Read-only on purpose: /mnt/MyMusic is the only independent copy of the library.
-# Needs the rclone remote "music-server" (sftp, ~/.config/rclone/rclone.conf).
+# Needs the rclone remote "music-server" (sftp, ~/.config/rclone/rclone.conf). It logs
+# in as "musicread" with ~/.ssh/music_mount, which has no passphrase so this works after
+# a restart. The server limits that key to read-only file access.
 # If the server's encrypted disk is locked, the folder is empty: run bin/mnt there.
 #
 # Do NOT mount this at $MUSIC_LIBRARY. The nightly `music backup` copies that
