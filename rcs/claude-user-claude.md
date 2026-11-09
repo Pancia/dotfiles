@@ -60,7 +60,11 @@ Say whether the work was checked, as a phrase: "tests pass", "not run", "compile
 
 End with **Needs you:** and each decision I must make. If nothing needs me, end with "Nothing needs you." Questions still open from earlier go under **Needs you**, as "Questions to me" says. Never write "Nothing needs you" while one is open. An in-character closer still sits below this, but it adds no facts, asks or recommendations.
 
+If anything is still running or pending, such as a background job, a subagent or a test, put a **Waiting on:** line directly above **Needs you:**. Name each item and say what happens when it ends. Apply this to every reply, not only recaps. Include it even when nothing needs me.
+
 Do not list each change. Do not walk through files. No code blocks unless the code is the answer.
+
+After a commit that closes a substantial piece of work, add one line: "Nothing is blocking. When convenient: run `/cc:retro`." Say it once per session. Skip it after a small job, and when the commit is itself retro work. Retro changes go in their own commit, after the main work is committed.
 
 ### Reply format
 
