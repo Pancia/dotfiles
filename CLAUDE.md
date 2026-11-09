@@ -75,6 +75,7 @@ service edit <name>       # Edit a service's script and plist
 | `music-backup` | Daily 3:00 | Backup music library via `music backup` |
 | `sanctuary` | On demand | Rotate encrypted backup directories |
 | `copyparty` | Startup | Media server for file sharing |
+| `music-mount` | Startup | Read-only `rclone nfsmount` of the server's music at `~/Music/music-server`, for cmus. See "Music streaming" below |
 
 See `service list` for all installed services. `bin/ziplog` can also be run manually with `ziplog --yes` (skips confirmation prompt).
 
@@ -293,6 +294,62 @@ hook bundles it to ProtonDrive). After any change, commit in the vault with git
 and check for `post-commit: backup OK`.
 
 Details, traps and restore: [docs/work-config-vault.md](docs/work-config-vault.md).
+
+### Music streaming (Navidrome + cmus mount)
+
+The library lives on the Vultr server (`ssh anthony@anthonydambrosio.me`, OpenBSD 7.8; see
+[remote/anthonydambrosio.me/README.md](remote/anthonydambrosio.me/README.md)), at
+`/mnt/MyMusic/my-music/<uuid>.m4a`. Phones use Navidrome over Tailscale. The Mac plays it in
+cmus through a mount.
+
+**The encrypted disk.** `/mnt` is a softraid CRYPTO volume that locks on every server restart.
+Only the user can unlock it: `bin/mnt` on the server asks for the passphrase, mounts it and
+starts Navidrome. Navidrome is deliberately **not** enabled at boot, because it would scan an
+empty folder. When locked, `/mnt` is a plain folder on the unencrypted root disk, so any script
+that writes there must first check `mount | grep -q '^/dev/sd2a on /mnt '`.
+
+**`/mnt/MyMusic` is the only copy with an independent lineage** (the USB drive is dead; ProtonDrive
+and restic share a damaged one). Never delete from it. `q remote-sync` is disabled by an `exit 999`
+for a reason: it uses `rsync --delete`, its `Music/MyMusic` source is empty, and `private` is now a
+symlink. Do not re-enable it unchanged.
+
+**Navidrome** is the OpenBSD package, 0.51.1. No newer OpenBSD build exists. It binds only to
+`100.64.0.3:4533`, and pf allows that port only on `tun0`. Config is `/etc/navidrome.toml`, data
+is `/mnt/.navidrome`.
+- It reports its version as `dev`, so current Feishin in Navidrome mode sends a `missing` filter
+  that 0.51 does not have and its pages fail with SQL errors. Add the server as Subsonic/OpenSubsonic.
+- A restart does not start a scan. The schedule is `@every 1h`, counted from the restart.
+- Playlists come from `$MUSIC_CATALOG`: `.cc/navidrome-m3u.py OUTDIR`, copied to
+  `/mnt/MyMusic/playlists/`. Tracks must be in the database first. To re-import, `touch` the files
+  and the folder, then let a scan run. A scan of the whole library takes about 30 minutes or more
+  on this disk, so run one at a time.
+
+**The mount** (`services/music-mount/`) needs the rclone remote `music-server`, which is in
+`~/.config/rclone/rclone.conf` and is not tracked. Homebrew's rclone has no `mount`, but
+`nfsmount` works without root.
+- **`$MUSIC_PLAYBACK` is the mount; `$MUSIC_LIBRARY` must never point at it.** `music backup`
+  (daily, 3:00) copies `$MUSIC_LIBRARY` over ProtonDrive, and the server's files are older.
+- It is read-only, so tools that change audio files (tagging) fail. `music import` still targets
+  the dead `$MUSIC_LIBRARY`. New tracks have no automatic route to the server yet: copy them with
+  `rsync --ignore-existing`, never `--delete`.
+- The settings are measured, so do not drop them casually. `--vfs-fast-fingerprint` skips a
+  full-file checksum on the server, and `--sftp-idle-timeout 0` with `ServerAliveInterval` in the
+  rclone `ssh` line avoids a new SSH login per song. Together they took the first 64 KB of an
+  uncached track from a median of 2.06 s to 0.76 s.
+- `--dir-cache-time 168h` means new server tracks can take a week to appear. `service restart
+  music-mount` shows them now.
+- Listing the 4,300-file folder takes about 107 s through the mount and 6 s with `rclone lsf`. While
+  a request is that slow, macOS prints "nfs server ... not responding" onto the terminal of the
+  blocked process, which garbles cmus until Ctrl-L. The startup `add` in `fish/functions/cmus.fish`
+  causes one such listing. It was kept on purpose.
+
+**Scripting cmus.** `save -l`, `save -L` and bare `save` return a hash-table order sorted by
+`lib_sort`, **not** the play order, and they ignore `:rand` (0 of 5 next tracks predicted). `save -p -`
+and `save -q -` are exact. Remote `rand` and `clear` act only when focus is on the track window, not
+the left panel, and do nothing silently otherwise: use `win-next`, and verify. cmus rewrites `lib.pl`
+and `cache` on exit, so edit those only while it is closed (`.cc/cmus-repath.py` moves them to a new
+folder). Preloading and a cmus patch were evaluated and rejected once tuning brought song start under
+2 s: [.cc/REVIEW-cmus-preload-patch.md](.cc/REVIEW-cmus-preload-patch.md).
 
 ### Claude Code Project Artifacts
 

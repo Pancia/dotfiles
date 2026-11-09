@@ -17,6 +17,8 @@ OpenBSD 7.8 VPS on Vultr running Headscale (self-hosted Tailscale).
 | relayd | 443 | TLS termination for Headscale |
 | httpd | 80 | ACME challenges only |
 | sshd | 22 | SSH access |
+| Tailscale | - | Joins the tailnet as `vultr`, 100.64.0.3 (`tun0`) |
+| Navidrome | 4533 (Tailscale only) | Music server. Started by `~/bin/mnt`, not at boot. See "Music streaming" in the root CLAUDE.md |
 
 ## DNS Records (Porkbun)
 
@@ -82,7 +84,7 @@ dns:
       - 1.1.1.1
       - 1.0.0.1
 
-unix_socket: /var/run/headscale/headscale.sock
+unix_socket: /var/db/headscale/headscale.sock  # not /var/run: OpenBSD empties that at boot
 ```
 
 ### /etc/headscale/acl.hujson

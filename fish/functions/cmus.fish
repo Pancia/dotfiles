@@ -1,5 +1,5 @@
 function cmus --description 'Start cmus with random mode' --wraps cmus
-    set -l ml $MUSIC_LIBRARY
+    set -l ml $MUSIC_PLAYBACK
     fish -c "
         sleep 1
         cmus-remote -C 'add $ml'
