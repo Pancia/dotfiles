@@ -292,31 +292,46 @@ def main():
     elif args[0].startswith("-"):
         # Flags only - run all with flags
         sys.exit(run_all(args))
-    elif args[0] in ALIASES:
+
+    # Paths are relative to tests/, but `tests/fish/x.py` is what tab completion
+    # from the repo root produces. A node id (`x.py::test_y`) is not a file, so
+    # only the part before `::` can be checked for existence or matched.
+    target = "" if args[0].rstrip("/") == "tests" else args[0].removeprefix("tests/")
+    file_part = target.split("::", 1)[0].rstrip("/")
+
+    if not target:
+        sys.exit(run_all(args[1:]))
+    elif target in ALIASES:
         # Alias lookup
-        component = ALIASES[args[0]]
-        sys.exit(run_component(component, args[1:])[0])
-    elif args[0] in COMPONENTS:
+        sys.exit(run_component(ALIASES[target], args[1:])[0])
+    elif file_part in COMPONENTS and "::" not in target:
         # Direct component path
-        sys.exit(run_component(args[0], args[1:])[0])
-    elif (TESTS_DIR / args[0]).exists():
-        # Subpath - find every matching component (e.g. "bin" covers
+        sys.exit(run_component(file_part, args[1:])[0])
+    elif (TESTS_DIR / file_part).exists():
+        # A path inside one component runs just that file or node, with that
+        # component's dependencies. It used to run the whole component.
+        owners = [c for c in COMPONENTS if file_part.startswith(c + "/")]
+        if owners:
+            config = COMPONENTS[max(owners, key=len)]
+            sys.exit(
+                run_pytest(
+                    TESTS_DIR / target, config.get("deps", []), args[1:], config.get("source_path")
+                )[0]
+            )
+        # A parent directory runs every component under it (e.g. "bin" covers
         # bin/astro, bin/ytdl and bin/exocortex-id).
-        subpath = args[0]
-        matches = [
-            c
-            for c in COMPONENTS
-            if subpath.startswith(c) or c.startswith(subpath.rstrip("/") + "/") or c == subpath
-        ]
+        matches = [c for c in COMPONENTS if c.startswith(file_part + "/")]
         if len(matches) == 1:
             sys.exit(run_component(matches[0], args[1:])[0])
         elif matches:
             sys.exit(run_all(args[1:], components=matches))
         # Fallback: treat as pytest path
-        sys.exit(run_pytest(TESTS_DIR / subpath, [], args[1:])[0])
+        sys.exit(run_pytest(TESTS_DIR / target, [], args[1:])[0])
     else:
-        # Unknown - pass through to run_all as pytest args
-        sys.exit(run_all(args))
+        # Not a pass-through: an unknown word used to reach run_all as a pytest
+        # argument, so a typo ran the whole suite (and then failed on the path).
+        print(f"Unknown component or path under {TESTS_DIR}: {args[0]}", file=sys.stderr)
+        sys.exit(2)
 
 
 if __name__ == "__main__":

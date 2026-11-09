@@ -2239,7 +2239,7 @@ def test_claim_checks_peers_before_redirecting_a_delete_to_also(repo):
     _bash(repo, "S1")
     r = repo.run("claim", "peer.txt", sid="S1")
     assert r.returncode == 1
-    assert "also claimed by" in r.stderr and "--also" not in r.stderr
+    assert "Bash span of session(s) S2" in r.stderr and "--also" not in r.stderr
 
 
 def test_also_names_a_symlink_not_its_target(repo):
@@ -2503,3 +2503,345 @@ def test_resumed_session_replaces_its_dead_owner(repo, monkeypatch):
     _hook_edit(repo, "S1", "g.txt", "g", "G")
     owner = os.path.join(repo.journal, repo.root.replace("/", "_"), "S1", ".owner")
     assert open(owner).read().startswith(str(os.getpid()) + "\t")
+
+
+# ---------------------------- moves and deletes: advice, previews and wording
+
+LONG = "".join("line %d\n" % i for i in range(40))
+
+
+def _moved(repo, sid="S1"):
+    """In one Bash window: old.txt moved to new.txt, gone.txt deleted, sed.txt edited."""
+    _optin(repo)
+    repo.write("old.txt", LONG)
+    repo.write("gone.txt", "bye\n")
+    repo.write("sed.txt", "s\n")
+    repo.commit("base")
+    _bash(repo, sid)
+    os.rename(os.path.join(repo.root, "old.txt"), os.path.join(repo.root, "new.txt"))
+    os.remove(os.path.join(repo.root, "gone.txt"))
+    repo.write("sed.txt", "s-via-sed\n")
+    _bash(repo, sid)
+
+
+def _also_line(text):
+    lines = [l for l in text.splitlines() if 'commit-mine -m "msg"' in l]
+    assert len(lines) == 1, text
+    return lines[0]
+
+
+def test_audit_routes_moves_and_deletes_to_one_also_line(repo):
+    """audit printed `ccjj claim` for every path in your window, and claim always
+    refuses renames and deletes. A per-path --also would strand half a rename."""
+    _moved(repo)
+    r = repo.run("audit", sid="S1")
+    for p in ("old.txt", "new.txt", "gone.txt"):
+        assert "ccjj claim " + p not in r.stderr, r.stderr
+    assert "ccjj claim sed.txt" in r.stderr
+    line = _also_line(r.stderr)
+    assert "--also old.txt --also new.txt" in line
+    assert line.count("--also old.txt") == 1 and "--also gone.txt" in line
+
+
+def test_exit_5_routes_moves_and_deletes_to_one_also_line(repo):
+    _moved(repo)
+    r = repo.run("commit", "-m", "x", "--also", "sed.txt", sid="S1")
+    assert r.returncode == 5, r.stdout + r.stderr
+    assert "ccjj claim" not in r.stderr, r.stderr
+    line = _also_line(r.stderr)
+    assert "--also old.txt --also new.txt" in line and "--also gone.txt" in line
+
+
+def test_exit_5_following_the_advice_commits_both_halves(repo):
+    _moved(repo)
+    r = repo.run("commit", "-m", "x", "--also", "old.txt", sid="S1")
+    assert r.returncode == 5, r.stdout + r.stderr
+    # Partner named even though old.txt was already passed: a lone half strands
+    # the other, so the advice must never be narrower than the whole move.
+    assert "--also old.txt --also new.txt" in _also_line(r.stderr)
+
+    assert repo.run("claim", "sed.txt", sid="S1").returncode == 0
+    ok = repo.run("commit", "-m", "x", "--also", "old.txt", "--also", "new.txt",
+                  "--also", "gone.txt", sid="S1")
+    assert ok.returncode == 0, ok.stderr
+    assert repo.show("new.txt") == LONG.encode()
+    assert repo.show("old.txt") in (None, b"")
+    assert repo.show("sed.txt") == b"s-via-sed\n"
+
+
+def _edited_and_loose(repo):
+    _optin(repo)
+    repo.write("edited.txt", "a\n")
+    repo.write("sedded.txt", "s\n")
+    repo.write("g.txt", "g\n")
+    repo.commit("base")
+    _bash(repo)
+    repo.write("sedded.txt", "s-via-sed\n")
+    _bash(repo)
+    repo.write("edited.txt", "A\n")
+    repo.record("S1", "edited.txt", old="a", new="A", original="a\n")
+
+
+def test_diff_previews_through_the_unclaimed_refusal(repo):
+    _edited_and_loose(repo)
+    r = repo.run("commit", "--diff", sid="S1")
+    assert r.returncode == 5, r.stderr            # ai_jj_commit stops on this
+    assert "+A" in r.stdout
+    assert "a real commit would refuse" in r.stderr
+    assert "ccjj claim sedded.txt" in r.stderr
+    assert repo.show("edited.txt") == b"a\n"
+
+
+def test_diff_previews_through_the_also_refusal(repo):
+    repo.write("f.txt", "a\n")
+    repo.write("g.txt", "g\n")
+    repo.commit("base")
+    repo.write("f.txt", "A\n")
+    repo.record("S1", "f.txt", old="a", new="A", original="a\n")
+    repo.write("g.txt", "g-S2\n")
+    repo.record("S2", "g.txt", old="g", new="g-S2", original="g\n")
+
+    r = repo.run("commit", "--diff", "--also", "g.txt", sid="S1")
+    assert r.returncode == 1, r.stderr
+    assert "+A" in r.stdout
+    assert "whole path, taken from the working copy) g.txt" in r.stdout
+    assert "a stake in them" in r.stderr
+    assert repo.show("g.txt") == b"g\n"
+
+
+def test_diff_exits_with_the_first_refusals_code(repo):
+    """Exit 0 would spend a model call and then refuse."""
+    _edited_and_loose(repo)
+    repo.write("g.txt", "g-S2\n")
+    repo.record("S2", "g.txt", old="g", new="g-S2", original="g\n")
+
+    r = repo.run("commit", "--diff", "--also", "g.txt", sid="S1")
+    assert r.returncode == 1, r.stderr            # --also came first, not the 5
+    assert "a stake in them" in r.stderr
+    assert "ccjj claim sedded.txt" in r.stderr
+    assert "+A" in r.stdout
+
+
+def test_diff_still_stops_on_a_build_conflict(repo):
+    repo.write("f.txt", "shared line\n")
+    repo.commit("base")
+    repo.write("f.txt", "theirs\n")
+    repo.commit("theirs")
+    repo.write("f.txt", "mine\n")
+    repo.record("S1", "f.txt", old="shared line", new="mine", original="shared line\n")
+
+    r = repo.run("commit", "--diff", sid="S1")
+    assert r.returncode != 0
+    assert "conflict" in r.stderr.lower()
+    assert "+mine" not in r.stdout
+
+
+def _window_peer(repo, path="peer.txt", peer="S2"):
+    """`peer`'s Bash window covers a change to path; S1 has an edit elsewhere."""
+    _optin(repo)
+    repo.write(path, "p\n")
+    repo.write("mine.txt", "m\n")
+    repo.commit("base")
+    _bash(repo, "S1")
+    _bash(repo, peer)
+    repo.write(path, "p-changed\n")
+    _bash(repo, peer)
+    _bash(repo, "S1")
+
+
+def test_claim_says_a_window_only_peer_may_not_have_touched_the_path(repo):
+    """window_span runs first to last Bash call, so an idle peer still counts."""
+    _window_peer(repo)
+    r = repo.run("claim", "peer.txt", sid="S1")
+    assert r.returncode == 1                       # the refusal itself stays
+    assert "Bash span of session(s) S2 (live)" in r.stderr
+    assert "may not have touched" in r.stderr
+    assert "claimed" not in r.stderr and "overlap" not in r.stderr
+    assert not repo.journal_records("S1")
+
+
+def test_claim_keeps_the_claimed_wording_for_a_peer_with_records(repo):
+    _optin(repo)
+    repo.write("shared.txt", "base\n")
+    repo.commit("base")
+    _bash(repo, sid="S1")
+    repo.write("shared.txt", "base\ntheirs\n")
+    repo.record("S2", "shared.txt", old="base\n", new="base\ntheirs\n", original="base\n")
+    _bash(repo, sid="S1")
+    r = repo.run("claim", "shared.txt", sid="S1")
+    assert r.returncode == 1
+    assert "also claimed by session(s) S2 (live)" in r.stderr
+    assert "may not have touched" not in r.stderr
+
+
+def test_claim_keeps_records_over_a_window_across_a_rename(repo):
+    """stakes.update let a window-only result for one half of a rename overwrite
+    the records result for the other."""
+    _optin(repo)
+    repo.write("old.txt", LONG)
+    repo.commit("base")
+    _bash(repo, "S1")
+    _bash(repo, "S2")
+    os.rename(os.path.join(repo.root, "old.txt"), os.path.join(repo.root, "new.txt"))
+    repo.record("S2", "old.txt", old="line 1", new="LINE 1", original=LONG)
+    _bash(repo, "S2")
+    _bash(repo, "S1")
+    # The halves are walked as a set, so which one lands last depends on the
+    # string hash. Several seeds, or the overwrite would slip through by luck.
+    for seed in "1234":
+        r = repo.run("claim", "new.txt", sid="S1", env={"PYTHONHASHSEED": seed})
+        assert r.returncode == 1
+        assert "also claimed by session(s) S2" in r.stderr
+        assert "Bash span of" not in r.stderr
+
+
+def test_also_refusal_for_a_window_only_peer_makes_no_claim_of_a_stake(repo):
+    _window_peer(repo)
+    _hook_edit(repo, "S1", "mine.txt", "m", "M")
+    r = repo.run("commit", "-m", "x", "--also", "peer.txt", "--no-claim", sid="S1")
+    assert r.returncode == 1, r.stdout
+    assert "Bash span only: S2 (live)" in r.stderr
+    assert "may not have touched" in r.stderr
+    assert "stake" not in r.stderr and "claimed" not in r.stderr
+    assert repo.show("peer.txt") == b"p\n"
+
+
+def test_also_refusal_separates_records_from_windows(repo):
+    _window_peer(repo, peer="S3")
+    repo.record("S2", "peer.txt", old="p\n", new="p-changed\n", original="p\n")
+    _hook_edit(repo, "S1", "mine.txt", "m", "M")
+    r = repo.run("commit", "-m", "x", "--also", "peer.txt", "--no-claim", sid="S1")
+    assert r.returncode == 1, r.stdout
+    assert "records: S2 (live); Bash span only: S3 (live)" in r.stderr
+    assert "a stake in them" in r.stderr
+
+
+def _peer_over_a_move(repo, edit=False):
+    """S1 moves old.txt to new.txt inside a span of S2's Bash calls."""
+    _optin(repo)
+    repo.write("old.txt", LONG)
+    repo.commit("base")
+    _bash(repo, "S1")
+    _bash(repo, "S2")
+    os.rename(os.path.join(repo.root, "old.txt"), os.path.join(repo.root, "new.txt"))
+    if edit:
+        repo.write("new.txt", LONG.replace("line 7\n", "line seven\n"))
+    _bash(repo, "S2")
+    _bash(repo, "S1")
+
+
+def test_also_refusal_marks_a_move_with_identical_bytes_and_still_refuses(repo):
+    """The note is information only: the guard refuses exactly as before."""
+    _peer_over_a_move(repo)
+    r = repo.run("commit", "-m", "x", "--also", "old.txt", "--also", "new.txt", sid="S1")
+    assert r.returncode == 1, r.stdout
+    assert r.stderr.count("[move, bytes identical to @-]") == 2, r.stderr
+    assert repo.show("new.txt") in (None, b"")
+
+
+def test_also_refusal_does_not_mark_a_move_that_was_edited(repo):
+    _peer_over_a_move(repo, edit=True)
+    status = repo.jj_("diff", "--from", "@-", "--to", "@", "-T", 'self.status() ++ "\\n"')
+    assert "renamed" in status.stdout              # jj still pairs the halves
+    r = repo.run("commit", "-m", "x", "--also", "old.txt", "--also", "new.txt", sid="S1")
+    assert r.returncode == 1, r.stdout
+    assert "bytes identical" not in r.stderr
+
+
+# ----------------------------------------------------------- moved-base warning
+
+def test_drift_skips_an_ended_session_with_an_empty_journal(repo):
+    """One Bash call stamps .base and writes nothing else, so the session never
+    held work that could have been swept."""
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    _base(repo, "S1", _parent_id(repo))
+    _ended(repo, "S1")
+    repo.commit("stray")
+    r = repo.run("audit", sid="S9")
+    assert "@- has moved" not in r.stderr, r.stderr
+
+
+def test_drift_keeps_an_ended_session_with_only_bash_windows(repo):
+    """No records, but its Bash work may be what got swept."""
+    _optin(repo)
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    _bash(repo, "S1")
+    repo.write("f.txt", "b\n")
+    _bash(repo, "S1")
+    _ended(repo, "S1")
+    repo.commit("stray")
+    r = repo.run("audit", sid="S9")
+    assert "@- has moved" in r.stderr, r.stderr
+
+
+def test_drift_keeps_a_live_session_with_an_empty_journal(repo):
+    """session_is_live is False for any journal with no activity, so using it
+    here would silence every session that has only just started."""
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    _base(repo, "S1", _parent_id(repo))
+    _owner(repo, "S1", str(os.getpid()), _my_lstart())
+    repo.commit("stray")
+    r = repo.run("audit", sid="S9")
+    assert "@- has moved" in r.stderr, r.stderr
+
+
+def test_drift_merges_every_no_restore_case_into_one_line(repo):
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    for sid, fake in (("S1", "a" * 40), ("S2", "b" * 40)):
+        repo.record(sid, "f.txt", old="a", new="A", original="a\n")
+        _base(repo, sid, fake)
+    r = repo.run("audit", sid="S9")
+    assert "@- has moved" in r.stderr
+    assert r.stderr.count("no action is needed") == 1, r.stderr
+    assert "No undo is available for 2 older base(s)" in r.stderr
+    assert "after 48 hours idle" in r.stderr
+    assert "jj op restore" not in r.stderr
+
+
+# --------------------------------------------------------------------- ccjj who
+
+def test_who_lists_each_sessions_state_and_kind_of_stake(repo):
+    _optin(repo)
+    repo.write("shared.txt", "base\n")
+    repo.commit("base")
+    _bash(repo, "S1")
+    _bash(repo, "S2")
+    repo.write("shared.txt", "base\nmore\n")
+    repo.record("S1", "shared.txt", old="base\n", new="base\nmore\n", original="base\n")
+    repo.record("S3", "shared.txt", old="base\n", new="base\nmore\n", original="base\n")
+    _ended(repo, "S3")
+    _bash(repo, "S2")
+    _bash(repo, "S1")
+
+    r = repo.run("who", "shared.txt", sid="S1")
+    assert r.returncode == 0, r.stderr
+    rows = {l.split()[0]: l.split(None, 1)[1] for l in r.stdout.splitlines()[1:]}
+    assert rows["S1"].split() == ["live", "records", "(this", "session)"]
+    assert rows["S2"].split() == ["live", "window", "only"]
+    assert rows["S3"].split() == ["ended", "records"]
+
+
+def test_who_does_not_snapshot_the_working_copy(repo):
+    """A snapshot landing inside another session's commit kills it."""
+    _optin(repo)
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    _bash(repo, "S1")
+    repo.write("f.txt", "b\n")
+    _bash(repo, "S1")
+    repo.write("unsnapshotted.txt", "new\n")
+    before = repo.op_head()
+    assert repo.run("who", "f.txt", sid="S1").returncode == 0
+    assert repo.op_head() == before
+
+
+def test_who_says_so_when_nobody_has_a_stake(repo):
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    r = repo.run("who", "f.txt", sid="S1")
+    assert r.returncode == 0
+    assert "no session has" in r.stdout

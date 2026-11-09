@@ -119,9 +119,10 @@ Bash edits are allowed. After one, do what those hooks would have done:
 
 - **Clojure files** (`.clj`, `.cljs`, `.cljc`, `.edn`): run `clj-paren-repair FILE`.
 - **A repo another live session shares** (the `ccjj nudge` line says so): run
-  `ccjj audit`, then `ccjj claim <path>` for your own changes. Otherwise
-  `commit-mine` leaves them out. `claim` needs `ccjj bash-windows on` in that
-  checkout; it says so when it is off.
+  `ccjj audit`, then `ccjj claim <path>` for your own changes. A Bash move or
+  delete goes through `commit-mine --also` instead, with both halves of a move.
+  Otherwise `commit-mine` leaves them out. `claim` needs `ccjj bash-windows on`
+  in that checkout; it says so when it is off.
 - **rcs/MANIFEST destinations and LaunchAgent plists**: edit the source in
   `~/dotfiles`. `rcs-sync` repairs a split link after each Bash call and
   reports it. Tell me about any "adopted" or "CONFLICT" line.

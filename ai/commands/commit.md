@@ -40,8 +40,10 @@ retry, it is not an error. Exit `1` is a refusal that re-running will reproduce;
 read the message rather than retrying. Full details: `docs/cc-jj-sessions.md`.
 
 `commit-mine` **stops with exit `5`** if this session has Bash-window changes
-nobody has claimed, and names the exact `ccjj claim` commands. Claim the ones
-that are yours and re-run, and it all lands in **one** commit. If some of them
+nobody has claimed, and names the exact commands: `ccjj claim` for a content
+change, and one `commit-mine --also` line, with both halves of every move, for a
+Bash move or delete. `claim` refuses those. Run the ones that are yours and
+re-run, and it all lands in **one** commit. If some of them
 are not yours (a build artifact, another program's rewrite), re-run with
 `--no-claim` to commit without them. Same for `ai_jj_commit` / `g run ci`.
 
@@ -83,9 +85,10 @@ to a file someone else may be working on. For a file with both your Edits and
 a Bash change, use `ccjj claim`: it replaces the records with the file as it is
 now.
 
-If `@- has moved` appears, something outside `ccjj` committed — `audit` names the
-exact `jj op restore <id>` to undo it. Report that to the user before doing
-anything else; do not run the restore unprompted, it rewinds the whole repo.
+If `@- has moved` appears and `audit` names an exact `jj op restore <id>`,
+something outside `ccjj` committed. Report that to the user before doing
+anything else; do not run the restore unprompted, it rewinds the whole repo. If
+`audit` says no undo is available, no action is needed: carry on.
 
 If `ccjj should-scope` exits non-zero (the usual case — you are the only session
 here), ignore all of the above and follow the normal procedure below. A

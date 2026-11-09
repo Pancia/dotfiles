@@ -10,6 +10,7 @@ else's work untouched and on disk.
     ccjj record-edit          PostToolUse hook (Edit|Write); journals one record
     ccjj commit -m MSG        commit only this session's edits
     ccjj audit                report working-copy changes no session claims
+    ccjj who PATH             list the sessions with a stake in one path
     ccjj prune                retire old journals
 
 `commit-mine` is a shim for `ccjj commit`.
@@ -28,6 +29,7 @@ import datetime
 import fcntl
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -1266,6 +1268,18 @@ def cmd_commit(args):
                     "  merge before committing session work." % len(ids), 4)
             return ids[0]
 
+        refused = []     # exit codes of the refusals --diff has previewed through
+
+        def refuse(msg, code):
+            # --diff shows the patch even when a real commit would stop, so the
+            # preview stays useful. It still exits with the first refusal's code:
+            # ai_jj_commit stops on a --diff exit 5, and an exit 0 here would
+            # spend a model call on a message and then refuse anyway.
+            if not args.diff:
+                die(msg, code)
+            print("ccjj: warning: a real commit would refuse:\n  " + msg, file=sys.stderr)
+            refused.append(code)
+
         pinned = parent_id()
         # `jj file show` exits 0 while matching nothing, in several distinct
         # ways, so returncode is not a usable presence test.
@@ -1288,12 +1302,7 @@ def cmd_commit(args):
             contested = {p: stakes for p in also
                          for stakes in [peers_with_a_stake(p, sid, cov)] if stakes}
             if contested:
-                die("--also would take these wholesale, but another session has\n"
-                    "  a stake in them:\n%s\n"
-                    "  Their unfinished work would be committed under your message.\n"
-                    "  Re-run with --force only if you are sure."
-                    % "\n".join("    %s  (%s)" % (p, describe_stakes(s))
-                                for p, s in sorted(contested.items())), 1)
+                refuse(also_refusal(contested), 1)
 
         # --also takes a path WHOLESALE, so its journal records must NOT also be
         # replayed. Without this, `--also <path>` could never rescue a path whose
@@ -1349,13 +1358,7 @@ def cmd_commit(args):
                 # here when one is set -- so a human's `g run ci` never lands in
                 # this branch. It takes the whole working copy, which captures
                 # Bash-made changes anyway, and has nothing to claim.
-                die("%d path(s) changed inside your Bash windows are not claimed,\n"
-                    "  and would NOT be committed:\n%s\n"
-                    "  Claim the ones that are yours, then re-run:\n%s\n"
-                    "  Or pass --no-claim to commit without them."
-                    % (len(loose),
-                       "\n".join("    " + p for p in loose),
-                       "\n".join("    ccjj claim " + p for p in loose)), 5)
+                refuse(unclaimed_refusal(loose, sid), 5)
 
         if args.diff:
             for path in sorted(mine):
@@ -1370,6 +1373,8 @@ def cmd_commit(args):
                                     "--label", "b/" + path, a, b])
             for path in sorted(also):
                 print("(whole path, taken from the working copy) %s" % path)
+            if refused:
+                sys.exit(refused[0])
             return
 
         exec_bits = parent_exec_bits([p for p in mine if p in present])
@@ -1643,13 +1648,25 @@ def cmd_claim(args):
     cov = window_coverage()
     stakes = {}
     for p in {path, src, tgt} - {None}:
-        stakes.update(peers_with_a_stake(p, sid, cov))
+        # Records outrank a window. A plain update() let a window-only result
+        # for one half of a rename overwrite the records result for the other.
+        for s, v in peers_with_a_stake(p, sid, cov).items():
+            if s not in stakes or v[1] == STAKE_RECORDS:
+                stakes[s] = v
     if stakes and not args.force:
-        die("%s is also claimed by session(s) %s.\n"
-            "  The window's content therefore includes their edits, and claiming\n"
-            "  it would commit their work under your name. Re-run with --force\n"
-            "  only if the diff below is genuinely all yours.\n%s"
-            % (path, describe_stakes(stakes),
+        recs, spans = split_stakes(stakes)
+        why = []
+        if recs:
+            why.append("%s is also claimed by session(s) %s.\n"
+                       "  The window's content therefore includes their edits, and claiming\n"
+                       "  it would commit their work under your name."
+                       % (path, describe_stakes(recs)))
+        if spans:
+            why.append("%s changed during the Bash span of session(s) %s.\n%s\n"
+                       "  If they did, claiming it would commit their work under your name."
+                       % (path, describe_stakes(spans), SPAN_NOTE))
+        die("%s\n  Re-run with --force only if the diff below is genuinely all yours.\n%s"
+            % ("\n".join(why),
                unified(file_bytes(span[0], path), file_bytes(span[1], path), path)), 1)
 
     if status == "removed":
@@ -1768,8 +1785,46 @@ def supersede_records(jdir, path, names, span, dry_run):
           "  It will be included by `commit-mine`." % (path, len(names)))
 
 
+STAKE_RECORDS = "records"        # Edit/Write records name this path
+STAKE_WINDOW = "window only"     # only a Bash window covers it
+
+SPAN_NOTE = ("  A Bash span runs from a session's first Bash call to its last, so that\n"
+             "  session's commands may not have touched this path.")
+
+
+def stakes_on(path, cov=None, skip=None):
+    """{session id: (state, kind)} for every session with a stake in path.
+
+    state is "live" or "ended". kind is STAKE_RECORDS when the session has
+    journal records for the path, else STAKE_WINDOW, and a session with both is
+    STAKE_RECORDS. The two are different evidence: a record says the session
+    wrote this file, while a window only says the path changed somewhere between
+    that session's first and last Bash call -- a session idle between two calls
+    still counts. `claim`, `--also` and `who` all read this one classification.
+    """
+    cov = window_coverage() if cov is None else cov
+    base_dir = os.path.join(journal_root(), repo_key(ROOT))
+    if not os.path.isdir(base_dir):
+        return {}
+    out = {}
+    for s in sorted(os.listdir(base_dir)):
+        d = os.path.join(base_dir, s)
+        if s in ("archive", skip) or not os.path.isdir(d):
+            continue
+        if path in claims_of(s):
+            kind = STAKE_RECORDS
+        elif s in cov.get(path, ()):
+            kind = STAKE_WINDOW
+        else:
+            continue
+        # A session listed here has a .json or a .win, so has_activity holds
+        # and session_is_live is the whole liveness test.
+        out[s] = ("live" if session_is_live(d) else "ended", kind)
+    return out
+
+
 def peers_with_a_stake(path, me, cov=None):
-    """{session id: "live"|"ended"} for every OTHER session with a stake in path.
+    """{session id: (state, kind)} for every OTHER session with a stake in path.
 
     The one definition used by both `claim` and `--also`. A stake is an
     Edit/Write record OR a Bash window of the peer's own, and an ENDED peer
@@ -1778,22 +1833,119 @@ def peers_with_a_stake(path, me, cov=None):
     callers used to disagree on both axes, and --also -- the weaker one -- is
     where claim's refusals send you.
     """
-    cov = window_coverage() if cov is None else cov
-    base_dir = os.path.join(journal_root(), repo_key(ROOT))
-    if not os.path.isdir(base_dir):
-        return {}
-    live = set(other_live_sessions(me))
-    out = {}
-    for s in sorted(os.listdir(base_dir)):
-        if s in ("archive", me) or not os.path.isdir(os.path.join(base_dir, s)):
-            continue
-        if path in claims_of(s) or s in cov.get(path, ()):
-            out[s] = "live" if s in live else "ended"
-    return out
+    return stakes_on(path, cov, skip=me)
+
+
+def split_stakes(stakes):
+    """(the peers with records, the peers with only a Bash window)."""
+    recs = {s: v for s, v in stakes.items() if v[1] == STAKE_RECORDS}
+    return recs, {s: v for s, v in stakes.items() if s not in recs}
 
 
 def describe_stakes(stakes):
-    return ", ".join("%s (%s)" % (s[:8], how) for s, how in sorted(stakes.items()))
+    return ", ".join("%s (%s)" % (s[:8], v[0]) for s, v in sorted(stakes.items()))
+
+
+def stake_summary(stakes):
+    recs, spans = split_stakes(stakes)
+    parts = []
+    if recs:
+        parts.append("records: " + describe_stakes(recs))
+    if spans:
+        parts.append("Bash span only: " + describe_stakes(spans))
+    return "; ".join(parts)
+
+
+def identical_moves(paths):
+    """The members of `paths` that are one half of a move with unchanged bytes.
+
+    Pairs come from jj's own rename detection, as the window delta's do, so a
+    file that was moved and then edited does not match. Information for the
+    reader only: nothing may decide whether to refuse on this.
+    """
+    out = set()
+    for status, src, tgt, kind in window_delta("@-", "@") or ():
+        if status != "renamed" or kind != "file" or not {src, tgt} & set(paths):
+            continue
+        # file_bytes needs the type checked first: `jj file show` exits 0 with
+        # empty stdout for a symlink, which would match an empty file.
+        if (file_type_at("@-", src) == "file"
+                and not os.path.islink(os.path.join(ROOT, tgt))
+                and file_bytes("@-", src) == working_copy_bytes(tgt)):
+            out |= {src, tgt}
+    return out
+
+
+def also_refusal(contested):
+    """The refusal for --also paths in which another session has a stake."""
+    moves = identical_moves(contested)
+    rows = "\n".join("    %s  (%s)%s" % (p, stake_summary(s),
+                                         "  [move, bytes identical to @-]" if p in moves else "")
+                     for p, s in sorted(contested.items()))
+    kinds = {v[1] for stakes in contested.values() for v in stakes.values()}
+    if STAKE_RECORDS in kinds:
+        lead = ("--also would take these wholesale, but another session has\n"
+                "  a stake in them:")
+        tail = "  Their unfinished work would be committed under your message.\n"
+    else:
+        lead = ("--also would take these wholesale, and another session's Bash\n"
+                "  commands ran during the span that changed them:")
+        tail = ""
+    if STAKE_WINDOW in kinds:
+        tail += SPAN_NOTE + "\n  If they did, their work would be committed under your message.\n"
+    return "%s\n%s\n%s  Re-run with --force only if you are sure." % (lead, rows, tail)
+
+
+def whole_path_changes(sid):
+    """Groups of paths this session's Bash windows moved or deleted, in delta order.
+
+    `claim` refuses these, and they go through --also instead. A rename is one
+    group of both halves, because a per-path --also is dangerous: `--also a.txt`
+    alone commits the delete and strands the add. From the window delta and not
+    window_coverage(), which keeps the status per path but not the partner.
+    """
+    span = window_span(os.path.join(journal_root(), repo_key(ROOT), sid))
+    delta = window_delta(*span) if span else None
+    groups = []
+    for status, src, tgt, _ in delta or ():
+        if status == "renamed":
+            groups.append((src, tgt))
+        elif status == "removed":
+            groups.append((tgt,))
+    return groups
+
+
+def also_advice(paths, groups):
+    """One `commit-mine --also` line for `paths` and every partner they need."""
+    want, picked, grew = set(paths), [], True
+    while grew:     # repeat until stable: two renames can share a path
+        grew = False
+        for g in groups:
+            if g not in picked and want & set(g):
+                picked.append(g)
+                want |= set(g)
+                grew = True
+    args = list(dict.fromkeys(p for g in picked for p in g))
+    return 'commit-mine -m "msg" ' + " ".join("--also " + shlex.quote(p) for p in args)
+
+
+def unclaimed_refusal(loose, sid):
+    """The exit-5 message: what to claim, and what must go through --also."""
+    groups = whole_path_changes(sid)
+    moved = {p for g in groups for p in g}
+    claimable = [p for p in loose if p not in moved]
+    whole = [p for p in loose if p in moved]
+    msg = ("%d path(s) changed inside your Bash windows are not claimed,\n"
+           "  and would NOT be committed:\n%s\n"
+           % (len(loose), "\n".join("    " + p for p in loose)))
+    if claimable:
+        msg += ("  Claim the ones that are yours, then re-run:\n%s\n"
+                % "\n".join("    ccjj claim " + p for p in claimable))
+    if whole:
+        msg += ("  Moves and deletes cannot be claimed. Commit the ones that are\n"
+                "  yours whole, with both halves of every move:\n    %s\n"
+                % also_advice(whole, groups))
+    return msg + "  Or pass --no-claim to commit without them."
 
 
 def claims_of(sid):
@@ -1892,8 +2044,15 @@ def survey():
             # Drift is about the repo's history moving unexpectedly, not about
             # liveness: a dead session's base moving means its orphaned work was
             # swept into someone's commit, which is just as worth hearing.
+            #
+            # The one exception is a session that ended with an empty journal:
+            # a single Bash call stamps .base and leaves nothing else, so it had
+            # no work to sweep. has_activity, not "has records": an ended session
+            # with Bash windows and no records can still have swept work. And
+            # owner_alive, not session_is_live, which is False for ANY journal
+            # with no activity and so could not tell ended from just started.
             b = read_base(d)
-            if b and b != parent_id:
+            if b and b != parent_id and (has_activity(d) or owner_alive(d)):
                 drifted[sid] = b
 
     # Only a LIVE session's claim suppresses a warning. A dead session's paths
@@ -1970,16 +2129,17 @@ def report_drift(drifted):
           "  `jj commit`/`jj new`/`git commit`. Session work may now be inside it.",
           file=sys.stderr)
     undos = drift_undos(sorted(set(drifted.values())))
+    # Naming a culprit for these was a contradiction: without a restore point we
+    # never found where the base was still current, so the oldest operation we
+    # happened to examine is not evidence of anything. One line for all of them.
+    # prune is named by its gate, because it refuses a journal idle under 48h.
+    no_undo = sum(1 for base in undos if not undos[base][0])
+    if no_undo:
+        print("  No undo is available for %d older base(s), and no action is needed; "
+              "`ccjj prune` retires these after 48 hours idle." % no_undo, file=sys.stderr)
     for base in sorted(set(drifted.values())):
         restore, culprit = undos[base]
         if not restore:
-            # Naming a culprit here was a contradiction: without a restore point
-            # we never found where the base was still current, so the oldest
-            # operation we happened to examine is not evidence of anything.
-            print("  Could not find where %s was still current within the last %d\n"
-                  "  operations, so there is no safe restore point to name.\n"
-                  "  Inspect `jj op log` by hand." % (base[:12], DRIFT_LIMIT),
-                  file=sys.stderr)
             continue
         if culprit:
             print("  %s was moved by operation %s (%s)."
@@ -2002,18 +2162,28 @@ def report_unclaimed(unclaimed, prefix="", cov=None, me=""):
         for g, n in sorted(groups.items(), key=lambda kv: -kv[1]):
             print("    %-40s %d" % (g, n), file=sys.stderr)
     else:
+        groups = whole_path_changes(me) if me and cov else []
+        moved = {p for g in groups for p in g}
         for p in unclaimed:
             print("    " + p, file=sys.stderr)
             who = cov.get(p) or {}
             if me and me in who:
-                print("        changed inside your Bash window (%s) -- recoverable:"
-                      % who[me], file=sys.stderr)
-                print("        ccjj claim %s   # after reading the diff it prints"
-                      % p, file=sys.stderr)
+                if p in moved:
+                    print("        changed inside your Bash window (%s) -- a move or "
+                          "delete cannot be claimed, see below" % who[me], file=sys.stderr)
+                else:
+                    print("        changed inside your Bash window (%s) -- recoverable:"
+                          % who[me], file=sys.stderr)
+                    print("        ccjj claim %s   # after reading the diff it prints"
+                          % p, file=sys.stderr)
             for sid, status in sorted(who.items()):
                 if sid != me:
                     print("        also inside session %s's Bash window (%s)"
                           % (sid[:8], status), file=sys.stderr)
+        mine = [p for p in unclaimed if p in moved]
+        if mine:
+            print("  To commit your moves and deletes whole, with both halves of every move:\n"
+                  "    %s" % also_advice(mine, groups), file=sys.stderr)
     print("  These will NOT be committed by any `ccjj commit`. They were made\n"
           "  outside Edit/Write (a Bash command, an editor), or by a session\n"
           "  whose hooks were disabled -- note `claude-p` disables hooks unless\n"
@@ -2021,6 +2191,25 @@ def report_unclaimed(unclaimed, prefix="", cov=None, me=""):
     if not cov and unclaimed:
         print("  `ccjj bash-windows on` makes Bash-made changes recoverable.",
               file=sys.stderr)
+
+
+def cmd_who(args):
+    """List every session with journal records or a Bash window on one path.
+
+    Read-only, so it neither calls survey() nor absorb_same_process(): it reads
+    the journals and asks jj only with --ignore-working-copy, because a snapshot
+    landing inside another session's `jj commit --tool` kills it.
+    """
+    me = args.session or os.environ.get("CLAUDE_SESSION_ID", "")
+    path = rel_literal(args.path)
+    stakes = stakes_on(path)
+    if not stakes:
+        print("no session has journal records or a Bash window on %s" % path)
+        return
+    print(path)
+    for s, (state, kind) in sorted(stakes.items()):
+        print("  %-8s  %-5s  %s%s"
+              % (s[:8], state, kind, "  (this session)" if s == me else ""))
 
 
 def cmd_audit(args):
@@ -2410,6 +2599,10 @@ def main():
     a.add_argument("--porcelain", action="store_true")
     a.add_argument("--session", default="")
 
+    wh = sub.add_parser("who", help="list the sessions with a stake in a path (read-only)")
+    wh.add_argument("path")
+    wh.add_argument("--session", default="")
+
     sub.add_parser("bash-window", help="PostToolUse hook (Bash)")
 
     bw = sub.add_parser("bash-windows", help="opt this checkout in or out")
@@ -2456,7 +2649,7 @@ def main():
     {"commit": cmd_commit, "audit": cmd_audit, "prune": cmd_prune,
      "disown": cmd_disown, "should-scope": cmd_should_scope,
      "retire-all": cmd_retire_all, "claim": cmd_claim,
-     "forget": cmd_forget,
+     "forget": cmd_forget, "who": cmd_who,
      "bash-windows": cmd_bash_windows}[args.cmd](args)
 
 

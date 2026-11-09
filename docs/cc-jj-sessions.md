@@ -63,6 +63,7 @@ commit-mine -m "message"                       # the normal case
 commit-mine --diff                             # preview, commit nothing
 commit-mine -m "msg" --also old.txt --also new.txt   # a Bash-made rename
 ccjj audit                                     # changes no session claims
+ccjj who path/to/file                          # who has records or a Bash window on it (read-only)
 ccjj prune -n                                  # what retention would remove
 ```
 
@@ -72,7 +73,8 @@ agent's own Bash calls, so the normal invocation takes no session argument.
 
 Exit codes: `0` ok · `1` refused · `2` nothing to do or not in a jj repo · `4`
 locked, base moved, or the working copy is a merge (retry) · `5` this session has
-unclaimed Bash-window paths.
+unclaimed Bash-window paths. `--diff` prints each `--also` and exit-`5` refusal as
+a warning, still shows the patch, and exits with the first refusal's code.
 
 Two cases are deliberately **not** `4`, because they are not retryable: a payload
 that jj would not select (`the commit did not take`) exits `1`, since re-running
@@ -216,7 +218,7 @@ in the loop.
 | Case | Why |
 |---|---|
 | symlink, directory | `jj file show` exits **0 with empty stdout** for both, so claiming would write a zero-byte regular file over it — and the byte verification would compare `b""` to `b""` and pass. Checked at the span *and* re-checked at the narrowed endpoints, which can differ. |
-| a path a live session claims — by an `Edit` record **or a Bash window of its own** | Its bytes are in your window. `--force` after reading the diff. |
+| a path another session has `Edit`/`Write` records for, or that changed inside its Bash span (first to last Bash call) | Its bytes may be in your window. The message says which: records are a claim; a span only means that session's commands ran in the same stretch. `--force` after reading the diff. |
 | a path that did not exist when the window opened, but does in `@-` | Another session committed it in between; taking the window wholesale would revert them, and the diff shown would not mention it. |
 | delete, rename | Whole-path changes have no hunks to split; routed to `--also`. |
 
@@ -235,8 +237,11 @@ was previously reported as a content conflict.
 ### One commit, not two
 
 `ccjj commit` **stops** (exit `5`) when this session has Bash-window paths nobody
-has claimed, naming the exact `ccjj claim` lines. Claim what is yours, re-run,
-and everything lands in one commit. `--no-claim` proceeds without them.
+has claimed, naming the exact `ccjj claim` lines. A move or delete gets one
+combined `commit-mine --also` line instead, with both halves of every move,
+because `claim` refuses those and a lone `--also old` strands the add. Run what
+is yours, re-run, and everything lands in one commit. `--no-claim` proceeds
+without them.
 
 Surfacing alone was not enough, and shipping it that way was a mistake worth
 recording: `ai_jj_commit` runs preflight → message → commit in a single
@@ -357,7 +362,12 @@ The restore target is the **last good** operation, not the culprit — restoring
 *to* the culprit would leave the stray commit in place. It rewinds the whole
 repo, so anything else that happened since goes too; the message says so. Bounded
 to 40 operations because each step is a `jj` process, though the stray commit is
-almost always recent enough to resolve in two or three.
+almost always recent enough to resolve in two or three. A base older than that
+gets one shared line: no undo is available and no action is needed.
+
+An ended session whose journal holds no records and no Bash windows is skipped: a
+single Bash call stamps `.base` and leaves nothing else, so it had no work to
+sweep.
 
 ## State
 
