@@ -70,7 +70,7 @@ and claim only what you know you did:
 - Recognise the change as yours → claim it, then commit.
 - The diff contains anything you did not do — another session's edit, a config
   file rewritten by some other program, an unrelated build artifact → **do not
-  claim it**. Say so under **Worth knowing** in the report instead. A window is
+  claim it**. Say so on the report's 🟡 `WATCH` label instead. A window is
   a snapshot difference,
   so it catches everything that happened in that interval, not only your work.
 - `claim` refuses outright for symlinks, deletions, renames, a path another
@@ -210,7 +210,7 @@ via Bash.
    the report's **Needs you** block — a commit sitting off the bookmark will
    never be pushed, and silence there reads as "done".
 
-8. **Report** using the section below. It is the same four-section shape as
+8. **Report** using the section below. It uses the same reply format as
    every other recap; the contents are fixed.
 
 ## Split mode
@@ -253,14 +253,13 @@ Commit the whole working copy as a series of commits, one per concern.
 6. **Bookmark**: advance `master`/`main` once, to the last commit, and
    only where the repo's CLAUDE.md says to advance it.
 
-In the report, **Result** names the number of commits. **Summary** lists
-each commit as `<change id> <subject>` with its paths, which takes the
-place of the single landed-paths bullet.
+In the report, `NOW` names the number of commits. `LANDED` takes one bullet
+per commit, as `<change id> <subject>` with its paths.
 
 ## Report
 
-The four-section recap from the global `CLAUDE.md` ("Reporting Back"), with
-fixed contents. **Never close with a bare "committed successfully."** The point
+The reply format from the global `CLAUDE.md` ("Reply format"), with fixed
+contents. **Never close with a bare "committed successfully."** The point
 of the report is that a mis-scoped commit is visible now, rather than at the
 next `jj status`.
 
@@ -269,34 +268,42 @@ file-by-file walkthrough, because the edits were already on screen. That does
 not apply to the landed-paths list here — for a commit, the file list *is* the
 result, and it is the only place the scope becomes checkable.
 
-**Result** — a sentence or two. The subject line you committed, and the commit
-or change id. Name the route when it was not the plain one: `commit-mine`
-(session-scoped) and a path-scoped `jj commit` both mean the commit is
-deliberately narrower than the working copy, and that has to be legible rather
-than inferred. Do not replay the message body — the user wrote it with you.
+Each item below is one label line, with its facts as bullets under it.
 
-**Worth knowing** — omit the heading when there is nothing. It exists for:
+🔴 `FAILED` — a pre-commit hook that failed, and the new commit you made instead.
+Omit it when nothing failed.
+
+🟢 `NOW` — a sentence or two. The subject line you committed, the commit or
+change id, and whether a `master`/`main` bookmark was advanced. Name the route
+when it was not the plain one: `commit-mine` (session-scoped) and a path-scoped
+`jj commit` both mean the commit is deliberately narrower than the working copy,
+and that has to be legible rather than inferred. Do not replay the message
+body — the user wrote it with you.
+
+🟢 `LANDED` — the paths that landed: a file list, not line counts (`--summary`,
+not `--stat`).
+
+🔵 `LEFT` — the paths deliberately left behind, and why. Omit it when there are
+none.
+
+🟡 `WATCH` — omit it when there is nothing. It exists for:
 
 - unclaimed paths you decided were **not** yours, and why you left them
 - `@- has moved` — name the `jj op restore <id>` and stop; never run it
-- a pre-commit hook that failed, and the new commit you made instead
 - anything that landed which you were not confident belonged
 
-**Summary** — at most five bullets:
-
-- the paths that landed — a file list, not line counts (`--summary`, not `--stat`)
-- the paths deliberately left behind, and why
-- the commit / change id
-- whether a `master`/`main` bookmark was advanced
-
-**Needs you** — always present, and after a commit it is rarely empty:
+**Needs you:** — always present, and after a commit it is rarely empty:
 
 - whatever stands between this commit and where it belongs — a bookmark not
   advanced, a push not made. State these when they apply; silence reads as done
 - leftover working-copy changes, and whose they are
 - claims you declined, for the user to review
 
-If nothing is genuinely outstanding, one line saying so.
+An obvious question takes one line, such as **Q2 (push):** Push to master? Use
+the yes and no list only when what an answer does is not clear, such as a claim
+you declined.
+
+If nothing is genuinely outstanding, end with "Nothing needs you."
 
 ## Heredoc format for multi-line messages
 

@@ -1,0 +1,389 @@
+<title>Reply Format Options</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+/* Layout: a reading column on top, then a wide gallery of real terminal captures. */
+:root{--bg:#f3f4f6;--fg:#1c2230;--mute:#5a6475;--line:#d5d9e1;--card:#ffffff;--accent:#1d5fa8;--accent-soft:#dfeaf7;--term:#14171d;--termfg:#d8dbe2;
+--sans:"IBM Plex Sans",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#181b22;--fg:#e4e7ee;--mute:#9aa3b3;--line:#333947;--card:#20242d;--accent:#9dcbf5;--accent-soft:#26364a;--term:#0e1014;--termfg:#d8dbe2;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#181b22;--fg:#e4e7ee;--mute:#9aa3b3;--line:#333947;--card:#20242d;--accent:#9dcbf5;--accent-soft:#26364a;--term:#0e1014;--termfg:#d8dbe2;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:15.5px/1.55 var(--sans);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:32px 56px}
+.wrap{max-width:1560px;margin:0 auto;display:flex;flex-direction:column;gap:36px}
+.col{max-width:880px;display:flex;flex-direction:column;gap:12px}
+h1{font-size:30px;line-height:1.2;margin:0;text-wrap:balance}
+h2{font-size:20px;margin:0;text-wrap:balance}
+h3{font-size:15.5px;margin:0}
+p{margin:0}
+.lede{color:var(--mute);font-size:17px}
+ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.tag{display:inline-block;font:700 12px/20px var(--mono);width:20px;text-align:center;border-radius:3px;background:var(--accent-soft);color:var(--accent)}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--card)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14.5px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child>*{border-bottom:0}
+thead th{font-size:12.5px;color:var(--mute);font-weight:600;letter-spacing:.02em}
+tbody th{font-weight:600;white-space:nowrap}
+td.n{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+thead th.n{text-align:right}
+tr.rec>*{background:var(--accent-soft)}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{font:600 13.5px var(--sans);border:0;background:var(--card);color:var(--fg);padding:7px 14px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--bg)}
+.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.note{color:var(--mute);font-size:14px}
+.gallery{display:grid;gap:18px;grid-template-columns:repeat(auto-fill,minmax(min(100%,720px),1fr))}
+main[data-w="66"] .gallery{grid-template-columns:repeat(auto-fill,minmax(min(100%,480px),1fr))}
+.panel{display:flex;flex-direction:column;gap:8px;min-width:0}
+.panel header{display:flex;align-items:center;gap:8px}
+.pick{font:600 12px var(--sans);color:var(--accent);margin-left:auto}
+.what,.cost{font-size:14px}
+.what{color:var(--mute)}
+.term{background:var(--term);color:var(--termfg);border-radius:6px;padding:12px 6px;overflow-x:auto;min-width:0}
+.panel.rec .term{box-shadow:0 0 0 2px var(--accent)}
+.term pre{margin:0;font:11.5px/1.5 var(--mono);width:max-content}
+main[data-w="100"] .w66,main[data-w="66"] .w100{display:none}
+</style>
+<main class="wrap" data-w="100">
+  <section class="col">
+    <h1>Reply format options</h1>
+    <p class="lede">One invented reply in eight formats. Each panel is a real capture from Claude Code 2.1.319, so bold, color and wrapping are what your terminal draws. The dark background is an approximation.</p>
+  </section>
+  <section class="col">
+    <h2>What I found</h2>
+    <ul>
+      <li><b>The four sections are mostly gone now.</b> A rule change on Nov 8 at 12:34 removed them and banned section headings.</li>
+      <li><b>On Nov 7, before the change,</b> 52 of 92 longer replies used the sections and 39 had no structure.</li>
+      <li><b>On Nov 9,</b> 254 of 264 had only a Needs you part, 3 used the sections and 7 had no structure. The facts above Needs you have no fixed format.</li>
+      <li><b>The terminal has few tools.</b> Bold shows as bold. A heading shows as bold plus blank lines. Inline code is the only color, a light blue.</li>
+      <li><b>Three dashes stay as three dashes,</b> so a horizontal rule does not draw a line.</li>
+      <li><b>The commit command still asks for the four sections,</b> so its replies follow a format the global rules no longer have.</li>
+    </ul>
+  </section>
+  <section class="col">
+    <h2>Part 1: the format</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Option</th><th class="n">Lines, 100 wide</th><th class="n">Lines, 66 wide</th><th class="n">Words</th><th>Main cost</th></tr></thead>
+      <tbody><tr><th scope="row"><span class="tag">A</span> Today's format</th><td class="n">9</td><td class="n">11</td><td class="n">86</td><td>Facts run together. A warning hides inside the paragraph.</td></tr>
+<tr><th scope="row"><span class="tag">B</span> Bold labels</th><td class="n">10</td><td class="n">12</td><td class="n">80</td><td>Questions are still long lines.</td></tr>
+<tr><th scope="row"><span class="tag">C</span> Status marks</th><td class="n">11</td><td class="n">13</td><td class="n">82</td><td>Marks are small, and each state needs learning. Some terminals draw them at the wrong width.</td></tr>
+<tr><th scope="row"><span class="tag">D</span> Tables</th><td class="n">22</td><td class="n">27</td><td class="n">78</td><td>Tallest option. Text wraps badly in narrow panes.</td></tr>
+<tr><th scope="row"><span class="tag">E</span> Question blocks</th><td class="n">12</td><td class="n">13</td><td class="n">74</td><td>Facts still run together. The rule line shows as three dashes.</td></tr>
+<tr><th scope="row"><span class="tag">F</span> Old four sections</th><td class="n">19</td><td class="n">21</td><td class="n">83</td><td>Headings look the same as bold, but cost extra lines.</td></tr>
+<tr><th scope="row"><span class="tag">G</span> Bold labels and question blocks</th><td class="n">14</td><td class="n">15</td><td class="n">80</td><td>No color. Two more lines than B per question.</td></tr>
+<tr class=rec><th scope="row"><span class="tag">H</span> Colored labels and question blocks</th><td class="n">14</td><td class="n">15</td><td class="n">80</td><td>The same color also marks file names and commands.</td></tr></tbody>
+    </table></div>
+    <p>I recommend H. The left edge becomes a column you can read down, and the questions stand apart. In this sample it uses 6 fewer words than today's format but 5 more lines. G is the same format without color, if the blue labels look too much like code.</p>
+    <p class="note">Labels appear only when they apply. A small job stays one or two lines. The labels are a suggested set, and you can change the words.</p>
+  </section>
+  <section>
+    <div class="gallery-head bar" style="margin-bottom:14px">
+      <h2 style="margin-right:auto">The eight formats</h2>
+      <span class="note">Terminal width</span>
+      <div class="seg" role="group" aria-label="Terminal width">
+        <button id="b100" aria-pressed="true" data-w="100">100 columns</button>
+        <button id="b66" aria-pressed="false" data-w="66">66 columns</button>
+      </div>
+    </div>
+    <div class="gallery"><article class="panel" id="opt-A">
+  <header><span class="tag">A</span><h3>Today's format</h3></header>
+  <p class="what">A paragraph, then a bold Needs you list.</p>
+  <div class="term w100"><pre>  The daily server check is installed and runs at 9:00 each day. A dry run passes, but I did not see
+  a real notification. The web certificate expires in 11 days, because its renewal job failed
+  twice. Nothing is committed.
+
+  <span style="font-weight:700">Needs you:</span>
+  - Q1 (renew certificate): yes renews it now and reloads the site for about 1 second. No leaves the
+    warning on each day. I recommend yes.
+  - Q2 (old music job): delete removes the disabled job. Keep leaves it off and costs nothing. I
+    recommend keep.</pre></div>
+  <div class="term w66"><pre>  The daily server check is installed and runs at 9:00 each day. A
+  dry run passes, but I did not see a real notification. The web
+  certificate expires in 11 days, because its renewal job failed
+  twice. Nothing is committed.
+
+  <span style="font-weight:700">Needs you:</span>
+  - Q1 (renew certificate): yes renews it now and reloads the site
+    for about 1 second. No leaves the warning on each day. I
+    recommend yes.
+  - Q2 (old music job): delete removes the disabled job. Keep
+    leaves it off and costs nothing. I recommend keep.</pre></div>
+  <p class="cost"><b>Cost:</b> Facts run together. A warning hides inside the paragraph.</p>
+</article>
+<article class="panel" id="opt-B">
+  <header><span class="tag">B</span><h3>Bold labels</h3></header>
+  <p class="what">Each fact gets one line and a fixed bold label.</p>
+  <div class="term w100"><pre>  <span style="font-weight:700">Now:</span> The daily server check runs at 9:00 each day.
+  <span style="font-weight:700">Checked:</span> Dry run passes. Real notification not seen.
+  <span style="font-weight:700">Watch:</span> The web certificate expires in 11 days. Renewal failed twice.
+  <span style="font-weight:700">Not done:</span> Nothing is committed.
+
+  <span style="font-weight:700">Needs you:</span>
+  - Q1 (renew certificate): yes renews it now and reloads the site for about 1 second. No leaves the
+    warning on each day. I recommend yes.
+  - Q2 (old music job): delete removes the disabled job. Keep leaves it off and costs nothing. I
+    recommend keep.</pre></div>
+  <div class="term w66"><pre>  <span style="font-weight:700">Now:</span> The daily server check runs at 9:00 each day.
+  <span style="font-weight:700">Checked:</span> Dry run passes. Real notification not seen.
+  <span style="font-weight:700">Watch:</span> The web certificate expires in 11 days. Renewal failed
+  twice.
+  <span style="font-weight:700">Not done:</span> Nothing is committed.
+
+  <span style="font-weight:700">Needs you:</span>
+  - Q1 (renew certificate): yes renews it now and reloads the site
+    for about 1 second. No leaves the warning on each day. I
+    recommend yes.
+  - Q2 (old music job): delete removes the disabled job. Keep
+    leaves it off and costs nothing. I recommend keep.</pre></div>
+  <p class="cost"><b>Cost:</b> Questions are still long lines.</p>
+</article>
+<article class="panel" id="opt-C">
+  <header><span class="tag">C</span><h3>Status marks</h3></header>
+  <p class="what">Each line starts with a mark for its state.</p>
+  <div class="term w100"><pre>  - ✓ The daily server check runs at 9:00 each day.
+  - ✓ Dry run passes.
+  - ○ Real notification not seen.
+  - ⚠ The web certificate expires in 11 days. Renewal failed twice.
+  - ○ Nothing is committed.
+
+  <span style="font-weight:700">Needs you:</span>
+  - ❓ Q1 (renew certificate): yes renews it now and reloads the site for about 1 second. No leaves
+    the warning on each day. I recommend yes.
+  - ❓ Q2 (old music job): delete removes the disabled job. Keep leaves it off and costs nothing. I
+    recommend keep.</pre></div>
+  <div class="term w66"><pre>  - ✓ The daily server check runs at 9:00 each day.
+  - ✓ Dry run passes.
+  - ○ Real notification not seen.
+  - ⚠ The web certificate expires in 11 days. Renewal failed
+    twice.
+  - ○ Nothing is committed.
+
+  <span style="font-weight:700">Needs you:</span>
+  - ❓ Q1 (renew certificate): yes renews it now and reloads the
+    site for about 1 second. No leaves the warning on each day. I
+    recommend yes.
+  - ❓ Q2 (old music job): delete removes the disabled job. Keep
+    leaves it off and costs nothing. I recommend keep.</pre></div>
+  <p class="cost"><b>Cost:</b> Marks are small, and each state needs learning. Some terminals draw them at the wrong width.</p>
+</article>
+<article class="panel" id="opt-D">
+  <header><span class="tag">D</span><h3>Tables</h3></header>
+  <p class="what">Facts and questions go in bordered tables.</p>
+  <div class="term w100"><pre>  ┌──────────┬───────────────────────────────────────────────────────────────┐
+  │          │                                                               │
+  ├──────────┼───────────────────────────────────────────────────────────────┤
+  │ <span style="font-weight:700">Now</span>      │ The daily server check runs at 9:00 each day.                 │
+  ├──────────┼───────────────────────────────────────────────────────────────┤
+  │ <span style="font-weight:700">Checked</span>  │ Dry run passes. Real notification not seen.                   │
+  ├──────────┼───────────────────────────────────────────────────────────────┤
+  │ <span style="font-weight:700">Watch</span>    │ The web certificate expires in 11 days. Renewal failed twice. │
+  ├──────────┼───────────────────────────────────────────────────────────────┤
+  │ <span style="font-weight:700">Not done</span> │ Nothing is committed.                                         │
+  └──────────┴───────────────────────────────────────────────────────────────┘
+
+  ┌────────────────────┬─────────────────────────────────┬────────────────────────┬────────────┐
+  │     Needs you      │       Yes / first choice        │   No / second choice   │     I      │
+  │                    │                                 │                        │ recommend  │
+  ├────────────────────┼─────────────────────────────────┼────────────────────────┼────────────┤
+  │ <span style="font-weight:700">Q1 (renew </span>         │ Renews now. Site reloads for    │ Warning stays on each  │ Yes        │
+  │ <span style="font-weight:700">certificate)</span>       │ about 1 second.                 │ day.                   │            │
+  ├────────────────────┼─────────────────────────────────┼────────────────────────┼────────────┤
+  │ <span style="font-weight:700">Q2 (old music job)</span> │ Delete: removes the disabled    │ Keep: stays off, costs │ Keep       │
+  │                    │ job.                            │  nothing.              │            │
+  └────────────────────┴─────────────────────────────────┴────────────────────────┴────────────┘</pre></div>
+  <div class="term w66"><pre>  ┌─────────┬─────────────────────────────────────────────────┐
+  │         │                                                 │
+  ├─────────┼─────────────────────────────────────────────────┤
+  │ <span style="font-weight:700">Now</span>     │ The daily server check runs at 9:00 each day.   │
+  ├─────────┼─────────────────────────────────────────────────┤
+  │ <span style="font-weight:700">Checked</span> │ Dry run passes. Real notification not seen.     │
+  ├─────────┼─────────────────────────────────────────────────┤
+  │ <span style="font-weight:700">Watch</span>   │ The web certificate expires in 11 days. Renewal │
+  │         │  failed twice.                                  │
+  ├─────────┼─────────────────────────────────────────────────┤
+  │ <span style="font-weight:700">Not </span>    │ Nothing is committed.                           │
+  │ <span style="font-weight:700">done</span>    │                                                 │
+  └─────────┴─────────────────────────────────────────────────┘
+
+  ┌───────────────┬────────────────┬─────────────┬───────────┐
+  │   Needs you   │  Yes / first   │ No / second │    I      │
+  │               │     choice     │    choice   │ recommend │
+  ├───────────────┼────────────────┼─────────────┼───────────┤
+  │               │ Renews now.    │ Warning     │           │
+  │ <span style="font-weight:700">Q1 (renew </span>    │ Site reloads   │ stays on    │ Yes       │
+  │ <span style="font-weight:700">certificate)</span>  │ for about 1    │ each day.   │           │
+  │               │ second.        │             │           │
+  ├───────────────┼────────────────┼─────────────┼───────────┤
+  │ <span style="font-weight:700">Q2 (old music</span> │ Delete:        │ Keep: stays │           │
+  │ <span style="font-weight:700"> job)</span>         │ removes the    │  off, costs │ Keep      │
+  │               │ disabled job.  │  nothing.   │           │
+  └───────────────┴────────────────┴─────────────┴───────────┘</pre></div>
+  <p class="cost"><b>Cost:</b> Tallest option. Text wraps badly in narrow panes.</p>
+</article>
+<article class="panel" id="opt-E">
+  <header><span class="tag">E</span><h3>Question blocks</h3></header>
+  <p class="what">A short paragraph, then one block per question.</p>
+  <div class="term w100"><pre>  The daily server check runs at 9:00 each day. Dry run passes. Real notification not seen. The web
+  certificate expires in 11 days, because renewal failed twice. Nothing is committed.
+
+  ---
+
+  <span style="font-weight:700">Q1 (renew certificate)</span> — I recommend <span style="font-weight:700">yes</span>
+  - <span style="font-weight:700">yes:</span> renews it now. The site reloads for about 1 second.
+  - <span style="font-weight:700">no:</span> the warning stays on each day.
+
+  <span style="font-weight:700">Q2 (old music job)</span> — I recommend <span style="font-weight:700">keep</span>
+  - <span style="font-weight:700">delete:</span> removes the disabled job.
+  - <span style="font-weight:700">keep:</span> stays off and costs nothing.</pre></div>
+  <div class="term w66"><pre>  The daily server check runs at 9:00 each day. Dry run passes.
+  Real notification not seen. The web certificate expires in 11
+  days, because renewal failed twice. Nothing is committed.
+
+  ---
+
+  <span style="font-weight:700">Q1 (renew certificate)</span> — I recommend <span style="font-weight:700">yes</span>
+  - <span style="font-weight:700">yes:</span> renews it now. The site reloads for about 1 second.
+  - <span style="font-weight:700">no:</span> the warning stays on each day.
+
+  <span style="font-weight:700">Q2 (old music job)</span> — I recommend <span style="font-weight:700">keep</span>
+  - <span style="font-weight:700">delete:</span> removes the disabled job.
+  - <span style="font-weight:700">keep:</span> stays off and costs nothing.</pre></div>
+  <p class="cost"><b>Cost:</b> Facts still run together. The rule line shows as three dashes.</p>
+</article>
+<article class="panel" id="opt-F">
+  <header><span class="tag">F</span><h3>Old four sections</h3></header>
+  <p class="what">Result, Worth knowing, Summary, Needs you.</p>
+  <div class="term w100"><pre>  <span style="font-weight:700">Result</span>
+
+  The daily server check runs at 9:00 each day. Dry run passes. Real notification not seen.
+
+  <span style="font-weight:700">Worth knowing</span>
+
+  The web certificate expires in 11 days. Renewal failed twice.
+
+  <span style="font-weight:700">Summary</span>
+
+  - Added the daily check.
+  - Nothing is committed.
+
+  <span style="font-weight:700">Needs you</span>
+
+  - Q1 (renew certificate): yes renews it now and reloads the site for about 1 second. No leaves the
+    warning on each day. I recommend yes.
+  - Q2 (old music job): delete removes the disabled job. Keep leaves it off and costs nothing. I
+    recommend keep.</pre></div>
+  <div class="term w66"><pre>  <span style="font-weight:700">Result</span>
+
+  The daily server check runs at 9:00 each day. Dry run passes.
+  Real notification not seen.
+
+  <span style="font-weight:700">Worth knowing</span>
+
+  The web certificate expires in 11 days. Renewal failed twice.
+
+  <span style="font-weight:700">Summary</span>
+
+  - Added the daily check.
+  - Nothing is committed.
+
+  <span style="font-weight:700">Needs you</span>
+
+  - Q1 (renew certificate): yes renews it now and reloads the site
+    for about 1 second. No leaves the warning on each day. I
+    recommend yes.
+  - Q2 (old music job): delete removes the disabled job. Keep
+    leaves it off and costs nothing. I recommend keep.</pre></div>
+  <p class="cost"><b>Cost:</b> Headings look the same as bold, but cost extra lines.</p>
+</article>
+<article class="panel" id="opt-G">
+  <header><span class="tag">G</span><h3>Bold labels and question blocks</h3></header>
+  <p class="what">B for the facts, E for the questions.</p>
+  <div class="term w100"><pre>  <span style="font-weight:700">Now:</span> The daily server check runs at 9:00 each day.
+  <span style="font-weight:700">Checked:</span> Dry run passes. Real notification not seen.
+  <span style="font-weight:700">Watch:</span> The web certificate expires in 11 days. Renewal failed twice.
+  <span style="font-weight:700">Not done:</span> Nothing is committed.
+
+  <span style="font-weight:700">Needs you:</span>
+
+  <span style="font-weight:700">Q1 (renew certificate)</span> — I recommend <span style="font-weight:700">yes</span>
+  - <span style="font-weight:700">yes:</span> renews it now. The site reloads for about 1 second.
+  - <span style="font-weight:700">no:</span> the warning stays on each day.
+
+  <span style="font-weight:700">Q2 (old music job)</span> — I recommend <span style="font-weight:700">keep</span>
+  - <span style="font-weight:700">delete:</span> removes the disabled job.
+  - <span style="font-weight:700">keep:</span> stays off and costs nothing.</pre></div>
+  <div class="term w66"><pre>  <span style="font-weight:700">Now:</span> The daily server check runs at 9:00 each day.
+  <span style="font-weight:700">Checked:</span> Dry run passes. Real notification not seen.
+  <span style="font-weight:700">Watch:</span> The web certificate expires in 11 days. Renewal failed
+  twice.
+  <span style="font-weight:700">Not done:</span> Nothing is committed.
+
+  <span style="font-weight:700">Needs you:</span>
+
+  <span style="font-weight:700">Q1 (renew certificate)</span> — I recommend <span style="font-weight:700">yes</span>
+  - <span style="font-weight:700">yes:</span> renews it now. The site reloads for about 1 second.
+  - <span style="font-weight:700">no:</span> the warning stays on each day.
+
+  <span style="font-weight:700">Q2 (old music job)</span> — I recommend <span style="font-weight:700">keep</span>
+  - <span style="font-weight:700">delete:</span> removes the disabled job.
+  - <span style="font-weight:700">keep:</span> stays off and costs nothing.</pre></div>
+  <p class="cost"><b>Cost:</b> No color. Two more lines than B per question.</p>
+</article>
+<article class="panel rec" id="opt-H">
+  <header><span class="tag">H</span><h3>Colored labels and question blocks</h3><span class="pick">My pick</span></header>
+  <p class="what">G with labels in inline code, which the terminal colors.</p>
+  <div class="term w100"><pre>  <span style="color:#afd7ff">NOW</span> The daily server check runs at 9:00 each day.
+  <span style="color:#afd7ff">CHECKED</span> Dry run passes. Real notification not seen.
+  <span style="color:#afd7ff">WATCH</span> The web certificate expires in 11 days. Renewal failed twice.
+  <span style="color:#afd7ff">NOT DONE</span> Nothing is committed.
+
+  <span style="font-weight:700">Needs you:</span>
+
+  <span style="font-weight:700">Q1 (renew certificate)</span> — I recommend <span style="color:#afd7ff">yes</span>
+  - <span style="font-weight:700">yes:</span> renews it now. The site reloads for about 1 second.
+  - <span style="font-weight:700">no:</span> the warning stays on each day.
+
+  <span style="font-weight:700">Q2 (old music job)</span> — I recommend <span style="color:#afd7ff">keep</span>
+  - <span style="font-weight:700">delete:</span> removes the disabled job.
+  - <span style="font-weight:700">keep:</span> stays off and costs nothing.</pre></div>
+  <div class="term w66"><pre>  <span style="color:#afd7ff">NOW</span> The daily server check runs at 9:00 each day.
+  <span style="color:#afd7ff">CHECKED</span> Dry run passes. Real notification not seen.
+  <span style="color:#afd7ff">WATCH</span> The web certificate expires in 11 days. Renewal failed
+  twice.
+  <span style="color:#afd7ff">NOT DONE</span> Nothing is committed.
+
+  <span style="font-weight:700">Needs you:</span>
+
+  <span style="font-weight:700">Q1 (renew certificate)</span> — I recommend <span style="color:#afd7ff">yes</span>
+  - <span style="font-weight:700">yes:</span> renews it now. The site reloads for about 1 second.
+  - <span style="font-weight:700">no:</span> the warning stays on each day.
+
+  <span style="font-weight:700">Q2 (old music job)</span> — I recommend <span style="color:#afd7ff">keep</span>
+  - <span style="font-weight:700">delete:</span> removes the disabled job.
+  - <span style="font-weight:700">keep:</span> stays off and costs nothing.</pre></div>
+  <p class="cost"><b>Cost:</b> The same color also marks file names and commands.</p>
+</article></div>
+  </section>
+  <section class="col">
+    <h2>Part 2: how to make the format hold</h2>
+    <p>A format only helps if replies use it. These four can be combined. None of them is built yet.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Option</th><th>What it does</th><th>When a miss is corrected</th><th>Main cost</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Rule text only</th><td>Add the format to the global reply rules.</td><td>Never</td><td>Replies can drift, as the Nov 7 numbers show.</td></tr>
+        <tr class="rec"><th scope="row">Reminder on each prompt</th><td>Extend the Altera reminder to all sessions. It also checks the last reply for the labels.</td><td>Next reply</td><td>One extra line of context per prompt. The current reply stays wrong.</td></tr>
+        <tr><th scope="row">Check at end of turn</th><td>A hook rejects a reply that has no labels, and Claude writes it again.</td><td>Same turn</td><td>You see both copies. It must skip replies that only answer a question.</td></tr>
+        <tr><th scope="row">Side pane</th><td>A mod copies the labeled lines into a pane beside the chat.</td><td>Does not correct</td><td>Most work. Needs fixed labels. I did not test an automatic pane.</td></tr>
+      </tbody>
+    </table></div>
+    <p>I recommend the rule text plus the reminder. The reminder already exists and calls no model. The end-of-turn check is the next step if misses continue.</p>
+    <p class="note">Counts cover interactive replies of 40 words or more, from the 400 most recently changed session files. The quality notes are my judgment.</p>
+  </section>
+</main>
+<script>
+(function(){var m=document.querySelector('main');var bs=document.querySelectorAll('.seg button');
+function set(w){m.dataset.w=w;bs.forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.w===w))});try{localStorage.setItem('w',w)}catch(e){}}
+bs.forEach(function(b){b.addEventListener('click',function(){set(b.dataset.w)})});
+try{var s=localStorage.getItem('w');if(s==='66'||s==='100')set(s)}catch(e){}})();
+</script>

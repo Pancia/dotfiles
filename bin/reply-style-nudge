@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-# reply-style-nudge: UserPromptSubmit hook for the Altera liaison only.
-# Puts the reply rules next to each prompt and reports the last reply's size.
+# reply-style-nudge: UserPromptSubmit hook for interactive sessions.
+# Every session gets a one-line reminder of the reply format. It does not check
+# the last reply, because a reply that only answers a question may have no marks.
+# The Altera liaison also gets the reply rules and a report of the last reply's size.
 # Makes no model call. Fails open: on any error it prints nothing and exits 0.
 import json, os, re, sys
 
@@ -11,6 +13,12 @@ NOTE = ("[Reply style] First line: the answer, in everyday words. Last: what you
         "from me. Use an ID or internal name only if I must type it, open it or find "
         "it. Limits: 60 words for a yes or no, 130 to catch up. Each question gets a "
         "lasting ID and label, such as Q3 (short name); repeat open ones at the end.")
+
+FORMAT_NOTE = ("[Reply format] In recaps and catch-ups, group the facts under label lines, "
+               "with each label once and one bullet per fact. The labels, in order, are "
+               "🔴 `BROKEN`, 🔴 `FAILED`, 🟢 `NOW`, 🟢 `CHECKED`, 🟡 `WATCH`, 🔵 `UNCHECKED` "
+               "and 🔵 `NOT DONE`. Use only these labels, never a topic word. Give a question "
+               "a yes and no list only when what each answer does is not obvious.")
 
 def score(text):
     text = "\n".join(l for l in text.split("\n") if not l.startswith("> 🎭"))
@@ -43,19 +51,24 @@ def read_transcript(path):
     return entry, reply
 
 try:
-    # ALT_AGENT_ID is inherited by child processes, so recons started by the
-    # liaison have it too. The transcript's entrypoint tells them apart.
-    if os.environ.get("ALT_AGENT_ID") != "liaison-01":
-        sys.exit(0)
     data = json.load(sys.stdin)
-    entry, reply = read_transcript(data.get("transcript_path", ""))
-    if entry != "cli":
+    try:
+        entry, reply = read_transcript(data.get("transcript_path", ""))
+    except OSError:  # the first prompt of a session can come before its transcript
+        entry, reply = "", ""
+    # The transcript's entrypoint comes first, because a nested session inherits
+    # CLAUDE_CODE_ENTRYPOINT from its parent.
+    if (entry or os.environ.get("CLAUDE_CODE_ENTRYPOINT")) != "cli":
         sys.exit(0)
-    note = NOTE
-    if reply:
-        words, ids = score(reply)
-        if words > FLAG_WORDS or ids > FLAG_IDS:
-            note += f" Last reply: {words} words, {ids} IDs. Shorter unless I asked for detail."
+    note = FORMAT_NOTE
+    # ALT_AGENT_ID is inherited by child processes, so recons started by the
+    # liaison have it too. The entrypoint check above tells them apart.
+    if os.environ.get("ALT_AGENT_ID") == "liaison-01":
+        note = f"{NOTE} {FORMAT_NOTE}"
+        if reply:
+            words, ids = score(reply)
+            if words > FLAG_WORDS or ids > FLAG_IDS:
+                note += f" Last reply: {words} words, {ids} IDs. Shorter unless I asked for detail."
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "UserPromptSubmit", "additionalContext": note}}))
 except Exception:

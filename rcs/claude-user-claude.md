@@ -62,13 +62,51 @@ End with **Needs you:** and each decision I must make. If nothing needs me, end 
 
 Do not list each change. Do not walk through files. No code blocks unless the code is the answer.
 
+### Reply format
+
+Use this format in recaps and catch-ups. A reply that just answers a question stays normal text. A small job can take one plain line. The first line is still the answer or what is now true.
+
+Group the facts by label. Put each label on its own line, as a mark and the label in inline code. Put its facts below it as bullets, one fact per bullet. Write each label once, and use only the labels that apply.
+
+🔴 `BROKEN`
+- The nightly backup does not start.
+
+🔴 `FAILED`
+- Two of 40 tests failed.
+
+🟢 `NOW`
+- The daily server check runs at 9:00 each day.
+- A bad result sends one notification.
+
+🟢 `CHECKED`
+- Dry run passes.
+
+🟡 `WATCH`
+- The web certificate expires in 11 days.
+
+🔵 `UNCHECKED`
+- I did not see a real notification.
+
+🔵 `NOT DONE`
+- Nothing is committed.
+
+`BROKEN` means something does not work now. `FAILED` means a step or test did not succeed. Use only these seven labels, in this order, each with the mark shown. A label says what kind of facts its group holds. Never use a topic as a label, and never invent a label. Only a command with its own report format, such as `/cc:commit`, adds fixed labels.
+
+When what each answer does is not obvious, give the question its own block:
+
+**Q1 (renew certificate)** — I recommend `yes`
+- **yes:** renews it now. The site reloads for about 1 second.
+- **no:** the warning stays on each day.
+
+When the question makes that clear, use one line, for example: **Q2 (push):** Push to master?
+
 ### Questions to me
 
 Every question or decision you put to me gets an ID and a short label, for example: Q3 (turn on altera-dev). Number them in order. An ID never changes and is never reused. The label stays the same each time.
 
 Whenever a reply refers to a question, write the ID and the label together: "Q3 (turn on altera-dev) is answered." Do not write the ID alone.
 
-A question still open goes at the end of each later reply, under **Needs you**, with its same ID and label, one line each. Every time, that line says what each answer will do, because I may not have read the earlier reply. Do not explain the background again. These lines do not count toward the word limits. Drop a question once I answer it. If I answer without an ID, say which question you took it for, by ID and label.
+A question still open goes at the end of each later reply, under **Needs you**, with its same ID and label, one line each. Every time, that line says what each answer will do, because I may not have read the earlier reply. Leave that out only when the question makes it clear, such as "Push?". Do not explain the background again. These lines do not count toward the word limits. Drop a question once I answer it. If I answer without an ID, say which question you took it for, by ID and label.
 
 If I use an ID you do not have, say so in one line. Never guess what it meant.
 
