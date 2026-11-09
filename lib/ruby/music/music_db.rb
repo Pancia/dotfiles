@@ -79,31 +79,9 @@ class MusicDB
   end
 
   def self.tag_single(i)
-    file_tags = self.parse_tags i
-    item = i.select {|k,_| @meta_to_db.values.include? k}
-    puts "file_tags: #{file_tags}" if $options[:verbose]
-    puts "item: #{item}" if $options[:verbose]
-    diff = hash_diff item, file_tags
-    if diff.empty?
-      return :skipped
-    else
-      meta_str = diff.keys
-        .map {|k| [" -metadata ", @meta_to_db.invert[k], "=", "#{item[k].to_s.shellescape}", " "]}
-        .join ""
-      if $options[:dry_run]
-        puts meta_str
-        return :dry_run
-      else
-        puts meta_str if $options[:verbose]
-        file = i["id"]+".m4a"
-        tmp = i["id"]+".tmp.m4a"
-        log_dir = File.expand_path("~/.log/music")
-        FileUtils.mkdir_p(log_dir)
-        log = "#{log_dir}/#{i["id"]}.log"
-        system("ffmpeg -v warning -i $MUSIC_LIBRARY/#{file} -c copy #{meta_str} $MUSIC_LIBRARY/#{tmp} 2>&1 | tee -a #{log} && mv $MUSIC_LIBRARY/#{tmp} $MUSIC_LIBRARY/#{file}")
-        return :tagged
-      end
-    end
+    result, error = tag_single_with_error(i)
+    warn "music: could not tag #{i["id"]}. The file is unchanged. #{error}" if result == :failed
+    result
   end
 
   def self.tag_parallel(items, workers, log_dir: nil)
@@ -187,7 +165,7 @@ class MusicDB
         file = i["id"]+".m4a"
         tmp = i["id"]+".tmp.m4a"
         output = `ffmpeg -v warning -i "$MUSIC_LIBRARY/#{file}" -c copy #{meta_str} "$MUSIC_LIBRARY/#{tmp}" 2>&1`
-        if $?.success? && File.exist?("#{ENV['MUSIC_LIBRARY']}/#{tmp}")
+        if $?.success? && File.size?("#{ENV['MUSIC_LIBRARY']}/#{tmp}")
           system("mv \"$MUSIC_LIBRARY/#{tmp}\" \"$MUSIC_LIBRARY/#{file}\"")
           return [:tagged, nil]
         else
