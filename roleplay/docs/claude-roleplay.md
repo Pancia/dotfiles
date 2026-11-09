@@ -5,14 +5,15 @@ in-character flavor — an **opener** at the top and a **closer** at the bottom 
 drawn from a randomly-rolled character. The technical content in between is
 written normally.
 
-Three pieces:
+The pieces:
 
 | Piece | File | Role |
 |---|---|---|
-| Prompt section | `rcs/claude-user-claude.md` → `~/.claude/CLAUDE.md` | format rules only, ~34 lines, **constant size** |
+| Prompt section | `rcs/claude-user-claude.md` → `~/.claude/CLAUDE.md` | format rules only, ~22 lines, **constant size** |
 | Roster | `roleplay/roster.tsv` | the cast — 80 characters across 9 universes — and the odds weights |
 | Hook | `roleplay/bin/roleplay-roll`, wired in `rcs/claude-settings.json` | rolls, and injects the chosen character |
-| Examples | `roleplay/examples.md` | style reference — 333 worked bookends, 4–5 per character. **Not read at runtime** |
+| Terminal command | `roleplay/bin/roleplay-say` | rolls, then has a cheap model write the line, for use outside a session |
+| Examples | `roleplay/examples.md` | style reference — 333 worked bookends, 4–5 per character. **The hook never reads it**; `roleplay-say` reads the rolled character's entries |
 
 ---
 
@@ -20,13 +21,15 @@ Three pieces:
 
 The subsystem is self-contained in one directory so it can be **copied out and
 given to someone else** — `roleplay/README.md` is the install guide for a
-stranger, and nothing under `roleplay/` reads a path outside it.
+stranger, and nothing under `roleplay/` reads a path outside it. The only outside
+program is `claude-p`, called through PATH by the optional `roleplay-say`.
 
-Staying wired into dotfiles costs three symlinks, chosen over the alternatives:
+Staying wired into dotfiles costs four symlinks, chosen over the alternatives:
 
 | Link | Keeps working |
 |---|---|
 | `bin/roleplay-roll` → `../roleplay/bin/roleplay-roll` | PATH and the hook registration, both untouched |
+| `bin/roleplay-say` → `../roleplay/bin/roleplay-say` | PATH for the terminal command |
 | `tests/roleplay` → `../roleplay/tests` | `cmds test roleplay` — `run_component()` does `TESTS_DIR / component`, so an unlinked tree would never run |
 | `docs/claude-roleplay.md` → `../roleplay/docs/claude-roleplay.md` | every existing link to this document |
 
@@ -45,7 +48,7 @@ It used to be. The hook injected `[🎲 Character Roll: N]` and the prompt secti
 carried a numbered table that Claude indexed into.
 
 That does not survive growth. `~/.claude/CLAUDE.md` loads into **every session in
-every project**, so an inline table of 57 characters means paying for 56 unused
+every project**, so an inline table of 80 characters means paying for 79 unused
 ones on every prompt, forever, to flavour two lines. It also duplicated the cast
 size into the hook's modulus (`RANDOM % 13`) and into the prompt's "1-13" wording
 — three places to keep in sync by hand.
@@ -191,9 +194,10 @@ the injected tag says which:
 The line is named in **both** branches — when spent it has to be identified in order
 to be avoided. `0/1` disables signature lines entirely, `1/1` always unlocks them.
 
-Seven characters currently declare one: Techpriest Logis, Commissar, Major Kusanagi,
-Tachikoma, Laughing Man, Simon, Kamina. `roleplay-roll --check` reports the count and
-the configured odds; `--list` shows each as `[sig: …]`.
+Twelve roster rows currently declare one: Techpriest Logis, Commissar, Major Kusanagi,
+Tachikoma, Laughing Man, Simon, Kamina, Holo, Malfoid, Houshou Marine, Houshou Marine
+(Uncut), Artoria Pendragon (Saber). `roleplay-roll --check` reports the count and the
+configured odds; `--list` shows each as `[sig: …]`.
 
 This also simplified the roster: those characters' traits went back to plain
 description, since the prohibition prose they used to carry now lives in a field the
@@ -224,6 +228,12 @@ roleplay-roll             # hook JSON envelope (what the hook calls)
 roleplay-roll --plain     # just the character line
 roleplay-roll --list      # the whole roster, grouped
 roleplay-roll --check     # validate: counts, odds, duplicate emoji/names
+
+roleplay-say                       # roll, and have a cheap model write the line
+roleplay-say fixing the login bug  # ...about this
+roleplay-say --closer shipped it   # a closer instead of an opener
+git diff | roleplay-say -          # context from stdin, only with an explicit -
+roleplay-say -m sonnet tests pass  # another model. The default is haiku
 ```
 
 | Env var | Effect |
@@ -231,6 +241,13 @@ roleplay-roll --check     # validate: counts, odds, duplicate emoji/names
 | `ROLEPLAY_CATCHPHRASE` | signature-line odds as `N/M`, default `1/3`. `0/1` never, `1/1` always. Unparseable values fall back to the default rather than erroring |
 | `ROLEPLAY_ROSTER` | override the roster path (for the tests) |
 | `ROLEPLAY_SEED` | force the RNG seed, making a roll reproducible (for the tests) |
+| `ROLEPLAY_SAY_MODEL` | `roleplay-say` default model when `-m` is not given |
+| `ROLEPLAY_EXAMPLES` | `roleplay-say` examples file, `/dev/null` for none |
+| `CLAUDE_P_TIMEOUT` | `roleplay-say` deadline in seconds, default `60` |
+
+`roleplay-say` **fails loudly**, unlike the hook: a message on stderr and exit 1,
+with stdout carrying only the finished line. A person or a script calls it, so
+nothing parses its failure as a prompt. It needs `claude-p` and `jq` on PATH.
 
 ### When changes take effect
 
@@ -263,27 +280,29 @@ Nothing else needs updating — no modulus, no prompt-section edit.
 
 ### The examples file
 
-`roleplay/examples.md` holds 235 worked bookends — four per character (two
-openers, two closers) plus a fifth for each of the seven signature characters
-showing the famous line used well on the roll where it is unlocked.
+`roleplay/examples.md` holds 333 worked bookends — four per character (two
+openers, two closers) plus a fifth for the signature characters, showing the
+famous line used well on the roll where it is unlocked.
 
-**Nothing reads it at runtime.** Loading it would undo the entire external-roster
+**The hook never reads it.** Loading it would undo the entire external-roster
 design, which exists so a prompt carries one line rather than the cast. It is a
 style reference: read it when adding a character, or when a universe starts
-sounding samey.
+sounding samey. `roleplay-say` is the one reader. It takes the rolled character's
+first four entries and skips the fifth, because showing the signature line would
+defeat a roll that came up spent.
 
-It was generated by six subagents, one per universe, each reading the roster
-itself so no name or emoji was retyped. Assembly verified all 57 characters
-present exactly once, emoji matching the roster, signature blocks appearing for
-exactly the seven characters that declare one, and — the check that mattered —
-that no signature quote appears in any of the four *ordinary* examples.
+The first 57 characters were generated by six subagents, one per universe, each
+reading the roster itself so no name or emoji was retyped. Assembly verified all
+57 present exactly once, emoji matching the roster, signature blocks appearing for
+exactly the seven characters that then declared one, and — the check that mattered
+— that no signature quote appears in any of the four *ordinary* examples.
 
 ---
 
 ## Tests
 
-`cmds test roleplay` — 43 tests under the `roleplay` component, registered in
-`COMPONENTS` (`lib/python/run_tests.py`). They drive the script as a subprocess.
+`cmds test roleplay` — 81 tests under the `roleplay` component, registered in
+`COMPONENTS` (`lib/python/run_tests.py`). They drive the scripts as subprocesses.
 The tests themselves live in `roleplay/tests/`, reached through the
 `tests/roleplay` symlink; they derive their root from `__file__` with `.resolve()`
 so a standalone copy tests itself, and `pytest roleplay/tests/` works with no
@@ -293,7 +312,7 @@ Mutation-checked. 9 of 10 mutations are killed; the survivor is `[ -r "$roster" 
 which is genuinely redundant with the `|| exit 0` on the awk capture and is kept
 only as an explicit statement of intent.
 
-**Six of the 43 cover symlink resolution**, which is load-bearing now that the
+**Six of them cover symlink resolution**, which is load-bearing now that the
 copy which actually runs is reached through `bin/roleplay-roll`. They are worth
 more than their line count suggests: neutering the walk to `while false; do` —
 a one-line mutation — makes the script read whatever `roster.tsv` happens to sit

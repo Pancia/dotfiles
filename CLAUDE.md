@@ -855,7 +855,7 @@ vendor approve <name>                  # Approve current state after review
 | [docs/revive.md](docs/revive.md) | Per-pane terminal journal: why the iTerm session GUID is the only identity that survives a reboot, the one-record-per-pane store and the rename that makes a ghost, what `fish_exit` buys, and the two gotchas — iTerm's `tab` class shadowing the AppleScript separator, and a zombie answering `ps` |
 | [docs/work-config-vault.md](docs/work-config-vault.md) | Private per-project config vault: layout, lookup order for `cmds` and the svc tools, the commit-to-back-up rule, the hook's traps (global hooksPath, ignored `.githooks`), restore |
 | [docs/claude-watchdog.md](docs/claude-watchdog.md) | Runaway-headless-`claude` watchdog: phases, classification, bundle redaction, tests |
-| [docs/claude-roleplay.md](docs/claude-roleplay.md) | Claude Code character roleplay: the external roster, two-stage roll, why the cast is not inlined into CLAUDE.md, and the three symlinks that keep `roleplay/` self-contained. A symlink into `roleplay/docs/` |
+| [docs/claude-roleplay.md](docs/claude-roleplay.md) | Claude Code character roleplay: the external roster, two-stage roll, why the cast is not inlined into CLAUDE.md, and the four symlinks that keep `roleplay/` self-contained. A symlink into `roleplay/docs/` |
 | [roleplay/README.md](roleplay/README.md) | Install guide for handing the roleplay system to someone else — written for a stranger, no dotfiles assumed |
 
 ## File Locations

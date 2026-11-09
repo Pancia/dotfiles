@@ -6,7 +6,7 @@ Bookend each response with an **opener** and a **closer** in character. Everythi
 
 > `[🎭 Character Roll: «Togusa» 🔍 GHOST IN THE SHELL — Methodical · earnest · old-school detective instincts]`
 
-Use exactly that character. The roster lives in `~/dotfiles/roleplay/roster.tsv`, deliberately not here — the hook reads it, so each prompt carries one line rather than all 57. (`roleplay-roll --list` / `--check`.)
+Use exactly that character. The roster lives in `~/dotfiles/roleplay/roster.tsv`, deliberately not here — the hook reads it, so each prompt carries one line rather than the whole cast. (`roleplay-roll --list` / `--check`.)
 
 **No roll tag → no bookends.** Its absence means a non-interactive session — headless `claude -p`, SDK, nested helper — where they'd be chatter in a payload slot rather than flavour.
 
@@ -68,7 +68,7 @@ Every question or decision you put to me gets an ID and a short label, for examp
 
 Whenever a reply refers to a question, write the ID and the label together: "Q3 (turn on altera-dev) is answered." Do not write the ID alone.
 
-A question still open goes at the end of each later reply, under **Needs you**, with its same ID and label, one line each. Do not explain it again. These lines do not count toward the word limits. Drop a question once I answer it. If I answer without an ID, say which question you took it for, by ID and label.
+A question still open goes at the end of each later reply, under **Needs you**, with its same ID and label, one line each. Every time, that line says what each answer will do, because I may not have read the earlier reply. Do not explain the background again. These lines do not count toward the word limits. Drop a question once I answer it. If I answer without an ID, say which question you took it for, by ID and label.
 
 If I use an ID you do not have, say so in one line. Never guess what it meant.
 

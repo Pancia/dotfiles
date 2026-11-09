@@ -16,7 +16,8 @@ Dozens of characters across several universes, with adjustable odds. Costs one
 line of context per prompt, not one per character.
 
 This directory is **self-contained**: copy it anywhere and it works. Nothing in it
-reads a path outside itself.
+reads a path outside itself. The one outside program is `claude-p`, which only the
+optional `roleplay-say` command needs (see *Install*).
 
 ---
 
@@ -24,7 +25,7 @@ reads a path outside itself.
 
 If you are reading this to **reimplement** the idea rather than install it —
 different shell, different agent harness, your own cast — start here. The whole
-subsystem is ~2,200 lines and fits in one context.
+subsystem is ~3,300 lines, 1,400 of them examples, and fits in one context.
 
 **Read in this order.** `docs/claude-roleplay.md` first: it is the *why*, and
 almost every decision below has a paragraph there explaining what it cost to
@@ -120,6 +121,18 @@ cat ~/roleplay/snippets/CLAUDE.md.section >> ~/.claude/CLAUDE.md
 That is the whole install. Start a new Claude Code session and the bookends
 appear.
 
+**Optional: `roleplay-say`.** The hook does not need this command. It writes a
+character's line from a plain terminal, and it needs its own symlink:
+
+```bash
+ln -s ~/roleplay/bin/roleplay-say ~/.local/bin/roleplay-say
+```
+
+It also needs `jq` and `claude-p` on your PATH. `claude-p` is not in this
+directory. It is a wrapper around `claude -p`, from the dotfiles this came from,
+that adds a deadline, error checks and `--safe-mode`. Your own `claude-p` only has
+to pass its arguments and stdin to `claude -p --safe-mode`.
+
 ## Layout
 
 | Path | What |
@@ -127,10 +140,10 @@ appear.
 | `bin/roleplay-roll` | the hook. bash + awk, no dependencies |
 | `roster.tsv` | the cast. Add characters here |
 | `bin/roleplay-say` | rolls a character and has a cheap model write its line, from a plain terminal |
-| `examples.md` | 235 worked bookends, 4–5 per character. A style reference for you. The hook never reads it; `roleplay-say` reads one character's entries |
+| `examples.md` | 333 worked bookends, 4–5 per character. A style reference for you. The hook never reads it; `roleplay-say` reads one character's entries |
 | `docs/claude-roleplay.md` | the design: why two-stage rolls, why the roster is external, the failure modes |
 | `snippets/` | the two things you paste into your own Claude config |
-| `tests/` | 43 pytest tests driving the script as a subprocess. `pytest tests/` |
+| `tests/` | 81 pytest tests driving the scripts as subprocesses. `pytest tests/` |
 
 ## Usage
 
@@ -175,6 +188,9 @@ point is that the quote stops being the default without becoming forbidden.
 | `ROLEPLAY_ROSTER` | use a different roster file |
 | `ROLEPLAY_SEED` | force the RNG seed, making a roll reproducible |
 | `ROLEPLAY_CATCHPHRASE` | `N/M` odds a signature line is unlocked. Default `1/3`; `0/1` never, `1/1` always |
+| `ROLEPLAY_SAY_MODEL` | `roleplay-say` only: the default model when `-m` is not given |
+| `ROLEPLAY_EXAMPLES` | `roleplay-say` only: use a different examples file, or `/dev/null` for none |
+| `CLAUDE_P_TIMEOUT` | `roleplay-say` only: deadline in seconds. Default `60` |
 
 ## Troubleshooting
 
@@ -204,3 +220,4 @@ payload slot is just chatter.
 
 bash and awk. Both BSD (macOS) and GNU awk work — the script avoids `\xNN`
 escapes for exactly this reason. `pytest` only if you want to run the tests.
+`jq` and `claude-p` only if you want `roleplay-say`.
