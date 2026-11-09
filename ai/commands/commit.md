@@ -45,7 +45,12 @@ change, and one `commit-mine --also` line, with both halves of every move, for a
 Bash move or delete. `claim` refuses those. Run the ones that are yours and
 re-run, and it all lands in **one** commit. If some of them
 are not yours (a build artifact, another program's rewrite), re-run with
-`--no-claim` to commit without them. Same for `ai_jj_commit` / `g run ci`.
+`--no-claim` to commit without them; `ccjj claim` can still take them later. Same
+for `ai_jj_commit` / `g run ci`.
+
+It does not stop for a file a peer already committed, or a file only a peer has
+edit records on. When you and a peer both edited one file, the commit takes only
+your hunks and prints a note.
 
 ### Before committing, run `ccjj audit`
 
@@ -73,10 +78,20 @@ and claim only what you know you did:
   claim it**. Say so on the report's 🟡 `WATCH` label instead. A window is
   a snapshot difference,
   so it catches everything that happened in that interval, not only your work.
-- `claim` refuses outright for symlinks, deletions, renames, a path another
-  session has a stake in, and a path that appeared in `@-` meanwhile. Those
-  refusals are not obstacles to work around — take the suggested route
-  (`--also`) or leave the change uncommitted.
+- `claim` refuses outright for symlinks, deletions and renames, and the commit
+  refuses a path that appeared in `@-` meanwhile. Those refusals are not
+  obstacles to work around — take the suggested route (`--also`) or leave the
+  change uncommitted.
+- When another session has a stake in a path, `claim` and `--also` both refuse,
+  print the diff, and say which kind of stake it is. Take the route for the case:
+  - **Bash span only**, and every hunk in the diff is yours:
+    `ccjj claim --force <path>`.
+  - **Records** ("also claimed by"), or any hunk is not yours: do not force. Use
+    `commit-mine --no-claim` and report it. On a file you also Edited,
+    `claim --force` takes the whole file on disk, the peer's hunks included.
+  - **A delete or rename**, and the diff is all yours:
+    `commit-mine --force --also <old> --also <new>`. It takes the path as it is
+    on disk, including anything a peer wrote after you read the diff.
 
 For a deletion or rename made with Bash, skip `claim` and use
 `commit-mine -m "msg" --also <old> --also <new>`. `--also` takes a path
@@ -88,7 +103,8 @@ now.
 If `@- has moved` appears and `audit` names an exact `jj op restore <id>`,
 something outside `ccjj` committed. Report that to the user before doing
 anything else; do not run the restore unprompted, it rewinds the whole repo. If
-`audit` says no undo is available, no action is needed: carry on.
+`audit` says no undo is available, or prints the one-line notice about ended
+sessions, no action is needed: carry on.
 
 If `ccjj should-scope` exits non-zero (the usual case — you are the only session
 here), ignore all of the above and follow the normal procedure below. A

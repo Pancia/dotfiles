@@ -2242,6 +2242,309 @@ def test_claim_checks_peers_before_redirecting_a_delete_to_also(repo):
     assert "Bash span of session(s) S2" in r.stderr and "--also" not in r.stderr
 
 
+# ------------------------------------- exit 5: paths that are not really loose
+#
+# A window is a whole-copy tree diff, so these all appear inside one. Each false
+# stop trained agents to pass --no-claim, and the printed `ccjj claim` for a
+# shared file committed the peer's unfinished hunk.
+
+def _contended(repo):
+    _optin(repo)
+    open(os.path.join(repo.root, ".jj", "ccjj-contended"), "w").close()
+
+
+def _three_files(repo):
+    for f in ("a.txt", "b.txt", "c.txt"):
+        repo.write(f, "line1\nline2\nline3\n")
+    repo.commit("base")
+
+
+def test_commit_does_not_stop_on_a_file_a_peer_already_committed(repo):
+    _contended(repo)
+    _three_files(repo)
+    _bash(repo, "A")
+    _owner(repo, "A", str(os.getpid()), _my_lstart())   # or B's commit prunes it
+    _hook_edit(repo, "B", "b.txt", "line1", "PEER")
+    assert repo.run("commit", "-m", "peer", sid="B").returncode == 0
+    _bash(repo, "A", tuid="t2")
+    _hook_edit(repo, "A", "a.txt", "line1", "MINE")
+    r = repo.run("commit", "-m", "mine", sid="A")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert repo.show("a.txt") == b"MINE\nline2\nline3\n"
+
+
+def test_commit_does_not_stop_on_a_file_only_a_peer_has_edited(repo):
+    _contended(repo)
+    _three_files(repo)
+    _bash(repo, "A")
+    _hook_edit(repo, "B", "b.txt", "line1", "PEER-UNFINISHED")
+    _bash(repo, "A", tuid="t2")
+    _hook_edit(repo, "A", "a.txt", "line1", "MINE")
+    r = repo.run("commit", "-m", "mine", sid="A")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert repo.show("b.txt") == b"line1\nline2\nline3\n"
+
+
+def test_two_edit_only_sessions_on_one_file_do_not_stop(repo):
+    """The main use case. A's reconstruction rightly lacks B's hunk, so it never
+    matches the disk; exit 5 then sent A to `claim --force`, which took B's
+    unfinished hunk under A's message at exit 0."""
+    _contended(repo)
+    _three_files(repo)
+    _bash(repo, "A")
+    _hook_edit(repo, "A", "a.txt", "line1", "A-EDIT")
+    _hook_edit(repo, "B", "a.txt", "line3", "B-UNFINISHED")
+    _bash(repo, "A", tuid="t2")
+    r = repo.run("commit", "-m", "mine", sid="A")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert repo.show("a.txt") == b"A-EDIT\nline2\nline3\n"
+    assert repo.read("a.txt") == b"A-EDIT\nline2\nB-UNFINISHED\n"
+    assert "have edits there" in r.stderr
+
+
+# ------------------------------------------- offers: what --no-claim leaves
+
+def _left_behind(repo):
+    """A commits an Edit with --no-claim, leaving a Bash edit to b.txt."""
+    _contended(repo)
+    _three_files(repo)
+    _bash(repo, "A")
+    _bash(repo, "B")
+    _hook_edit(repo, "A", "a.txt", "line1", "EDIT")
+    repo.write("b.txt", "A-PERL\nline2\nline3\n")
+    _bash(repo, "A", tuid="t2")
+    repo.write("z.txt", "z\n")
+    _bash(repo, "B", tuid="t2")
+    r = repo.run("commit", "-m", "first", sid="A", extra=["--no-claim"])
+    assert r.returncode == 0, r.stderr
+    _bash(repo, "A", tuid="t3")          # commit-mine's own PostToolUse
+
+
+def test_a_path_left_by_no_claim_can_still_be_claimed(repo):
+    _left_behind(repo)
+    r = repo.run("claim", "--force", "b.txt", sid="A")
+    assert r.returncode == 0, r.stdout + r.stderr
+    r = repo.run("commit", "-m", "second", sid="A", extra=["--no-claim"])
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert repo.show("b.txt") == b"A-PERL\nline2\nline3\n"
+
+
+def test_a_path_left_by_no_claim_keeps_its_stake(repo):
+    """Retiring the windows also retired the stake, so a peer could claim the
+    left-behind file unrefused and commit it under its own message."""
+    _left_behind(repo)
+    r = repo.run("claim", "b.txt", sid="B")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "A (live)" in r.stderr or "A (ended)" in r.stderr
+    assert not repo.journal_records("B")
+
+
+def test_no_claim_does_not_stop_the_next_commit(repo):
+    """Keeping the .win files themselves made the next commit exit 5 on files
+    the previous commit had just landed: a window is not per-path."""
+    _left_behind(repo)
+    _hook_edit(repo, "A", "c.txt", "line1", "C")
+    r = repo.run("commit", "-m", "second", sid="A")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert repo.show("a.txt") == b"EDIT\nline2\nline3\n"
+    assert repo.show("b.txt") == b"line1\nline2\nline3\n"
+
+
+def test_an_offer_survives_a_later_commit(repo):
+    _left_behind(repo)
+    _hook_edit(repo, "A", "c.txt", "line1", "C")
+    assert repo.run("commit", "-m", "second", sid="A").returncode == 0
+    _bash(repo, "A", tuid="t4")
+    r = repo.run("claim", "--force", "b.txt", sid="A")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert repo.run("commit", "-m", "third", sid="A", extra=["--no-claim"]).returncode == 0
+    assert repo.show("b.txt") == b"A-PERL\nline2\nline3\n"
+
+
+def test_an_offer_ends_once_its_path_is_committed(repo):
+    _left_behind(repo)
+    r = repo.run("commit", "-m", "wholesale", "--also", "b.txt", "--force", sid="A",
+                 extra=["--no-claim"])
+    assert r.returncode == 0, r.stdout + r.stderr
+    d = os.path.join(repo.journal, repo.root.replace("/", "_"), "A")
+    offers = [json.load(open(os.path.join(d, n))) for n in os.listdir(d)
+              if n.endswith(".offer")] if os.path.isdir(d) else []
+    assert not any("b.txt" in o["paths"] for o in offers)
+
+
+def test_an_offer_only_journal_is_not_pruned_as_empty(repo):
+    _left_behind(repo)
+    assert repo.run("prune", sid="A").returncode == 0
+    r = repo.run("claim", "--force", "b.txt", sid="A")
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_a_new_bash_change_to_an_offered_path_stops_the_next_commit(repo):
+    """An offered path is skipped by exit 5 only while nothing new touched it."""
+    _left_behind(repo)
+    repo.write("b.txt", "A-PERL\nline2\nA-PERL-AGAIN\n")
+    _bash(repo, "A", tuid="t4")
+    _hook_edit(repo, "A", "c.txt", "line1", "C")
+    r = repo.run("commit", "-m", "second", sid="A")
+    assert r.returncode == 5, r.stdout + r.stderr
+    assert "ccjj claim b.txt" in r.stderr
+
+
+def test_an_offer_moves_with_compaction(repo, monkeypatch):
+    _left_behind(repo)
+    d = os.path.join(repo.journal, repo.root.replace("/", "_"), "A")
+    _owner(repo, "A", str(os.getpid()), _my_lstart())
+    assert any(n.endswith(".offer") for n in os.listdir(d))
+    monkeypatch.setenv("CLAUDE_PID", str(os.getpid()))
+    r = repo.run("claim", "--force", "b.txt", sid="A2")
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_claim_with_no_windows_does_not_say_none_were_recorded(repo):
+    """After a commit archived them this read "No Bash calls have been recorded
+    yet", which was false and sent the agent looking for a hook failure."""
+    _contended(repo)
+    _three_files(repo)
+    _bash(repo, "A")
+    _hook_edit(repo, "A", "a.txt", "line1", "EDIT")
+    _bash(repo, "A", tuid="t2")
+    assert repo.run("commit", "-m", "x", sid="A").returncode == 0
+    r = repo.run("claim", "b.txt", sid="A")
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "have been recorded" not in r.stderr
+    assert "archives windows" in r.stderr
+
+
+# ----------------------------------------------------- refusals say what is known
+
+def test_window_only_stake_does_not_say_claimed(repo):
+    _contended(repo)
+    _three_files(repo)
+    _bash(repo, "A")
+    _bash(repo, "B")
+    repo.write("a.txt", "A-PERL\nline2\nline3\n")
+    _bash(repo, "A", tuid="t2")
+    repo.write("z.txt", "z\n")
+    _bash(repo, "B", tuid="t2")
+    r = repo.run("claim", "a.txt", sid="A")
+    assert r.returncode == 1
+    assert "also claimed" not in r.stderr
+    assert "may not have touched this path" in r.stderr
+    assert "A-PERL" in r.stderr                    # the diff is there to read
+
+
+def test_a_peers_edit_record_is_named_as_such(repo):
+    _contended(repo)
+    _three_files(repo)
+    _bash(repo, "A")
+    repo.write("a.txt", "A-PERL\nline2\nline3\n")
+    _hook_edit(repo, "B", "a.txt", "line3", "B-EDIT")
+    _bash(repo, "A", tuid="t2")
+    r = repo.run("claim", "a.txt", sid="A")
+    assert r.returncode == 1
+    assert "also claimed by" in r.stderr
+    assert "commit-mine --no-claim" in r.stderr
+
+
+def test_also_refusal_prints_the_diff_and_the_evidence(repo):
+    """--also printed no diff, so "read the diff, then --force" was impossible."""
+    _contended(repo)
+    _three_files(repo)
+    _bash(repo, "A")
+    _bash(repo, "B")
+    repo.write("a.txt", "A-PERL\nline2\nline3\n")
+    _bash(repo, "A", tuid="t2")
+    repo.write("z.txt", "z\n")
+    _bash(repo, "B", tuid="t2")
+    _hook_edit(repo, "A", "c.txt", "line1", "C")
+    r = repo.run("commit", "-m", "x", "--also", "a.txt", "--no-claim", sid="A")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "Bash span only" in r.stderr
+    assert "+A-PERL" in r.stderr
+    assert repo.show("a.txt") == b"line1\nline2\nline3\n"
+
+
+# -------------------------------------------------------- drift, by liveness
+
+def _stray_sweep(repo, sid, live):
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    if live:
+        _owner(repo, sid, str(os.getpid()), _my_lstart())
+    else:
+        _ended(repo, sid)
+    _base(repo, sid, _parent_id(repo))
+
+
+def test_ended_sessions_drift_is_one_line_with_no_undo(repo):
+    _stray_sweep(repo, "S2", live=False)
+    _hook_edit(repo, "S2", "f.txt", "a", "S2-WORK")
+    _ended(repo, "S2")
+    repo.commit("stray")
+    r = repo.run("audit", sid="NEW")
+    assert "1 ended session(s)" in r.stderr, r.stdout + r.stderr
+    assert "jj op restore" not in r.stderr
+    assert "nothing unclaimed" not in r.stdout      # the sweep is not hidden
+
+
+def test_ended_session_with_no_work_is_not_reported(repo):
+    _stray_sweep(repo, "S2", live=False)
+    repo.commit("stray")
+    repo.jj_("new")
+    r = repo.run("audit", sid="NEW")
+    assert "ended session(s)" not in r.stderr
+    assert "@- has moved" not in r.stderr
+    assert "nothing unclaimed" in r.stdout
+
+
+def test_a_live_sessions_drift_keeps_the_undo(repo):
+    _stray_sweep(repo, "S1", live=True)
+    _hook_edit(repo, "S1", "f.txt", "a", "S1-WORK")
+    repo.commit("stray")
+    r = repo.run("audit", sid="S1")
+    assert "@- has moved" in r.stderr and "jj op restore" in r.stderr
+
+
+# --------------------------------------------- previews and other sessions' ids
+
+def _pre_clear_journal(repo, monkeypatch):
+    monkeypatch.setenv("CLAUDE_PID", str(os.getpid()))
+    _three_files(repo)
+    _hook_edit(repo, "PRE", "a.txt", "line1", "EDIT")
+    _owner(repo, "PRE", str(os.getpid()), _my_lstart())
+    return os.path.join(repo.journal, repo.root.replace("/", "_"))
+
+
+def test_diff_does_not_move_this_processes_journal(repo, monkeypatch):
+    j = _pre_clear_journal(repo, monkeypatch)
+    repo.write("b.txt", "B\nline2\nline3\n")   # recorded directly: a real hook would absorb
+    repo.record("POST", "b.txt", old="line1", new="B", original="line1\nline2\nline3\n")
+    before = sorted(os.listdir(os.path.join(j, "PRE")))
+    r = repo.run("commit", "--diff", sid="POST")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert sorted(os.listdir(os.path.join(j, "PRE"))) == before
+    assert "leaves out edits" in r.stderr
+
+
+def test_explicit_other_session_does_not_absorb(repo, monkeypatch):
+    j = _pre_clear_journal(repo, monkeypatch)
+    before = sorted(os.listdir(os.path.join(j, "PRE")))
+    r = repo.run("commit", "--session", "UNUSED", "--diff", sid="MINE")
+    assert r.returncode == 2, r.stdout + r.stderr       # nothing recorded for it
+    assert sorted(os.listdir(os.path.join(j, "PRE"))) == before
+    repo.run("audit", "--session", "UNUSED", sid="MINE")
+    assert sorted(os.listdir(os.path.join(j, "PRE"))) == before
+    assert not os.path.isdir(os.path.join(j, "UNUSED"))
+
+
+def test_explicit_own_session_still_absorbs(repo, monkeypatch):
+    j = _pre_clear_journal(repo, monkeypatch)
+    r = repo.run("commit", "-m", "x", "--session", "MINE", sid="MINE")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert repo.show("a.txt") == b"EDIT\nline2\nline3\n"
+    assert not os.path.isdir(os.path.join(j, "PRE"))
+
+
 def test_also_names_a_symlink_not_its_target(repo):
     """rel() realpaths, so `--also link` became `--also target.txt`: exit 0,
     the link never committed."""

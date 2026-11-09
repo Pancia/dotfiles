@@ -218,7 +218,7 @@ in the loop.
 | Case | Why |
 |---|---|
 | symlink, directory | `jj file show` exits **0 with empty stdout** for both, so claiming would write a zero-byte regular file over it — and the byte verification would compare `b""` to `b""` and pass. Checked at the span *and* re-checked at the narrowed endpoints, which can differ. |
-| a path another session has `Edit`/`Write` records for, or that changed inside its Bash span (first to last Bash call) | Its bytes may be in your window. The message says which: records are a claim; a span only means that session's commands ran in the same stretch. `--force` after reading the diff. |
+| a path another session has `Edit`/`Write` records for, or that changed inside its Bash span (first to last Bash call) | Its bytes may be in your window. The message says which: records are a claim; a span only means that session's commands ran in the same stretch. Span only: `--force` if every hunk in the diff is yours. Records, or any hunk that is not yours: leave it with `commit-mine --no-claim`. On a path you also `Edit`ed, `claim --force` takes the whole file on disk, peer hunks included. |
 | a path that did not exist when the window opened, but does in `@-` | Another session committed it in between; taking the window wholesale would revert them, and the diff shown would not mention it. |
 | delete, rename | Whole-path changes have no hunks to split; routed to `--also`. |
 
@@ -242,6 +242,28 @@ combined `commit-mine --also` line instead, with both halves of every move,
 because `claim` refuses those and a lone `--also old` strands the add. Run what
 is yours, re-run, and everything lands in one commit. `--no-claim` proceeds
 without them.
+
+**What does not stop.** A window is a whole-copy tree diff, so it also holds other
+sessions' work. Exit `5` ignores a path that no longer differs from `@-` (a peer
+committed it), and a path only a peer has records on. When you and a peer both
+edited one file, your reconstruction rightly lacks the peer's hunk and cannot match
+the disk. The commit takes your hunks and prints a note instead of stopping. The
+cost: your own Bash change to that same file stays uncommitted and is flagged only
+by the note, though it can still be claimed. Without this, the printed `ccjj claim` led to `claim --force`, which committed
+the peer's unfinished hunk at exit `0`.
+
+**What `--no-claim` leaves behind.** A commit archives every window, which used to
+make a later claim impossible and also removed the session's stake, so a peer could
+claim the left-behind file unrefused. A window cannot be kept for one path: it is a
+whole-copy id pair, and a kept window spans the files that commit took, so the next
+commit stopped with exit `5` on them. The commit writes an `.offer` file instead. It
+names the paths still changed and holds the windows for them. `claim` reads it,
+peers see it as a stake, exit `5` skips it until a new Bash change touches the path,
+and later commits carry it until the path stops differing from `@-`.
+
+The `--also` refusal prints what would be committed, so that the diff can be read
+before `--force`. Use that only for a delete or rename. `--force --also` takes the
+path as it is on disk, including anything a peer wrote after you read the diff.
 
 Surfacing alone was not enough, and shipping it that way was a mistake worth
 recording: `ai_jj_commit` runs preflight → message → commit in a single
@@ -332,6 +354,11 @@ Before this, the earlier edits counted as a live peer: the commit left them out 
 still reported "verified". A journal past the 12-hour limit is left alone, so an
 old abandoned edit cannot start blocking commits.
 
+`commit-mine --diff` changes no state: it names those journals instead of moving
+them, so the preview leaves their edits out. An explicit `--session` that differs
+from `$CLAUDE_SESSION_ID` never takes over a journal. It used to move this process's
+whole journal into the id it was given.
+
 **`--resume` keeps the session id in a new process**, so `.owner` is rewritten when
 the recorded process has ended. If the id ever does change across a resume, the old
 journal has a dead owner and is not taken over.
@@ -369,12 +396,18 @@ An ended session whose journal holds no records and no Bash windows is skipped: 
 single Bash call stamps `.base` and leaves nothing else, so it had no work to
 sweep.
 
+Other ended sessions share one line, with no culprit and no undo. Their work can
+really be inside a stray commit, and this line is then the only signal. But their
+bases are usually older than the walk reaches, and a restore would rewind every live
+session. Leaving them out of the walk also saves up to 40 `jj` calls on each audit.
+
 ## State
 
 ```
 $XDG_STATE_HOME/cc-jj-journal/<repo-root-with-slashes-as-underscores>/
     <session_id>/<nanos>-<pid>.json      live records
     <session_id>/<nanos>-<pid>.win       Bash windows (offers, never claims)
+    <session_id>/<nanos>-<pid>.offer     paths a commit left behind, with their windows
     <session_id>/.last                   rolling snapshot id for the next window
     <session_id>/.owner                  owning claude pid + start time
     <session_id>/.base                   the @- this session started from
