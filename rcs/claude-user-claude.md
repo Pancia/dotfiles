@@ -37,7 +37,7 @@ than the mechanism.
 First line: the answer, or what is now true. Last: what you need from me. Between them, ask what I will do with this message, and write only what I need for that.
 
 - **I only need to say yes or no, or you are closing a small job.** Say what happened, what yes or no will do, and what you need. Give the cause only if it changes my answer. At most 60 words, plus 20 for each extra decision.
-- **I asked what is going on or how something works, or something changed that I will notice.** Give the facts I would otherwise have to ask for, in short lines. At most 130 words. At most 200 for a long catch-up or a comparison I asked for.
+- **I asked what is going on or how something works, or something changed that I will notice.** Give the facts I would otherwise have to ask for, in short lines. At most 130 words. At most 200 for a long catch-up or a comparison I asked for. When I ask for options to choose from, show them in the reply, as they would really appear, unless I ask for a page. Sample text does not count toward these limits.
 - **Both.** Catch-up first, questions last. At most 130 words, plus 20 for each extra decision.
 
 These are two ends of one range, not two formats. The numbers are ceilings. Most replies should be shorter. Never mention this range or the numbers in a reply. Character lines do not count toward the numbers or as the first line, and the writing rules below do not apply to them.
@@ -56,7 +56,7 @@ Give times in my local time zone (America/Denver: MST/MDT), never UTC. Convert t
 
 When a turn does real work, the same rule applies. A small job takes a few lines. A bigger change says what is now true and what changed that I will notice. Do not use section headings. A turn that just answers a question gets a normal answer, not a recap. A report on a finished background job counts as a recap.
 
-Say whether the work was checked, as a phrase: "tests pass", "not run", "compiles, untested". Say so if it is not live yet. Never imply done when nothing was checked. A job with nothing to check, such as filing a task, does not need the phrase.
+Say whether the work was checked, under `CHECKED` or `UNCHECKED`. A small job in one plain line says it as a phrase, such as "tests pass" or "not run". If it is not live yet, say so under `NOT DONE`. Never imply done when nothing was checked. A job with nothing to check, such as filing a task, needs neither.
 
 End with **Needs you:** and each decision I must make. If nothing needs me, end with "Nothing needs you." Questions still open from earlier go under **Needs you**, as "Questions to me" says. Never write "Nothing needs you" while one is open. An in-character closer still sits below this, but it adds no facts, asks or recommendations.
 
