@@ -50,6 +50,40 @@
         "position" : [1420, 0],
         "size" : [500, 1080],
         "zoom" : 1
+      },
+      {
+        "path" : "$HOME\/ProtonDrive\/red-hood-retro-days-sunset-goddess-of-victory-nikke-moewalls-com.mp4",
+        "position" : [0, 25],
+        "size" : [844, 1055],
+        "zoom" : 1
+      },
+      {
+        "lock" : true,
+        "path" : "$HOME\/ProtonDrive\/ytdl\/video\/‹‹BY››ADayASMR‹‹TITLE››Lumos Lumos Anime OVA ‘Year 8’ (ft. Say Yes) [Official Music Video]‹‹ID››qRjTJKCXeLY.mp4",
+        "position" : [1451, 25],
+        "size" : [469, 264],
+        "zoom" : 1
+      },
+      {
+        "lock" : true,
+        "path" : "$HOME\/ProtonDrive\/ytdl\/video\/‹‹BY››ADayASMR‹‹TITLE››Lumos Lumos Anime Epilogue [ft. Lumos Lumos]‹‹ID››YuL-vEPe1ao.mp4",
+        "position" : [1451, 289],
+        "size" : [469, 264],
+        "zoom" : 1
+      },
+      {
+        "lock" : true,
+        "path" : "$HOME\/ProtonDrive\/Media\/Android\/‹‹BY››ADayASMR‹‹TITLE››The Girl Who Loved The Boy Who Lived (ft. Lumos Lumos Waltz) [Official Music Video]‹‹ID››Hmc246DNMK0.mp4",
+        "position" : [1451, 553],
+        "size" : [469, 264],
+        "zoom" : 1
+      },
+      {
+        "lock" : true,
+        "path" : "$HOME\/ProtonDrive\/ytdl\/video\/‹‹BY››Foyege‹‹TITLE››Miss Malfoy, May I Have This Dance - Parts 1-4 (stitched).mp4",
+        "position" : [1451, 817],
+        "size" : [469, 263],
+        "zoom" : 1
       }
     ]
   }

@@ -15,6 +15,8 @@ struct ImageEntry: Codable {
     let zoom: Double?
     let pan: [Double]?
     let lock: Bool?
+    let audio: Bool?
+    let volume: Double?
 }
 
 struct WallpapersConfig: Codable {
@@ -120,21 +122,31 @@ class VideoCanvasView: NSView {
     var zoom: Double
     var panOffset: CGPoint = .zero
 
+    var audioEnabled: Bool {
+        didSet { player?.isMuted = !audioEnabled }
+    }
+    var volume: Float {
+        didSet { player?.volume = volume }
+    }
+
     private var player: AVQueuePlayer!
     private var playerLayer: AVPlayerLayer!
     private var looper: AVPlayerLooper!
     private var playerItem: AVPlayerItem!
 
-    init(url: URL, zoom: Double, filePath: String) {
+    init(url: URL, zoom: Double, filePath: String, audioEnabled: Bool = false, volume: Float = 1.0) {
         self.filePath = filePath
         self.zoom = zoom
+        self.audioEnabled = audioEnabled
+        self.volume = volume
         super.init(frame: .zero)
         wantsLayer = true
 
         let asset = AVURLAsset(url: url)
         playerItem = AVPlayerItem(asset: asset)
         player = AVQueuePlayer(items: [playerItem])
-        player.isMuted = true
+        player.isMuted = !audioEnabled
+        player.volume = volume
         looper = AVPlayerLooper(player: player, templateItem: AVPlayerItem(asset: asset))
 
         playerLayer = AVPlayerLayer(player: player)
@@ -319,7 +331,13 @@ func createWindows(entries: [ImageEntry]) -> [WallWindow] {
 
             let rect = NSRect(x: winX, y: winY, width: winW, height: winH)
             let window = WallWindow(rect: rect)
-            let canvas = VideoCanvasView(url: url, zoom: zoom, filePath: entry.path)
+            let canvas = VideoCanvasView(
+                url: url,
+                zoom: zoom,
+                filePath: entry.path,
+                audioEnabled: entry.audio ?? false,
+                volume: Float(min(1.0, max(0.0, entry.volume ?? 1.0)))
+            )
 
             if let pan = entry.pan, pan.count == 2 {
                 canvas.panOffset = CGPoint(x: pan[0], y: pan[1])
@@ -424,6 +442,15 @@ func buildSnapshotEntries(windows: [WallWindow]) -> [[String: Any]] {
 
         if window.isLocked {
             entry["lock"] = true
+        }
+
+        if let video = canvas as? VideoCanvasView {
+            if video.audioEnabled {
+                entry["audio"] = true
+            }
+            if video.volume != 1.0 {
+                entry["volume"] = round(Double(video.volume) * 100) / 100
+            }
         }
 
         entries.append(entry)
@@ -659,8 +686,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func screenDidWake() {
         isScreenAsleep = false
         for window in windows {
-            guard window.occlusionState.contains(.visible) else { continue }
-            (window.contentView as? VideoCanvasView)?.resume()
+            updatePlayback(for: window)
+        }
+    }
+
+    /// Silent videos pause while covered. A video with audio on keeps playing, so its sound does not cut out.
+    func updatePlayback(for window: WallWindow) {
+        guard !isScreenAsleep, let video = window.contentView as? VideoCanvasView else { return }
+        if video.audioEnabled || window.occlusionState.contains(.visible) {
+            video.resume()
+        } else {
+            video.pause()
         }
     }
 
@@ -670,14 +706,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             forName: NSWindow.didChangeOcclusionStateNotification,
             object: window, queue: .main
         ) { [weak self] note in
-            guard let self = self, !self.isScreenAsleep,
-                  let w = note.object as? WallWindow,
-                  let video = w.contentView as? VideoCanvasView else { return }
-            if w.occlusionState.contains(.visible) {
-                video.resume()
-            } else {
-                video.pause()
-            }
+            guard let self = self, let w = note.object as? WallWindow else { return }
+            self.updatePlayback(for: w)
         }
         occlusionObservers[window] = token
     }
@@ -759,6 +789,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func addImageMenuItems(to menu: NSMenu, canvas view: NSView) {
         guard let canvas = view as? WallCanvas else { return }
         let canvasView = canvas as NSView
+
+        if let video = canvas as? VideoCanvasView {
+            let audioItem = NSMenuItem(title: "Play Audio", action: #selector(doToggleAudio(_:)), keyEquivalent: "")
+            audioItem.target = self
+            audioItem.representedObject = video
+            audioItem.state = video.audioEnabled ? .on : .off
+            menu.addItem(audioItem)
+
+            let label = NSTextField(labelWithString: "Volume")
+            label.font = NSFont.menuFont(ofSize: 0)
+            label.frame = NSRect(x: 20, y: 3, width: 56, height: 18)
+            let volumeSlider = NSSlider(value: Double(video.volume), minValue: 0.0, maxValue: 1.0, target: self, action: #selector(doSliderVolume(_:)))
+            volumeSlider.frame = NSRect(x: 78, y: 0, width: 122, height: 24)
+            volumeSlider.isContinuous = true
+            objc_setAssociatedObject(volumeSlider, &kCanvasKey, canvasView, .OBJC_ASSOCIATION_ASSIGN)
+            let volumeContainer = NSView(frame: NSRect(x: 0, y: 0, width: 212, height: 24))
+            volumeContainer.addSubview(label)
+            volumeContainer.addSubview(volumeSlider)
+            let volumeItem = NSMenuItem()
+            volumeItem.view = volumeContainer
+            menu.addItem(volumeItem)
+
+            menu.addItem(NSMenuItem.separator())
+        }
 
         // Zoom submenu
         let zoomSubmenu = NSMenu()
@@ -867,8 +921,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Clean up occlusion observers before destroying windows
         removeAllOcclusionObservers()
 
-        // Close all existing windows
+        // Close all existing windows. Pause first, so a video with audio on cannot keep sounding.
         for window in windows {
+            (window.contentView as? VideoCanvasView)?.pause()
             window.orderOut(nil)
         }
         windows.removeAll()
@@ -986,6 +1041,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func refreshCanvas(_ canvas: WallCanvas) {
         if let video = canvas as? VideoCanvasView { video.applyZoomAndPan() }
         (canvas as NSView).needsDisplay = true
+    }
+
+    @objc func doToggleAudio(_ sender: NSMenuItem) {
+        guard let video = sender.representedObject as? VideoCanvasView else { return }
+        video.audioEnabled.toggle()
+        if let window = video.window as? WallWindow { updatePlayback(for: window) }
+        rebuildMenu()
+    }
+
+    @objc func doSliderVolume(_ sender: NSSlider) {
+        guard let video = objc_getAssociatedObject(sender, &kCanvasKey) as? VideoCanvasView else { return }
+        video.volume = sender.floatValue
     }
 
     @objc func doSetZoom(_ sender: NSMenuItem) {
