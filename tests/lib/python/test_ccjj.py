@@ -1816,6 +1816,75 @@ def test_a_stale_record_is_not_applied_twice(repo):
     assert "already in @-" in r.stderr                    # and it said so
 
 
+# Insert a section, then edit text inside it: the insert's `new` is no longer
+# verbatim anywhere, but its anchor is, so judging records one at a time
+# re-inserted the whole section after an external commit took both edits.
+_SEC = "## Notes\n\n"
+_BASE = "# T\n\nintro line\n\n" + _SEC + "old note\n"
+_INS = _SEC + "### New\n\nalpha beta\ngamma delta\nepsilon zeta eta theta\n\n"
+_S1 = _BASE.replace(_SEC, _INS, 1)
+_FINAL = _S1.replace("alpha beta", "alpha BETA", 1)
+
+
+def _insert_then_edit_inside(repo, committed):
+    repo.write("f.md", _BASE)
+    repo.commit("base")
+    repo.write("f.md", committed)
+    repo.jj_("commit", "-m", "someone else commits the file")
+    repo.write("f.md", _FINAL)
+    repo.record("S1", "f.md", old=_SEC, new=_INS, original=_BASE, seq=1)
+    repo.record("S1", "f.md", old="alpha beta", new="alpha BETA", original=_S1, seq=2)
+    return repo.run("commit", "--diff", sid="S1")
+
+
+def test_an_insert_edited_later_is_not_inserted_twice(repo):
+    r = _insert_then_edit_inside(repo, _FINAL)
+    assert r.returncode == 0, r.stderr
+    assert "### New" not in r.stdout, r.stdout
+    assert "2 of your 2 edit(s)" in r.stderr
+
+
+def test_committed_with_a_peer_edit_elsewhere_is_not_inserted_twice(repo):
+    """The real case: a peer commits the shared file with its own edits too,
+    so @- never equals this session's final state."""
+    r = _insert_then_edit_inside(repo, _FINAL.replace("intro line", "intro (peer)"))
+    assert r.returncode == 0, r.stderr
+    assert "### New" not in r.stdout, r.stdout
+
+
+def test_a_peer_edit_inside_the_section_is_refused_not_duplicated(repo):
+    r = _insert_then_edit_inside(repo, _FINAL.replace("theta", "THETA (peer)"))
+    assert r.returncode == 1, r.stdout
+    assert "could\n  duplicate text" in r.stderr
+    assert "+### New" not in r.stdout
+
+
+def test_only_the_rest_is_replayed_when_the_insert_alone_was_committed(repo):
+    r = _insert_then_edit_inside(repo, _S1)
+    assert r.returncode == 0, r.stderr
+    assert "+alpha BETA" in r.stdout and "+### New" not in r.stdout, r.stdout
+    assert "1 of your 2 edit(s)" in r.stderr
+
+
+def test_an_insert_then_edit_with_no_external_commit_replays_both(repo):
+    repo.write("f.md", _BASE)
+    repo.commit("base")
+    repo.write("f.md", _FINAL)
+    repo.record("S1", "f.md", old=_SEC, new=_INS, original=_BASE, seq=1)
+    repo.record("S1", "f.md", old="alpha beta", new="alpha BETA", original=_S1, seq=2)
+    r = repo.run("commit", "-m", "mine", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert repo.show("f.md") == _FINAL.encode()
+
+
+@pytest.mark.xfail(strict=True, reason="known gap: a peer edit within "
+                   "already_applied's 8-byte window hides every sign of the "
+                   "external commit, so nothing stops the re-insert")
+def test_a_peer_edit_right_next_to_mine_is_not_duplicated(repo):
+    r = _insert_then_edit_inside(repo, _FINAL.replace("gamma delta", "gamma DELTA"))
+    assert "+### New" not in r.stdout, r.stdout
+
+
 def test_also_refuses_a_path_that_does_not_exist(repo):
     """`--also` is CWD-relative by design, so a run from a subdirectory invented
     `sub/oldname.txt` -- and reported it as 'committed and verified'."""

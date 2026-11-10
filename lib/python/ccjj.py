@@ -1131,6 +1131,75 @@ def blob(rec, key):
     return v.encode("utf-8", "surrogateescape")
 
 
+def _record_result(rec):
+    """The file as this record left it, or None when that cannot be known."""
+    if rec.get("tool") == "Write":
+        return blob(rec, "content") or b""
+    o, old, new = blob(rec, "original"), rec.get("old"), rec.get("new")
+    if o is None or old is None or new is None:
+        return None
+    ob = old.encode("utf-8", "surrogateescape")
+    nb = new.encode("utf-8", "surrogateescape")
+    if rec.get("replace_all"):
+        return o.replace(ob, nb)
+    return o.replace(ob, nb, 1) if o.count(ob) == 1 else None
+
+
+def _merge_clean(current, base, ours):
+    """Three-way merge, or None on any conflict. Never dies: a conflict here
+    only means "not already committed", which the caller handles."""
+    if current == base:
+        return ours
+    if ours == base:
+        return current
+    with tempfile.TemporaryDirectory(prefix="ccjj-merge-") as d:
+        p = []
+        for name, b in (("cur", current), ("base", base), ("ours", ours)):
+            p.append(os.path.join(d, name))
+            with open(p[-1], "wb") as fh:
+                fh.write(b)
+        r = subprocess.run(["git", "merge-file", "-p", *p], capture_output=True)
+    return r.stdout if r.returncode == 0 else None
+
+
+def committed_prefix(content, recs):
+    """(k, seen): the first k of this path's records are already in `content`,
+    and `seen` lists the records already_applied() alone finds there.
+
+    already_applied() judges one record at a time, so it misses an edit whose
+    `new` this session changed again later. The commonest shape: insert a
+    section, then edit inside it. The insert's `new` is no longer verbatim in
+    @-, its anchor (`old`) still is, and replaying it put the whole section in
+    a SECOND time, beside two "already in @-" notes. So judge the file each
+    record LEFT, by a three-way merge from the session's starting point: one
+    that changes nothing means everything up to that record is committed, even
+    when @- also holds other sessions' edits to the same file. Identical
+    changes on both sides merge cleanly; peer text that was on disk at the
+    start sits in both base and ours, so @-'s version of it wins.
+
+    Gated on already_applied(): with no sign of an external commit, no merge
+    runs and replay is exactly what it was.
+    """
+    base = blob(recs[0], "original")
+    if base is None or not content or b"\r\n" in content:
+        return 0, []
+    seen = []
+    for i, r in enumerate(recs):
+        o, old, new = blob(r, "original"), r.get("old"), r.get("new")
+        if r.get("tool") == "Write" or o is None or old is None or new is None:
+            continue
+        if already_applied(content, o, old.encode("utf-8", "surrogateescape"),
+                           new.encode("utf-8", "surrogateescape")):
+            seen.append(i)
+    if not seen:
+        return 0, seen
+    for k in range(len(recs), 0, -1):
+        t = _record_result(recs[k - 1])
+        if t is not None and _merge_clean(content, base, t) == content:
+            return k, seen
+    return 0, seen
+
+
 def build(records, present, pinned):
     """Reconstruct, per path, '@- plus exactly this session's edits'."""
     by_path = {}
@@ -1141,6 +1210,25 @@ def build(records, present, pinned):
     mine = {}
     for path, recs in by_path.items():
         content = jj("file", "show", "-r", "@-", fs(path)).stdout if path in present else b""
+
+        done, seen = committed_prefix(content, recs)
+        if seen and max(seen) >= done:
+            # Skipping one applied record while replaying its neighbours is
+            # exactly how the duplicate section was made.
+            die("conflict: some of your edits to %s are already in @- (committed\n"
+                "  outside this session) and others are not, and the committed\n"
+                "  file also differs from yours there, so replaying the rest could\n"
+                "  duplicate text. Compare with:  jj diff -r @- %s\n"
+                "  If @- already has everything you want:  ccjj forget %s\n"
+                "  If the file as it is on disk is right:   --also %s"
+                % (path, path, path, path))
+        if done:
+            # One line per path, with counts: a per-record "skipping" note
+            # printed above a diff that still re-added text read as "handled".
+            print("note: %d of your %d edit(s) to %s are already in @- (committed\n"
+                  "  outside this session); replaying only the rest."
+                  % (done, len(recs), path), file=sys.stderr)
+            recs = recs[done:]
 
         for rec in recs:
             original = blob(rec, "original")
