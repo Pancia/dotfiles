@@ -259,9 +259,14 @@ Commit the whole working copy as a series of commits, one per concern.
      `jj commit <paths...> -m "<msg>"`, then write the saved full content
      back. Run `jj diff <file>` after: it must show exactly the hunks
      still to come.
-   - **Part of a file, git**: write a patch with only this group's hunks
-     and `git apply --cached` it, then commit. Never `git add -p` (it
-     hangs).
+   - **Part of a file, git**: build the content this commit should have:
+     `git show HEAD:<file> > <scratch>/<name>`, then apply only this group's
+     changes to that copy with Edit. Stage it without touching the working
+     tree:
+     `git update-index --cacheinfo "$(git ls-files -s <file> | cut -d' ' -f1),$(git hash-object -w --path=<file> <scratch>/<name>),<file>"`.
+     Check that `git diff --cached <file>` shows exactly this group's changes
+     and `git diff <file>` shows the rest, then commit. This also splits a
+     single hunk that mixes two concerns. Never `git add -p` (it hangs).
 5. **Verify after the last commit**: the working copy must be empty
    (`jj status` / `git status`) apart from anything you said you would
    leave. If a file is left over, show it rather than folding it into
