@@ -8,7 +8,7 @@ module CMD
           --config-file tests.local.edn \
           --focus-meta :test/focused \
           --watch \
-          #{args.join " "}
+          #{args.shelljoin}
       }
     }
   end
@@ -17,7 +17,7 @@ module CMD
     opts.info = "Run clojure repl"
     lambda { |*args|
       EXE.bash %{
-        clj -A:nREVL:test #{args.join " "}
+        clj -A:nREVL:test #{args.shelljoin}
       }
     }
   end

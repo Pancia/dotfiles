@@ -30,7 +30,7 @@ COMPONENTS = {
     "lib/python": {
         "runner": "pytest",
         "deps": [],
-        "aliases": ["cjson", "python"],
+        "aliases": ["python"],
     },
     "bin/astro": {
         "runner": "pytest",
@@ -65,16 +65,19 @@ COMPONENTS = {
     },
     # Python tests that drive fish via `fish -c` and assert on the output --
     # NOT fishtape. Needs the `fish` binary on PATH, no pip deps.
+    #
+    # No single-file aliases here or on lib/python and hooks: `trash`, `cjson`
+    # and `ensure-rcs` were named after the one file each component once held,
+    # so `cmds test trash` ran every fish test for ~2 minutes. Name the file
+    # instead, relative to tests/: `cmds test fish/test_trash.py`.
     "fish": {
         "runner": "pytest",
         "deps": [],
-        "aliases": ["trash"],
         "source_path": "fish/functions",
     },
     "hooks": {
         "runner": "pytest",
         "deps": [],
-        "aliases": ["ensure-rcs"],
         "source_path": "rcs",
     },
     # supervise / svc / svc-tmux, driven as real processes: pty + pyte for the

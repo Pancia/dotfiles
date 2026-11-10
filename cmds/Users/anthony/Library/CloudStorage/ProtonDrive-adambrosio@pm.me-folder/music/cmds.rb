@@ -4,7 +4,7 @@ module CMD
     opts.info = "AI-powered import from ytdl music inbox"
     lambda { |*args|
       EXE.bash %{
-        music ai_import #{args.join " "}
+        music ai_import #{args.shelljoin}
       }
     }
   end

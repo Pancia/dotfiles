@@ -11,10 +11,15 @@ import subprocess
 from pathlib import Path
 
 CCS = Path(__file__).resolve().parents[2] / "fish" / "functions" / "ccs.fish"
+KEY = CCS.parent / "_cc_worktree_key.fish"
 
 
 def fish(code, state):
-    r = subprocess.run(["fish", "-c", f"source {CCS}\n{code}"], capture_output=True,
+    # --no-config disables autoloading from ~/.config/fish/functions, so every
+    # function ccs.fish calls from another file is sourced here explicitly.
+    # Without KEY, _ccs_open_register still exits 0 but records cwd "".
+    r = subprocess.run(["fish", "--no-config", "-c", f"source {CCS}\nsource {KEY}\n{code}"],
+                       capture_output=True,
                        text=True, stdin=subprocess.DEVNULL, timeout=30,
                        env={**os.environ, "XDG_STATE_HOME": str(state)})
     assert r.returncode == 0, r.stderr

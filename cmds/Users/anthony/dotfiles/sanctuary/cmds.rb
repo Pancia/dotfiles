@@ -14,7 +14,7 @@ module CMD
     opts.info = "Run main sanctuary session"
     lambda { |*args|
       EXE.bash %{
-        fish main-claude.fish #{args.join " "}
+        fish main-claude.fish #{args.shelljoin}
       }
     }
   end
@@ -24,7 +24,7 @@ module CMD
     opts.info = "Quick sanctuary: focus, state, pomodoro, journal, edit"
     lambda { |*args|
       EXE.bash %{
-        fish main-claude.fish minimal #{args.join " "}
+        fish main-claude.fish minimal #{args.shelljoin}
       }
     }
   end

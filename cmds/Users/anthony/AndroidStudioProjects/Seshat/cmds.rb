@@ -22,7 +22,7 @@ module CMD
     opts.info = "Open adb shell as Seshat app user"
     lambda { |*args|
       EXE.bash %{
-        adb shell run-as com.dayzerostudio.seshat #{args.join " "}
+        adb shell run-as com.dayzerostudio.seshat #{args.shelljoin}
       }
     }
   end

@@ -25,7 +25,7 @@ module CMD
     opts.info = "Run an e2e test scenario via scripts/run-manual-test"
     lambda { |*args|
       EXE.bash %{
-        ./scripts/run-manual-test #{args.join " "}
+        ./scripts/run-manual-test #{args.shelljoin}
       }
     }
   end
@@ -49,7 +49,7 @@ module CMD
         set -l timestamp (date +%H:%M:%S)
         set -l label (basename (pwd))
         set label "$label $timestamp"
-        proc-label "claude [$label]" alt ai run claude #{args.join " "}
+        proc-label "claude [$label]" alt ai run claude #{args.shelljoin}
       }
     }
   end

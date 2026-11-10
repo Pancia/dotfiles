@@ -4,7 +4,7 @@ module CMD
     opts.info = "Generate mock audio locally, split chapters, output to Cloud"
     lambda { |*args|
       EXE.bash %{
-          uv run generate_script_audio.py --mock --split-chapters -o ~/Cloud/hypnosis-vision-quest/audios/ --mock-speed 0.7 -v #{args.join " "}
+          uv run generate_script_audio.py --mock --split-chapters -o ~/Cloud/hypnosis-vision-quest/audios/ --mock-speed 0.7 -v #{args.shelljoin}
       }
     }
 

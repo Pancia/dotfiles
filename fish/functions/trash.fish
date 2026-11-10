@@ -155,12 +155,20 @@ function _trash_put --description 'Move files to trash with history'
             # Avoid silently clobbering a file trashed earlier this second
             # from the same folder (timestamp is second-granularity). `-L`
             # too: a trashed relative symlink dangles, so `-e` misses it.
-            if test -e "$dest"; or test -L "$dest"
-                set dest "$trash_dir/"(_trash_dest_name "$base" "$origin" "$suffix-"(exocortex-id))
+            # Loop with a counter: a single retry with a time-based suffix
+            # let a third same-second entry overwrite the second.
+            set -l n 2
+            while test -e "$dest"; or test -L "$dest"
+                set dest "$trash_dir/"(_trash_dest_name "$base" "$origin" "$suffix-$n")
+                set n (math $n + 1)
             end
-            set -l id (exocortex-id)
+            # The id is a hash of the destination, the same one legacy entries
+            # fall back to, so it is unique exactly when the entry name is.
+            # exocortex-id only resolves 0.1s, so files trashed in one call
+            # used to share an id.
+            set -l id (_trash_entry_id "$dest" "")
             echo "[dotfiles/trash] INFO: moving '$f' to '$dest'"
-            mv "$f" "$dest"
+            command mv "$f" "$dest"
             or begin
                 echo "[dotfiles/trash] ERROR: failed to move '$f'" >&2
                 set failed true

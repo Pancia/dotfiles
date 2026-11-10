@@ -8,15 +8,27 @@ from pathlib import Path
 DOTFILES = Path(__file__).resolve().parents[2]
 TRASH_FISH = DOTFILES / "fish" / "functions" / "trash.fish"
 
+# trash.fish calls plain `date` for the entry timestamp, so a fish function
+# shadows it. Pins every trash call in a test to one second, which makes the
+# same-second collision branch run every time instead of only by luck.
+FIXED_DATE = "function date; echo 2026-01-01_00:00:00; end\n"
+
 
 def fish_eval(
     code: str, *, env: dict | None = None, stdin=None
 ) -> subprocess.CompletedProcess:
-    """Source trash.fish then run code in Fish shell."""
+    """Source trash.fish then run code in Fish shell.
+
+    `--no-config`: XDG_CONFIG_HOME is inherited, so plain `fish -c` loads the
+    real ~/.config/fish (conf.d against the fake HOME, functions autoloaded from
+    the live ~/dotfiles) and costs ~0.7s a call. This checkout's bin/ goes first
+    on PATH so `exocortex-id` is the one under test, not whatever the caller has.
+    """
     full_code = f"source {TRASH_FISH}\n{code}"
     run_env = {**os.environ, **(env or {})}
+    run_env["PATH"] = f"{DOTFILES / 'bin'}:{run_env.get('PATH', '')}"
     return subprocess.run(
-        ["fish", "-c", full_code],
+        ["fish", "--no-config", "-c", full_code],
         capture_output=True,
         text=True,
         env=run_env,
@@ -275,7 +287,8 @@ class TestTrash:
         home = tmp_path / "home"
         (home / ".Trash").mkdir(parents=True)
         r = fish_eval(
-            f"cd {tmp_path} && touch target && ln -s target foo && trash foo"
+            FIXED_DATE
+            + f"cd {tmp_path} && touch target && ln -s target foo && trash foo"
             " && printf precious > foo && trash foo",
             env={"HOME": str(home)},
         )
@@ -292,12 +305,52 @@ class TestTrash:
         f.write_text("first")
         f2 = "printf second > dup.txt"
         r = fish_eval(
-            f"cd {tmp_path} && trash dup.txt && {f2} && trash dup.txt",
+            FIXED_DATE + f"cd {tmp_path} && trash dup.txt && {f2} && trash dup.txt",
             env={"HOME": str(home)},
         )
         assert r.returncode == 0, r.stderr
         bodies = sorted(p.read_text() for p in (home / ".Trash").iterdir())
         assert bodies == ["first", "second"]
+
+    def test_same_name_thrice_in_one_second_keeps_all(self, tmp_path):
+        """The collision check loops: a third same-name entry in the same
+        second used to reuse the second's suffix and overwrite it."""
+        home = tmp_path / "home"
+        (home / ".Trash").mkdir(parents=True)
+        r = fish_eval(
+            FIXED_DATE
+            + f"cd {tmp_path}\n"
+            "for i in 1 2 3; printf v$i > dup.txt; and trash dup.txt; or exit 1; end",
+            env={"HOME": str(home)},
+        )
+        assert r.returncode == 0, r.stderr
+        bodies = sorted(p.read_text() for p in (home / ".Trash").iterdir())
+        assert bodies == ["v1", "v2", "v3"]
+        names = sorted(p.name for p in (home / ".Trash").iterdir())
+        assert [n.rsplit("‹‹AT››", 1)[1] for n in names] == [
+            "2026-01-01_00:00:00",
+            "2026-01-01_00:00:00-2",
+            "2026-01-01_00:00:00-3",
+        ]
+
+    def test_ids_are_unique_when_the_clock_is_not(self, tmp_path):
+        """Ids used to come from exocortex-id, which has 0.1s resolution, so
+        several files trashed in one call shared an id and `restore <id>`
+        could not reach each one."""
+        home = tmp_path / "home"
+        (home / ".Trash").mkdir(parents=True)
+        for name in ("a.txt", "b.txt", "c.txt"):
+            (tmp_path / name).write_text(name)
+        r = fish_eval(
+            "function exocortex-id; echo 26ba-same; end\n"
+            + FIXED_DATE
+            + f"cd {tmp_path} && trash a.txt b.txt c.txt",
+            env={"HOME": str(home)},
+        )
+        assert r.returncode == 0, r.stderr
+        ids = [e["id"] for e in _list_json(home, tmp_path)]
+        assert len(ids) == 3
+        assert len(set(ids)) == 3, ids
 
     def test_trash_multiple_files(self, tmp_path):
         """Trashing multiple files at once."""

@@ -16,26 +16,40 @@ patterns are wrong or subtly broken in Fish.
 - **`status` is reserved** — it holds the last command's exit code. Never `set -l status`. Capture it immediately: `set -l exit_code $status` — any intervening command overwrites it.
 - **`argv` is special** — function arguments live here. Be careful with scoping.
 - **Scope matters**: `set -l` (local to function), `set -g` (global), `set -U` (universal persistent). Wrong scope causes silent bugs.
-- **`set -l` is function-scoped, NOT block-scoped.** A `set -l` inside `if`/`for`/`while` is visible for the rest of the function. But if the branch isn't taken, the variable is never set. Declare at function level to ensure it exists:
+- **`set -l` is block-scoped.** A `set -l` inside `if`/`for`/`while`/`begin` disappears at that block's `end`, even when the branch ran. Declare at function level with `set -l var`, then assign inside the block with plain `set var ...`:
 - **Erase with `set -e`**, not `unset`.
 - **No `export`** — use `set -gx VAR value`.
 - **`set -a` / `set --append`** to build lists: `set -a mylist item`. Not `mylist+=item`.
 - **Arrays are 1-indexed**: `$argv[1]` is the first element, not `$argv[0]`.
 
 ```fish
-# WRONG - if branch not taken, $msg was never set
+# WRONG - $msg is local to the if block
 if test $big
     set -l msg (generate_message)
 end
-echo $msg  # empty if branch wasn't taken!
+echo $msg  # always empty, even when the branch ran!
 
 # RIGHT - declare first, assign inside
 set -l msg
 if test $big
     set msg (generate_message)
 end
-echo $msg  # works — empty string if branch wasn't taken
+echo $msg  # works — empty if the branch wasn't taken
 ```
+
+- **Named regex captures assign to an existing variable of that name.** `string match -r '(?<s>...)'` sets a variable `s`. If a caller already has a global `s`, the match overwrites it. If no `s` exists, the match creates a function-local one. Declare each capture name local before the match:
+
+```fish
+# WRONG - clobbers a caller's global $s and $e
+string match -rq '^(?<s>.+)(?<e>\.[^.]+)$' -- $name
+
+# RIGHT
+set -l s
+set -l e
+string match -rq '^(?<s>.+)(?<e>\.[^.]+)$' -- $name
+```
+
+A capture group that did not match gives an empty list, not an empty string.
 
 ## Control Flow
 
@@ -67,7 +81,17 @@ or return  # handles Ctrl-C during read
 - **`string` builtin** for all manipulation: `string split`, `string match`, `string replace`, `string trim`, `string collect`, etc.
 - **`string match` uses globs by default** — use `string match -r` for regex. Forgetting `-r` is a common bug.
 - **Double quotes**: `"$var"` works but arrays expand differently than bash — `"$list"` joins with spaces, `$list` keeps elements separate.
-- **Multi-line capture loses newlines**: `set -l output (command)` splits output into a list by newlines. `"$output"` then joins with spaces, collapsing all lines into one. For multi-line output, write to a temp file instead: `command > $tmpfile`.
+- **Multi-line capture loses newlines**: `set -l output (command)` splits output into a list by newlines. `"$output"` then joins with spaces, collapsing all lines into one. To keep the newlines, use a quoted substitution, `set -l output "$(command)"`, or `set -l output (command | string collect)`. Both keep the output as one element.
+- **Joining a word to an empty list removes the whole word.** Fish concatenation is a cartesian product, so `"/"(cmd)` is zero words when `cmd` prints nothing, and `pre$list` is zero words when `$list` is empty. A quoted substitution `"$(cmd)"` is always exactly one word. Use it, or assign first:
+
+```fish
+set -l parts            # empty list
+echo "$lead"(string join / -- $parts)   # WRONG: zero arguments, the word vanished
+echo "$lead$(string join / -- $parts)"  # RIGHT: one argument, "$lead"
+
+set -l joined (string join / -- $parts) # RIGHT too: assign first,
+echo "$lead$joined"                     # then quote the whole word
+```
 - **Escape sequences work in quotes**: `\t`, `\n`, `\r` are interpreted in both single and double quotes (unlike bash). Use `printf` when you need precise control.
 - **No heredocs** (`<<EOF`). Use `printf`, multi-line quoted strings, or `echo` piped:
 

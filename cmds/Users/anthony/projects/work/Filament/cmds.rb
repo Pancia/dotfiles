@@ -24,7 +24,7 @@ module CMD
     opts.info = "Start Clojure nREPL with dev and test aliases"
     lambda { |*args|
       EXE.bash %{
-        clj -A:local/nREPL:dev:test #{args.join " "}
+        clj -A:local/nREPL:dev:test #{args.shelljoin}
       }
     }
   end
@@ -46,7 +46,7 @@ module CMD
           -J-Dguardrails.config=guardrails-test.edn \
           -m kaocha.runner \
           :clojure-unit \
-          #{args.join " "}
+          #{args.shelljoin}
       }
     }
   end
@@ -55,7 +55,7 @@ module CMD
     opts.info = "Run ClojureScript tests via Karma"
     lambda { |*args|
       EXE.bash %{
-        wait-for .shadow-cljs/ci-tests.status npx karma start #{args.join " "}
+        wait-for .shadow-cljs/ci-tests.status npx karma start #{args.shelljoin}
       }
     }
   end

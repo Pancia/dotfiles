@@ -8,9 +8,11 @@ The wrapper no longer creates or enters a worktree -- Claude Code does, natively
 creation, holds, merge-on-exit and slot-aware resume; all of that machinery is
 gone, along with the tests for it.
 
-PATH is always set INSIDE the fish command: fish/conf.d/path.fish re-prepends
-~/dotfiles/bin at startup, so a stub placed on the outer PATH is defeated before
-the code under test ever runs.
+Every fish here runs with `--no-config`: no user or system config, no conf.d,
+no universal variables, and no autoloading from ~/.config/fish/functions (which
+points at the live ~/dotfiles, not this checkout). So nothing re-orders PATH
+behind a test's back, and each function used is sourced or put on
+fish_function_path explicitly.
 """
 
 import os
@@ -24,7 +26,7 @@ KEY_FISH = DOTFILES / "fish" / "functions" / "_cc_worktree_key.fish"
 
 
 def fish_eval(code: str, *, env: dict | None = None, cwd=None):
-    return subprocess.run(["fish", "-c", code], capture_output=True, text=True,
+    return subprocess.run(["fish", "--no-config", "-c", code], capture_output=True, text=True,
                           env={**os.environ, **(env or {})}, cwd=cwd)
 
 
@@ -79,14 +81,14 @@ class TestWorktreeKey:
 # so `~/dotfiles/...` inside the wrapper still resolves while ~/Cloud and
 # ~/.claude stay untouched.
 #
-# XDG_CONFIG_HOME is redirected to an EMPTY directory as well, and that is not
-# optional: it is inherited from the real environment, so fish would otherwise
-# load ~/.config/fish/config.fish (a symlink into this repo) with ~ pointing at
-# the temp HOME -- re-running _ENSURE_RCS, relinking LaunchAgents against a
-# directory that does not exist, and re-prepending ~/dotfiles/bin ahead of the
-# stubs, so the REAL proc-label ran. With no user config, fish_function_path and
-# PATH have to be set explicitly, which they are (inside the fish command, per
-# the same PATH lesson).
+# The fish under test runs with `--no-config`, so it loads no config.fish and
+# no conf.d; fish_function_path and PATH are set explicitly inside the fish
+# command. Before that, the inherited XDG_CONFIG_HOME made fish load
+# ~/.config/fish/config.fish with ~ pointing at the temp HOME -- re-running
+# _ENSURE_RCS, relinking LaunchAgents against a directory that does not exist,
+# and re-prepending ~/dotfiles/bin ahead of the stubs, so the REAL proc-label
+# ran. XDG_CONFIG_HOME still points at an EMPTY directory, as a backstop for any
+# fish the wrapper itself starts, which does not get `--no-config`.
 # ===========================================================================
 
 import pytest
@@ -184,8 +186,9 @@ class Wrapped:
     def run(self, *args, cwd=None, script="", extra_path="", stdin=None, extra_env=None):
         """Run the wrapper once, in its own fish.
 
-        PATH is set INSIDE the fish command: fish/conf.d/path.fish re-prepends
-        ~/dotfiles/bin at startup and would otherwise defeat the stubs.
+        `--no-config` keeps fish/conf.d/path.fish from re-prepending
+        ~/dotfiles/bin ahead of the stubs. PATH is still set inside the fish
+        command, so the stubs win over anything on the inherited PATH.
         """
         argline = " ".join(args)
         code = (
@@ -198,8 +201,8 @@ class Wrapped:
             f"rm -f {self.spy_log}\n"
             f"my-claude-code-wrapper {argline}\n"
         )
-        return subprocess.run(["fish", "-c", code], capture_output=True, text=True,
-                              stdin=stdin,
+        return subprocess.run(["fish", "--no-config", "-c", code], capture_output=True,
+                              text=True, stdin=stdin,
                               env=self.env(CLAUDE_STUB_SCRIPT=script, **(extra_env or {})))
 
     def claude_ran_in(self):

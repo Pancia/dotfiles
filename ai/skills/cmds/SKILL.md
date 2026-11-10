@@ -49,7 +49,7 @@ module CMD
     opts.info = "One-line description of what this does"
     lambda { |*args|
       EXE.bash %{
-        actual shell command here #{args.join " "}
+        actual shell command here #{args.shelljoin}
       }
     }
   end
@@ -72,7 +72,13 @@ The template file is at `~/dotfiles/cmds/template.rb`.
 - Pass `{silent: true}` to suppress the preview: `EXE.bash %{ ... }, {silent: true}`
 - The `trap "SIGINT"` block at the end of the file handles Ctrl-C (required)
 - Function names use snake_case — they become the subcommand names
-- To forward CLI args through to the shell command: `#{args.join " "}`
+- To forward CLI args through to the shell command: `#{args.shelljoin}`. Never
+  `#{args.join " "}`: the command string goes through a shell again, so an
+  argument such as `-k "a or b"` is split into separate words. `bin/cmds`
+  already requires `shellwords`, and the escaped form parses the same in bash and fish.
+- A flag before the first plain argument is parsed by cmds itself and fails as
+  an invalid option. Put the flag after a plain argument, or after `--`:
+  `cmds test -- -k foo`.
 - Name the primary entry point `main` or `start` (the `@@` shell shortcut runs whichever exists)
 
 ## Creating a New cmds.rb
@@ -106,7 +112,7 @@ module CMD
     opts.info = "Run Flet app on port 8555"
     lambda { |*args|
       EXE.bash %{
-        uv run flet run --recursive --port 8555 #{args.join " "}
+        uv run flet run --recursive --port 8555 #{args.shelljoin}
       }
     }
   end
