@@ -29,6 +29,70 @@ function _trash_safe_name --description 'Truncate trash filename to fit macOS 25
     echo "$truncated-$uid"
 end
 
+function _trash_bytes --description 'Byte length of a string'
+    printf '%s' "$argv[1]" | wc -c | string trim
+end
+
+function _trash_encode_dir --description 'Make a directory path safe inside one filename'
+    # Only `%` and `/` are escaped, so non-ASCII and spaces stay readable and
+    # cost one character each instead of URL-encoding's three bytes per byte.
+    string replace -a '%' '%25' -- "$argv[1]" | string replace -a '/' '%2F'
+end
+
+function _trash_dest_name --description 'Trash entry name: <file>‹‹FROM››<dir>‹‹AT››<stamp>'
+    # argv: basename, absolute original directory, timestamp (maybe with -id)
+    #
+    # The file's own name comes first and the timestamp last, so neither is
+    # ever cut. When the name exceeds macOS's 255-byte limit, leading folder
+    # components are dropped (shown as `…`), keeping the most specific end.
+    # Labelled guillemets match ytdl's ‹‹LABEL›› names: inert when pasted
+    # into a shell or chat, unlike the old `>>>`/`<<<` redirect characters.
+    set -l base "$argv[1]"
+    set -l stamp "$argv[3]"
+    set -l parts (string split -n / -- "$argv[2]")
+    set -l lead /
+    set -l name
+    while true
+        # Join into a variable first: once every component is dropped, an
+        # empty command substitution would erase "$lead"(…) entirely.
+        set -l joined (string join / -- $parts)
+        set -l folder (_trash_encode_dir "$lead$joined")
+        set name "$base‹‹FROM››$folder‹‹AT››$stamp"
+        if test (_trash_bytes "$name") -le 255; or test (count $parts) -eq 0
+            break
+        end
+        set -e parts[1]
+        set lead '…/'
+    end
+    # Still too long with every folder dropped: the file name alone nearly
+    # fills 255 bytes. Shorten its stem from the end (marked `…`), keeping the
+    # extension and the readable timestamp.
+    set -l over (math (_trash_bytes "$name") - 255)
+    if test $over -gt 0
+        set -l stem "$base"
+        set -l ext ''
+        # Named captures assign to any existing variable of that name, so
+        # declare them local or a caller's global `s`/`e` gets overwritten.
+        set -l s
+        set -l e
+        set -l folder (_trash_encode_dir "$lead")
+        if string match -rq '^(?<s>.+)(?<e>\.[^.]{1,10})$' -- "$base"
+            set stem $s
+            set ext $e
+        end
+        while test $over -gt 0; and test (string length -- "$stem") -gt 1
+            # A character is at most 4 bytes, so this never cuts more than
+            # 3 bytes past what is needed, and finishes in a few passes.
+            set -l drop (math "ceil($over / 4)")
+            set stem (string sub -l (math "max(1, "(string length -- "$stem")" - $drop)") -- "$stem")
+            set name "$stem…$ext‹‹FROM››$folder‹‹AT››$stamp"
+            set over (math (_trash_bytes "$name") - 255)
+        end
+    end
+    # Guard only; with a 10-character extension cap the name always fits.
+    _trash_safe_name "$name"
+end
+
 function _record_trash --description 'Record trashed file (fname, encoded_dir, timestamp, dest, id)'
     set -l history_file (_trash_history_path)
     set -l max_history 500
@@ -85,14 +149,14 @@ function _trash_put --description 'Move files to trash with history'
     for f in $argv
         if test -e "$f"
             set -l trash_dir (_trash_dir_for_path "$f")
-            set -l f_encoded (_trash_encode_path "$f")
-            set -l raw_name "$prefix>>>$f_encoded<<<$suffix"
-            set -l dest "$trash_dir/"(_trash_safe_name "$raw_name")
-            # Avoid silently clobbering a file trashed earlier this second with
-            # the same name and cwd (timestamp is second-granularity).
-            if test -e "$dest"
-                set raw_name "$raw_name-"(exocortex-id)
-                set dest "$trash_dir/"(_trash_safe_name "$raw_name")
+            set -l base (basename -- "$f")
+            set -l origin (realpath (dirname -- "$f"))
+            set -l dest "$trash_dir/"(_trash_dest_name "$base" "$origin" "$suffix")
+            # Avoid silently clobbering a file trashed earlier this second
+            # from the same folder (timestamp is second-granularity). `-L`
+            # too: a trashed relative symlink dangles, so `-e` misses it.
+            if test -e "$dest"; or test -L "$dest"
+                set dest "$trash_dir/"(_trash_dest_name "$base" "$origin" "$suffix-"(exocortex-id))
             end
             set -l id (exocortex-id)
             echo "[dotfiles/trash] INFO: moving '$f' to '$dest'"

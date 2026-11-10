@@ -107,7 +107,7 @@ class TestSafeName:
 
     def test_realistic_trash_name_truncation(self):
         """Simulate a realistic long encoded trash filename."""
-        # This mimics the pattern: encoded_cwd>>>encoded_file<<<timestamp
+        # This mimics the legacy pattern: encoded_cwd>>>encoded_file<<<timestamp
         # The cwd prefix is the full encoded path (as seen in the original error)
         prefix = (
             "%2FUsers%2Fanthony%2FLibrary%2FCloudStorage"
@@ -170,6 +170,134 @@ class TestTrash:
         )
         trash_entry = list((home / ".Trash").iterdir())[0]
         assert "myfile.txt" in trash_entry.name
+
+    def test_trash_entry_name_shape(self, tmp_path):
+        """Entry is <file>‹‹FROM››<resolved dir>‹‹AT››<timestamp>."""
+        (tmp_path / "shape.txt").write_text("x")
+        home = tmp_path / "home"
+        (home / ".Trash").mkdir(parents=True)
+
+        fish_eval(f"cd {tmp_path} && trash shape.txt", env={"HOME": str(home)})
+        name = list((home / ".Trash").iterdir())[0].name
+        folder = str(tmp_path.resolve()).replace("%", "%25").replace("/", "%2F")
+        assert name.startswith(f"shape.txt‹‹FROM››{folder}‹‹AT››")
+        assert len(name.rsplit("‹‹AT››", 1)[1]) >= len("2026-01-01_00:00:00")
+
+    def test_absolute_path_records_folder_once(self, tmp_path):
+        """Trashing by absolute path from elsewhere does not add the cwd."""
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "abs.txt").write_text("x")
+        home = tmp_path / "home"
+        (home / ".Trash").mkdir(parents=True)
+
+        fish_eval(f"cd {home} && trash {sub / 'abs.txt'}", env={"HOME": str(home)})
+        name = list((home / ".Trash").iterdir())[0].name
+        folder = str(sub.resolve()).replace("/", "%2F")
+        assert name.startswith(f"abs.txt‹‹FROM››{folder}‹‹AT››")
+        assert name.count("‹‹FROM››") == 1
+
+    def test_long_folder_keeps_name_and_timestamp(self, tmp_path):
+        """A deep folder is cut from the front; file name and time survive."""
+        deep = tmp_path
+        for i in range(6):
+            deep = deep / f"{i}{'d' * 50}"
+        deep.mkdir(parents=True)
+        (deep / "keep-me.txt").write_text("x")
+        home = tmp_path / "home"
+        (home / ".Trash").mkdir(parents=True)
+
+        r = fish_eval(f"cd {deep} && trash keep-me.txt", env={"HOME": str(home)})
+        assert r.returncode == 0, r.stderr
+        name = list((home / ".Trash").iterdir())[0].name
+        assert len(name.encode()) <= 255
+        assert name.startswith("keep-me.txt‹‹FROM››…%2F")
+        # The most specific folder component is the one kept.
+        assert f"%2F5{'d' * 50}‹‹AT››" in name
+        assert len(name.rsplit("‹‹AT››", 1)[1]) >= len("2026-01-01_00:00:00")
+
+    def test_dest_name_all_folders_dropped_keeps_ellipsis(self):
+        """With every folder dropped, the folder field is `…/`, not empty."""
+        base = "x" * 190 + ".txt"  # 249 bytes with no folder; 258 with one
+        r = fish_eval(
+            f'_trash_dest_name "{base}" /Users/anthony/Documents 2026-11-10_11:20:05'
+        )
+        assert r.returncode == 0, r.stderr
+        assert r.stdout.strip() == f"{base}‹‹FROM››…%2F‹‹AT››2026-11-10_11:20:05"
+
+    def test_dest_name_huge_basename_keeps_timestamp(self):
+        """A file name near 255 bytes is shortened; extension and time stay."""
+        base = "가나다라마바사아자차" * 7 + "-final-draft.txt"  # 226 bytes
+        r = fish_eval(
+            f'_trash_dest_name "{base}" /Users/anthony/Documents 2026-11-10_11:20:05'
+        )
+        assert r.returncode == 0, r.stderr
+        name = r.stdout.strip()
+        assert len(name.encode()) <= 255
+        assert len(name.encode()) >= 252, "cut no more than needed"
+        assert name.startswith("가나다라마바사아자차")
+        assert name.endswith("….txt‹‹FROM››…%2F‹‹AT››2026-11-10_11:20:05")
+
+    def test_dest_name_huge_basename_without_extension(self):
+        """A long name with no extension is still shortened to fit."""
+        base = "z" * 250
+        r = fish_eval(f'_trash_dest_name "{base}" /tmp 2026-11-10_11:20:05')
+        assert r.returncode == 0, r.stderr
+        name = r.stdout.strip()
+        assert len(name.encode()) <= 255
+        assert name.endswith("z…‹‹FROM››…%2F‹‹AT››2026-11-10_11:20:05")
+
+    def test_dest_name_huge_basename_in_root_shows_root(self):
+        """Nothing dropped from `/`, so the folder shows `%2F`, not `…%2F`."""
+        base = "b" * 250 + ".txt"
+        r = fish_eval(f'_trash_dest_name "{base}" / 2026-11-10_11:20:05')
+        name = r.stdout.strip()
+        assert len(name.encode()) <= 255
+        assert name.endswith("….txt‹‹FROM››%2F‹‹AT››2026-11-10_11:20:05")
+
+    def test_dest_name_does_not_leak_capture_vars(self):
+        """The extension regex must not overwrite a caller's globals s/e."""
+        r = fish_eval(
+            "set -g s KEEP; set -g e KEEP2; "
+            "_trash_dest_name (string repeat -n 250 a).txt /x T >/dev/null; "
+            "echo $s $e"
+        )
+        assert r.stdout.strip() == "KEEP KEEP2"
+
+    def test_dest_name_escapes_percent_in_folder(self):
+        """`%` in the folder is escaped, so `%2F` always means a slash."""
+        r = fish_eval('_trash_dest_name f.txt "/a%2Fb/c" T')
+        assert r.stdout.strip() == "f.txt‹‹FROM››%2Fa%252Fb%2Fc‹‹AT››T"
+
+    def test_trashed_dangling_symlink_not_clobbered(self, tmp_path):
+        """A trashed relative symlink dangles in the trash; a second entry
+        with the same name in the same second must not replace it."""
+        home = tmp_path / "home"
+        (home / ".Trash").mkdir(parents=True)
+        r = fish_eval(
+            f"cd {tmp_path} && touch target && ln -s target foo && trash foo"
+            " && printf precious > foo && trash foo",
+            env={"HOME": str(home)},
+        )
+        assert r.returncode == 0, r.stderr
+        entries = list((home / ".Trash").iterdir())
+        assert len(entries) == 2
+        assert sum(p.is_symlink() for p in entries) == 1
+
+    def test_same_name_twice_does_not_clobber(self, tmp_path):
+        """Trashing the same name twice from one folder keeps both entries."""
+        home = tmp_path / "home"
+        (home / ".Trash").mkdir(parents=True)
+        f = tmp_path / "dup.txt"
+        f.write_text("first")
+        f2 = "printf second > dup.txt"
+        r = fish_eval(
+            f"cd {tmp_path} && trash dup.txt && {f2} && trash dup.txt",
+            env={"HOME": str(home)},
+        )
+        assert r.returncode == 0, r.stderr
+        bodies = sorted(p.read_text() for p in (home / ".Trash").iterdir())
+        assert bodies == ["first", "second"]
 
     def test_trash_multiple_files(self, tmp_path):
         """Trashing multiple files at once."""
