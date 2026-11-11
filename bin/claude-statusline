@@ -145,12 +145,30 @@ if [ -n "$five_h" ]; then
 fi
 if [ -n "$seven_d" ]; then
   seven_d_when=""
+  seven_d_text="$(colorize "$seven_d" 50 20)"
   if [ "${seven_d_reset:-0}" -gt "$now" ] 2>/dev/null; then
     # Round up to the hour: resets land at :59:59, so 22:59 reads as 23,
     # and a reset is never shown earlier than it happens.
     seven_d_when=" ↻$(date -r $(( (seven_d_reset + 3599) / 3600 * 3600 )) '+%a@%Hh')"
+    # Pace: points ahead of (+) or behind (−) a steady spend across the
+    # week. Continuous — the share of the week elapsed, to the second, so
+    # the steady line rises ~0.6 points an hour. No day boundaries.
+    # Color follows the gap, not the raw percent: +10 yellow, +20 red.
+    week=604800
+    left_s=$(( seven_d_reset - now ))
+    [ "$left_s" -gt "$week" ] && left_s=$week
+    expected=$(( ( (week - left_s) * 100 + week / 2 ) / week ))
+    gap=$(( seven_d - expected ))
+    if [ "$gap" -gt 0 ]; then gap_s="+${gap}"
+    elif [ "$gap" -lt 0 ]; then gap_s="−${gap#-}"
+    else gap_s="±0"
+    fi
+    if [ "$gap" -ge 20 ]; then seven_d_text="${RED}${seven_d}% ${gap_s}${RST}"
+    elif [ "$gap" -ge 10 ]; then seven_d_text="${YEL}${seven_d}% ${gap_s}${RST}"
+    else seven_d_text="${seven_d}% ${gap_s}"
+    fi
   fi
-  rate_parts="${rate_parts:+$rate_parts }7d:$(colorize "$seven_d" 50 20)${seven_d_when}"
+  rate_parts="${rate_parts:+$rate_parts }7d:${seven_d_text}${seven_d_when}"
 fi
 [ -n "$rate_parts" ] && rate_info=" (${rate_parts})"
 
