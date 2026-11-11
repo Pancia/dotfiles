@@ -17,12 +17,13 @@ module MusicCMD
     lambda { |*tags|
       song_id = $options[:song_id]
       raise "NEED SONG ID" if not song_id
-      raise "NEED TAGS" if not tag_args
+      raise "NEED TAGS" if tags.empty?   # `tags` is always an Array, so `not tags` never fires
 
       song_id = song_id.gsub(/\..*$/, "")
       p song_id if $options[:verbose]
       music = MusicDB.read
       song = music[song_id]
+      abort "music tag: #{song_id} is not in the catalog" unless song
       p song if $options[:verbose]
       puts "#{song["playlist"]} | #{song["artist"]} - #{song["name"]}" if not $options[:verbose]
 

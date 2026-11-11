@@ -16,11 +16,23 @@ class MusicDB
           "and this command reads every file. Set MUSIC_LIBRARY to a local copy to run it."
   end
 
+  # Write a temp file beside the catalog, then rename it over. The old
+  # `cat tmp | jq . > $MUSIC_CATALOG` let the shell empty the catalog before jq
+  # ran, so a missing jq (launchd PATH), a kill or a full disk left it empty.
   def self.save(music, temp_name = "")
-    tmp = Tempfile.new temp_name
-    p tmp.path if $options[:verbose]
-    IO.write tmp, JSON.generate(music)
-    %x[ cat #{tmp.path} | jq '.' > $MUSIC_CATALOG ]
+    catalog = ENV.fetch("MUSIC_CATALOG")
+    tmp = Tempfile.new([".#{File.basename(catalog)}.#{temp_name}.", ".tmp"], File.dirname(catalog))
+    begin
+      p tmp.path if $options[:verbose]
+      tmp.write JSON.pretty_generate(music) + "\n"
+      tmp.flush
+      tmp.fsync
+      tmp.close
+      File.chmod(File.stat(catalog).mode & 0o7777, tmp.path) if File.exist?(catalog)
+      File.rename(tmp.path, catalog)
+    ensure
+      tmp.close!   # removes the temp file if the rename did not happen
+    end
   end
 
   def self.append(song)

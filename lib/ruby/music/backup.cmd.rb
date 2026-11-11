@@ -26,10 +26,19 @@ module MusicCMD
 
       # 1. rsync MUSIC_LIBRARY/ -> MUSIC_CLOUD (trailing slash = contents)
       section.call("rsync  library → cloud")
-      rsync_flags = %w[-a --info=stats1,progress2 --no-inc-recursive
+      # --min-size=1: a zero-byte file in the library must never replace a good
+      # copy in the cloud (eight tracks were lost that way). They are listed
+      # here, because rsync skips them silently and they would never be noticed.
+      rsync_flags = %w[-a --min-size=1 --info=stats1,progress2 --no-inc-recursive
                        --exclude .DS_Store --exclude .Spotlight-V100]
       rsync_flags << "--delete" if $options[:delete]
       src = lib.chomp("/") + "/"
+      empty = Dir.glob(File.join(src, "**", "*")).select { |f| File.file?(f) && File.zero?(f) }
+      unless empty.empty?
+        puts "  ⚠ #{empty.size} zero-byte file(s) in the library, not copied to the cloud:"
+        empty.first(20).each { |f| puts "    #{f}" }
+        puts "    ... and #{empty.size - 20} more" if empty.size > 20
+      end
       run.call(nil, ["rsync", *rsync_flags, src, cloud].shelljoin)
 
       # 2. restic snapshots
