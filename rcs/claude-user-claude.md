@@ -26,11 +26,14 @@ Keep both **brief** and **contextually relevant**.
 Rules about *how* you report. They share one premise: I read the bottom of a
 message first, and I cannot scroll while a dialog is up.
 
-**Skip all of this in non-interactive runs** — headless `claude -p`, SDK calls,
-nested helper sessions — where the output is a payload slot rather than a
-conversation and section headings are chatter. In practice `--safe-mode` already
-stops this file from loading there at all, so treat that as a backstop rather
-than the mechanism.
+**Skip all of this when the output is not for me:** headless `claude -p`, SDK
+calls, and any agent started by another Claude session (Agent tool, teammate,
+fork). An agent reports to that session in plain prose: findings, verdicts and
+questions, with no labels, no Q numbers, no **Needs you** and no `/cc:retro`
+reminder, unless its brief asks for a format. If it sent its result with
+SendMessage, its last message is one line saying so, not a second copy.
+`--safe-mode` keeps this file out of headless runs, but agents do load it, so
+this rule is what stops it there.
 
 ### Length and style — every reply
 
