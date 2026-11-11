@@ -22,6 +22,8 @@ Honor those instructions over the defaults below when they conflict.
 
 ## Concurrent sessions — check this first
 
+In a git repo, see "In a git repo: the `PEERS` section" below.
+
 In a jj repo, run `ccjj should-scope` before anything else. If it **exits 0**,
 another live Claude session is working in this same working copy, and a plain
 `jj commit` would capture its half-written files. Commit with:
@@ -111,6 +113,34 @@ here), ignore all of the above and follow the normal procedure below. A
 whole-working-copy commit is *better* then, because it also captures changes made
 via Bash.
 
+### In a git repo: the `PEERS` section
+
+`ccjj` and `commit-mine` work only in jj. In git, step 1's `vcs-status-for-ai`
+prints a `### PEERS` section when another live Claude session is working in this
+checkout. It names each session and the files that session wrote with Edit or
+Write. (`cc-peers` prints the same list by itself.) A `PEERS` section has the
+same effect as `ccjj should-scope` exiting 0:
+
+- Each listed file is that session's work in progress, not yours.
+- Scope the commit to this session: stage only the paths and hunks you wrote.
+  For a file you and a peer both edited, stage only your hunks (the "Part of a
+  file, git" route under Split mode).
+- Do not offer **Split everything**.
+- When the scope question is needed, name each peer session (its name and the
+  first 8 characters of its id) and its files, say they are a live session's
+  work in progress, and recommend **Session only**.
+- Bash-made changes are not in the list. A changed file listed for no session
+  may still be a peer's; say so rather than assume it is yours.
+
+After the commit, if it holds any path listed for a peer (the user chose to
+include it), send that session one `SendMessage` naming the commits and which of
+its files each one holds, so it does not keep reporting them as uncommitted.
+Address it by the name `PEERS` shows (run `ListAgents` if that does not resolve).
+Report the message under 🟡 `WATCH`.
+
+No `PEERS` section in git means no other live session is here: follow the
+normal procedure.
+
 ## Procedure
 
 1. **Survey the changes** by running exactly this one command:
@@ -123,6 +153,8 @@ via Bash.
    `### STATUS`, `### DIFF_STAT`, `### CURRENT_COMMIT`, `### RECENT_COMMITS`.
    Use the VCS section to decide whether to use jj or git commands in step 4.
    Use the RECENT_COMMITS section to match the repo's existing commit style.
+   In git, a `### PEERS` section means another live session is here; see
+   "In a git repo: the `PEERS` section" above.
 
    The default output is **stat-only** (changed files + line counts). If you
    need to read the actual hunks to draft an accurate commit message — which
@@ -166,7 +198,8 @@ via Bash.
      scope. `$ARGUMENTS` of `split` (or "split it up", "all, split as
      needed") means **Split everything** with no question.
 
-     Do not offer **Split everything** when `ccjj should-scope` exited 0:
+     Do not offer **Split everything** when `ccjj should-scope` exited 0,
+     or in git when `vcs-status-for-ai` printed a `### PEERS` section:
      the other session's changes are in-flight, not yours to commit.
 
 3. **Draft the commit message** following the auto-loaded style template.

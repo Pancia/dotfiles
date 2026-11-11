@@ -189,6 +189,13 @@ routing decides for itself. `cc-worktree` needs `cc-worktree on` once per
 checkout, permanent. Optionally `ccjj bash-windows on` once per checkout (already
 on here) to make Bash-made changes recoverable rather than merely reported.
 
+**A git repo that is not opted in** has neither, so two sessions can share its
+checkout. `bin/cc-peers` lists the other live sessions there (from Claude Code's
+`~/.claude/sessions/<pid>.json`, live by process id) and the files each one wrote
+(from its transcript). `vcs-status-for-ai` prints that as a `### PEERS` section,
+and `/cc:commit` then scopes the commit and messages any peer whose files it
+committed. Tests: `tests/bin/cc-peers/test_cc_peers.py`.
+
 **Inside a worktree of a jj repo, use `git`, not `jj`.** Claude Code's
 `--worktree` creates a *git* worktree, which has no `.jj` of its own — so `jj`
 there walks up and resolves to the **parent** repo. `jj commit` in a worktree

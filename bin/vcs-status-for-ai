@@ -9,7 +9,8 @@
 # tradeoff is that only binaries on the base PATH are reachable. This script
 # currently only shells out to `jj` and `git`, so that's fine; if you add a
 # call to a user-installed tool, either resolve it with an absolute path or
-# prepend its directory to PATH explicitly.
+# prepend its directory to PATH explicitly. (cc-peers, below, is resolved next
+# to this script for that reason.)
 
 function __vcs_status_help
     echo "Emit a VCS status snapshot formatted for AI consumption (e.g. /commit)."
@@ -20,6 +21,7 @@ function __vcs_status_help
     echo "  ### STATUS"
     echo "  ### DIFF_STAT"
     echo "  ### UNTRACKED       (git only, if any)"
+    echo "  ### PEERS           (git only, if another live Claude session is here)"
     echo "  ### DIFF            (only with --diff)"
     echo "  ### CURRENT_COMMIT"
     echo "  ### RECENT_COMMITS"
@@ -68,6 +70,10 @@ if test -z "$vcs_info"
     exit 1
 end
 
+# Resolved before the `cd` below, and next to this script rather than on PATH,
+# because --no-config leaves out the user's PATH additions.
+set -l peers_bin (path dirname (path resolve (status filename)))/cc-peers
+
 set -l parts (string split -m 1 ' ' -- $vcs_info)
 set -l vcs $parts[1]
 set -l root $parts[2]
@@ -113,6 +119,18 @@ if test "$vcs" = git
         printf '### UNTRACKED\n'
         printf '%s\n' $untracked
         printf '\n(file contents not shown — these files are not in the DIFF section)\n\n'
+    end
+end
+
+# Other live Claude sessions in this checkout, and the files each one wrote.
+# ccjj covers this for jj repos; in git nothing else would tell /cc:commit that
+# a file it is about to commit is a peer's work in progress. Silent when alone.
+if test "$vcs" = git; and test -x "$peers_bin"
+    set -l peers ($peers_bin --root $root 2>/dev/null)
+    if test $status -eq 0; and test (count $peers) -gt 0
+        printf '### PEERS\n'
+        printf '%s\n' $peers
+        printf '\n(live sessions working in this checkout — their files are their work in progress)\n\n'
     end
 end
 

@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+"""List the other live Claude Code sessions working in this checkout.
+
+    cc-peers                 # peers of the checkout that holds $PWD
+    cc-peers --root DIR      # peers of another checkout
+
+For each peer it prints the session id, its name, process id and status, then
+the paths in this checkout that the session wrote with Edit or Write, taken
+from its transcript (subagent transcripts included).
+
+Exit: 0 peers found · 1 none · 2 not inside a git or jj checkout.
+Prints nothing when there are no peers.
+
+Why this exists. `ccjj` keeps edit records and liveness only for jj repos
+(`find_repo` looks for `.jj/`), so in a plain git repo `/cc:commit` could not
+tell that another session was mid-way through the files it was about to commit.
+On 2026-11-10 a sekhmet session split-committed a peer's element picker, and the
+peer did not find out until its own commit the next day. Claude Code already
+keeps everything needed:
+
+- `~/.claude/sessions/<pid>.json`: one entry per running session, with `pid`,
+  `procStart` (UTC, `ps -o lstart` format), `sessionId`, `cwd`, `name`, `status`.
+- `~/.claude/projects/<key>/<sessionId>.jsonl`: the transcript, with every Edit
+  and Write call's `file_path`.
+
+Liveness is the process id plus its start time, never a file time. The picker
+session sat idle for five and a half hours while its peer committed, so any
+"modified in the last N minutes" test would have called it dead.
+
+Not peers: this session itself, any session in this process's ancestry (a
+nested `claude -p` and the session that started it), and any session started
+from inside this one (a helper that writes a commit message). "This session" is
+the nearest ancestor process with a registry entry, so it does not depend on
+$CLAUDE_SESSION_ID, which a nested `claude -p` inherits from its parent.
+"""
+import argparse
+import datetime
+import glob
+import json
+import os
+import subprocess
+import sys
+
+TOOLS = {"Edit": "file_path", "Write": "file_path", "MultiEdit": "file_path",
+         "NotebookEdit": "notebook_path"}
+
+
+def checkout_root(start):
+    """Nearest folder at or above `start` holding .git (dir or file) or .jj."""
+    d = os.path.realpath(start)
+    while True:
+        if os.path.exists(os.path.join(d, ".git")) or os.path.isdir(os.path.join(d, ".jj")):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            return None
+        d = parent
+
+
+def process_table():
+    """{pid: (ppid, lstart_utc)} from one `ps` call; {} if ps fails."""
+    env = dict(os.environ, TZ="UTC", LC_ALL="C")
+    try:
+        out = subprocess.run(["ps", "-axo", "pid=,ppid=,lstart="], env=env,
+                             capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    table = {}
+    for line in out.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
+            table[int(parts[0])] = (int(parts[1]), " ".join(parts[2].split()))
+    return table
+
+
+def alive(entry, table):
+    pid = entry.get("pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        pass
+    want = " ".join(str(entry.get("procStart") or "").split())
+    if want and pid in table:
+        # A reused pid belongs to some other program started at another time.
+        return table[pid][1] == want
+    return True
+
+
+def ancestors(pid, table):
+    seen = []
+    while pid in table and pid not in seen and pid > 1:
+        seen.append(pid)
+        pid = table[pid][0]
+    return seen
+
+
+def load_registry(sessions_dir):
+    entries = []
+    for f in sorted(glob.glob(os.path.join(sessions_dir, "*.json"))):
+        try:
+            with open(f) as fh:
+                e = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        if isinstance(e, dict) and e.get("sessionId") and isinstance(e.get("pid"), int):
+            entries.append(e)
+    return entries
+
+
+def written_paths(projects_dir, sid, root):
+    """Repo-relative paths this session's transcripts wrote with Edit or Write."""
+    files = glob.glob(os.path.join(projects_dir, "*", sid + ".jsonl"))
+    files += glob.glob(os.path.join(projects_dir, "*", sid, "subagents", "*.jsonl"))
+    found = []
+    for f in files:
+        try:
+            fh = open(f, errors="replace")
+        except OSError:
+            continue
+        with fh:
+            for line in fh:
+                if '"tool_use"' not in line or not any('"%s"' % t in line for t in TOOLS):
+                    continue
+                try:
+                    content = json.loads(line).get("message", {}).get("content")
+                except ValueError:
+                    continue
+                for block in content if isinstance(content, list) else []:
+                    if not isinstance(block, dict) or block.get("type") != "tool_use":
+                        continue
+                    key = TOOLS.get(block.get("name"))
+                    path = key and (block.get("input") or {}).get(key)
+                    if not isinstance(path, str) or not os.path.isabs(path):
+                        continue
+                    rel = os.path.relpath(os.path.realpath(path), root)
+                    if rel != ".." and not rel.startswith(".." + os.sep) and rel not in found:
+                        found.append(rel)
+    return sorted(found)
+
+
+def main():
+    home = os.path.expanduser("~/.claude")
+    ap = argparse.ArgumentParser(prog="cc-peers", description=__doc__.split("\n\n")[0])
+    ap.add_argument("--root", default=".", help="a folder inside the checkout")
+    ap.add_argument("--session", default=os.environ.get("CLAUDE_SESSION_ID", ""),
+                    help="this session's id, also left out (default $CLAUDE_SESSION_ID)")
+    # The env vars let a test point vcs-status-for-ai, which passes no flags,
+    # at fixtures instead of the real registry.
+    ap.add_argument("--sessions-dir", default=os.environ.get(
+        "CC_PEERS_SESSIONS_DIR", os.path.join(home, "sessions")))
+    ap.add_argument("--projects-dir", default=os.environ.get(
+        "CC_PEERS_PROJECTS_DIR", os.path.join(home, "projects")))
+    args = ap.parse_args()
+
+    root = checkout_root(args.root)
+    if not root:
+        print("cc-peers: not inside a git or jj checkout", file=sys.stderr)
+        sys.exit(2)
+
+    table = process_table()
+    registry = load_registry(args.sessions_dir)
+    by_pid = {e["pid"]: e for e in registry}
+    mine = ancestors(os.getpid(), table)
+    me = next((p for p in mine if p in by_pid), None)
+
+    peers = []
+    for e in registry:
+        pid = e["pid"]
+        if e["sessionId"] == args.session or pid in mine:
+            continue
+        if me is not None and me in ancestors(pid, table):
+            continue
+        cwd = e.get("cwd")
+        if not isinstance(cwd, str) or checkout_root(cwd) != root:
+            continue
+        if alive(e, table):
+            peers.append(e)
+
+    if not peers:
+        sys.exit(1)
+    for e in peers:
+        started = ""
+        if isinstance(e.get("startedAt"), (int, float)):
+            started = datetime.datetime.fromtimestamp(e["startedAt"] / 1000) \
+                .strftime(", started %Y-%m-%d %H:%M")
+        name = ' "%s"' % e["name"] if e.get("name") else ""
+        print("session %s%s (pid %d, %s%s)" % (e["sessionId"], name, e["pid"],
+                                             e.get("status") or "unknown", started))
+        paths = written_paths(args.projects_dir, e["sessionId"], root)
+        for p in paths:
+            print("    " + p)
+        if not paths:
+            print("    (no Edit or Write in this checkout)")
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
