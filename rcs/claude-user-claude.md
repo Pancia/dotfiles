@@ -355,3 +355,12 @@ Per-project services are declared in `.svc.conf` / `.svc.local.conf`
 
 Full docs (read if you need the config format, restart/crash semantics, or to add
 it to a project): `~/dotfiles/wiki/pages/supervise-svc.md`
+
+### Outliving a Bash call
+
+Stopping a Bash call (Esc or timeout) kills its process group, then each
+descendant found by parent pid. `nohup` does not escape this, and macOS has no
+`setsid` command. For a long-lived process use `service` or `svc-tmux up`.
+A short watcher that must outlive the call forks twice, so its parent is
+launchd, and must end on its own time limit:
+`perl -MPOSIX -e 'fork and exit 0; POSIX::setsid() != -1 or die "setsid: $!"; exec @ARGV or die "exec: $!"' CMD ARGS </dev/null >>LOG 2>&1`
