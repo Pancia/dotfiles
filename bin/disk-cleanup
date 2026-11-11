@@ -138,6 +138,19 @@ build_report() {
     else
         printf '  unmeasured: not recorded in this snapshot — rerun with --scan\n'
     fi
+
+    # Folders du could not open at scan time. Their sizes in the snapshot are
+    # too small or missing. Keep only the deepest: if ~/Library/Mail is listed,
+    # ~/Library adds nothing.
+    local denied
+    denied="$(awk '$0 == "=== could not read ===" {f = 1; next} /^=== /{f = 0} f && NF' "$LATEST" \
+        | sort -r | awk '{ if (index(prev, $0 "/") != 1) print; prev = $0 }' | sort || true)"
+    if [[ -n "$denied" ]]; then
+        printf '  could not read at scan time (sizes below are too small or missing):\n'
+        while IFS= read -r path; do
+            printf '    %s\n' "$(pretty "$path")"
+        done <<< "$denied"
+    fi
     printf '\n'
 
     printf '  snapshot: %s  (%s days ago)\n' "$LATEST_STEM" "$LATEST_AGE"
@@ -155,6 +168,7 @@ build_report() {
     while IFS= read -r sec; do
         # "~/projects (git repos)" -> "~/projects", then expand ~ so the
         # section's own root line can be dropped from its own listing.
+        [[ "$sec" == "could not read" ]] && continue
         root="${sec% (*}"
         root="${root/#\~/$HOME}"
 
@@ -287,7 +301,7 @@ Help me free up disk space on this Mac. Start with the report at ${REPORT} and t
 Investigate the biggest and fastest-growing directories with du/ls to find what is actually in them, then give me a concrete list of deletion candidates with sizes, safest first. Say what each one is and whether I can get it back. Do not propose something the notes say I kept, unless it has grown a lot or the reason no longer holds. Do not delete anything without asking me, and use trash rather than rm.
 
 Check these before you trust a number:
-- The snapshot usually runs in the background without access to protected folders. Desktop, Documents, Downloads, Mail, Messages, Photos, Music, app containers and the Trash can be missing or too small. The unmeasured line in the report shows the total. Measure the readable ones directly, and say which ones you cannot read.
+- The snapshot usually runs in the background without access to protected folders. Desktop, Documents, Downloads, Mail, Messages, Photos, Music, app containers and the Trash can be missing or too small. The unmeasured line in the report shows the total, and the report lists the folders the scan could not open. Measure the readable ones directly, and say which ones you cannot read.
 - The / and /System rows in the raw snapshot count the data volume twice. Ignore them.
 - UV_LINK_MODE=hardlink is set, so uv cache files are shared with existing environments. Clearing the cache frees only files with one hard link. Count those, not the du total.
 - Trash frees no space until it is emptied, so say that when you propose it. Cleanup commands such as go clean, uv cache clean and brew cleanup skip the Trash and delete permanently, so ask about those separately.
