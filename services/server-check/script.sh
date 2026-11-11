@@ -31,10 +31,14 @@ run_checks() {
         problems+=("SSH: server unreachable")
         return
     fi
-    if ! grep -q unlocked <<<"$state"; then
-        problems+=("disk locked: run bin/mnt on the server")
+    if ! grep -q musicdisk <<<"$state"; then
+        problems+=("music disk not mounted")
     elif ! grep -q navidrome <<<"$state"; then
         problems+=("Navidrome is not answering")
+    fi
+    # Music no longer needs the encrypted disk; only the backups that write there pause.
+    if ! grep -q unlocked <<<"$state"; then
+        problems+=("encrypted disk locked: backups paused, run bin/mnt")
     fi
 }
 

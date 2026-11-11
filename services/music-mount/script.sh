@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Show the music on the Vultr server as a local folder, for cmus.
 #
-# Read-only on purpose: /mnt/MyMusic is the only independent copy of the library.
+# Read-only on purpose: the server copy is what Navidrome serves.
 # Needs the rclone remote "music-server" (sftp, ~/.config/rclone/rclone.conf). It logs
 # in as "musicread" with ~/.ssh/music_mount, which has no passphrase so this works after
 # a restart. The server limits that key to read-only file access.
-# If the server's encrypted disk is locked, the folder is empty: run bin/mnt there.
+# The music lives on the server's unencrypted /music disk, so it works while the
+# encrypted /mnt is locked. /mnt/MyMusic is an old copy.
 #
 # Do NOT mount this at $MUSIC_LIBRARY. The nightly `music backup` copies that
 # path over ProtonDrive, and these files are older.
@@ -19,7 +20,7 @@ if /sbin/mount | grep -q " on $mount_point "; then
 fi
 
 echo "$(date): mounting music-server at $mount_point"
-exec /opt/homebrew/bin/rclone nfsmount music-server:/mnt/MyMusic/my-music "$mount_point" \
+exec /opt/homebrew/bin/rclone nfsmount music-server:/music/MyMusic/my-music "$mount_point" \
     --read-only \
     --vfs-cache-mode full \
     --vfs-cache-max-size 2G \

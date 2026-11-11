@@ -2,7 +2,7 @@
 """Build Navidrome .m3u playlists from the music catalog ($MUSIC_CATALOG).
 
 usage: navidrome-m3u.py OUTPUT_DIR
-Copy the output to /mnt/MyMusic/playlists/ on the server. Paths are relative to
+Copy the output to /music/MyMusic/playlists/ on the server (`music push` does this now). Paths are relative to
 that folder. Navidrome reads the display name from the #PLAYLIST line.
 """
 import collections, json, os, re, sys

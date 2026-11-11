@@ -18,7 +18,7 @@ OpenBSD 7.8 VPS on Vultr running Headscale (self-hosted Tailscale).
 | httpd | 80 | ACME challenges only |
 | sshd | 22 | SSH access |
 | Tailscale | - | Joins the tailnet as `vultr`, 100.64.0.3 (`tun0`) |
-| Navidrome | 4533 (Tailscale only) | Music server. Started by `~/bin/mnt`, not at boot. See "Music streaming" in the root CLAUDE.md |
+| Navidrome | 4533 (Tailscale only) | Music server, on the `/music` disk. Started by `/etc/rc.local` at boot, after Tailscale is up. See "Music streaming" in the root CLAUDE.md |
 
 The user `musicread` exists only for two restricted keys used by Mac background jobs. See
 "Music streaming" in the root CLAUDE.md.
@@ -246,12 +246,21 @@ doas syspatch
 doas fw_update
 ```
 
+## Music disk (`/music`)
+
+A 40 GB unencrypted Vultr HDD volume (DUID `aa81c53c88998d20`) that holds only
+`/music/MyMusic` (tracks and playlists) and `/music/.navidrome`. It is `noauto` in
+`/etc/fstab`; `/etc/rc.local` fscks and mounts it in the background, so a problem with it
+cannot stop the boot, then starts Navidrome once `tun0` has 100.64.0.3. `/etc/rc.shutdown`
+stops Navidrome. `music push` writes here, and `musicread` reads it. When it is not mounted,
+`/music` is an empty root-owned folder, so writers check `mount | grep -q ' on /music '`.
+
 ## Encrypted disk (`/mnt`)
 
 `/mnt` is a softraid CRYPTO volume on separate block storage. It locks on every server
-restart. `~/bin/mnt` unlocks it (it asks for the passphrase), mounts it and starts
-Navidrome; `~/bin/unmnt` stops it. Navidrome is not enabled at boot, because it would
-scan an empty folder. Music details are in "Music streaming" in the root CLAUDE.md.
+restart. `~/bin/mnt` unlocks it (it asks for the passphrase); `~/bin/unmnt` locks it and
+prints FAILED if the volume is still attached. Neither touches Navidrome or `/music`.
+Music details are in "Music streaming" in the root CLAUDE.md.
 
 **When it is locked, `/mnt` is a plain folder on the unencrypted root disk**, and a write
 there puts private data on that disk. Every writer must first run
@@ -264,8 +273,8 @@ Folders, as of 2026-11-10 (disk unlocked):
 
 | Folder | Owner:group, mode | Written by | Read by |
 |--------|-------------------|------------|---------|
-| `/mnt` (volume root) | root:wheel 755 | – | – |
-| `/mnt/MyMusic` | anthony:_navidrome 755 | `music push` | Navidrome; `musicread` (the Mac's read-only mount) |
+| `/mnt` (volume root) | root:wheel 750 (since 2026-11-10, so `musicread` and `_navidrome` cannot enter) | – | – |
+| `/mnt/MyMusic` | anthony:_navidrome 755 | nothing: an **old copy** from 2026-11-10, kept by choice (see its README) | – |
 | `/mnt/private`, `/mnt/ytdl` | anthony:wheel 750 | `~/ProtonDrive/bin/remote-sync` (Mac) | – |
 | `/mnt/Movies` | anthony:wheel 700 | `remote-sync` | – |
 | `/mnt/backups` | anthony:wheel 750 | – | – |

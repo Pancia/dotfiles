@@ -300,36 +300,53 @@ Details, traps and restore: [docs/work-config-vault.md](docs/work-config-vault.m
 
 The library lives on the Vultr server (`ssh anthony@anthonydambrosio.me`, OpenBSD 7.8; see
 [remote/anthonydambrosio.me/README.md](remote/anthonydambrosio.me/README.md)), at
-`/mnt/MyMusic/my-music/<uuid>.m4a`. Phones use Navidrome over Tailscale. The Mac plays it in
+`/music/MyMusic/my-music/<uuid>.m4a`. Phones use Navidrome over Tailscale. The Mac plays it in
 cmus through a mount.
 
-**The encrypted disk.** `/mnt` is a softraid CRYPTO volume that locks on every server restart.
-Only the user can unlock it: `bin/mnt` on the server asks for the passphrase, mounts it and
-starts Navidrome. Navidrome is deliberately **not** enabled at boot, because it would scan an
-empty folder. When locked, `/mnt` is a plain folder on the unencrypted root disk, so any script
-that writes there must first check `mount | grep -q '^/dev/sd2a on /mnt '`.
+**Two disks, since 2026-11-10.** `/music` is a 40 GB unencrypted Vultr HDD volume that holds only
+the music and Navidrome's data, so music works after a restart with nothing unlocked. `/mnt` is
+the 100 GB encrypted softraid CRYPTO volume for private files, the AKR backup and `remote-sync`.
+It locks on every restart, and only the user can unlock it with `~/bin/mnt` (it asks for the
+passphrase; `~/bin/unmnt` locks it). **`/mnt/MyMusic` is an old copy from 2026-11-10, kept by
+choice and never updated**; a README there, the login message and `bin/mnt` all say so.
+ProtonDrive is the main backup of the music.
 
-**`/mnt/MyMusic` is the only copy with an independent lineage** (the USB drive is dead; ProtonDrive
-and restic share a damaged one). Never delete from it. `q remote-sync` (`~/ProtonDrive/bin/remote-sync`) was
-rebuilt without `--delete` for that reason: never add it back, because its old `Music/MyMusic`
-source is empty.
+**Find disks by DUID, never by `sdN`.** Device numbers shift when a disk is added: after the music
+disk arrived, the encrypted chunk moved from `sd1` to `sd2` and the unlocked volume from `sd2` to
+`sd3`. A script that writes to `/mnt` must first run `/usr/local/bin/crypt-mounted` (exit 0 only
+when the encrypted volume is mounted there); one that writes to `/music` checks
+`mount | grep -q ' on /music '`. Unmounted, either path is a plain folder on the root disk. DUIDs:
+root `008bb05f4a333904`, encrypted chunk `30397bee4d4fc7b8`, unlocked volume `6ff93f0d9222912c`,
+music `aa81c53c88998d20`.
+
+**Boot.** `/music` is `noauto` in `/etc/fstab`, and `/etc/rc.local` fscks and mounts it in the
+background, waits for `tun0` to get 100.64.0.3, then starts Navidrome. A bad music disk therefore
+cannot stop the boot (a normal fstab entry that fails fsck drops to single-user mode, which happened
+once on `/`). Navidrome stays disabled in `rcctl`: started earlier, it would fail to bind the
+Tailscale address. `/etc/rc.shutdown` stops it.
+
+`q remote-sync` (`~/ProtonDrive/bin/remote-sync`) was rebuilt without `--delete`: never add it back,
+because its old `Music/MyMusic` source is empty.
 
 Syncthing runs Mac to phone over Tailscale: the Mac dials `tcp://100.64.0.2:22000`, and global
 discovery, relays and NAT mapping are off.
 
 **Navidrome** is the OpenBSD package, 0.51.1. No newer OpenBSD build exists. It binds only to
 `100.64.0.3:4533`, and pf allows that port only on `tun0`. Config is `/etc/navidrome.toml`, data
-is `/mnt/.navidrome`.
+is `/music/.navidrome` (started fresh on 2026-11-10; the old one stays in `/mnt/.navidrome`).
+Track IDs are an MD5 of the file path, so moving the music folder means a new database, a new
+user (`pancia`, same password, so clients keep working) and a full scan.
 - It reports its version as `dev`, so current Feishin in Navidrome mode sends a `missing` filter
   that 0.51 does not have and its pages fail with SQL errors. Add the server as Subsonic/OpenSubsonic.
 - A restart does not start a scan. The schedule is `@every 1h`, counted from the restart.
 - **`music push` is the route for new tracks** (`lib/ruby/music/push.cmd.rb`; `music -n push` is a
   dry run). It sends catalog tracks the server lacks from `$MUSIC_CLOUD`, only adding, and rewrites
-  the playlists in `/mnt/MyMusic/playlists/` from `$MUSIC_CATALOG`. It skips files changed in the
+  the playlists in `/music/MyMusic/playlists/` from `$MUSIC_CATALOG`. It skips files changed in the
   last 2 minutes, because a track is tagged after it is copied and `--ignore-existing` would keep
   the untagged one. Navidrome picks changes up at its next hourly scan.
-- Tracks must be in the database before their playlists import correctly. A scan of the whole
-  library takes about 30 minutes or more on this disk, so run one at a time.
+- Tracks must be in the database before their playlists import correctly, and playlists import
+  only once an admin user exists. A playlist folder already scanned is not re-read until it
+  changes: `touch` the `.m3u` files and the folder, then scan. Run one scan at a time.
 
 **The mount** (`services/music-mount/`) needs the rclone remote `music-server`, which is in
 `~/.config/rclone/rclone.conf` and is not tracked. Homebrew's rclone has no `mount`, but
@@ -345,11 +362,14 @@ folders get `/mnt`'s group (now `wheel`), but mode 755, which every account can 
 included. A forced command breaks rclone's hash probing, so the remote
 needs `shell_type = none` and `disable_hashcheck = true`. Repeated failed SSH logins make the server
 refuse this Mac for a couple of minutes.
-- **`$MUSIC_PLAYBACK` is the mount; `$MUSIC_LIBRARY` must never point at it.** `music backup`
-  copies `$MUSIC_LIBRARY` over ProtonDrive, and the server's files are older.
-- It is read-only, so tools that change audio files (tagging) fail. By default `music import` and
-  `import_single` still target the dead `$MUSIC_LIBRARY`, and they add the catalog entry *before*
-  the copy, so a failed copy leaves an entry with no file.
+- **`$MUSIC_PLAYBACK` is the mount; `$MUSIC_LIBRARY` must never point at it.** The mount is
+  read-only, so tools that change audio files (tagging) fail.
+- `$MUSIC_LIBRARY` now equals `$MUSIC_CLOUD`, so `music import` and `import_single` write to
+  ProtonDrive and `music push` sends from there. They add the catalog entry *before* the copy,
+  so a failed copy leaves an entry with no file.
+- `music tag_from_db` and `music backup` read every file, which would download the whole library
+  from ProtonDrive. They refuse to run on a cloud or network `$MUSIC_LIBRARY`. Set it to a local
+  copy to run them.
 - The nightly `music-backup` service is off: its source drive is dead, and it had failed 221 of 222
   runs with `music: command not found` (launchd has no such PATH). Its plist is renamed
   `*.plist.disabled`, because `_ENSURE_SERVICES` in `fish/config.fish` reinstalls any `services/*/*.plist`

@@ -6,10 +6,12 @@ require "tmpdir"
 
 module MusicCMD
   PUSH_HOST = "anthony@anthonydambrosio.me"
-  PUSH_REMOTE = "music-server:/mnt/MyMusic/my-music"
-  PUSH_TRACKS = "/mnt/MyMusic/my-music/"
-  PUSH_PLAYLISTS = "/mnt/MyMusic/playlists/"
-  PUSH_MOUNTED = "mount | grep -q '^/dev/sd2a on /mnt '"
+  # The live library is on the unencrypted music disk. /mnt/MyMusic is an old copy.
+  PUSH_REMOTE = "music-server:/music/MyMusic/my-music"
+  PUSH_TRACKS = "/music/MyMusic/my-music/"
+  PUSH_PLAYLISTS = "/music/MyMusic/playlists/"
+  # When /music is not mounted it is an empty folder on the root disk: never write there.
+  PUSH_MOUNTED = "mount | grep -q ' on /music '"
   # A track is tagged after it is copied. --ignore-existing never updates a file,
   # so sending one mid-import would freeze its missing tags on the server.
   PUSH_MIN_AGE = 120
@@ -27,7 +29,7 @@ module MusicCMD
     lambda { |*_args|
       ssh = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", PUSH_HOST]
       unless system(*ssh, PUSH_MOUNTED)
-        abort "push: the server is unreachable or its disk is locked. Run bin/mnt there."
+        abort "push: the server is unreachable or its music disk (/music) is not mounted."
       end
 
       cloud = ENV.fetch("MUSIC_CLOUD").chomp("/") + "/"
