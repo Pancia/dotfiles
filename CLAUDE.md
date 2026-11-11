@@ -340,8 +340,9 @@ after a Mac restart until someone logs in. `~/.ssh/music_mount` (the mount) and 
 (the daily check) have no passphrase. Both log in as the server user `musicread`, and
 `authorized_keys` limits each one: the first to `sftp-server -R` (read-only), the second to
 `/usr/local/bin/server-health`. `musicread` is in group `_navidrome`, which is how it reads `MyMusic`.
-So any new folder under `/mnt` that holds private data needs group `wheel` and mode 750: new folders
-inherit `/mnt`'s group, `_navidrome`. A forced command breaks rclone's hash probing, so the remote
+So any new folder under `/mnt` that holds private data needs group `wheel` and mode 750 or 700. New
+folders get `/mnt`'s group (now `wheel`), but mode 755, which every account can read, `musicread`
+included. A forced command breaks rclone's hash probing, so the remote
 needs `shell_type = none` and `disable_hashcheck = true`. Repeated failed SSH logins make the server
 refuse this Mac for a couple of minutes.
 - **`$MUSIC_PLAYBACK` is the mount; `$MUSIC_LIBRARY` must never point at it.** `music backup`
