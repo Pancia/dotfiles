@@ -325,7 +325,8 @@ cannot stop the boot (a normal fstab entry that fails fsck drops to single-user 
 once on `/`). Navidrome stays disabled in `rcctl`: started earlier, it would fail to bind the
 Tailscale address. `/etc/rc.shutdown` stops it.
 
-`q remote-sync` (`~/ProtonDrive/bin/remote-sync`) was rebuilt without `--delete`: never add it back,
+`q remote-sync` (`~/AKR/scripts/remote-sync`, moved from `~/ProtonDrive/bin/` on 2026-11-10, with
+`restic-sync`; the `q` registry in `~/.config/q/` points there) was rebuilt without `--delete`: never add it back,
 because its old `Music/MyMusic` source is empty.
 
 Syncthing runs Mac to phone over Tailscale: the Mac dials `tcp://100.64.0.2:22000`, and global

@@ -275,7 +275,7 @@ Folders, as of 2026-11-10 (disk unlocked):
 |--------|-------------------|------------|---------|
 | `/mnt` (volume root) | root:wheel 750 (since 2026-11-10, so `musicread` and `_navidrome` cannot enter) | – | – |
 | `/mnt/MyMusic` | anthony:_navidrome 755 | nothing: an **old copy** from 2026-11-10, kept by choice (see its README) | – |
-| `/mnt/private`, `/mnt/ytdl` | anthony:wheel 750 | `~/ProtonDrive/bin/remote-sync` (Mac) | – |
+| `/mnt/private`, `/mnt/ytdl` | anthony:wheel 750 | `~/AKR/scripts/remote-sync` (Mac) | – |
 | `/mnt/Movies` | anthony:wheel 700 | `remote-sync` | – |
 | `/mnt/backups` | anthony:wheel 750 | – | – |
 | `/mnt/backups/akr` | anthony 700 | the vault's `vcs-hooks/post-commit` (it documents the retention) | – |
