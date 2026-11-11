@@ -246,17 +246,43 @@ doas syspatch
 doas fw_update
 ```
 
-## Encrypted Storage
+## Encrypted disk (`/mnt`)
 
-The server has separate encrypted block storage (from Sivers guide):
+`/mnt` is a softraid CRYPTO volume on separate block storage. It locks on every server
+restart. `~/bin/mnt` unlocks it (it asks for the passphrase), mounts it and starts
+Navidrome; `~/bin/unmnt` stops it. Navidrome is not enabled at boot, because it would
+scan an empty folder. Music details are in "Music streaming" in the root CLAUDE.md.
 
-```sh
-# Mount encrypted storage
-m
+**When it is locked, `/mnt` is a plain folder on the unencrypted root disk**, and a write
+there puts private data on that disk. Every writer must first run
+`/usr/local/bin/crypt-mounted`, on the same connection that writes (for rsync, in
+`--rsync-path`). It exits 0 only when the encrypted volume is mounted on `/mnt`. It finds
+the volume by its disk ID, not by device name, because the `sdN` number changes when
+disks are added: it was `sd2a`, and is now `sd3a`. Do not check `mount` for a device name.
 
-# Unmount
-m-x
-```
+Folders, as of 2026-11-10 (disk unlocked):
+
+| Folder | Owner:group, mode | Written by | Read by |
+|--------|-------------------|------------|---------|
+| `/mnt` (volume root) | root:wheel 755 | – | – |
+| `/mnt/MyMusic` | anthony:_navidrome 755 | `music push` | Navidrome; `musicread` (the Mac's read-only mount) |
+| `/mnt/private`, `/mnt/ytdl` | anthony:wheel 750 | `~/ProtonDrive/bin/remote-sync` (Mac) | – |
+| `/mnt/Movies` | anthony:wheel 700 | `remote-sync` | – |
+| `/mnt/backups` | anthony:wheel 750 | – | – |
+| `/mnt/backups/akr` | anthony 700 | the vault's `vcs-hooks/post-commit` (it documents the retention) | – |
+
+**Create a new folder by hand, 750 or 700, before anything syncs into it.** A folder that
+rsync creates takes mode 755 from the umask, so every account on the server can read it,
+`musicread` included.
+
+Traps:
+- rsync is `/usr/local/bin/rsync`. Name it in full in `--rsync-path`, after the
+  `crypt-mounted` check.
+- OpenBSD `xargs` supports `-r`.
+- `git bundle verify` needs a repository, and even with one it does not read the pack:
+  it passes a truncated bundle. Check a bundle with `git bundle unbundle` into a
+  throwaway bare repo. Put that repo on `/mnt`, not `/tmp`, because `unbundle` writes
+  the objects out.
 
 ## SSH Access
 

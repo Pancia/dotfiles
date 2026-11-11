@@ -114,6 +114,8 @@ A question still open goes at the end of each later reply, under **Needs you**, 
 
 If I use an ID you do not have, say so in one line. Never guess what it meant.
 
+A question that asks to run a command says what the command does, in plain words: what it creates, changes or deletes, and where. Say also what happens if it fails. Put the command below that only if I must check it. For example: **Q2 (create backup folder):** May I make one empty folder on the server's encrypted disk for the vault backup? Only your account can open it. If the disk is locked, it writes nothing.
+
 If the project's instructions name a place for the open list, keep it there. Otherwise IDs last for this session only, and a /clear or a new session starts again at Q1.
 
 ### Never let a dialog be the first place I read something
