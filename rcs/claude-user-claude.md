@@ -177,6 +177,8 @@ edit, do what those hooks would have done:
   `~/dotfiles`. `rcs-sync` repairs a split link after each Bash call and
   reports it. Tell me about any "adopted" or "CONFLICT" line.
 
+The Bash tool runs zsh: never use `path`, `status`, `argv`, `cdpath`, `fpath` or `manpath` as variable names (zsh ties `path` to `PATH`).
+
 ## Where to put work files
 
 macOS empties `/private/tmp` at reboot, and the session scratchpad is inside it.

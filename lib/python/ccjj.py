@@ -37,6 +37,7 @@ import time
 from typing import NoReturn
 
 JJ_DEADLINE = 8          # seconds; a wedged jj must never hang the agent
+PIN_TRIES = 3            # cmd_commit's payload builds before "@- moved; re-run"
 SCHEMA = 2               # 2 adds "rel"; schema 1 records still read, see rec_rel
 ROOT = ""                # repo root, set once in main() before any subcommand
 # Everything that counts as a session's journal content. A filter that lists the
@@ -202,7 +203,7 @@ def rel(p):
     return r
 
 
-def parent_ids():
+def parent_ids(fresh=False):
     """(list of @-'s commit ids, error text). None on failure.
 
     The "\\n" is load-bearing, and this lives at module scope because getting it
@@ -212,9 +213,14 @@ def parent_ids():
     made survey() diff from a nonsense revision, so `ccjj audit` reported
     all-clear with everything unclaimed; and let stamp_base() write an 80-char
     .base that can never match again, so that session reports drift forever.
+
+    fresh=True snapshots and imports from git first, in the same process. In a
+    colocated checkout a plain `git commit` from another tool is invisible to an
+    --ignore-working-copy read, so cmd_commit pinned the old @- and the next
+    importing call moved it: "@- moved ... re-run", about 8 times in one session.
     """
     p = jj("log", "--no-graph", "-T", 'commit_id ++ "\\n"', "-r", "@-",
-           "--ignore-working-copy", check=False)
+           *(() if fresh else ("--ignore-working-copy",)), check=False)
     if p.returncode != 0:
         return None, p.stderr.decode(errors="replace")
     return p.stdout.decode().split(), ""
@@ -1450,8 +1456,8 @@ def cmd_commit(args):
         # whole read-modify-commit must be exclusive.
         fcntl.flock(lock, fcntl.LOCK_EX)
 
-        def parent_id():
-            ids, err = parent_ids()
+        def parent_id(fresh=False):
+            ids, err = parent_ids(fresh)
             if ids is None:
                 if "more than one revision" in err:
                     die("the working copy is a merge, so @- is ambiguous.\n"
@@ -1475,249 +1481,267 @@ def cmd_commit(args):
             print("ccjj: warning: a real commit would refuse:\n  " + msg, file=sys.stderr)
             refused.append(code)
 
-        pinned = parent_id()
-        # `jj file show` exits 0 while matching nothing, in several distinct
-        # ways, so returncode is not a usable presence test.
-        present = set(jj("file", "list", "-r", "@-").stdout
-                      .decode(errors="surrogateescape").splitlines())
+        # A loop because nothing is written until `jj commit`, so a payload built
+        # against an @- that moved underneath it can simply be built again. The
+        # daemon in a colocated checkout commits with plain git, often enough that
+        # each "re-run" by hand worked -- so ccjj re-runs it. Never past the
+        # commit: every path after `jj commit` dies or breaks.
+        for attempt in range(1, PIN_TRIES + 1):
+            # fresh: snapshot and import once BEFORE pinning. Pinning without the
+            # import let the next importing call move @- every time a git commit
+            # had landed since the last jj command.
+            pinned = parent_id(fresh=True)
+            # `jj file show` exits 0 while matching nothing, in several distinct
+            # ways, so returncode is not a usable presence test.
+            present = set(jj("file", "list", "-r", "@-").stdout
+                          .decode(errors="surrogateescape").splitlines())
 
-        for p in also:
-            if not os.path.lexists(os.path.join(ROOT, p)) and p not in present:
-                die("--also %s: no such path in the working copy or in @-.\n"
-                    "  --also is resolved against the directory you are standing in\n"
-                    "  (%s), not the repo root." % (p, caller_cwd))
-        if also and not args.force:
-            # --also takes a path WHOLESALE, so a peer's unfinished work in it
-            # lands under your message with no hunk-level split. This used to
-            # check live peers' RECORDS only, strictly weaker than `claim` on
-            # both axes: a Bash-only peer, or an ended-but-uncommitted one, had
-            # its bytes committed (or, for a delete, destroyed) at exit 0 --
-            # reproduced, and reachable by following claim's own printed advice.
-            cov = window_coverage()
-            contested = {p: stakes for p in also
-                         for stakes in [peers_with_a_stake(p, sid, cov)] if stakes}
-            if contested:
-                refuse(also_refusal(contested), 1)
+            for p in also:
+                if not os.path.lexists(os.path.join(ROOT, p)) and p not in present:
+                    die("--also %s: no such path in the working copy or in @-.\n"
+                        "  --also is resolved against the directory you are standing in\n"
+                        "  (%s), not the repo root." % (p, caller_cwd))
+            if also and not args.force:
+                # --also takes a path WHOLESALE, so a peer's unfinished work in it
+                # lands under your message with no hunk-level split. This used to
+                # check live peers' RECORDS only, strictly weaker than `claim` on
+                # both axes: a Bash-only peer, or an ended-but-uncommitted one, had
+                # its bytes committed (or, for a delete, destroyed) at exit 0 --
+                # reproduced, and reachable by following claim's own printed advice.
+                cov = window_coverage()
+                contested = {p: stakes for p in also
+                             for stakes in [peers_with_a_stake(p, sid, cov)] if stakes}
+                if contested:
+                    refuse(also_refusal(contested), 1)
 
-        # --also takes a path WHOLESALE, so its journal records must NOT also be
-        # replayed. Without this, `--also <path>` could never rescue a path whose
-        # records conflict -- which is precisely what the conflict message
-        # recommends it for, so the advice was useless. Found by using the tool.
-        also_set = set(also)
-        scoped = []
-        for r in records:
-            p = r.get("path")
-            if p:
-                try:
-                    # rec_rel, not rel: build() keys by rec_rel, and an
-                    # exclusion filter that keys differently silently fails to
-                    # exclude -- which is the double-application above.
-                    if rec_rel(r) in also_set:
-                        continue
-                except SystemExit:
-                    pass
-            scoped.append(r)
+            # --also takes a path WHOLESALE, so its journal records must NOT also be
+            # replayed. Without this, `--also <path>` could never rescue a path whose
+            # records conflict -- which is precisely what the conflict message
+            # recommends it for, so the advice was useless. Found by using the tool.
+            also_set = set(also)
+            scoped = []
+            for r in records:
+                p = r.get("path")
+                if p:
+                    try:
+                        # rec_rel, not rel: build() keys by rec_rel, and an
+                        # exclusion filter that keys differently silently fails to
+                        # exclude -- which is the double-application above.
+                        if rec_rel(r) in also_set:
+                            continue
+                    except SystemExit:
+                        pass
+                scoped.append(r)
 
-        scoped = drop_vanished(scoped, present)
-        mine = build(scoped, present, pinned)
-        check_new_files_against_disk(mine, present, sid)
-        if not mine and not also:
-            die("nothing to commit", 2)
+            scoped = drop_vanished(scoped, present)
+            mine = build(scoped, present, pinned)
+            check_new_files_against_disk(mine, present, sid)
+            if not mine and not also:
+                die("nothing to commit", 2)
 
-        # BEFORE committing, not after. `ccjj commit` already reported unclaimed
-        # paths on the way out, which is too late to do anything about them --
-        # the commit has happened. Anything this session's own Bash windows
-        # cover but nobody has claimed is recoverable right now, and silently
-        # leaving it behind is the exact blind spot windows exist to close.
-        shared = set()
-        if os.path.isfile(marker(ROOT, MARKER_OPTIN)) and not args.no_claim:
-            # `p not in mine` was WRONG, and it cost a partial commit of this
-            # tool's own source tree. A path with BOTH journal records and
-            # Bash-window changes is in `mine` -- reconstructed from the records
-            # alone -- so it was excluded from this check and the Bash half was
-            # dropped silently. The reconstruction differing from the working
-            # copy is exactly when the warning is most needed.
-            #
-            # Three more false stops, each of which trained agents to pass
-            # --no-claim. A window is a whole-copy tree diff, so it also holds:
-            # a file a peer has already committed (hence the `still` test), a
-            # file only a peer has edited, and a peer's hunk in a file both
-            # sessions edited, which `mine` rightly leaves out. Following the
-            # printed `ccjj claim` for that last one committed the peer's
-            # unfinished hunk under this session's message, exit 0.
-            #
-            # `still` applies only outside `mine`. Records that rebuild something
-            # other than the disk must stop even when the path equals @-: jj has
-            # nothing to select there, so the commit dies with "did not take",
-            # where exit 5 gives a `claim` that works.
-            cov = window_coverage()
-            still = working_copy_paths()
-            peer_edits = peer_record_paths(sid)
-            uncovered = [p for p, who in cov.items()
-                         if sid in who and who[sid] != OFFERED and p not in also
-                         and ((p not in mine and (still is None or p in still))
-                              or (p in mine and mine[p] != working_copy_bytes(p)))]
-            loose = sorted(p for p in uncovered if p not in peer_edits)
-            shared = {p for p in uncovered if p in mine and p in peer_edits}
-            if loose:
-                # STOP, rather than note-and-proceed. Surfacing alone did not
-                # work: ai_jj_commit runs preflight-message-commit in one shot,
-                # so the agent read the note only after the commit had landed
-                # and the best it could do was a second commit. Stopping is what
-                # turns "claim it and re-run" into a true statement.
+            # BEFORE committing, not after. `ccjj commit` already reported unclaimed
+            # paths on the way out, which is too late to do anything about them --
+            # the commit has happened. Anything this session's own Bash windows
+            # cover but nobody has claimed is recoverable right now, and silently
+            # leaving it behind is the exact blind spot windows exist to close.
+            shared = set()
+            if os.path.isfile(marker(ROOT, MARKER_OPTIN)) and not args.no_claim:
+                # `p not in mine` was WRONG, and it cost a partial commit of this
+                # tool's own source tree. A path with BOTH journal records and
+                # Bash-window changes is in `mine` -- reconstructed from the records
+                # alone -- so it was excluded from this check and the Bash half was
+                # dropped silently. The reconstruction differing from the working
+                # copy is exactly when the warning is most needed.
                 #
-                # Only reachable with a session id, and ai_jj_commit only routes
-                # here when one is set -- so a human's `g run ci` never lands in
-                # this branch. It takes the whole working copy, which captures
-                # Bash-made changes anyway, and has nothing to claim.
-                refuse(unclaimed_refusal(loose, sid), 5)
-            for p in sorted(shared):
-                print("note: %s on disk differs from what this commit takes, and\n"
-                      "  session(s) %s have edits there. The difference stays in the\n"
-                      "  working copy. Any of it that is your own Bash change stays\n"
-                      "  uncommitted and can still be claimed."
-                      % (p, ", ".join(s[:8] for s in peer_edits[p])), file=sys.stderr)
+                # Three more false stops, each of which trained agents to pass
+                # --no-claim. A window is a whole-copy tree diff, so it also holds:
+                # a file a peer has already committed (hence the `still` test), a
+                # file only a peer has edited, and a peer's hunk in a file both
+                # sessions edited, which `mine` rightly leaves out. Following the
+                # printed `ccjj claim` for that last one committed the peer's
+                # unfinished hunk under this session's message, exit 0.
+                #
+                # `still` applies only outside `mine`. Records that rebuild something
+                # other than the disk must stop even when the path equals @-: jj has
+                # nothing to select there, so the commit dies with "did not take",
+                # where exit 5 gives a `claim` that works.
+                cov = window_coverage()
+                still = working_copy_paths()
+                peer_edits = peer_record_paths(sid)
+                uncovered = [p for p, who in cov.items()
+                             if sid in who and who[sid] != OFFERED and p not in also
+                             and ((p not in mine and (still is None or p in still))
+                                  or (p in mine and mine[p] != working_copy_bytes(p)))]
+                loose = sorted(p for p in uncovered if p not in peer_edits)
+                shared = {p for p in uncovered if p in mine and p in peer_edits}
+                if loose:
+                    # STOP, rather than note-and-proceed. Surfacing alone did not
+                    # work: ai_jj_commit runs preflight-message-commit in one shot,
+                    # so the agent read the note only after the commit had landed
+                    # and the best it could do was a second commit. Stopping is what
+                    # turns "claim it and re-run" into a true statement.
+                    #
+                    # Only reachable with a session id, and ai_jj_commit only routes
+                    # here when one is set -- so a human's `g run ci` never lands in
+                    # this branch. It takes the whole working copy, which captures
+                    # Bash-made changes anyway, and has nothing to claim.
+                    refuse(unclaimed_refusal(loose, sid), 5)
+                for p in sorted(shared):
+                    print("note: %s on disk differs from what this commit takes, and\n"
+                          "  session(s) %s have edits there. The difference stays in the\n"
+                          "  working copy. Any of it that is your own Bash change stays\n"
+                          "  uncommitted and can still be claimed."
+                          % (p, ", ".join(s[:8] for s in peer_edits[p])), file=sys.stderr)
 
-        if args.diff:
-            for path in sorted(mine):
-                base = jj("file", "show", "-r", "@-", fs(path)).stdout if path in present else b""
-                with tempfile.TemporaryDirectory(prefix="ccjj-diff-") as d:
-                    a, b = os.path.join(d, "a"), os.path.join(d, "b")
-                    with open(a, "wb") as fh:
-                        fh.write(base)
-                    with open(b, "wb") as fh:
-                        fh.write(mine[path])
-                    subprocess.run(["diff", "-u", "--label", "a/" + path,
-                                    "--label", "b/" + path, a, b])
-            for path in sorted(also):
-                print("(whole path, taken from the working copy) %s" % path)
-            if refused:
-                sys.exit(refused[0])
-            return
+            if args.diff:
+                for path in sorted(mine):
+                    base = jj("file", "show", "-r", "@-", fs(path)).stdout if path in present else b""
+                    with tempfile.TemporaryDirectory(prefix="ccjj-diff-") as d:
+                        a, b = os.path.join(d, "a"), os.path.join(d, "b")
+                        with open(a, "wb") as fh:
+                            fh.write(base)
+                        with open(b, "wb") as fh:
+                            fh.write(mine[path])
+                        subprocess.run(["diff", "-u", "--label", "a/" + path,
+                                        "--label", "b/" + path, a, b])
+                for path in sorted(also):
+                    print("(whole path, taken from the working copy) %s" % path)
+                if refused:
+                    sys.exit(refused[0])
+                return
 
-        exec_bits = parent_exec_bits([p for p in mine if p in present])
+            exec_bits = parent_exec_bits([p for p in mine if p in present])
 
-        with tempfile.TemporaryDirectory(prefix="ccjj-") as tmp:
-            payload = os.path.join(tmp, "payload")
-            modes = {}
-            for path, content in mine.items():
-                dest = os.path.join(payload, path)
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
-                with open(dest, "wb") as fh:
-                    fh.write(content)   # bytes: text mode mangled CRLF whole-file
-                if path in exec_bits:
-                    modes[path] = 0o755 if exec_bits[path] else 0o644
+            with tempfile.TemporaryDirectory(prefix="ccjj-") as tmp:
+                payload = os.path.join(tmp, "payload")
+                modes = {}
+                for path, content in mine.items():
+                    dest = os.path.join(payload, path)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    with open(dest, "wb") as fh:
+                        fh.write(content)   # bytes: text mode mangled CRLF whole-file
+                    if path in exec_bits:
+                        modes[path] = 0o755 if exec_bits[path] else 0o644
 
-            tool = os.path.join(tmp, "pick.py")
-            with open(tool, "w") as fh:
-                fh.write("#!/usr/bin/env python3\n"
-                         "import shutil, os, sys\n"
-                         "payload, modes = %r, %r\n"
-                         "right = sys.argv[2]\n"
-                         "for r in %r:\n"
-                         "    d = os.path.join(right, r)\n"
-                         "    os.makedirs(os.path.dirname(d), exist_ok=True)\n"
-                         # jj materializes a tracked symlink in $right as a REAL
-                         # symlink, and copyfile follows it -- so without the
-                         # unlink we write through the link, clobbering its
-                         # target (which may be outside the repo entirely:
-                         # bin/hermes-native points into ~/projects/hermes).
-                         # islink, NOT lexists: for a regular file copyfile
-                         # writes IN PLACE and thereby preserves the mode $right
-                         # arrived with, which is the only thing carrying the
-                         # exec bit for a path that does not exist in @- yet.
-                         # Unlinking first creates a 0644 file and silently
-                         # drops it -- caught by test_new_file_keeps_its_own_exec_bit.
-                         "    if os.path.islink(d): os.remove(d)\n"
-                         "    shutil.copyfile(os.path.join(payload, r), d)\n"
-                         "    if r in modes: os.chmod(d, modes[r])\n"
-                         % (payload, modes, list(mine)))
-            os.chmod(tool, 0o755)
+                tool = os.path.join(tmp, "pick.py")
+                with open(tool, "w") as fh:
+                    fh.write("#!/usr/bin/env python3\n"
+                             "import shutil, os, sys\n"
+                             "payload, modes = %r, %r\n"
+                             "right = sys.argv[2]\n"
+                             "for r in %r:\n"
+                             "    d = os.path.join(right, r)\n"
+                             "    os.makedirs(os.path.dirname(d), exist_ok=True)\n"
+                             # jj materializes a tracked symlink in $right as a REAL
+                             # symlink, and copyfile follows it -- so without the
+                             # unlink we write through the link, clobbering its
+                             # target (which may be outside the repo entirely:
+                             # bin/hermes-native points into ~/projects/hermes).
+                             # islink, NOT lexists: for a regular file copyfile
+                             # writes IN PLACE and thereby preserves the mode $right
+                             # arrived with, which is the only thing carrying the
+                             # exec bit for a path that does not exist in @- yet.
+                             # Unlinking first creates a 0644 file and silently
+                             # drops it -- caught by test_new_file_keeps_its_own_exec_bit.
+                             "    if os.path.islink(d): os.remove(d)\n"
+                             "    shutil.copyfile(os.path.join(payload, r), d)\n"
+                             "    if r in modes: os.chmod(d, modes[r])\n"
+                             % (payload, modes, list(mine)))
+                os.chmod(tool, 0o755)
 
-            # The lock excludes other ccjj runs; a bare `jj` from an agent's Bash
-            # or a terminal can still move @- underneath us, and committing a
-            # payload built against a stale parent REVERTS what landed between.
-            if parent_id() != pinned:
-                die("@- moved from %s to %s while preparing the payload.\n"
-                    "  Nothing committed; re-run." % (pinned[:12], parent_id()[:12]), 4)
+                # The lock excludes other ccjj runs; a bare `jj` from an agent's Bash
+                # or a terminal can still move @- underneath us, and committing a
+                # payload built against a stale parent REVERTS what landed between.
+                # fresh, so a git commit that landed during preparation counts too.
+                now = parent_id(fresh=True)
+                if now != pinned:
+                    if attempt < PIN_TRIES:
+                        print("note: @- moved from %s to %s while preparing the payload;\n"
+                              "  preparing it again (attempt %d of %d)."
+                              % (pinned[:12], now[:12], attempt + 1, PIN_TRIES),
+                              file=sys.stderr)
+                        continue
+                    die("@- moved from %s to %s while preparing the payload.\n"
+                        "  Nothing committed; re-run." % (pinned[:12], now[:12]), 4)
 
-            paths = sorted(set(mine) | set(also))
-            also_wanted = {p: disk_state(p) for p in also}
-            before_op = jj("op", "log", "--no-graph", "-T", "id", "--limit", "1",
-                           "--ignore-working-copy").stdout.decode().strip()
-            c = jj("--config", "merge-tools.ccjj.program=%s" % tool,
-                   "--config", 'merge-tools.ccjj.edit-args=["$left","$right"]',
-                   "commit", "--tool=ccjj", "-m", args.message,
-                   *[fs(p) for p in paths], check=False)
-            if c.returncode != 0:
-                # A failed `jj commit` is NOT a no-op. A `jj util snapshot`
-                # racing it -- which ~/.claude/hooks/jj-snapshot.sh runs on every
-                # Edit in every session, and which our lock does not exclude --
-                # returns rc 0 instantly while the commit dies rc 255 with
-                # "Concurrent checkout", leaving the commit on a dangling head
-                # and two DIVERGENT changes. Reproduced 3/3. Without this
-                # restore the repo stays divergent and nothing says so.
-                rollback(before_op)
-                die("commit failed (rolled back to operation %s):\n%s"
-                    % (before_op[:12], c.stderr.decode(errors="replace")), 4)
+                paths = sorted(set(mine) | set(also))
+                also_wanted = {p: disk_state(p) for p in also}
+                before_op = jj("op", "log", "--no-graph", "-T", "id", "--limit", "1",
+                               "--ignore-working-copy").stdout.decode().strip()
+                c = jj("--config", "merge-tools.ccjj.program=%s" % tool,
+                       "--config", 'merge-tools.ccjj.edit-args=["$left","$right"]',
+                       "commit", "--tool=ccjj", "-m", args.message,
+                       *[fs(p) for p in paths], check=False)
+                if c.returncode != 0:
+                    # A failed `jj commit` is NOT a no-op. A `jj util snapshot`
+                    # racing it -- which ~/.claude/hooks/jj-snapshot.sh runs on every
+                    # Edit in every session, and which our lock does not exclude --
+                    # returns rc 0 instantly while the commit dies rc 255 with
+                    # "Concurrent checkout", leaving the commit on a dangling head
+                    # and two DIVERGENT changes. Reproduced 3/3. Without this
+                    # restore the repo stays divergent and nothing says so.
+                    rollback(before_op)
+                    die("commit failed (rolled back to operation %s):\n%s"
+                        % (before_op[:12], c.stderr.decode(errors="replace")), 4)
 
-            # The byte check below only notices a failure when the payload
-            # DIFFERS from @-. A reconstruction that coincidentally equals @-
-            # verifies clean no matter what actually happened -- so a commit that
-            # selected nothing at all passes it, banks an empty commit under your
-            # message, and consumes the journal. Ask jj directly instead.
-            e = jj("log", "--no-graph", "-T", "empty", "-r", "@-",
-                   "--ignore-working-copy", check=False).stdout.decode().strip()
-            # Fail CLOSED. `== "true"` alone meant any failure of this one call
-            # -- a renamed keyword in a future jj, a transient error -- silently
-            # reopened the exact hole this guard exists to close.
-            if e not in ("true", "false"):
-                rollback(before_op)
-                die("could not tell whether the new commit is empty (got %r).\n"
-                    "  Rolled back to operation %s; nothing committed."
-                    % (e[:60], before_op[:12]))
-            if e == "true":
-                rollback(before_op)
-                die("nothing of yours differed from @-, so the commit was empty.\n"
-                    "  Rolled back to operation %s; the journal is intact.\n"
-                    "  Your edits may already be in history via another session."
-                    % before_op[:12], 2)
+                # The byte check below only notices a failure when the payload
+                # DIFFERS from @-. A reconstruction that coincidentally equals @-
+                # verifies clean no matter what actually happened -- so a commit that
+                # selected nothing at all passes it, banks an empty commit under your
+                # message, and consumes the journal. Ask jj directly instead.
+                e = jj("log", "--no-graph", "-T", "empty", "-r", "@-",
+                       "--ignore-working-copy", check=False).stdout.decode().strip()
+                # Fail CLOSED. `== "true"` alone meant any failure of this one call
+                # -- a renamed keyword in a future jj, a transient error -- silently
+                # reopened the exact hole this guard exists to close.
+                if e not in ("true", "false"):
+                    rollback(before_op)
+                    die("could not tell whether the new commit is empty (got %r).\n"
+                        "  Rolled back to operation %s; nothing committed."
+                        % (e[:60], before_op[:12]))
+                if e == "true":
+                    rollback(before_op)
+                    die("nothing of yours differed from @-, so the commit was empty.\n"
+                        "  Rolled back to operation %s; the journal is intact.\n"
+                        "  Your edits may already be in history via another session."
+                        % before_op[:12], 2)
 
-            # MANDATORY. `jj commit --tool` accepts $right only for paths that
-            # already differ between @- and the working copy; for any other path
-            # it discards the payload, makes an empty commit and reports success.
-            # Without this the journal would then be consumed and the work
-            # rendered unattributable.
-            # The file-type check is for an empty payload: `jj file show` prints
-            # nothing for an absent path too, so b"" == b"" passed having
-            # committed nothing.
-            bad = [p for p, want in mine.items()
-                   if jj("file", "show", "-r", "@-", fs(p), check=False).stdout != want
-                   or (not want and file_type_at("@-", p) != "file")]
-            if bad:
-                rollback(before_op)
-                die("the commit did not take for: %s\n"
-                    "  Rolled back to operation %s; nothing was committed.\n"
-                    "  Most likely those paths have no working-copy change to select\n"
-                    "  from, because something outside this session already committed\n"
-                    "  them. Re-running reproduces this exactly -- it is not transient.\n"
-                    "  `ccjj audit` shows whether @- moved. `ccjj forget %s` drops\n"
-                    "  just those paths' records, so the session's OTHER, still-\n"
-                    "  uncommitted work is not held hostage by them. (`ccjj disown`\n"
-                    "  drops ALL of them, which also strands that other work.)"
-                    % (", ".join(bad), before_op[:12], " ".join(bad)))
+                # MANDATORY. `jj commit --tool` accepts $right only for paths that
+                # already differ between @- and the working copy; for any other path
+                # it discards the payload, makes an empty commit and reports success.
+                # Without this the journal would then be consumed and the work
+                # rendered unattributable.
+                # The file-type check is for an empty payload: `jj file show` prints
+                # nothing for an absent path too, so b"" == b"" passed having
+                # committed nothing.
+                bad = [p for p, want in mine.items()
+                       if jj("file", "show", "-r", "@-", fs(p), check=False).stdout != want
+                       or (not want and file_type_at("@-", p) != "file")]
+                if bad:
+                    rollback(before_op)
+                    die("the commit did not take for: %s\n"
+                        "  Rolled back to operation %s; nothing was committed.\n"
+                        "  Most likely those paths have no working-copy change to select\n"
+                        "  from, because something outside this session already committed\n"
+                        "  them. Re-running reproduces this exactly -- it is not transient.\n"
+                        "  `ccjj audit` shows whether @- moved. `ccjj forget %s` drops\n"
+                        "  just those paths' records, so the session's OTHER, still-\n"
+                        "  uncommitted work is not held hostage by them. (`ccjj disown`\n"
+                        "  drops ALL of them, which also strands that other work.)"
+                        % (", ".join(bad), before_op[:12], " ".join(bad)))
 
-            # jj selects nothing for an --also path it does not track (ignored,
-            # or a new file over snapshot.max-new-file-size), and the commit
-            # still succeeds when another path made it non-empty.
-            bad = [p for p, want in also_wanted.items() if not at_parent_is(p, want)]
-            if bad:
-                rollback(before_op)
-                die("--also did not take for: %s\n"
-                    "  Rolled back to operation %s; nothing was committed.\n"
-                    "  The path changed during the commit, or jj does not track it\n"
-                    "  (ignored, or a new file over its size limit -- `jj st` warns)."
-                    % (", ".join(bad), before_op[:12]))
+                # jj selects nothing for an --also path it does not track (ignored,
+                # or a new file over snapshot.max-new-file-size), and the commit
+                # still succeeds when another path made it non-empty.
+                bad = [p for p, want in also_wanted.items() if not at_parent_is(p, want)]
+                if bad:
+                    rollback(before_op)
+                    die("--also did not take for: %s\n"
+                        "  Rolled back to operation %s; nothing was committed.\n"
+                        "  The path changed during the commit, or jj does not track it\n"
+                        "  (ignored, or a new file over its size limit -- `jj st` warns)."
+                        % (", ".join(bad), before_op[:12]))
+            break
 
     # Only now that the content is verified present is the journal retired, and
     # moved out of the live namespace rather than renamed beside it so that

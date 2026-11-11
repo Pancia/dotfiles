@@ -711,6 +711,89 @@ def test_concurrent_commits_never_diverge(repo):
         assert repo.show("f.txt") == b"A\nB\n"
 
 
+def _git_commit(root, name):
+    """What Altera's daemon does in a colocated checkout: a plain `git commit`."""
+    with open(os.path.join(root, name), "w") as fh:
+        fh.write(name + "\n")
+    g = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
+    subprocess.run([*g, "add", name], cwd=root, check=True, capture_output=True)
+    subprocess.run([*g, "commit", "-q", "-m", name], cwd=root, check=True,
+                   capture_output=True)
+
+
+def _git_commits_during_prepare(tmp_path, times):
+    """PATH env with a `jj` that git-commits before its first `times` calls of
+    `jj file list -r @-` -- the first importing call after cmd_commit pins @-."""
+    real = shutil.which("jj")
+    left = tmp_path / "moves-left"
+    left.write_text(str(times))
+    bindir = tmp_path / "fakebin"
+    bindir.mkdir()
+    (bindir / "jj").write_text(
+        "#!/bin/sh\n"
+        'if [ "$*" = "file list -r @-" ]; then\n'
+        '  n=$(cat %s)\n'
+        '  if [ "$n" -gt 0 ]; then\n'
+        '    echo $((n - 1)) > %s\n'
+        '    f=daemon-$n.txt; echo $n > $f\n'
+        '    git -c user.name=t -c user.email=t@t -c commit.gpgsign=false add $f >/dev/null\n'
+        '    git -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -q -m $f\n'
+        '  fi\n'
+        'fi\n'
+        'exec %s "$@"\n' % (left, left, real))
+    (bindir / "jj").chmod(0o755)
+    return {"PATH": "%s:%s" % (bindir, os.environ["PATH"])}
+
+
+def test_a_git_commit_before_the_run_does_not_move_the_pin(repo):
+    """The pin read @- with --ignore-working-copy, so a plain `git commit` since
+    the last jj command was not imported yet. The next call imported it, moved
+    @-, and the run died "@- moved ... re-run" -- about 8 times in one session."""
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    repo.write("f.txt", "A\n")
+    repo.record("S1", "f.txt", old="a", new="A", original="a\n")
+    _git_commit(repo.root, "daemon.txt")
+
+    r = repo.run("commit", "-m", "mine", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert "moved" not in r.stderr, r.stderr
+    assert repo.show("f.txt") == b"A\n"
+    assert repo.show("daemon.txt") == b"daemon.txt\n"   # not reverted
+
+
+def test_parent_moving_while_preparing_is_retried(repo, tmp_path):
+    """Nothing is written before `jj commit`, so a payload built against a moved
+    @- is built again instead of sending the agent to re-run by hand."""
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    repo.write("f.txt", "A\n")
+    repo.record("S1", "f.txt", old="a", new="A", original="a\n")
+
+    r = repo.run("commit", "-m", "mine", sid="S1",
+                 env=_git_commits_during_prepare(tmp_path, 1))
+    assert r.returncode == 0, r.stderr
+    assert "preparing it again (attempt 2 of 3)" in r.stderr, r.stderr
+    assert repo.show("f.txt") == b"A\n"
+    assert repo.show("daemon-1.txt") == b"1\n"            # not reverted
+    assert not repo.divergent()
+
+
+def test_parent_that_keeps_moving_gives_up_with_nothing_committed(repo, tmp_path):
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    repo.write("f.txt", "A\n")
+    repo.record("S1", "f.txt", old="a", new="A", original="a\n")
+
+    r = repo.run("commit", "-m", "mine", sid="S1",
+                 env=_git_commits_during_prepare(tmp_path, 99))
+    assert r.returncode == 4, r.stderr
+    assert r.stderr.count("preparing it again") == 2, r.stderr
+    assert "Nothing committed; re-run." in r.stderr
+    assert "mine" not in repo.descriptions()
+    assert repo.journal_records("S1")                     # journal intact
+
+
 # --------------------------------------------------------------- --also, audit
 
 def test_also_takes_whole_paths(repo):
