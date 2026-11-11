@@ -1888,10 +1888,16 @@ def cmd_claim(args):
             why.append("%s changed during the Bash span of session(s) %s.\n%s\n"
                        "  If they did, claiming it would commit their work under your name."
                        % (path, describe_stakes(spans), SPAN_NOTE))
-        die("%s\n  Re-run with --force only if the diff below is genuinely all yours.\n"
-            "  If any of it is not, leave it out with `commit-mine --no-claim`.\n%s"
-            % ("\n".join(why),
-               unified(file_bytes(span[0], path), file_bytes(span[1], path), path)), 1)
+        # The diff first and the way forward LAST, on one line: an agent that
+        # reads this through `2>&1 | tail -1` missed a hint printed above the diff.
+        print("ccjj: refusing to claim %s. The diff in question:\n%s"
+              % (path, unified(file_bytes(span[0], path), file_bytes(span[1], path), path)),
+              file=sys.stderr, end="")
+        forced = "ccjj claim --force %s%s" % (
+            "--session %s " % shlex.quote(args.session) if args.session else "",
+            shlex.quote(args.path))
+        die("%s\n  If all of the diff above is yours: `%s`. If not: `commit-mine --no-claim`."
+            % ("\n".join(why), forced), 1)
 
     if status == "removed":
         die("%s was deleted inside a Bash window.\n"
@@ -2144,9 +2150,11 @@ def also_refusal(contested):
         tail = ""
     if STAKE_WINDOW in kinds:
         tail += SPAN_NOTE + "\n  If they did, their work would be committed under your message.\n"
-    return ("%s\n%s\n%s  Re-run with --force only if you are sure, and never for a path\n"
-            "  another session has records on. What would be committed:\n%s"
-            % (lead, rows, tail, "".join(whole_path_diff(p) for p in sorted(contested))))
+    # The diff first and the --force line LAST, as in claim's refusal, so a
+    # reader who tails the output still sees what to do.
+    return ("--also refused. What it would commit:\n%s%s\n%s\n%s"
+            "  Re-run with --force only if all of the diff above is yours, never for a path another session has records on."
+            % ("".join(whole_path_diff(p) for p in sorted(contested)), lead, rows, tail))
 
 
 def whole_path_changes(sid):

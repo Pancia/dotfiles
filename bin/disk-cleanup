@@ -9,8 +9,11 @@
 set -euo pipefail
 
 SNAP_DIR="$HOME/.local/share/disk-snapshots"
-SCAN_SCRIPT="$HOME/dotfiles/services/disk-snapshot/script.sh"
-DIFF_BIN="$HOME/dotfiles/bin/disk-snapshot-diff"
+# Siblings of this script, not $HOME/dotfiles: a copy under test then runs its
+# own sibling copies, and a fake HOME does not break --scan.
+HERE="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+SCAN_SCRIPT="$HERE/../services/disk-snapshot/script.sh"
+DIFF_BIN="$HERE/disk-snapshot-diff"
 REPORT_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/disk-cleanup"
 NOTES="$SNAP_DIR/cleanup-notes.md"   # private: decisions carried between runs
 

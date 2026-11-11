@@ -159,7 +159,10 @@ To trash a file literally named `put`/`list`/`restore`/`help`, use `trash put <n
 ## Edits made through Bash
 
 The Edit/Write hooks do not see a Bash edit (`sed -i`, `>`, a Python script).
-Bash edits are allowed. After one, do what those hooks would have done:
+Bash edits are allowed. In a jj repo, make edits with Edit or Write, not Bash
+scripts. Those hooks record the edit, so `commit-mine` takes it with no claim.
+Use Bash only for large mechanical edits, and claim them as below. After a Bash
+edit, do what those hooks would have done:
 
 - **Clojure files** (`.clj`, `.cljs`, `.cljc`, `.edn`): run `clj-paren-repair FILE`.
 - **A repo another live session shares** (the `ccjj nudge` line says so): run

@@ -3067,6 +3067,40 @@ def test_claim_keeps_records_over_a_window_across_a_rename(repo):
         assert "Bash span of" not in r.stderr
 
 
+def _last_line(text):
+    lines = text.rstrip("\n").splitlines()
+    return lines[-1] if lines else ""
+
+
+def test_claim_refusal_ends_with_the_way_forward(repo):
+    """The hint sat above a long diff, so an agent reading `2>&1 | tail -1`
+    saw a diff line and never learned that --force existed."""
+    _window_peer(repo)
+    r = repo.run("claim", "peer.txt", sid="S1")
+    assert r.returncode == 1
+    last = _last_line(r.stderr)
+    assert "`ccjj claim --force peer.txt`" in last
+    assert "`commit-mine --no-claim`" in last
+    assert "diff below" not in r.stderr
+    assert r.stderr.index("+p-changed") < r.stderr.index("Bash span of")
+
+
+def test_claim_refusal_hint_keeps_session_and_quotes_the_path(repo):
+    _window_peer(repo, path="peer file.txt")
+    r = repo.run("claim", "peer file.txt", sid="S1", extra=["--session", "S1"])
+    assert r.returncode == 1
+    assert "`ccjj claim --force --session S1 'peer file.txt'`" in _last_line(r.stderr)
+
+
+def test_also_refusal_ends_with_the_force_line(repo):
+    _window_peer(repo)
+    _hook_edit(repo, "S1", "mine.txt", "m", "M")
+    r = repo.run("commit", "-m", "x", "--also", "peer.txt", "--no-claim", sid="S1")
+    assert r.returncode == 1, r.stdout
+    assert "Re-run with --force" in _last_line(r.stderr)
+    assert r.stderr.index("+p-changed") < r.stderr.index("Bash span only")
+
+
 def test_also_refusal_for_a_window_only_peer_makes_no_claim_of_a_stake(repo):
     _window_peer(repo)
     _hook_edit(repo, "S1", "mine.txt", "m", "M")
