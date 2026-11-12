@@ -13,6 +13,7 @@ kill anything.**
 | Config | `services/claude-watchdog/config.sh` |
 | Log | `~/.log/services/claude-watchdog.log` |
 | Bundles | `~/.local/state/claude-watchdog/incidents/` (`drwx------`, 20 kept) |
+| Click | a click on the notification (or "Show") opens `services/claude-watchdog/show.sh <bundle>` in iTerm: what the verdict means, whether the process still runs. Shows only, signals nothing |
 | Tests | `services/claude-watchdog/test/run-tests.sh` |
 | Design | `.cc/plans/PLAN-claude-watchdog.md` |
 

@@ -73,6 +73,7 @@ LOGWARN_FILE="$STATE_DIR/logwarn"
 SERVICE_LOG="$HOME/.log/services/claude-watchdog.log"
 
 NOTIFIER=/opt/homebrew/bin/terminal-notifier
+SHOW_SCRIPT="$(cd "$(dirname "$(readlink -f "$0")")/../services/claude-watchdog" 2>/dev/null && pwd)/show.sh"
 SAMPLE_BIN=/usr/bin/sample
 LSOF_BIN=/usr/sbin/lsof
 
@@ -504,13 +505,17 @@ write_bundle() {
 }
 
 notify() {
-    local pid=$1 verdict=$2 msg=$3
+    local pid=$1 verdict=$2 msg=$3 dir=$4
     [ "$CW_NOTIFY" = 1 ] || return 0
     # Guarded, and never fatal — a missing notifier must not abort the run.
     [ -x "$NOTIFIER" ] || return 0
+    # A click (or "Show") opens an iTerm window that only shows this incident.
+    # Without -execute, "Show" just activated terminal-notifier and did nothing.
     "$NOTIFIER" -title "claude-watchdog: $verdict" \
         -subtitle "pid $pid" -message "$msg" \
-        -group "claude-watchdog-$pid" >/dev/null 2>&1 || true
+        -group "claude-watchdog-$pid" \
+        -execute "/usr/bin/osascript -e 'tell application \"iTerm\" to create window with default profile command \"/bin/bash $SHOW_SCRIPT $dir\"'" \
+        >/dev/null 2>&1 || true
 }
 
 # ---------------------------------------------------------------------------
@@ -560,7 +565,8 @@ while IFS=$'\t' read -r verdict pid ppid pgid sess tty stat cls age start rmin r
                         n_bundles=$((n_bundles + 1))
                         say "bundle $dir"
                         notify "$pid" "$verdict" \
-                            "${rmax}MB, ${cmax}% CPU, ${age}s old. Forensics captured; NOT killed (phase $CW_PHASE)."
+                            "${rmax}MB, ${cmax}% CPU, ${age}s old. Forensics captured; NOT killed (phase $CW_PHASE)." \
+                            "$dir"
                         printf '%s\t%s\t%s\n' "$pid" "$start" "$(date +%Y-%m-%dT%H:%M:%S)" >>"$TMP/state.new"
                     else
                         say "WARN bundle failed for pid=$pid"
