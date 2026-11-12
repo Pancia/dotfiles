@@ -545,6 +545,18 @@ while IFS=$'\t' read -r verdict pid ppid pgid sess tty stat cls age start rmin r
 
     prev=$(state_lookup "$pid" "$start")
 
+    # Claude Code's own background helpers (`claude daemon run`, and the
+    # `--bg-pty-host` of a background session) are orphans by design and sit idle
+    # for hours. On 2026-11-12 they were all three ORPHAN-IDLE notices of the day.
+    # Only the idle notice skips them: a spinning, growing helper still becomes an
+    # ORPHAN-CANDIDATE. Checked here, not in the sweep, because `comm=` on macOS is
+    # the executable path without arguments.
+    if [ "$verdict" = ORPHAN-IDLE ]; then
+        case " $(ps -o args= -p "$pid" 2>/dev/null) " in
+            *" daemon run "*|*" --bg-pty-host "*) verdict=OBS ;;
+        esac
+    fi
+
     line="pid=$pid class=$cls tty=$tty age=${age}s rss=${rmin}-${rmax}MB(${rfirst}->${rlast} ${trend} drop${maxdrop}%)"
     line="$line cpu=${cmin}-${cmax}% th=$th ppid=$ppid pgid=$pgid sess=$sess"
     [ "$clschanged" != "-" ] && line="$line reclass=$clschanged"

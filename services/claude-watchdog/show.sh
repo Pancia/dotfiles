@@ -30,7 +30,8 @@ case "$verdict" in
         echo "${yellow}An idle Claude process has no parent${reset}"
         echo "  The program that started it has exited, and it has used almost no CPU"
         echo "  for at least 30 minutes. This is usually harmless, for example"
-        echo "  Claude Code's own background helper ('claude daemon run')."
+        echo "  something started with nohup. (Claude Code's own background helpers"
+        echo "  are skipped since 2026-11-12, so this is not one of them.)"
         ;;
     ORPHAN-CANDIDATE)
         echo "${red}A Claude process with no parent is growing${reset}"

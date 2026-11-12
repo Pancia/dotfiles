@@ -105,7 +105,11 @@ disowns the post-session review, which runs `CLAUDE_P_TIMEOUT=300`, so a healthy
 claude sits at `ppid 1` for up to 305 s. 420 s is that plus margin.
 
 An **idle** orphan (≥ 30 min, < 5% CPU) is notified and never killed at any phase —
-it is indistinguishable from something deliberately `nohup`'d.
+it is indistinguishable from something deliberately `nohup`'d. Claude Code's own
+background helpers (`claude daemon run`, and `claude --bg-pty-host` for a background
+session) are orphans by design, so they never get the idle notice. They can still
+become an `ORPHAN-CANDIDATE` if they spin and grow. On 2026-11-12 these helpers were
+all three idle notices of the day.
 
 ### These numbers are provisional
 
