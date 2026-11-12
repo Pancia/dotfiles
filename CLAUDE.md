@@ -267,7 +267,11 @@ usually power loss, so nothing can run afterwards — the title has to already b
 - `bin/ccsave-hook` (a `SessionStart` hook) stamps the real `session_id` into the entry,
   **write-once** — except on `/clear` and compaction (`.source`), which start a new session
   id in the same terminal and so must be followed, or ccs would keep pointing at the
-  pre-`/clear` conversation. A rotation clears the recorded title too.
+  pre-`/clear` conversation. A rotation clears the recorded title too. It also follows
+  `/resume` (`source=resume`), but only when the wrapper's pid is the hook's grandparent
+  or great-grandparent, because a nested `claude -p --resume` reports the same source.
+  Without that, an entry stays on the empty pre-`/resume` id and its real conversation
+  looks lost. Tests: `tests/hooks/test_ccsave_hook.py`.
 - Both hooks gate on identity, because `CCS_ENTRY_FILE` is inherited by every descendant and
   `claude -p` runs hooks too: without it a nested helper session would overwrite the parent's
   id or title. A nested session always reports `source=startup`, never `clear`.

@@ -25,6 +25,30 @@ if [ -n "$SESSION_ID" ] && [ -n "${CLAUDE_ENV_FILE:-}" ]; then
     { echo "export CLAUDE_SESSION_ID=$SESSION_ID" >> "$CLAUDE_ENV_FILE"; } 2>/dev/null
 fi
 
+# True when this hook belongs to the claude that the wrapper launched, not a
+# nested one. The entry records the wrapper's fish pid. Claude runs the hook
+# directly or through `sh -c`, so that claude is our parent or grandparent, and
+# its parent is the wrapper. A nested claude sits at least one shell deeper, so
+# the wrapper is never within two steps of its hooks. pid_lstart guards reuse.
+_ccs_is_top_claude() {
+    local want lstart p i pp
+    want=$(jq -r '.pid // empty' "$CCS_ENTRY_FILE" 2>/dev/null)
+    lstart=$(jq -r '.pid_lstart // empty' "$CCS_ENTRY_FILE" 2>/dev/null)
+    [ -n "$want" ] || return 1
+    p=$PPID
+    for i in 1 2; do
+        pp=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')
+        [ -n "$pp" ] || return 1
+        if [ "$pp" = "$want" ]; then
+            [ -z "$lstart" ] && return 0
+            [ "$(ps -o lstart= -p "$want" 2>/dev/null | sed 's/^ *//; s/ *$//')" = "$lstart" ]
+            return
+        fi
+        p=$pp
+    done
+    return 1
+}
+
 # Stamp the ccs entry. CCS_ENTRY_FILE is exported and so inherited by every
 # descendant process, and `claude -p` runs hooks too — so a nested helper session
 # must never be able to claim the entry, or `ccs resume` would confidently open
@@ -41,6 +65,12 @@ if [ -n "$SESSION_ID" ] && [ -n "${CCS_ENTRY_FILE:-}" ] && [ -f "$CCS_ENTRY_FILE
     if [ -z "$STAMPED" ]; then
         RESTAMP=fresh
     elif [ "$STAMPED" != "$SESSION_ID" ] && { [ "$SOURCE" = "clear" ] || [ "$SOURCE" = "compact" ]; }; then
+        RESTAMP=rotated
+    elif [ "$STAMPED" != "$SESSION_ID" ] && [ "$SOURCE" = "resume" ] && _ccs_is_top_claude; then
+        # /resume inside a running session switches it to another conversation.
+        # A nested `claude -p --resume` reports the same source, so trust it only
+        # from the claude the wrapper launched. On 2026-09-30 an entry stayed on
+        # the empty pre-/resume id, and its real conversation was unrecoverable.
         RESTAMP=rotated
     fi
 
