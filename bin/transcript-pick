@@ -1,0 +1,74 @@
+#!/bin/bash
+# transcript-pick — browse saved Live Transcribe transcripts with fzf.
+# Hermes: ⌘Space → u → t. Works whether or not a session is running; the app's own
+# history menu (clock button in its panel) only exists while one is.
+#
+#   enter   copy `read <path>` (same form the app copies) and open the file
+#   ctrl-y  copy the text with timestamps stripped, flowed into one paragraph
+#   ctrl-a  play the session's audio (.m4a) when there is one
+#   ctrl-f  reveal the file in Finder
+#
+# Newest first by FILENAME, not mtime: ProtonDrive rewrites mtimes when it syncs,
+# and transcript_<ts> sorts with recording start (same rule as the app).
+set -euo pipefail
+
+dir="$HOME/Cloud/transcripts"
+self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+
+notify() {
+  [ -x /opt/homebrew/bin/terminal-notifier ] &&
+    /opt/homebrew/bin/terminal-notifier -title "Transcripts" -message "$1" >/dev/null 2>&1 || true
+}
+
+# Internal actions, called back by fzf's bindings.
+case "${1:-}" in
+  --list)
+    # ~/Cloud is ProtonDrive, and most older transcripts there are "dataless": cloud-only
+    # placeholders that download when READ. Reading every first line to build the list
+    # hung for minutes, so the file flags (one `ls -lO`) decide: a local file shows its
+    # first line, a cloud-only one shows ☁ and downloads only when previewed or opened.
+    # Size 0 = an aborted session; skipped, as the app does.
+    ls -lO "$dir" | awk -v dir="$dir" '
+      $NF ~ /^transcript_.*\.txt$/ && $6 > 0 {
+          name = $NF; ts = substr(name, 12, 19)                  # 2026-11-12_10-08-03
+          when = substr(ts, 1, 10) " " substr(ts, 12, 2) ":" substr(ts, 15, 2)
+          path = dir "/" name; text = "☁ not downloaded"
+          if ($5 !~ /dataless/ && (getline line < path) > 0) {
+              sub(/^\[[0-9:]+\] (Microphone: |Computer: )?/, "", line)
+              text = substr(line, 1, 90)
+          }
+          close(path)
+          printf "%s  %s\t%s\n", when, text, path
+      }' | sort -r
+    exit 0 ;;
+  --preview)
+    f=$2; m=${f%.txt}.m4a
+    [ -e "$m" ] && echo "♪ audio: $(basename "$m")" || echo "(no audio)"
+    echo; cat "$f"; exit 0 ;;
+  --open)
+    f=$2
+    printf '%s' "read ${f/#$HOME/~}" | pbcopy
+    open "$f"
+    notify "Copied: read ${f/#$HOME/~}"
+    exit 0 ;;
+  --copy-text)
+    sed -E 's/^\[[0-9:]+\] (Microphone: |Computer: )?//' "$2" | paste -sd' ' - | tr -d '\n' | pbcopy
+    notify "Copied text of $(basename "$2")"
+    exit 0 ;;
+  --audio)
+    m=${2%.txt}.m4a
+    if [ -e "$m" ]; then open "$m"; else notify "No audio for $(basename "$2")"; fi
+    exit 0 ;;
+esac
+
+[ -d "$dir" ] || { echo "No transcripts folder: $dir" >&2; exit 1; }
+
+"$self" --list | fzf \
+  --delimiter=$'\t' --with-nth=1 --no-sort --tiebreak=index \
+  --prompt='transcripts> ' \
+  --header='enter: copy read-ref + open · ctrl-y: copy text · ctrl-a: audio · ctrl-f: Finder' \
+  --preview="'$self' --preview {2}" --preview-window='down,60%,wrap' \
+  --bind="enter:execute-silent('$self' --open {2})+abort" \
+  --bind="ctrl-y:execute-silent('$self' --copy-text {2})+abort" \
+  --bind="ctrl-a:execute-silent('$self' --audio {2})" \
+  --bind="ctrl-f:execute-silent(open -R {2})+abort" || true

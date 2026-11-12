@@ -24,9 +24,11 @@
 // and starts a fresh one on the new device — which is why the session tracks a
 // LIST of transcript files rather than one.
 //
-// History: the status menu's "Recent Transcripts" submenu lists the last 10 saved
-// transcripts, newest first. Clicking one copies its `read <path>` reference and
-// opens it in whatever owns .txt.
+// History: the clock pull-down in the panel's top bar and the status menu's "Recent
+// Transcripts" submenu list the last 10 saved transcripts, newest first. Clicking one
+// copies its `read <path>` reference and opens it in whatever owns .txt. Both end in
+// "Open Transcripts Folder". When no session runs, `transcript-pick` (Hermes ⌘Space
+// → u → t) browses them all.
 //
 // Build: see Makefile (plain swiftc → .app bundle, codesigned).
 
@@ -429,6 +431,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     // In-window controls.
     private var micPopup: NSPopUpButton!
     private var optionsPopup: NSPopUpButton!   // ⚙ pull-down holding every toggle
+    private var historyPopup: NSPopUpButton!   // clock pull-down: earlier transcripts
     // Inline copies of the same toggles, shown only while the top bar has room for them.
     private var tsCheck: NSButton!
     private var refCheck: NSButton!
@@ -755,6 +758,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         opts.menu?.delegate = self   // rebuilt on open, so checkmarks track the hotkey mode
         opts.setContentHuggingPriority(.required, for: .horizontal)   // else it soaks up slack
 
+        // Earlier transcripts, the same list as the status menu's "Recent Transcripts".
+        // Here too because the menu-bar item is easy to miss. Up top, not in the footer:
+        // the footer's width belongs to the meter (see rebuildRecentSubmenu's comment).
+        let hist = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 44, height: 22), pullsDown: true)
+        hist.font = NSFont.systemFont(ofSize: 13)
+        hist.toolTip = "Earlier transcripts — click one to open it and copy its `read <path>`"
+        historyPopup = hist
+        rebuildHistoryMenu()
+        hist.menu?.delegate = self   // rebuilt on open, so a session that just ended shows up
+        hist.setContentHuggingPriority(.required, for: .horizontal)
+
         func check(_ title: String, _ action: Selector, _ tip: String) -> NSButton {
             let b = NSButton(checkboxWithTitle: title, target: self, action: action)
             b.font = NSFont.systemFont(ofSize: 13)     // NOT tiny .small next to 22pt transcript
@@ -782,6 +796,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         cancelButton.bezelStyle = .rounded
 
         bar.addView(opts, in: .leading)
+        bar.addView(hist, in: .leading)
+        // Outlasts every checkbox as the bar narrows; only Cancel/Complete matter more.
+        bar.setVisibilityPriority(NSStackView.VisibilityPriority(500), for: hist)
         // Visibility order as the bar narrows: Timestamps goes first (the transcript shows
         // it anyway), then File reference, then the Auto-paste/+ Enter pair together.
         for (b, pri) in [(tsCheck!, 250), (refCheck!, 300), (pasteCheck!, 400), (enterCheck!, 400)] {
@@ -990,6 +1007,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         // the status-menu maintenance below would rewrite its button title.
         if let popup = micPopup, menu === popup.menu { rebuildMicPopup(); return }
         if let popup = optionsPopup, menu === popup.menu { rebuildOptionsMenu(); return }
+        if let popup = historyPopup, menu === popup.menu { rebuildHistoryMenu(); return }
         rebuildMicSubmenu()
         rebuildRecentSubmenu()
         menu.item(at: 0)?.title = panel.isVisible ? "Hide Panel" : "Show Panel"
@@ -1082,10 +1100,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     // one — which is why the transcript is tracked as a LIST of files: the new engine
     // opens its own transcript_<ts>.txt and .m4a, and a copy at stop has to carry both.
     //
-    // Strictly sequential, never overlapping. Each engine clears
-    // ~/.local/state/live-transcribe/rec_*.wav at start-up as an orphan sweep, so a
-    // second one launched while the first is still recording would delete the recording
-    // out from under it.
+    // Strictly sequential, never overlapping. Each engine sweeps orphan
+    // ~/.local/state/live-transcribe/rec_*.wav at start-up. Since 2026-11-12 it only
+    // takes ones untouched for 14 days, so overlap no longer deletes a live recording,
+    // but two engines on one device still fight over it.
     private func switchMic(to name: String) {
         guard !finishing, !restarting else { return }
         let idle = (engine == nil)
@@ -1175,14 +1193,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private func rebuildRecentSubmenu() {
         guard let menu = recentItem?.submenu else { return }
         menu.removeAllItems()
+        fillRecent(menu)
+    }
+
+    // The panel's history pull-down. Item 0 of a pull-down is its button face, never
+    // shown as an entry, so it carries the icon and the list starts at item 1.
+    private func rebuildHistoryMenu() {
+        guard let menu = historyPopup?.menu else { return }
+        menu.removeAllItems()
+        menu.autoenablesItems = false
+        let face = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        if #available(macOS 11.0, *),
+           let img = NSImage(systemSymbolName: "clock.arrow.circlepath",
+                             accessibilityDescription: "Earlier transcripts") {
+            face.image = img
+        } else {
+            face.title = "🕘"
+        }
+        menu.addItem(face)
+        fillRecent(menu)
+    }
+
+    // Shared body of both history menus: the recent list, then a way to everything older.
+    private func fillRecent(_ menu: NSMenu) {
         let items = recentTranscriptItems()
-        guard !items.isEmpty else {
+        if items.isEmpty {
             let empty = NSMenuItem(title: "No earlier transcripts", action: nil, keyEquivalent: "")
             empty.isEnabled = false
             menu.addItem(empty)
-            return
         }
         for item in items { menu.addItem(item) }
+        menu.addItem(.separator())
+        let all = NSMenuItem(title: "Open Transcripts Folder", action: #selector(openTranscriptsFolder),
+                             keyEquivalent: "")
+        all.target = self
+        all.toolTip = cloudTranscriptsDir
+        menu.addItem(all)
+    }
+
+    @objc private func openTranscriptsFolder() {
+        NSWorkspace.shared.open(URL(fileURLWithPath: cloudTranscriptsDir, isDirectory: true))
     }
 
     // The last `limit` saved transcripts, newest first, as ready-made menu items.

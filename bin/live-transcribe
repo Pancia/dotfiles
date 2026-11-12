@@ -24,6 +24,7 @@ HEARTBEAT = STATE_DIR / "heartbeat"
 SERVERD = str(Path(__file__).resolve().parent / "whisper-serverd")
 READY_TIMEOUT = 60  # must match whisper-serverd
 HEARTBEAT_INTERVAL = 10  # seconds between heartbeat touches while running
+ORPHAN_WAV_MAX_AGE = 14 * 24 * 3600  # sweep leftover rec_*.wav only once this stale
 
 # Configuration
 SAMPLE_RATE = 16000  # Whisper expects 16kHz
@@ -79,6 +80,13 @@ class LiveTranscriber:
                 print(f"Using {self.model_path} with whisper-server (port {self.server_port})...", file=sys.stderr)
         self.audio_queue = queue.Queue()
         self.running = True
+        # Set once nothing more can be enqueued (after _flush_buffers). The worker
+        # exits on THIS, not on `running`: `running` goes False before the final
+        # buffer is flushed, and a worker that saw an empty queue in that gap quit
+        # early and silently dropped the last utterance (when the stop came mid-speech
+        # and the .m4a transcode outlasted the worker's 1s queue poll).
+        # Repro: .cc/scripts/live-transcribe-tail-repro.sh
+        self._input_done = threading.Event()
 
         # Store VAD parameters
         self.vad_aggressiveness = vad_aggressiveness
@@ -114,11 +122,16 @@ class LiveTranscriber:
         if self.save_audio:
             state_dir = Path.home() / ".local/state/live-transcribe"
             state_dir.mkdir(parents=True, exist_ok=True)
-            # Belt-and-suspenders: clear any orphan WAV a prior hard-killed run
-            # left behind (finalize normally deletes its own temp).
+            # Belt-and-suspenders: clear orphan WAVs a prior hard-killed run left
+            # behind (finalize normally deletes its own temp). Only ones untouched
+            # for ORPHAN_WAV_MAX_AGE: a live session rewrites its WAV continuously,
+            # and sweeping every rec_*.wav once deleted another engine's in-progress
+            # recording (2026-11-12, a test run started while the app was recording).
+            cutoff = time.time() - ORPHAN_WAV_MAX_AGE
             for stale in state_dir.glob("rec_*.wav"):
                 try:
-                    stale.unlink()
+                    if stale.stat().st_mtime < cutoff:
+                        stale.unlink()
                 except OSError:
                     pass
             self.wav_tmp_path = state_dir / f"rec_{timestamp}.wav"
@@ -546,7 +559,7 @@ class LiveTranscriber:
         """Worker thread that processes audio chunks from the queue"""
         last_text_by_source = {}  # Track last text per source to deduplicate
 
-        while self.running or not self.audio_queue.empty():
+        while not self._input_done.is_set() or not self.audio_queue.empty():
             try:
                 source, audio_data = self.audio_queue.get(timeout=1)
 
@@ -771,16 +784,19 @@ class LiveTranscriber:
                 print("\n\nStopping recording...", file=sys.stderr)
                 self.running = False
 
+            # Flush any remaining buffered audio first. It is only an enqueue, so it
+            # costs nothing, and the worker transcribes the tail while the recording
+            # transcodes below. Then mark input done: only now may the worker exit.
+            print("Flushing remaining audio buffers...", file=sys.stderr)
+            self._flush_buffers()
+            self._input_done.set()
+
             # Audio is fully captured the instant the `with mic_stream` block above
             # exits (the stream is stopped). Finalize + transcode the recording NOW,
             # before the transcript-queue drain below — that drain makes blocking
             # whisper-server calls that can exceed the app's SIGKILL deadline, so
             # doing audio first guarantees the .m4a exists even if we're killed.
             self._finalize_recording()
-
-            # Flush any remaining buffered audio
-            print("Flushing remaining audio buffers...", file=sys.stderr)
-            self._flush_buffers()
 
             # Wait for transcription thread to finish processing queue
             print("Processing remaining transcriptions...", file=sys.stderr)
@@ -790,6 +806,10 @@ class LiveTranscriber:
             self.file_handle.close()
             print(f"\nTranscript saved to: {self.output_file}", file=sys.stderr)
         finally:
+            # Release the (non-daemon) worker on an error path too, or the process
+            # would never exit.
+            self.running = False
+            self._input_done.set()
             # Idempotent safety net: if we bailed before the normal finalize
             # (e.g. an exception other than KeyboardInterrupt), still save audio.
             self._finalize_recording()

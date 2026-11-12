@@ -98,7 +98,8 @@
     },
     "u": {
         "_desc": "+audio tools",
-        "l": ["Live Transcribe", "$HOME/dotfiles/bin/live-transcribe-launch"]
+        "l": ["Live Transcribe", "$HOME/dotfiles/bin/live-transcribe-launch"],
+        "t": ["Transcript history", {"shell": "$HOME/dotfiles/bin/transcript-pick"}]
     },
     "m": {
         "_desc": "+music",
