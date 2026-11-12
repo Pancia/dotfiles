@@ -147,6 +147,12 @@ the recap, in your own words. If it changed nothing for me, it earns silence.
 The one exception: it **failed**, or it found something that blocks the work.
 Say that plainly, once.
 
+## UI style
+
+Before you design or style a web page, an artifact or a native app screen,
+load the `ui-style` skill. It sets my look. Its own description lists the
+folders where it does not apply. Terminal output is not covered.
+
 ## File Deletion
 
 Prefer `trash` over `rm` when deleting files. If `trash` fails, try `rm` as a fallback — but always as a separate command, never chained together (no `trash ... || rm ...`).

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Style Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,600&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ---------- page chrome (neutral, stays out of the way) ---------- */
+  :root { --chrome-bg:#e9e9e9; --chrome-fg:#222; --chrome-muted:#666; }
+  @media (prefers-color-scheme: dark) { :root { --chrome-bg:#2a2a2a; --chrome-fg:#ddd; --chrome-muted:#999; } }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px 16px 64px; background:var(--chrome-bg); color:var(--chrome-fg);
+         font:14px/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
+  .intro { max-width:1180px; margin:0 auto 24px; }
+  .intro h1 { font-size:18px; margin:0 0 4px; }
+  .intro p { margin:0; color:var(--chrome-muted); }
+  .direction { max-width:1180px; margin:0 auto 40px; }
+  .dir-head { display:flex; gap:12px; align-items:baseline; margin:0 0 10px; }
+  .dir-head .letter { font-size:28px; font-weight:700; }
+  .dir-head .name { font-size:16px; font-weight:600; }
+  .dir-head .note { color:var(--chrome-muted); }
+  .pair { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width: 860px) { .pair { grid-template-columns:1fr; } }
+
+  /* ---------- the specimen: everything below reads only these tokens ---------- */
+  .s { background:var(--bg); color:var(--fg); font-family:var(--body); font-size:var(--size);
+       line-height:1.55; padding:28px 28px 32px; border-radius:6px; }
+  .s h2 { font-family:var(--head); font-weight:var(--head-w); font-size:var(--h-size); letter-spacing:var(--head-track);
+          margin:0; line-height:1.2; }
+  .s .sub { color:var(--muted); margin:4px 0 22px; }
+  .s .label { font-family:var(--label-font); font-size:var(--label-size); font-weight:600;
+              letter-spacing:var(--label-track); text-transform:var(--label-case); color:var(--muted); margin:20px 0 6px; }
+  .s .indent { padding-left:16px; }
+  .s .rows { display:grid; grid-template-columns:max-content max-content 1fr; column-gap:28px; row-gap:2px; }
+  .s .num { font-family:var(--num); font-variant-numeric:tabular-nums; color:var(--muted); }
+  .s .ok   { color:var(--ok); }
+  .s .warn { color:var(--warn); }
+  .s .bad  { color:var(--bad); font-weight:600; }
+  .s .idle { color:var(--muted); }
+  .s ul { margin:0; padding-left:18px; }
+  .s p { margin:0; max-width:56ch; }
+  .s a { color:var(--fg); text-decoration:underline; text-decoration-color:var(--line-strong); text-underline-offset:3px; }
+  .s .form { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .s input { font:inherit; color:var(--fg); background:var(--field); border:1px solid var(--line-strong);
+             border-radius:var(--radius); padding:7px 10px; width:200px; }
+  .s input:focus { outline:2px solid var(--fg); outline-offset:1px; }
+  .s button { font:inherit; font-weight:500; border-radius:var(--radius); padding:7px 14px; cursor:pointer; }
+  .s .primary { background:var(--fg); color:var(--bg); border:1px solid var(--fg); }
+  .s .secondary { background:transparent; color:var(--fg); border:1px solid var(--line-strong); }
+  .s .toast { display:flex; gap:12px; align-items:flex-start; max-width:360px; background:var(--raised);
+              border:1px solid var(--line); border-radius:calc(var(--radius) + 4px); padding:12px 14px; }
+  .s .toast .mark { color:var(--warn); font-weight:700; }
+  .s .toast b { display:block; }
+  .s .toast span { color:var(--muted); }
+
+  /* ---------- A · System (Apple / Swiss) ---------- */
+  .A { --body:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; --head:var(--body);
+       --num:var(--body); --label-font:var(--body); --size:15px; --h-size:24px; --head-w:600; --head-track:-0.01em;
+       --label-size:11px; --label-track:0.06em; --label-case:uppercase; --radius:8px; }
+  .A.light { --bg:#ffffff; --fg:#1d1d1f; --muted:#6e6e73; --line:#e5e5ea; --line-strong:#c7c7cc; --field:#fff; --raised:#f5f5f7;
+             --ok:#248a3d; --warn:#a05a00; --bad:#d70015; }
+  .A.dark  { --bg:#1c1c1e; --fg:#f5f5f7; --muted:#98989d; --line:#38383a; --line-strong:#545456; --field:#2c2c2e; --raised:#2c2c2e;
+             --ok:#30d158; --warn:#ffd60a; --bad:#ff453a; }
+
+  /* ---------- B · Editorial (print, paper and ink) ---------- */
+  .B { --body:"Public Sans", sans-serif; --head:"Newsreader", Georgia, serif; --num:"Public Sans", sans-serif;
+       --label-font:"Public Sans", sans-serif; --size:15px; --h-size:30px; --head-w:400; --head-track:-0.01em;
+       --label-size:11px; --label-track:0.12em; --label-case:uppercase; --radius:2px; }
+  .B.light { --bg:#faf8f3; --fg:#1f1b16; --muted:#6b6359; --line:#e6e0d4; --line-strong:#c9bfae; --field:#fffdf8; --raised:#f2eee5;
+             --ok:#3f6b2a; --warn:#8a5a00; --bad:#a1281e; }
+  .B.dark  { --bg:#191714; --fg:#ede6da; --muted:#a39a8c; --line:#34302a; --line-strong:#4d473e; --field:#221f1b; --raised:#24211c;
+             --ok:#8fbf6a; --warn:#e0b04a; --bad:#e8796b; }
+
+  /* ---------- C · Technical (sans body, mono for labels and numbers) ---------- */
+  .C { --body:"IBM Plex Sans", sans-serif; --head:"IBM Plex Sans", sans-serif; --num:"IBM Plex Mono", monospace;
+       --label-font:"IBM Plex Mono", monospace; --size:15px; --h-size:22px; --head-w:600; --head-track:0;
+       --label-size:12px; --label-track:0.02em; --label-case:uppercase; --radius:4px; }
+  .C.light { --bg:#fbfcfd; --fg:#111418; --muted:#5b6470; --line:#dde1e6; --line-strong:#b8c0ca; --field:#fff; --raised:#f1f3f5;
+             --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; }
+  .C.dark  { --bg:#0f1216; --fg:#e6e9ed; --muted:#8b95a1; --line:#262c33; --line-strong:#3d4650; --field:#161a1f; --raised:#181c22;
+             --ok:#3fb950; --warn:#d29922; --bad:#f85149; }
+
+  /* ---------- D · Plain (terminal-native, one mono face, pure black and white) ---------- */
+  .D { --body:"JetBrains Mono", Menlo, monospace; --head:var(--body); --num:var(--body); --label-font:var(--body);
+       --size:14px; --h-size:18px; --head-w:700; --head-track:0; --label-size:14px; --label-track:0; --label-case:uppercase; --radius:0px; }
+  .D.light { --bg:#ffffff; --fg:#000000; --muted:#5a5a5a; --line:#d0d0d0; --line-strong:#000000; --field:#fff; --raised:#ffffff;
+             --ok:#2d7a00; --warn:#8a6d00; --bad:#cc0000; }
+  .D.dark  { --bg:#000000; --fg:#ffffff; --muted:#a0a0a0; --line:#333333; --line-strong:#ffffff; --field:#000; --raised:#000000;
+             --ok:#88b379; --warn:#d9bd86; --bad:#e0707f; }
+</style>
+</head>
+<body>
+<div class="intro">
+  <h1>Style lab — Q5 (direction)</h1>
+  <p>Four directions. Each one uses your answers: comfortable spacing, caps labels with indented content, and no color except status. Each shows the same content in light and dark. Reply with a letter, plus anything to borrow from another.</p>
+</div>
+
+<template id="specimen">
+  <h2>Server check</h2>
+  <div class="sub">Today 9:00 · 1 warning, 1 failure</div>
+
+  <div class="label">Services</div>
+  <div class="indent rows">
+    <span>inari</span><span class="ok">running</span><span class="num">2d</span>
+    <span>music-mount</span><span class="ok">running</span><span class="num">6h</span>
+    <span>server-check</span><span class="idle">idle</span><span class="num">3h</span>
+    <span>claude-watchdog</span><span class="bad">failed</span><span class="num">1m</span>
+  </div>
+
+  <div class="label">Watch</div>
+  <div class="indent"><ul><li>The web certificate expires in <span class="warn">11 days</span>.</li>
+    <li>Navidrome picks up new tracks at its next hourly scan. See <a href="#">the server README</a>.</li></ul></div>
+
+  <div class="label">Restart a service</div>
+  <div class="indent form"><input value="claude-watchdog" aria-label="Service name"><button class="primary">Restart</button><button class="secondary">Cancel</button></div>
+
+  <div class="label">Notification</div>
+  <div class="indent"><div class="toast"><div class="mark">!</div><div><b>Server check</b><span>The certificate expires in 11 days.</span></div></div></div>
+</template>
+
+<script>
+const dirs = [
+  ["A", "System", "Apple / Swiss. The macOS system font, neutral grays, 8px corners. Feels native in Swift apps for free."],
+  ["B", "Editorial", "Print. Serif headings, warm paper and ink, almost square corners. Reads like a document, not a dashboard."],
+  ["C", "Technical", "Engineering docs. Sans body, mono for labels and numbers, cool grays, 4px corners."],
+  ["D", "Plain", "Terminal-native. One mono face, pure black and white like your terminal, square corners."],
+];
+const tpl = document.getElementById("specimen").innerHTML;
+for (const [letter, name, note] of dirs) {
+  const sec = document.createElement("section");
+  sec.className = "direction";
+  sec.innerHTML = `<div class="dir-head"><span class="letter">${letter}</span><span class="name">${name}</span><span class="note">${note}</span></div>
+    <div class="pair"><div class="s ${letter} light">${tpl}</div><div class="s ${letter} dark">${tpl}</div></div>`;
+  document.body.appendChild(sec);
+}
+</script>
+</body>
+</html>
