@@ -17,7 +17,8 @@ NOTE = ("[Reply style] First line: the answer, in everyday words. Last: what you
 FORMAT_NOTE = ("[Reply format] In recaps and catch-ups, group the facts under label lines, "
                "with each label once and one bullet per fact. The labels, in order, are "
                "🔴 `BROKEN`, 🔴 `FAILED`, 🟢 `NOW`, 🟢 `CHECKED`, 🟡 `WATCH`, 🔵 `UNCHECKED` "
-               "and 🔵 `NOT DONE`. Use only these labels, never a topic word. Give a question "
+               "and 🔵 `NOT DONE`. Use only these labels, never a topic word. End with "
+               "👀 **Needs you:**, or \"✅ Nothing needs you.\" Give a question "
                "a yes and no list only when what each answer does is not obvious.")
 
 def score(text):

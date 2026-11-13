@@ -372,7 +372,7 @@ not `--stat`).
 🔵 `LEFT` — the paths deliberately left behind, and why. Omit it when there are
 none.
 
-**Needs you:** — always present, and after a commit it is rarely empty:
+👀 **Needs you:** — always present, and after a commit it is rarely empty:
 
 - whatever stands between this commit and where it belongs — a bookmark not
   advanced, a push not made. State these when they apply; silence reads as done
@@ -383,7 +383,7 @@ An obvious question takes one line, such as **Q2 (push):** Push to master? Use
 the yes and no list only when what an answer does is not clear, such as a claim
 you declined.
 
-If nothing is genuinely outstanding, end with "Nothing needs you."
+If nothing is genuinely outstanding, end with "✅ Nothing needs you."
 
 ## Heredoc format for multi-line messages
 

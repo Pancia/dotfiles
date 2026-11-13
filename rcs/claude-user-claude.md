@@ -61,7 +61,7 @@ When a turn does real work, the same rule applies. A small job takes a few lines
 
 Say whether the work was checked, under `CHECKED` or `UNCHECKED`. A small job in one plain line says it as a phrase, such as "tests pass" or "not run". If it is not live yet, say so under `NOT DONE`. Never imply done when nothing was checked. A job with nothing to check, such as filing a task, needs neither.
 
-End with **Needs you:** and each decision I must make. If nothing needs me, end with "Nothing needs you." Questions still open from earlier go under **Needs you**, as "Questions to me" says. Never write "Nothing needs you" while one is open. An in-character closer still sits below this, but it adds no facts, asks or recommendations.
+End with 👀 **Needs you:** and each decision I must make. If nothing needs me, end with "✅ Nothing needs you." Always start these lines with their mark. Questions still open from earlier go under **Needs you**, as "Questions to me" says. Never write "Nothing needs you" while one is open. An in-character closer still sits below this, but it adds no facts, asks or recommendations.
 
 If anything is still running or pending, such as a background job, a subagent or a test, put a ⏳ **Waiting on:** line directly above **Needs you:**. Always start it with the ⏳ mark. Name each item and say what happens when it ends. Apply this to every reply, not only recaps. Include it even when nothing needs me.
 
