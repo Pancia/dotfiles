@@ -23,6 +23,8 @@ dry="${MEDIA_SYNC_DRY:-}"
 mkdir -p "$state/runs"
 runlog="$state/runs/$(date +%Y-%m-%d_%H%M%S).log"
 prompt_file="$state/fix-prompt.md"
+# A dry run must not overwrite the prompt a real failure left for Claude.
+[ -n "$dry" ] && prompt_file="${runlog%.log}-fix-prompt.md"
 
 notify() { # title message [command to run on click]
     if [ -n "$dry" ]; then echo "would notify: $1 — $2 ${3:+(click: $3)}"; return; fi
