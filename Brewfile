@@ -10,6 +10,7 @@ tap 'rads/bbin'
 # Shell & CLI Tools
 brew 'fish'
 brew 'fzf'
+brew 'age' # encrypts the AKR backup bundle before it goes to the server
 
 # File & Text Search
 brew 'bat'

@@ -76,7 +76,7 @@ service edit <name>       # Edit a service's script and plist
 | `sanctuary` | On demand | Rotate encrypted backup directories |
 | `copyparty` | Startup | Media server for file sharing |
 | `music-mount` | Startup | Read-only `rclone nfsmount` of the server's music at `~/Music/music-server`, for cmus. See "Music streaming" below |
-| `server-check` | Daily 9:00 | Check the Vultr server: Headscale and its certificate, SSH, the disk lock, Navidrome. Silent when healthy; at most one macOS notification. `SERVER_CHECK_DRY=1 services/server-check/script.sh` tests it |
+| `server-check` | Daily 9:00 | Check the Vultr server: Headscale and its certificate, SSH, Navidrome, and warn if the encrypted disk is left **unlocked**. Silent when healthy; at most one macOS notification, and a click opens `show.sh` in iTerm (shows only, runs nothing). `SERVER_CHECK_DRY=1 services/server-check/script.sh` tests it |
 
 See `service list` for all installed services. `bin/ziplog` can also be run manually with `ziplog --yes` (skips confirmation prompt).
 
@@ -316,9 +316,14 @@ cmus through a mount.
 
 **Two disks, since 2026-11-10.** `/music` is a 40 GB unencrypted Vultr HDD volume that holds only
 the music and Navidrome's data, so music works after a restart with nothing unlocked. `/mnt` is
-the 100 GB encrypted softraid CRYPTO volume for private files, the AKR backup and `remote-sync`.
+the 100 GB encrypted softraid CRYPTO volume for private files and `remote-sync`.
 It locks on every restart, and only the user can unlock it with `~/bin/mnt` (it asks for the
-passphrase; `~/bin/unmnt` locks it). **`/mnt/MyMusic` is an old copy from 2026-11-10, kept by
+passphrase; `~/bin/unmnt` locks it). **Locked is the normal state**: nothing automatic writes
+there. Since 2026-11-12 the AKR post-commit hook encrypts its bundle on the Mac with `age` and
+writes it to `~/backups/akr` on the root disk; `remote-sync` copies that into
+`/mnt/backups/akr-age/`. The private key is `~/.config/age/akr-backup.key` and Proton Pass,
+never the server. Auto-unlocking was rejected: it needs the passphrase stored somewhere
+unattended, which defeats the lock. **`/mnt/MyMusic` is an old copy from 2026-11-10, kept by
 choice and never updated**; a README there, the login message and `bin/mnt` all say so.
 ProtonDrive is the main backup of the music.
 

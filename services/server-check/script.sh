@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Daily check of the Vultr server. Silent when healthy; at most one notification.
+# Clicking the notification opens show.sh in iTerm: the last results and what to do.
 #
 # A once-a-day check is deliberate: the server once sat dead for weeks unnoticed,
 # and a day's delay is fine. Checking more often only adds noise.
@@ -36,9 +37,12 @@ run_checks() {
     elif ! grep -q navidrome <<<"$state"; then
         problems+=("Navidrome is not answering")
     fi
-    # Music no longer needs the encrypted disk; only the backups that write there pause.
-    if ! grep -q unlocked <<<"$state"; then
-        problems+=("encrypted disk locked: backups paused, run bin/mnt")
+    # Locked is the safe, normal state: nothing automatic needs /mnt any more (the AKR
+    # backup goes encrypted to the root disk since 2026-11-12). Unlocked means private
+    # files are readable on the server, so it is unlocked that gets the warning --
+    # usually a reminder that remote-sync finished and the disk was left open.
+    if grep -q unlocked <<<"$state"; then
+        problems+=("encrypted disk is unlocked: lock it with unmnt when done")
     fi
 }
 
@@ -65,5 +69,8 @@ echo "$(date): PROBLEM: $message"
 if [ -n "${SERVER_CHECK_DRY:-}" ]; then
     echo "would notify: $message"
 else
-    "$notifier" -title "Vultr server" -message "$message"
+    # A click opens an iTerm window that only shows the result and what to do.
+    show="$(cd "$(dirname "$0")" && pwd)/show.sh"
+    "$notifier" -title "Vultr server" -message "$message" \
+        -execute "/usr/bin/osascript -e 'tell application \"iTerm\" to create window with default profile command \"/bin/bash $show\"'"
 fi

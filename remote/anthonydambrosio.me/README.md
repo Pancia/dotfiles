@@ -278,7 +278,14 @@ Folders, as of 2026-11-10 (disk unlocked):
 | `/mnt/private`, `/mnt/ytdl` | anthony:wheel 750 | `~/AKR/scripts/remote-sync` (Mac) | – |
 | `/mnt/Movies` | anthony:wheel 700 | `remote-sync` | – |
 | `/mnt/backups` | anthony:wheel 750 | – | – |
-| `/mnt/backups/akr` | anthony 700 | the vault's `vcs-hooks/post-commit` (it documents the retention) | – |
+| `/mnt/backups/akr` | anthony 700 | nothing since 2026-11-12: the last **plain** AKR bundles, from before the hook encrypted them | – |
+| `/mnt/backups/akr-age` | anthony 700 | `remote-sync` copies `~/backups/akr` here (still encrypted) | – |
+
+**The AKR backup no longer needs this disk.** Since 2026-11-12 the vault's
+`vcs-hooks/post-commit` encrypts the bundle on the Mac with `age` and writes it to
+`/home/anthony/backups/akr` (mode 700) on the unencrypted root disk. The hook documents the
+retention. The private key is on the Mac and in Proton Pass, and **must never be on this
+server**. Decrypt only on the Mac.
 
 **Create a new folder by hand, 750 or 700, before anything syncs into it.** A folder that
 rsync creates takes mode 755 from the umask, so every account on the server can read it,
@@ -290,8 +297,8 @@ Traps:
 - OpenBSD `xargs` supports `-r`.
 - `git bundle verify` needs a repository, and even with one it does not read the pack:
   it passes a truncated bundle. Check a bundle with `git bundle unbundle` into a
-  throwaway bare repo. Put that repo on `/mnt`, not `/tmp`, because `unbundle` writes
-  the objects out.
+  throwaway bare repo. The AKR bundles are encrypted, so download and decrypt them on
+  the Mac first (the recipe is in the hook's step 3 comment). Never decrypt one here.
 
 ## SSH Access
 
