@@ -1924,7 +1924,8 @@ def cmd_claim(args):
         return
 
     # Computed once for the batch: both are a jj call per path otherwise.
-    shared = {"cov": window_coverage(), "deltas": {}}
+    # Mixed values ("span_only" is a bool), so say so for the type checker.
+    shared: dict[str, object] = {"cov": window_coverage(), "deltas": {}}
     claimed, nothing, span_refused, refused = [], [], [], []
     for p in args.path:
         shared["span_only"] = False
