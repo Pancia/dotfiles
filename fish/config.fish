@@ -21,8 +21,9 @@ function _ENSURE_SERVICES
         if not test -f "$dest/$plist"; or _not_same_inode "$dest/$plist" "$service_path"
             echo "[fish/config]: (re)loading $service_path"
             ln -f "$service_path" "$dest/"(basename $service_path)
+            # No `launchctl start`: load already starts RunAtLoad and KeepAlive
+            # jobs, and starting a scheduled job here ran it on every plist edit.
             launchctl load ~/Library/LaunchAgents/$plist
-            launchctl start (basename $plist .plist)
         end
     end
 end

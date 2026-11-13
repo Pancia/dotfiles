@@ -124,7 +124,7 @@
         "d": ["Disk cleanup (report + Claude)", "open-iterm-with 'disk-cleanup; exec fish'"],
         "r": ["Disk report only", "open-iterm-with 'disk-cleanup --no-ai; exec fish'"],
         "s": ["Fresh scan, then cleanup", "open-iterm-with 'disk-cleanup --scan; exec fish'"],
-        "p": ["Save to Pinterest", {"interactive": "cd ~/private/pancia && _bin/pinterest_save"}],
+        "p": ["Save to Pinterest", {"interactive": "~/AKR/scripts/media-sync pins"}],
         "c": ["calendar", {"interactive": "agenda 24"}],
         "l": ["LOCK IT DOWN", "launch-lock-screen-dialog"],
         "m": ["Toggle mouse scroll", "hs -c 'require(\"seeds.scrollblock\").toggle()'"],
