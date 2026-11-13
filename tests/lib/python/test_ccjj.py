@@ -7,6 +7,7 @@ so a regression here would not announce itself.
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -3259,6 +3260,121 @@ def test_claim_refusal_hint_keeps_session_and_quotes_the_path(repo):
     r = repo.run("claim", "peer file.txt", sid="S1", extra=["--session", "S1"])
     assert r.returncode == 1
     assert "`ccjj claim --force --session S1 'peer file.txt'`" in _last_line(r.stderr)
+
+
+# ------------------------------------------------ claiming several paths at once
+
+def _own_and_peer_changes(repo):
+    """own.txt changes in S1's window only; peer.txt also inside S2's Bash span."""
+    _optin(repo)
+    repo.write("peer.txt", "p\n")
+    repo.write("own.txt", "o\n")
+    repo.write("rec.txt", "r\n")
+    repo.commit("base")
+    _bash(repo, "S1")
+    _bash(repo, "S2")
+    repo.write("peer.txt", "p-changed\n")
+    _bash(repo, "S2")
+    repo.write("own.txt", "o-changed\n")
+    repo.write("rec.txt", "r-changed\n")
+    repo.record("S3", "rec.txt", old="r\n", new="r-changed\n", original="r\n")
+    _bash(repo, "S1")
+
+
+def _claimed(repo, sid="S1"):
+    """Base names of the files sid has journal records for."""
+    d = os.path.join(repo.journal, repo.root.replace("/", "_"), sid)
+    out = []
+    for n in repo.journal_records(sid):
+        with open(os.path.join(d, n)) as fh:
+            out.append(os.path.basename(json.load(fh)["path"]))
+    return sorted(out)
+
+
+def test_claim_takes_several_paths(repo):
+    _optin(repo)
+    repo.write("a.txt", "a\n")
+    repo.write("b.txt", "b\n")
+    repo.commit("base")
+    _bash(repo)
+    repo.write("a.txt", "a-sed\n")
+    repo.write("b.txt", "b-sed\n")
+    _bash(repo)
+
+    r = repo.run("claim", "a.txt", "b.txt", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert "+a-sed" in r.stdout and "+b-sed" in r.stdout      # each diff shown
+    assert _last_line(r.stderr) == "ccjj: claimed 2"
+    assert repo.run("commit", "-m", "both", sid="S1").returncode == 0
+    assert repo.show("a.txt") == b"a-sed\n" and repo.show("b.txt") == b"b-sed\n"
+
+
+def test_batch_claim_goes_on_past_a_refusal_and_sums_up_last(repo):
+    _own_and_peer_changes(repo)
+    r = repo.run("claim", "peer.txt", "own.txt", "nochange.txt", sid="S1")
+    assert r.returncode == 1, r.stderr
+    assert "+p-changed" in r.stderr                            # the refused diff
+    last = _last_line(r.stderr)
+    assert last.startswith("ccjj: claimed 1;")
+    assert "nothing to claim for 1: nochange.txt" in last
+    assert "`ccjj claim --force peer.txt`" in last
+    assert _claimed(repo) == ["own.txt"]
+
+
+def test_batch_force_takes_a_span_stake_but_never_records(repo):
+    _own_and_peer_changes(repo)
+    r = repo.run("claim", "--force", "peer.txt", "rec.txt", "own.txt", sid="S1")
+    assert r.returncode == 1, r.stderr
+    assert "on this path alone" in r.stderr                    # rec.txt's own refusal
+    last = _last_line(r.stderr)
+    assert last.startswith("ccjj: claimed 2;")
+    assert "refused 1 (see each message above): rec.txt" in last
+    assert _claimed(repo) == ["own.txt", "peer.txt"]
+
+    # The records stake still yields to --force on that one path.
+    assert repo.run("claim", "--force", "rec.txt", sid="S1").returncode == 0
+
+
+def test_batch_claim_with_nothing_to_claim_exits_2(repo):
+    _own_and_peer_changes(repo)
+    r = repo.run("claim", "own.txt", "nochange.txt", sid="S1")
+    assert r.returncode == 2, r.stderr
+    assert _last_line(r.stderr) == "ccjj: claimed 1; nothing to claim for 1: nochange.txt"
+
+
+def test_claim_suggestions_are_shell_quoted(repo):
+    """The exit-5 refusal and the audit printed `ccjj claim <path>` bare, so a
+    path with a space or an apostrophe broke when pasted."""
+    _optin(repo)
+    name = "it's a file.pdf"
+    repo.write(name, "x\n")
+    repo.write("edited.txt", "a\n")
+    repo.commit("base")
+    _bash(repo)
+    repo.write(name, "y\n")
+    _bash(repo)
+    repo.write("edited.txt", "A\n")
+    repo.record("S1", "edited.txt", old="a", new="A", original="a\n")
+
+    quoted = "ccjj claim " + shlex.quote(name)
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode == 5, r.stdout + r.stderr
+    assert quoted in r.stderr
+    assert quoted in repo.run("audit", sid="S1").stderr
+
+
+def test_a_refused_binary_claim_shows_the_sizes(repo):
+    _optin(repo)
+    repo.write("peer.bin", b"\x00\x01\x02")
+    repo.commit("base")
+    _bash(repo, "S1")
+    _bash(repo, "S2")
+    repo.write("peer.bin", b"\x00\x01\x02\x03\x04")
+    _bash(repo, "S2")
+    _bash(repo, "S1")
+    r = repo.run("claim", "peer.bin", sid="S1")
+    assert r.returncode == 1
+    assert "(binary: 3 bytes -> 5 bytes)" in r.stderr
 
 
 def test_also_refusal_ends_with_the_force_line(repo):

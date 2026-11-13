@@ -6,7 +6,7 @@
 #   ccjj commit -m "msg"        # commit this session's work only
 #   ccjj commit --diff          # show what that would be
 #   ccjj audit                  # changes no session claims
-#   ccjj claim <path>           # accept a Bash-made change as your own
+#   ccjj claim <path>...        # accept Bash-made changes as your own
 #   ccjj forget <path> [-n]     # drop this session's records for a path
 #   ccjj bash-windows on        # opt this checkout in to recording them
 #   ccjj prune [-n]             # retire archived journals

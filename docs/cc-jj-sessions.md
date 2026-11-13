@@ -193,8 +193,20 @@ abandon`, `jj undo` and `jj op restore`).
 ccjj bash-windows on          # opt this checkout in
 ccjj audit                    # unclaimed paths, annotated with what covers them
 ccjj claim path/to/file       # accept one, after reading the diff it prints
+ccjj claim a b c              # several: each gets its own diff and refusal
 ccjj claim path -n            # preview only
 ```
+
+With several paths, each is claimed or refused on its own, and one refusal does
+not stop the rest. The last line sums them up: what was claimed, what had nothing
+to claim, and what was refused. Exit `1` if any was refused, else `2` if any had
+nothing to claim, else `0`. **A batch `--force` overrides only a Bash-span stake.**
+A peer's Edit/Write records are still refused, and need `--force` on that one path,
+after reading that one diff. Otherwise one flag would take recorded peer work that
+nobody read. A refused binary file shows only "Binary files ... differ", so the
+refusal adds the sizes before and after. Claims from one window share its time, so
+their record names collided (`FileExistsError`) on the first batch test; a taken
+name now steps 1 ns later, which keeps the record at the window's own place.
 
 A claim writes an ordinary `Write`-shaped journal record, so everything
 downstream is the existing `merge3` path and `commit-mine` stays exact **by

@@ -1065,7 +1065,7 @@ def anchored_replace(target, original, old, new, path, label):
             "  your records with the file as it is now. Otherwise another session\n"
             "  changed the same region, or your base moved: resolve by hand, or\n"
             "  commit this path wholesale with `--also %s` if nobody else is on it."
-            % (path, label, old, path, path, path))
+            % (path, label, old, path, shlex.quote(path), shlex.quote(path)))
     if n > 1:
         # Grow the window from SMALL to large and take the first width that
         # isolates one site. Match count is monotonically non-increasing in
@@ -1900,12 +1900,18 @@ def file_type_at(rev, path):
 
 
 def cmd_claim(args):
-    """Turn one Bash-window-covered path into an ordinary journal record.
+    """Turn Bash-window-covered paths into ordinary journal records.
 
     This is the whole point of the offer model: a window's delta may contain
     bytes this session never wrote, and no local rule can tell which. Printing
     the diff and requiring an explicit claim puts the one detector that works --
     a reader -- in the loop, and keeps `ccjj commit` exact by construction.
+
+    Several paths are claimed one by one, each with its own diff and its own
+    refusal. One refusal does not stop the rest. With several paths, --force
+    overrides only a Bash-span stake: a peer's Edit/Write records still refuse,
+    so one flag can never take a peer's recorded work unread. That needs
+    `--force` on that one path.
     """
     sid = args.session or os.environ.get("CLAUDE_SESSION_ID", "")
     if not sid:
@@ -1913,7 +1919,48 @@ def cmd_claim(args):
     jdir = os.path.join(journal_root(), repo_key(ROOT), sid)
     if may_absorb(args):
         absorb_same_process(ROOT, sid)
-    path = rel_literal(args.path)
+    if len(args.path) == 1:
+        claim_one(args, sid, jdir, args.path[0], {})
+        return
+
+    # Computed once for the batch: both are a jj call per path otherwise.
+    shared = {"cov": window_coverage(), "deltas": {}}
+    claimed, nothing, span_refused, refused = [], [], [], []
+    for p in args.path:
+        shared["span_only"] = False
+        try:
+            claim_one(args, sid, jdir, p, shared, multi=True)
+            claimed.append(p)
+        except SystemExit as e:
+            code = e.code if isinstance(e.code, int) else 1
+            if code == 2:
+                nothing.append(p)
+            elif shared["span_only"]:
+                span_refused.append(p)
+            else:
+                refused.append(p)
+        sys.stdout.flush()
+        sys.stderr.flush()
+
+    # One summary line LAST: an agent reading `2>&1 | tail -1` sees all of it.
+    quote = lambda ps: " ".join(shlex.quote(p) for p in ps)
+    sess = "--session %s " % shlex.quote(args.session) if args.session else ""
+    parts = ["claimed %d" % len(claimed)]
+    if nothing:
+        parts.append("nothing to claim for %d: %s" % (len(nothing), quote(nothing)))
+    if refused:
+        parts.append("refused %d (see each message above): %s" % (len(refused), quote(refused)))
+    if span_refused:
+        parts.append("refused %d for a Bash span only -- read each diff above; if all of it "
+                     "is yours: `ccjj claim --force %s%s`" % (len(span_refused), sess,
+                                                            quote(span_refused)))
+    print("ccjj: " + "; ".join(parts), file=sys.stderr)
+    sys.exit(1 if refused or span_refused else 2 if nothing else 0)
+
+
+def claim_one(args, sid, jdir, path_arg, shared, multi=False):
+    """Claim one path; refusals die() as before. `shared` caches batch lookups."""
+    path = rel_literal(path_arg)
     wins = claimable_windows(jdir, path)
     if not wins:
         hint = ("  A window needs two Bash calls with a working-copy change between\n"
@@ -1925,7 +1972,10 @@ def cmd_claim(args):
             % (sid[:8], path, hint), 2)
 
     span = (wins[0]["before"], wins[-1]["after"])
-    delta = window_delta(*span)
+    deltas = shared.setdefault("deltas", {})
+    if span not in deltas:
+        deltas[span] = window_delta(*span)
+    delta = deltas[span]
     if delta is None:
         die("this session's Bash windows no longer resolve (%s..%s).\n"
             "  `jj op abandon` discards them instantly. Nothing to claim."
@@ -1940,7 +1990,7 @@ def cmd_claim(args):
     # when this check sat below them it was never reached for exactly the
     # operations --also exists for: a delete of a Bash-only peer's file was
     # handed straight to --also, which (then) did not look either.
-    cov = window_coverage()
+    cov = shared.get("cov") or window_coverage()
     stakes = {}
     for p in {path, src, tgt} - {None}:
         # Records outrank a window. A plain update() let a window-only result
@@ -1948,8 +1998,12 @@ def cmd_claim(args):
         for s, v in peers_with_a_stake(p, sid, cov).items():
             if s not in stakes or v[1] == STAKE_RECORDS:
                 stakes[s] = v
-    if stakes and not args.force:
-        recs, spans = split_stakes(stakes)
+    recs, spans = split_stakes(stakes)
+    # A batch --force covers only a Bash-span stake; a peer's records need the
+    # flag on that one path, after reading that one diff.
+    forced = args.force and not (multi and recs)
+    if stakes and not forced:
+        shared["span_only"] = not recs
         why = []
         if recs:
             why.append("%s is also claimed by session(s) %s.\n"
@@ -1965,11 +2019,12 @@ def cmd_claim(args):
         print("ccjj: refusing to claim %s. The diff in question:\n%s"
               % (path, unified(file_bytes(span[0], path), file_bytes(span[1], path), path)),
               file=sys.stderr, end="")
-        forced = "ccjj claim --force %s%s" % (
+        cmd = "ccjj claim --force %s%s" % (
             "--session %s " % shlex.quote(args.session) if args.session else "",
-            shlex.quote(args.path))
-        die("%s\n  If all of the diff above is yours: `%s`. If not: `commit-mine --no-claim`."
-            % ("\n".join(why), forced), 1)
+            shlex.quote(path_arg))
+        alone = " (on this path alone: a batch --force skips records)" if multi and recs else ""
+        die("%s\n  If all of the diff above is yours: `%s`%s. If not: `commit-mine --no-claim`."
+            % ("\n".join(why), cmd, alone), 1)
 
     if status == "removed":
         die("%s was deleted inside a Bash window.\n"
@@ -2045,8 +2100,16 @@ def write_claim(jdir, path, original, content, window, t_ns, **extra):
            "original": base64.b64encode(original).decode() if original is not None else None,
            "encoding": "base64", "claimed": True,
            "window": window, "t_ns": t_ns, **extra}
-    name = "%019d-%d.json" % (t_ns, os.getpid())
-    fd = os.open(os.path.join(jdir, name), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    # Claims from one window share its t_ns, so a batch `claim a b` in one
+    # process would name both records alike. Step past a taken name by 1 ns:
+    # the record still sorts at the window's own time.
+    while True:
+        name = "%019d-%d.json" % (t_ns, os.getpid())
+        try:
+            fd = os.open(os.path.join(jdir, name), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            break
+        except FileExistsError:
+            t_ns += 1
     with os.fdopen(fd, "w") as fh:
         json.dump(rec, fh)
 
@@ -2279,7 +2342,7 @@ def unclaimed_refusal(loose, sid):
            % (len(loose), "\n".join("    " + p for p in loose)))
     if claimable:
         msg += ("  Claim the ones that are yours, then re-run:\n%s\n"
-                % "\n".join("    ccjj claim " + p for p in claimable))
+                % "\n".join("    ccjj claim " + shlex.quote(p) for p in claimable))
     if whole:
         msg += ("  Moves and deletes cannot be claimed. Commit the ones that are\n"
                 "  yours whole, with both halves of every move:\n    %s\n"
@@ -2307,7 +2370,13 @@ def unified(a, b, path):
             fh.write(b or b"")
         r = subprocess.run(["diff", "-u", "--label", "a/" + path,
                             "--label", "b/" + path, pa, pb], capture_output=True)
-    return r.stdout.decode(errors="replace")
+    out = r.stdout.decode(errors="replace")
+    if out.startswith("Binary files"):
+        # diff shows nothing a reader can judge for a binary file; the sizes
+        # at least say whether it is new, emptied or merely rewritten.
+        out += "  (binary: %s -> %d bytes)\n" % (
+            "absent" if a is None else "%d bytes" % len(a), len(b or b""))
+    return out
 
 
 def cmd_bash_windows(args):
@@ -2562,7 +2631,7 @@ def report_unclaimed(unclaimed, prefix="", cov=None, me=""):
                     print("        changed inside your Bash window (%s) -- recoverable:"
                           % status_label(who[me]), file=sys.stderr)
                     print("        ccjj claim %s   # after reading the diff it prints"
-                          % p, file=sys.stderr)
+                          % shlex.quote(p), file=sys.stderr)
             for sid, status in sorted(who.items()):
                 if sid != me:
                     print("        also inside session %s's Bash window (%s)"
@@ -3000,12 +3069,13 @@ def main():
     bw.add_argument("action", nargs="?", default="status",
                     choices=["on", "off", "status"])
 
-    cl = sub.add_parser("claim", help="accept a Bash-window change as your own")
-    cl.add_argument("path")
+    cl = sub.add_parser("claim", help="accept Bash-window changes as your own")
+    cl.add_argument("path", nargs="+")
     cl.add_argument("--session", default="")
     cl.add_argument("-n", "--dry-run", action="store_true")
     cl.add_argument("--force", action="store_true",
-                    help="claim even though another session has a stake in it")
+                    help="claim even though another session has a stake in it; "
+                         "with several paths, only a Bash-span stake")
 
     p = sub.add_parser("prune", help="retire orphaned and old journals")
     p.add_argument("--days", type=int, default=14,
