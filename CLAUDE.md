@@ -76,7 +76,7 @@ service edit <name>       # Edit a service's script and plist
 | `sanctuary` | On demand | Rotate encrypted backup directories |
 | `copyparty` | Startup | Media server for file sharing |
 | `music-mount` | Startup | Read-only `rclone nfsmount` of the server's music at `~/Music/music-server`, for cmus. See "Music streaming" below |
-| `server-check` | Daily 9:00 | Check the Vultr server: Headscale and its certificate, SSH, Navidrome, and warn if the encrypted disk is left **unlocked**. Silent when healthy; at most one macOS notification, and a click opens `show.sh` in iTerm (shows only, runs nothing). `SERVER_CHECK_DRY=1 services/server-check/script.sh` tests it |
+| `server-check` | Daily 9:00 | Check the Vultr server: Headscale and its certificate, SSH, Navidrome, and warn if the encrypted disk is left **unlocked**. Silent when healthy; at most one macOS notification, and a click opens `show.sh` in iTerm (shows only, runs nothing). `SERVER_CHECK_DRY=1 services/server-check/script.sh` runs it for real without notifying; `cmds test server-check` fakes the server's answer (`SERVER_CHECK_STATE`) and needs no network |
 
 See `service list` for all installed services. `bin/ziplog` can also be run manually with `ziplog --yes` (skips confirmation prompt).
 
@@ -788,6 +788,7 @@ immediately because it still asserted the pre-XDG `~/.tmux.conf` destination.
 | Component | Alias | Runner | Notes |
 |---|---|---|---|
 | `services/youtube_transcribe` | `yt` | pytest | needs fastapi/httpx/etc. |
+| `services/server_check` | `server-check` | pytest | fakes the server's SSH answer; parses `show.sh`, never runs it |
 | `lib/python` | `python` | pytest | |
 | `bin/astro` | `astro` | pytest | needs kerykeion/pyswisseph |
 | `bin/ytdl` | `ytdl` | pytest | stubs yt-dlp via PATH |

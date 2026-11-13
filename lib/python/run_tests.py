@@ -27,6 +27,14 @@ COMPONENTS = {
         "aliases": ["youtube-transcribe", "yt"],
         "source_path": "services/youtube-transcribe",
     },
+    # Drives services/server-check/script.sh with a faked server answer, and
+    # checks that show.sh has help for every problem message. No network.
+    "services/server_check": {
+        "runner": "pytest",
+        "deps": [],
+        "aliases": ["server-check"],
+        "source_path": "services/server-check",
+    },
     "lib/python": {
         "runner": "pytest",
         "deps": [],

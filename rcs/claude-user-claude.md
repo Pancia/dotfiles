@@ -153,6 +153,10 @@ Before you design or style a web page, an artifact or a native app screen,
 load the `ui-style` skill. It sets my look. Its own description lists the
 folders where it does not apply. Terminal output is not covered.
 
+## Security trade-offs
+
+When automation needs a security control off to keep working (an unlocked disk, a disabled check, an open port), do not tell me to turn it off. Say what that exposes, and propose a change so it works with the control on. The same applies when you design the automation or write its alerts.
+
 ## File Deletion
 
 Prefer `trash` over `rm` when deleting files. If `trash` fails, try `rm` as a fallback — but always as a separate command, never chained together (no `trash ... || rm ...`).

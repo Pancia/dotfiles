@@ -6,6 +6,10 @@
 !.claude-plugin/
 !.cc
 .cc/private/
+# A per-machine queue: /cc:pending-updates applies each one, then deletes it.
+# Tracked, they rode along in unrelated commits and stopped commit-mine (exit 5)
+# in every live session, since no session wrote them.
+.cc/pending-updates-*.md
 .DS_Store
 .lein-repl-history
 .nrepl-history

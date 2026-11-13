@@ -18,10 +18,10 @@ Find and apply pending CLAUDE.md update suggestions from `.cc/pending-updates-*.
 
 4. After processing all files, report how many were applied and how many were skipped/rejected.
 
-5. If any updates were applied, commit the changes (only CLAUDE.md and deleted pending-update files — do not commit unrelated working copy changes):
+5. If any updates were applied, commit the changes (only CLAUDE.md — do not commit unrelated working copy changes). The global gitignore ignores `.cc/pending-updates-*.md`, so deleting one normally leaves nothing to commit. An older one that is still tracked shows up as a deletion; include only those:
    a. Detect the project's VCS: check for `.jj/` (Jujutsu) or `.git/` (Git). Refer to CLAUDE.md for project-specific VCS instructions if available.
-   b. For **jj** repos: `jj split -r @ CLAUDE.md .cc/ -m "<message>"` (splits only the relevant paths into a new commit, leaving other working copy changes untouched)
-   c. For **git** repos: stage only CLAUDE.md and any deleted `.cc/pending-updates-*` files, then commit
+   b. For **jj** repos: `jj split -r @ CLAUDE.md 'glob:".cc/pending-updates-*.md"' -m "<message>"`. Never pass `.cc/`: that also takes other sessions' reports and plans.
+   c. For **git** repos: stage only CLAUDE.md and any deleted `.cc/pending-updates-*` files that git still tracks, then commit
    d. Commit message format: subject line `Apply <N> pending CLAUDE.md update(s)`, followed by a body that briefly describes what was added or changed
 
 ## Important

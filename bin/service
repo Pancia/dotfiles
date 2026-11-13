@@ -189,6 +189,11 @@ def execute(cmd)
   system(cmd)
 end
 
+# `launchctl list <label>` exits 0 when launchd has the job loaded, 113 when not.
+def launchd_loaded?(label)
+  system("launchctl list #{label.shellescape} >/dev/null 2>&1")
+end
+
 class ServiceCMDS
   def self.list(opts)
     opts.info = "List my services"
@@ -213,9 +218,20 @@ class ServiceCMDS
         end
       end
 
-      puts "Loading #{full_name}..."
-      execute("launchctl load #{plist_dest.shellescape}")
-      execute("launchctl start #{full_name.shellescape}")
+      # Loading a job that is already loaded prints "Load failed: 5" and still
+      # exits 0, so ask launchd whether it knows the label instead.
+      unless launchd_loaded?(full_name)
+        puts "Loading #{full_name}..."
+        execute("launchctl load #{plist_dest.shellescape}")
+        unless launchd_loaded?(full_name)
+          warn "Error: launchd did not load #{plist_dest}"
+          exit 1
+        end
+      end
+      unless execute("launchctl start #{full_name.shellescape}")
+        warn "Error: launchctl start #{full_name} failed (exit #{$?.exitstatus})"
+        exit 1
+      end
       puts "Started #{full_name}"
     }
   end

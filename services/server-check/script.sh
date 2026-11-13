@@ -7,6 +7,10 @@
 #
 # SERVER_CHECK_HOST and SERVER_CHECK_URL override the targets for testing.
 # SERVER_CHECK_DRY=1 prints the alert instead of sending it.
+# SERVER_CHECK_STATE, when set (even empty), replaces the server's SSH answer and
+# skips the internet check, so tests need no network. Empty means unreachable.
+# SERVER_CHECK_RETRY_DELAY sets the wait before the one retry (default 120 s).
+# Tests: cmds test server-check
 
 host="${SERVER_CHECK_HOST:-musicread@anthonydambrosio.me}"
 url="${SERVER_CHECK_URL:-https://hs.anthonydambrosio.me/health}"
@@ -21,33 +25,41 @@ run_checks() {
     fi
 
     local state
-    # This key has no passphrase, so the check works before anyone has logged in.
-    # The server limits it to running /usr/local/bin/server-health, whatever is asked.
-    # The time limit covers a server that accepts the connection and then stalls.
-    state=$(/opt/homebrew/bin/timeout 90 /usr/bin/ssh -i "$HOME/.ssh/server_check" \
-        -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=yes -o ConnectTimeout=20 \
-        -o ServerAliveInterval=10 -o ServerAliveCountMax=3 "$host" </dev/null 2>/dev/null)
+    if [ -n "${SERVER_CHECK_STATE+x}" ]; then
+        state=$SERVER_CHECK_STATE
+    else
+        # This key has no passphrase, so the check works before anyone has logged in.
+        # The server limits it to running /usr/local/bin/server-health, whatever is asked.
+        # The time limit covers a server that accepts the connection and then stalls.
+        state=$(/opt/homebrew/bin/timeout 90 /usr/bin/ssh -i "$HOME/.ssh/server_check" \
+            -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=yes -o ConnectTimeout=20 \
+            -o ServerAliveInterval=10 -o ServerAliveCountMax=3 "$host" </dev/null 2>/dev/null)
+    fi
 
-    if ! grep -q reachable <<<"$state"; then
+    # The words reachable, musicdisk, navidrome and unlocked are a contract with
+    # /usr/local/bin/server-health on the server, which is not in this repo. Change
+    # both sides together. -w, so that "unreachable" does not count as "reachable".
+    if ! grep -qw reachable <<<"$state"; then
         problems+=("SSH: server unreachable")
         return
     fi
-    if ! grep -q musicdisk <<<"$state"; then
+    if ! grep -qw musicdisk <<<"$state"; then
         problems+=("music disk not mounted")
-    elif ! grep -q navidrome <<<"$state"; then
+    elif ! grep -qw navidrome <<<"$state"; then
         problems+=("Navidrome is not answering")
     fi
     # Locked is the safe, normal state: nothing automatic needs /mnt any more (the AKR
     # backup goes encrypted to the root disk since 2026-11-12). Unlocked means private
     # files are readable on the server, so it is unlocked that gets the warning --
     # usually a reminder that remote-sync finished and the disk was left open.
-    if grep -q unlocked <<<"$state"; then
+    if grep -qw unlocked <<<"$state"; then
         problems+=("encrypted disk is unlocked: lock it with unmnt when done")
     fi
 }
 
 # Without internet here, every check would fail and blame the server.
-if ! /usr/bin/nc -z -G 10 1.1.1.1 443 2>/dev/null; then
+# A faked state needs no network, so the test skips this.
+if [ -z "${SERVER_CHECK_STATE+x}" ] && ! /usr/bin/nc -z -G 10 1.1.1.1 443 2>/dev/null; then
     echo "$(date): no internet on this Mac; skipped"
     exit 0
 fi
