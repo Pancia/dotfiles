@@ -169,7 +169,7 @@ Prefer `trash` over `rm` when deleting files. If `trash` fails, try `rm` as a fa
 
 To trash a file literally named `put`/`list`/`restore`/`help`, use `trash put <name>`.
 
-Before you move or delete a script, search for its file name, not its topic or its full path: `rg -l -F --hidden <name> ~/dotfiles ~/Vaults ~/.config ~/Library/LaunchAgents`, and check `crontab -l`. Callers often `cd` first and use a relative path.
+Before you move, rename or delete a script or a folder, search for its name, not its topic or its full path: `rg -l -F --hidden <name> ~/dotfiles ~/Vaults ~/.config ~/projects ~/Library/LaunchAgents -g '!.venv'`. Also check `crontab -l`, and find symlinks that point at it: `find ~ -maxdepth 4 -type l -ilname '*<name>*' 2>/dev/null` (`rg` does not see symlink targets; never give it `-L`). Callers often `cd` first and use a relative path.
 
 ## Edits made through Bash
 
@@ -238,6 +238,8 @@ element was blocked too. The same file played fine in Brave from disk.
 ## Cloud-only files in ~/Cloud
 
 Many files under `~/Cloud` (ProtonDrive) are cloud-only: `stat -f %Sf` shows `dataless`, and reading one downloads it, so a bulk read can hang for minutes. `stat`, `ls -lO` and `find` do not download. Before reading many files there, select the local ones with `find DIR ! -flags +dataless`.
+
+Before you move, add, rename or delete anything under `~/Cloud` (also reached as `~/ProtonDrive` and `~/Library/CloudStorage/ProtonDrive-*`), read `~/Cloud/CLAUDE.md`. Claude Code does not load it for you: a nested CLAUDE.md loads only when Read, Edit or Write touches a file under the session's start folder, and never for Bash.
 
 ## Web Search
 

@@ -1375,6 +1375,33 @@ def check_new_files_against_disk(mine, present, sid):
             % (", ".join(bad), " --also ".join(bad), " ".join(bad)), 1)
 
 
+def ignored_new_paths(mine, present):
+    """New paths jj will never select, because an ignore rule covers them.
+
+    A Write into .cc/private/ (ignored by the global gitignore) is journaled
+    like any other. Replayed, jj selected nothing and the commit died "did not
+    take", blaming another session -- while --diff, which stops before that
+    check, printed the private file whole and exited 0, and ai_jj_commit sent
+    that diff to the model writing the message. Both views must agree before a
+    path is dropped: jj does not track it in @ (the fresh pin snapshotted), and
+    git says it is ignored. A new file over jj's size limit is untracked but not
+    ignored, so it still fails closed. No .git (non-colocated): nothing dropped.
+    """
+    new = [p for p in mine if p not in present]
+    if not new or not os.path.exists(os.path.join(ROOT, ".git")):
+        return []
+    tracked = set(jj("file", "list", "-r", "@", "--ignore-working-copy").stdout
+                  .decode(errors="surrogateescape").splitlines())
+    cand = [p for p in new if p not in tracked]
+    if not cand:
+        return []
+    r = subprocess.run(["git", "-C", ROOT, "check-ignore", "--no-index", "-z", "--stdin"],
+                       input="\0".join(cand).encode(errors="surrogateescape"),
+                       capture_output=True)
+    hit = set(r.stdout.decode(errors="surrogateescape").split("\0")) if r.returncode == 0 else set()
+    return sorted(p for p in cand if p in hit)
+
+
 def parent_exec_bits(paths):
     """Executable bit for each path as it exists in @-.
 
@@ -1536,6 +1563,10 @@ def cmd_commit(args):
             scoped = drop_vanished(scoped, present)
             mine = build(scoped, present, pinned)
             check_new_files_against_disk(mine, present, sid)
+            for p in ignored_new_paths(mine, present):
+                del mine[p]
+                print("note: skipping %s: an ignore rule covers it, so jj does not\n"
+                      "  track it. It is left out of this commit." % p, file=sys.stderr)
             if not mine and not also:
                 die("nothing to commit", 2)
 

@@ -353,7 +353,17 @@ def test_an_lf_file_is_left_alone(repo):
 
 def test_an_empty_payload_jj_did_not_take_is_rolled_back(repo):
     """`jj file show` prints nothing for an absent path, so an empty payload
-    compared equal and was reported verified while not in the commit."""
+    compared equal and was reported verified while not in the commit.
+
+    Non-colocated, because in a repo with .git an ignored new path is now
+    skipped before the commit (test_an_ignored_new_path_is_left_out), and an
+    empty file cannot exceed the size limit -- so this is the only way left to
+    reach the guard."""
+    shutil.rmtree(repo.root)
+    os.makedirs(repo.root)
+    subprocess.run(["jj", "git", "init", "--no-colocate"], cwd=repo.root,
+                   capture_output=True, check=True)
+    assert not os.path.exists(os.path.join(repo.root, ".git"))
     repo.write(".gitignore", "ignored.txt\n")
     repo.write("mine.txt", "m\n")
     repo.commit("base")
@@ -364,6 +374,54 @@ def test_an_empty_payload_jj_did_not_take_is_rolled_back(repo):
     r = repo.run("commit", "-m", "x", sid="S1")
     assert r.returncode == 1, r.stdout + r.stderr
     assert "did not take" in r.stderr
+    assert repo.show("mine.txt") == b"m\n"
+
+
+def test_an_ignored_new_path_is_left_out(repo):
+    """A Write into an ignored folder (.cc/private/) was journaled, listed in
+    --diff with its whole content at exit 0, and then made the real commit die
+    "did not take", blaming another session."""
+    repo.write(".gitignore", ".cc/private/\n")
+    repo.write("mine.txt", "m\n")
+    repo.commit("base")
+    _hook_write(repo, "S1", ".cc/private/r.md", "secret\n")
+    _hook_edit(repo, "S1", "mine.txt", "m", "M")
+
+    d = repo.run("commit", "--diff", sid="S1")
+    assert d.returncode == 0, d.stdout + d.stderr
+    assert "secret" not in d.stdout
+    assert "skipping .cc/private/r.md" in d.stderr
+
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "left out of this commit" in r.stderr
+    assert repo.show("mine.txt") == b"M\n"
+    assert repo.show(".cc/private/r.md") is None or repo.show(".cc/private/r.md") == b""
+
+
+def test_an_ignored_path_alone_is_nothing_to_commit(repo):
+    repo.write(".gitignore", ".cc/private/\n")
+    repo.write("mine.txt", "m\n")
+    repo.commit("base")
+    _hook_write(repo, "S1", ".cc/private/r.md", "secret\n")
+
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "nothing to commit" in r.stderr
+
+
+def test_a_new_file_over_the_size_limit_still_fails_closed(repo):
+    """Untracked but NOT ignored: the user wants it, so skipping it would
+    retire its records with the file left uncommitted."""
+    repo.write("mine.txt", "m\n")
+    repo.commit("base")
+    repo.jj_("config", "set", "--repo", "snapshot.max-new-file-size", "10")
+    _hook_write(repo, "S1", "big.txt", "x" * 100 + "\n")
+    _hook_edit(repo, "S1", "mine.txt", "m", "M")
+
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "did not take for: big.txt" in r.stderr
     assert repo.show("mine.txt") == b"m\n"
 
 
