@@ -18,7 +18,7 @@
 #   ToRead      → ~/Cloud/_inbox/ToRead.md
 #   later       → ~/Vaults/the-akashic-records/later.md
 #   tasks       → ~/Vaults/the-akashic-records/tasks.md
-#   bookmarks   → ~/Cloud/bookmarks/_INDEX.md
+#   bookmarks   → ~/Cloud/knowledge/bookmarks/_INDEX.md
 
 set -euo pipefail
 
@@ -38,7 +38,7 @@ resolve_dest() {
         ToRead)     echo "$INBOX/ToRead.md" ;;
         later)      echo "$HOME/Vaults/the-akashic-records/later.md" ;;
         tasks)      echo "$HOME/Vaults/the-akashic-records/tasks.md" ;;
-        bookmarks)  echo "$HOME/Cloud/bookmarks/_INDEX.md" ;;
+        bookmarks)  echo "$HOME/Cloud/knowledge/bookmarks/_INDEX.md" ;;
         *)          echo "$INBOX/$dest/_INDEX.md" ;;
     esac
 }
