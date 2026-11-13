@@ -213,6 +213,10 @@ scratchpad.
   material in `.cc/private/`, such as quotes from my transcripts. Git ignores that
   folder in every repo, so it is safe from a push. It also has no backup.
 
+## Cloud-only files in ~/Cloud
+
+Many files under `~/Cloud` (ProtonDrive) are cloud-only: `stat -f %Sf` shows `dataless`, and reading one downloads it, so a bulk read can hang for minutes. `stat`, `ls -lO` and `find` do not download. Before reading many files there, select the local ones with `find DIR ! -flags +dataless`.
+
 ## Web Search
 
 Prefer the built-in WebSearch tool for web searches. Kagi search (`mcp__kagi__kagi_search_fetch`) is also available as an alternative.

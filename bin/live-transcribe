@@ -127,6 +127,7 @@ class LiveTranscriber:
             # for ORPHAN_WAV_MAX_AGE: a live session rewrites its WAV continuously,
             # and sweeping every rec_*.wav once deleted another engine's in-progress
             # recording (2026-11-12, a test run started while the app was recording).
+            # A WAV kept after a failed transcode is kept_*.wav, so this never takes it.
             cutoff = time.time() - ORPHAN_WAV_MAX_AGE
             for stale in state_dir.glob("rec_*.wav"):
                 try:
@@ -147,7 +148,10 @@ class LiveTranscriber:
                       f"(transcode to {self.audio_output_path.name} on stop)",
                       file=sys.stderr)
             except Exception as e:
-                print(f"Warning: could not open audio recording file: {e}", file=sys.stderr)
+                # "failed" on purpose: the app's panel hides engine lines that read
+                # like chatter (isDebugChatter), and this one means no audio at all.
+                print(f"Warning: saving audio failed: could not open recording file: {e}",
+                      file=sys.stderr)
                 self.wav_writer = None
                 self._recording = False
 
@@ -716,7 +720,16 @@ class LiveTranscriber:
                 writer.close()
             except Exception as e:
                 print(f"Warning: closing audio recording failed: {e}", file=sys.stderr)
-        if not tmp or not tmp.exists():
+        if not tmp:
+            return
+        if not tmp.exists():
+            # Something deleted the temp WAV mid-session (on 2026-11-12 a second
+            # engine's start-up sweep did). Gated on frames: with none captured, or
+            # when wave.open failed in __init__ (path set, file never made), nothing
+            # was lost and that failure was already reported.
+            if frames > 0:
+                print(f"Warning: saving audio failed: {tmp} was deleted during the "
+                      f"session; no {self.audio_output_path.name} written", file=sys.stderr)
             return
         # Nothing captured (e.g. start-then-immediately-stop) → don't hand ffmpeg
         # an empty input, it errors.
@@ -737,9 +750,19 @@ class LiveTranscriber:
             print(f"Saved audio to: {out}", file=sys.stderr)
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             # ffmpeg missing/failed: keep the WAV locally (NOT Cloud — a long
-            # session is 100+ MB of sync churn) and report where it landed.
-            print(f"Warning: ffmpeg transcode failed ({e}); keeping WAV", file=sys.stderr)
-            print(f"Saved audio to: {tmp}", file=sys.stderr)
+            # session is 100+ MB of sync churn) and report where it landed. Renamed
+            # out of rec_*.wav first: that WAV is now the only copy of the audio, and
+            # the start-up sweep deletes idle rec_*.wav after ORPHAN_WAV_MAX_AGE.
+            kept = tmp.with_name("kept_" + tmp.name.removeprefix("rec_"))
+            try:
+                tmp.rename(kept)
+            except OSError as re:
+                print(f"Warning: could not rename {tmp.name} to {kept.name}: {re}",
+                      file=sys.stderr)
+                kept = tmp
+            print(f"Warning: ffmpeg transcode failed ({e}); kept the recording at: {kept}",
+                  file=sys.stderr)
+            print(f"Saved audio to: {kept}", file=sys.stderr)
 
     def start(self):
         """Start live transcription"""

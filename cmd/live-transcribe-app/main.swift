@@ -406,6 +406,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     // where a hard terminate (logout/Force-Quit) fires DURING finish()'s off-main drain,
     // before afterEngineStopped() got to copy (there `finishing` is already true).
     private var clipboardWritten = false
+    // True once checkAudioSaved() has run, so the normal stop path and the
+    // applicationWillTerminate safety net never both notify.
+    private var audioChecked = false
 
     // Session output settings — owned by the launch/stop mode, not UserDefaults (the
     // checkboxes stay live overrides for the session). `showTimestamps` is also the
@@ -1338,11 +1341,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     // MARK: Engine
 
+    // Keep the previous sessions' logs: last.log used to be emptied at every start, so a
+    // session that went wrong had lost its log by the time anyone looked. The old file is
+    // renamed to session_<its creation time>.log (= that session's start, sorting by name)
+    // and only the newest `keep` are kept. last.log itself stays the current session.
+    // The log tees every transcript line, so these are local copies of transcript text.
+    private func rotateLastLog(keep: Int = 20) {
+        let fm = FileManager.default
+        guard let attrs = try? fm.attributesOfItem(atPath: logFilePath),
+              ((attrs[.size] as? NSNumber)?.intValue ?? 0) > 0 else { return }
+        let born = (attrs[.creationDate] as? Date) ?? (attrs[.modificationDate] as? Date) ?? Date()
+        let stamp = AppDelegate.stampParser.string(from: born)
+        var dest = stateDir + "/session_\(stamp).log"
+        var n = 2
+        while fm.fileExists(atPath: dest) {
+            dest = stateDir + "/session_\(stamp)_\(n).log"
+            n += 1
+        }
+        guard (try? fm.moveItem(atPath: logFilePath, toPath: dest)) != nil else { return }
+        let logs = ((try? fm.contentsOfDirectory(atPath: stateDir)) ?? [])
+            .filter { $0.hasPrefix("session_") && $0.hasSuffix(".log") }
+            .sorted(by: >)
+        for name in logs.dropFirst(keep) {
+            try? fm.removeItem(atPath: stateDir + "/" + name)
+        }
+    }
+
+    // After the engine exits: every non-empty transcript of this session should have its
+    // sibling .m4a (the app always passes --save-audio). The engine's own warning cannot
+    // be relied on to reach anyone — the panel closes right after, and a mic switch
+    // detaches the reader before the old engine finalizes — so the app looks for the file
+    // itself and posts a notification. terminal-notifier, as bin/live-transcribe-launch
+    // uses: UNUserNotificationCenter would need a new notification permission for the app.
+    // An empty transcript is skipped: a start-then-stop captures no audio by design.
+    private func checkAudioSaved() {
+        if audioChecked { return }
+        audioChecked = true
+        let fm = FileManager.default
+        for path in transcriptPaths {
+            let size = ((try? fm.attributesOfItem(atPath: path))?[.size] as? NSNumber)?.intValue ?? 0
+            guard size > 0 else { continue }
+            let m4a = (path as NSString).deletingPathExtension + ".m4a"
+            if fm.fileExists(atPath: m4a) { continue }
+            let name = (path as NSString).lastPathComponent
+            // The engine names the temp WAV with the transcript's own timestamp.
+            let stamp = String(name.dropFirst("transcript_".count).dropLast(".txt".count))
+            let kept = stateDir + "/kept_\(stamp).wav"
+            let msg = fm.fileExists(atPath: kept)
+                ? "No audio saved for \(name). The recording was kept at \(kept)."
+                : "No audio saved for \(name). See \(logFilePath)."
+            logHandle?.write(Data("[app] saving audio failed: \(msg)\n".utf8))
+            appendError("⚠︎ \(msg)")
+            let tn = "/opt/homebrew/bin/terminal-notifier"
+            guard fm.isExecutableFile(atPath: tn) else { continue }
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: tn)
+            p.arguments = ["-title", "Live Transcribe", "-message", msg]
+            p.standardOutput = FileHandle.nullDevice
+            p.standardError = FileHandle.nullDevice
+            try? p.run()
+        }
+    }
+
     private func startEngine() {
         // Fresh log for this session (also tee'd here for debugging). A restart after a
         // mic switch appends to the same file instead of truncating it — what you open
         // last.log to read is usually whatever went wrong BEFORE the switch.
         if logHandle == nil {
+            rotateLastLog()
             FileManager.default.createFile(atPath: logFilePath, contents: nil)
             logHandle = FileHandle(forWritingAtPath: logFilePath)
         } else {
@@ -1627,6 +1693,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             while p.isRunning && Date() < deadline { usleep(100_000) }
             if p.isRunning { kill(p.processIdentifier, SIGKILL) }
         }
+        checkAudioSaved()
         // Copy iff we haven't already (covers a hard terminate that raced finish()'s
         // async drain). `cancelled` still means "leave the clipboard alone".
         if !clipboardWritten, !cancelled {
@@ -1677,6 +1744,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     // what's displayed and copied, both of which are re-derivable from the archive.
     private func afterEngineStopped() {
         enginePipe?.fileHandleForReading.readabilityHandler = nil
+        checkAudioSaved()
         applyPasteTargetOverride()
         let didWrite = deliver()
         clipboardWritten = didWrite
