@@ -144,13 +144,33 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
     if test $skip_extras -eq 0
         # Helpers live in ccs.fish; autoload only picks up the top-level `ccs`
         # function, so source explicitly the first time.
-        functions -q _ccs_open_register; or source ~/dotfiles/fish/functions/ccs.fish
+        # _ccs_open_finish, not _ccs_open_register: a shell that sourced an
+        # older ccs.fish has the second but not the first.
+        functions -q _ccs_open_finish; or source ~/dotfiles/fish/functions/ccs.fish
         # The ORIGINAL argv, not pass_argv: --process-label is ours, and a
         # resume has to hand it back to this wrapper along with the rest
         set CCS_ENTRY_FILE (_ccs_open_register $fish_pid (_ccs_launch_flags $argv | string split0))
     end
 
+    # Jobs that exist before claude starts, so a stopped claude can be told
+    # apart from a job the shell already had.
+    set -l jobs_before (jobs -p 2>/dev/null)
     proc-label "claude [$label]" claude --verbose $wt_flag $pass_argv
+    set -l claude_status $status
+
+    # Ctrl-Z stops claude, and fish then carries on with this function. The
+    # session is still alive, so reviewing it or retiring its entry here would
+    # be wrong: the entry used to be deleted, and after `fg` the session ran
+    # with no title, no backup and no place in `ccs list`. The SessionEnd hook
+    # marks the entry ended later, and `ccs list` retires it then.
+    set -l stopped 0
+    for p in (jobs -p 2>/dev/null)
+        contains -- $p $jobs_before; or set stopped 1
+    end
+    if test $stopped -eq 1
+        echo (set_color brblack)"Claude is suspended. `fg` returns to it; its ccs record stays until it ends."(set_color normal)
+        return 0
+    end
 
     # Claude Code derives its project directory from the cwd it actually ran in,
     # and --worktree makes it cd there AFTER this wrapper has launched it — so
@@ -160,40 +180,27 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
     # comment below records having been burned by once already. Measured, not
     # assumed — the transcript lands under the mangled *worktree* path.
     #
-    # ccsave-hook (SessionStart) records the real cwd into the ccs entry, which
-    # is the only reliable source: the hook sees the cwd claude actually chose.
-    # Fall back to pwd when there is no entry file (skip_extras) or the hook did
-    # not run (--safe-mode disables hooks).
-    set -l real_cwd (pwd)
-    if test -n "$CCS_ENTRY_FILE"; and test -f "$CCS_ENTRY_FILE"
-        set -l recorded (jq -r '.cwd // empty' "$CCS_ENTRY_FILE" 2>/dev/null)
-        if test -n "$recorded"; and test -d "$recorded"
-            set real_cwd $recorded
-        end
-    end
-    # Claude Code mangles '.' and ':' as well as '/' (~/.claude -> --claude), so
-    # replacing only '/' silently pointed at a directory that never exists —
-    # which made the post-session review below a no-op for any dotted path,
-    # including every .alt/worktrees checkout.
-    set -l sessions_dir "$HOME/.claude/projects/"(string replace -a '/' '-' $real_cwd | string replace -a '.' '-' | string replace -a ':' '-')
+    # So the session's transcript is found by its id, across every project
+    # folder (_ccs_session_jsonl), not by a folder computed from a cwd. Only
+    # when no hook ran (--safe-mode disables hooks) is there no id, and then
+    # the newest transcript in pwd's folder is the best guess. Claude Code
+    # names that folder by replacing every non-alphanumeric character with '-'.
+    set -l sessions_dir "$HOME/.claude/projects/"(string replace -ra '[^A-Za-z0-9]' '-' -- (pwd))
 
     # Post-session review: find the session JSONL and review in background
-    if test $skip_extras -eq 0; and test -d "$sessions_dir"
+    if test $skip_extras -eq 0
         # The session that just ended, by the id ccsave-hook stamped. "Newest file
         # in the folder" reviews the wrong conversation whenever another live
         # session shares this directory, and an older one when this session never
         # wrote a transcript, so a recorded id with no file means no review.
-        # The newest-file guess remains only for when no hook ran (--safe-mode).
         set -l post_latest
         set -l ended_session
         if test -n "$CCS_ENTRY_FILE"; and test -f "$CCS_ENTRY_FILE"
             set ended_session (jq -r '.session_id // empty' "$CCS_ENTRY_FILE" 2>/dev/null)
         end
         if test -n "$ended_session"
-            if test -f "$sessions_dir/$ended_session.jsonl"
-                set post_latest "$sessions_dir/$ended_session.jsonl"
-            end
-        else
+            set post_latest (_ccs_session_jsonl "$ended_session")
+        else if test -d "$sessions_dir"
             set post_latest (find "$sessions_dir" -maxdepth 1 -name '*.jsonl' -type f -exec stat -f '%m %N' {} + 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
         end
         if test -n "$post_latest"
@@ -233,6 +240,6 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
     # Clean exit: drop the open-sessions entry. (Both saved and unsaved clean
     # exits delete the file — only crashes leave it behind for recovery.)
     if test $skip_extras -eq 0
-        _ccs_open_finalize $fish_pid
+        _ccs_open_finish "$CCS_ENTRY_FILE" $claude_status
     end
 end

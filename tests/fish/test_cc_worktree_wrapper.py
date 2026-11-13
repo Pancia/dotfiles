@@ -135,7 +135,8 @@ class Wrapped:
         self.label_log = self.base / "label.log"
         self.spy_log = self.base / "spy.log"
         self.review_log = self.base / "review.log"
-        mangled = str(self.root).replace("/", "-").replace(".", "-").replace(":", "-")
+        # Claude Code's own rule: every non-alphanumeric character becomes "-".
+        mangled = re.sub(r"[^A-Za-z0-9]", "-", str(self.root))
         self.sessions = self.home / ".claude" / "projects" / mangled
         for d in (self.root, self.home, self.stub, self.xdg, self.xdg_config):
             d.mkdir(parents=True, exist_ok=True)

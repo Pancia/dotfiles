@@ -12,7 +12,19 @@ fi
 id="$CLAUDE_SESSION_ID"
 title="${*:-}"
 timestamp=$(date '+%Y-%m-%d %H:%M')
-dir="$HOME/Cloud/cc-sessions$(pwd)"
+# Key the save on the folder the session was launched from, as every other ccs
+# site does (_cc_worktree_key: the parent repo for a worktree). The current
+# folder drifts when Claude cds into a subfolder, and a save keyed on it lands
+# where `ccs list` at the root never looks. The ccs entry holds that key when it
+# belongs to this session.
+key=""
+if [ -n "${CCS_ENTRY_FILE:-}" ] && [ -f "$CCS_ENTRY_FILE" ] \
+    && [ "$(jq -r '.session_id // empty' "$CCS_ENTRY_FILE" 2>/dev/null)" = "$id" ]; then
+    key=$(jq -r '.cwd // empty' "$CCS_ENTRY_FILE" 2>/dev/null)
+fi
+[ -n "$key" ] || key=$(fish -c '_cc_worktree_key' 2>/dev/null || true)
+[ -n "$key" ] || key=$(pwd)
+dir="$HOME/Cloud/cc-sessions$key"
 file="$dir/sessions.json"
 
 mkdir -p "$dir"
@@ -31,10 +43,14 @@ else
 fi
 
 # Back up session JSONL
-project_dir=$(echo "$(pwd)" | tr '/' '-')
-jsonl="$HOME/.claude/projects/$project_dir/$id.jsonl"
-if [ -f "$jsonl" ]; then
-    backup_dir="$HOME/Cloud/cc-sessions$(pwd)/session-backups"
+# Find it by id in every project folder. Building the folder name with
+# `tr '/' '-'` missed any path with a dot, which then got no backup.
+jsonl=""
+for f in "$HOME"/.claude/projects/*/"$id".jsonl; do
+    if [ -f "$f" ]; then jsonl=$f; break; fi
+done
+if [ -n "$jsonl" ]; then
+    backup_dir="$dir/session-backups"
     mkdir -p "$backup_dir"
     zstd -qf "$jsonl" -o "$backup_dir/$id.jsonl.zst"
 fi

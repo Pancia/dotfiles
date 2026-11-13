@@ -20,7 +20,8 @@ HOOK = DOTFILES / "bin" / "ccsave-hook"
 SCRIPTS = {
     "wrapper.sh": r"""
 jq -n --argjson pid $$ --arg l "$(ps -o lstart= -p $$ | sed 's/^ *//; s/ *$//')" \
-  --arg sid "$OLD_SID" '{pid:$pid, pid_lstart:$l, session_id:$sid, title:"old"}' \
+  --arg sid "$OLD_SID" '{pid:$pid, pid_lstart:$l, session_id:$sid, title:"old",
+                         cwd:"/repo", ended:true, title_manual:true}' \
   > "$CCS_ENTRY_FILE"
 bash "$D/$FIRST"; true
 """,
@@ -34,6 +35,7 @@ bash "$D/$FIRST"; true
 
 
 def run(tmp_path, source, first, old_sid="old-id"):
+    tmp_path.mkdir(parents=True, exist_ok=True)
     for name, body in SCRIPTS.items():
         (tmp_path / name).write_text(body)
     entry = tmp_path / "entry.json"
@@ -61,6 +63,14 @@ def test_resume_in_top_session_follows_new_id(tmp_path):
     e = run(tmp_path, "resume", "claude.sh")
     assert e["session_id"] == "new-id"
     assert e["title"] == ""
+    assert "ended" not in e and "title_manual" not in e, "they described the old id"
+
+
+def test_the_registered_cwd_is_never_overwritten(tmp_path):
+    """The payload cwd is /x; .cwd is the key `ccs list` matches on."""
+    for source in ("resume", "clear"):
+        assert run(tmp_path / source, source, "claude.sh")["cwd"] == "/repo"
+    assert run(tmp_path / "fresh", "startup", "claude.sh", old_sid="")["cwd"] == "/repo"
 
 
 def test_resume_through_sh_c_still_counts_as_top(tmp_path):

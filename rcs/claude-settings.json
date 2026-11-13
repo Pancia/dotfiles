@@ -232,6 +232,11 @@
           {
             "type": "command",
             "command": "clj-paren-repair-claude-hook --cljfmt"
+          },
+          {
+            "type": "command",
+            "command": "ccs-title-hook --end",
+            "timeout": 5
           }
         ]
       }

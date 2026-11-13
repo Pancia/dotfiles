@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-# Claude Code Stop hook: copy this session's current title into its ccs
-# open-session entry file.
+# Claude Code Stop and SessionEnd hook. Three jobs:
+#   1. Keep a local compressed copy of every session's transcript, so a session
+#      stays recoverable after Claude Code prunes the original.
+#   2. (Stop) Copy the session's current title into its ccs open-session entry.
+#   3. (SessionEnd, run as `ccs-title-hook --end`) Mark the entry as ended, so
+#      the wrapper and `ccs list` can tell a clean end from a crash, and take a
+#      last copy of the transcript without the throttle.
 #
 # Why: a crashed session is usually a power cut, so nothing can run at crash
 # time. Recording the title on every turn means the entry left behind is still
@@ -10,90 +15,125 @@
 # from stopping and feeds its stderr back to Claude. It must also print nothing
 # on stdout. Every path below ends at `exit 0`.
 
+END_MODE=0
+[ "${1:-}" = "--end" ] && END_MODE=1
+
+# _ccs_is_top_claude. If the library is missing, nothing counts as the top
+# claude: no entry is marked ended, which keeps entries rather than losing them.
+_ccs_is_top_claude() { return 1; }
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/bash/ccs-hook-lib.sh" 2>/dev/null
+
 INPUT=$(cat 2>/dev/null)
-
-# An unset entry file means this session isn't tracked — `claude` run directly
-# rather than through my-claude-code-wrapper, or a --print invocation.
-[ -n "$CCS_ENTRY_FILE" ] || exit 0
-[ -f "$CCS_ENTRY_FILE" ] || exit 0
-
 SID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null)
+REASON=$(printf '%s' "$INPUT" | jq -r '.reason // empty' 2>/dev/null)
 [ -n "$SID" ] || exit 0
-[ -f "$TRANSCRIPT" ] || exit 0
 
-# Identity gate. CCS_ENTRY_FILE is exported and so inherited by every
-# descendant process, and `claude -p` runs hooks too — so without this, a
-# nested helper session (ccs autotitle, cc-session-review, a cmds entry) would
-# write its own junk title over ours. It also catches /clear, which starts a new
-# session id against the same entry. Only the stamped session may write.
-STAMPED=$(jq -r '.session_id // empty' "$CCS_ENTRY_FILE" 2>/dev/null)
-[ -n "$STAMPED" ] || exit 0
-[ "$STAMPED" = "$SID" ] || exit 0
-
-# Claude Code writes its own generated title as {"type":"ai-title","aiTitle":...},
-# refreshed as the session drifts, so the last record is current. Decode with jq
-# rather than matching the raw text: slicing between quotes would cut a title
-# containing an escaped quote mid-escape and leave a trailing backslash.
-# The `type == "string"` guard keeps a non-string field from being stored as its
-# JSON rendering (a lastPrompt array would otherwise become '[ "a", "b" ]').
-TITLE=$(grep '"type":"ai-title"' "$TRANSCRIPT" 2>/dev/null | tail -1 \
-    | jq -r 'if (.aiTitle | type) == "string" then .aiTitle else empty end' 2>/dev/null)
-if [ -z "$TITLE" ]; then
-    # Fall back to the last user prompt, for sessions Claude never titled
-    TITLE=$(grep '"type":"last-prompt"' "$TRANSCRIPT" 2>/dev/null | tail -1 \
-        | jq -r 'if (.lastPrompt | type) == "string" then .lastPrompt else empty end' 2>/dev/null)
-fi
-
-# Collapse to a single line and bound what we store
-TITLE=$(printf '%s' "$TITLE" | tr '\n\t' '  ' | sed 's/  */ /g; s/^ //; s/ *$//' | cut -c1-120)
-[ -n "$TITLE" ] || exit 0
-
-TMP="$CCS_ENTRY_FILE.tmp.$$"
-# Never clobber a title the user set by hand with `ccs rename` — that sets
-# .title_manual, and the next turn would otherwise silently revert it.
-if { jq --arg t "$TITLE" --arg p "$TRANSCRIPT" \
-    'if (.title_manual // false) then . else .title = $t end | .transcript_path = $p' \
-    "$CCS_ENTRY_FILE" > "$TMP"; } 2>/dev/null; then
-    # Re-check before replacing: a clean exit may have deleted the entry while we
-    # worked. This narrows that window but does not close it — see the known
-    # limitation noted in CLAUDE.md.
-    if [ -f "$CCS_ENTRY_FILE" ]; then
-        mv "$TMP" "$CCS_ENTRY_FILE" 2>/dev/null || rm -f "$TMP"
+# Replace the entry file with the output of a jq filter, atomically.
+update_entry() {
+    local tmp="$CCS_ENTRY_FILE.tmp.$$"
+    if { jq "$@" "$CCS_ENTRY_FILE" > "$tmp"; } 2>/dev/null; then
+        # Re-check before replacing: a clean exit may have deleted the entry
+        # while we worked. This narrows that window but does not close it -- see
+        # the known limitation noted in CLAUDE.md.
+        if [ -f "$CCS_ENTRY_FILE" ]; then
+            mv "$tmp" "$CCS_ENTRY_FILE" 2>/dev/null || rm -f "$tmp"
+        else
+            rm -f "$tmp"
+        fi
     else
-        rm -f "$TMP"
+        rm -f "$tmp"
     fi
-else
-    rm -f "$TMP"
-fi
+}
 
-# Keep a local compressed copy of the transcript so a crashed session stays
-# recoverable after Claude Code prunes the original. Local state, not ~/Cloud —
+# Keep a local compressed copy of the transcript. Local state, not ~/Cloud --
 # that is a ProtonDrive symlink, and re-syncing a multi-MB blob every turn would
-# thrash it. `ccs resume` restores from here via _ccs_restore_transcript.
-BACKUP_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/claude-sessions/transcripts"
-BACKUP="$BACKUP_DIR/$SID.jsonl.zst"
-mkdir -p "$BACKUP_DIR" 2>/dev/null || exit 0
+# thrash it (services/cc-transcript-backup copies to ProtonDrive nightly).
+# `ccs resume` restores from here via _ccs_restore_transcript.
+#
+# This runs for every session, before any entry or title check. It used to sit
+# behind them, so plain `claude`, the desktop app, IDE sessions and any session
+# with no title were never copied.
+backup_transcript() {
+    local throttle=$1
+    [ -f "$TRANSCRIPT" ] || return 0
+    local dir="${XDG_STATE_HOME:-$HOME/.local/state}/claude-sessions/transcripts"
+    local backup="$dir/$SID.jsonl.zst"
+    mkdir -p "$dir" 2>/dev/null || return 0
 
-# Throttle: skip if the existing copy is under 10 minutes old. The lower bound
-# also covers a future mtime (clock skew), which would otherwise read as a huge
-# negative age and suppress every backup for the rest of the session.
-if [ -f "$BACKUP" ]; then
-    NOW=$(date +%s 2>/dev/null)
-    BAK=$(stat -f %m "$BACKUP" 2>/dev/null)
-    if [ -n "$NOW" ] && [ -n "$BAK" ] \
-        && [ "$((NOW - BAK))" -ge 0 ] && [ "$((NOW - BAK))" -lt 600 ]; then
-        exit 0
+    # Throttle: skip if the existing copy is under 10 minutes old. The lower
+    # bound also covers a future mtime (clock skew), which would otherwise read
+    # as a huge negative age and suppress every backup for the rest of the
+    # session. SessionEnd skips the throttle, so the last minutes are kept.
+    if [ "$throttle" = 1 ] && [ -f "$backup" ]; then
+        local now bak
+        now=$(date +%s 2>/dev/null)
+        bak=$(stat -f %m "$backup" 2>/dev/null)
+        if [ -n "$now" ] && [ -n "$bak" ] \
+            && [ "$((now - bak))" -ge 0 ] && [ "$((now - bak))" -lt 600 ]; then
+            return 0
+        fi
     fi
+
+    # Compress to a temp path first: zstd writing in place is not atomic, and
+    # being killed mid-write (the hook timeout on a large transcript) would
+    # leave a truncated file where a good backup used to be.
+    if { zstd -qf "$TRANSCRIPT" -o "$backup.tmp.$$"; } 2>/dev/null; then
+        mv "$backup.tmp.$$" "$backup" 2>/dev/null || rm -f "$backup.tmp.$$"
+    else
+        rm -f "$backup.tmp.$$"
+    fi
+}
+
+# Identity gate for the entry. CCS_ENTRY_FILE is exported and so inherited by
+# every descendant process, and `claude -p` runs hooks too -- so without this, a
+# nested helper session (ccs autotitle, cc-session-review, a cmds entry) would
+# write over ours. It also catches /clear, which starts a new session id against
+# the same entry. Only the stamped session may write.
+owns_entry() {
+    [ -n "${CCS_ENTRY_FILE:-}" ] && [ -f "$CCS_ENTRY_FILE" ] || return 1
+    local stamped
+    stamped=$(jq -r '.session_id // empty' "$CCS_ENTRY_FILE" 2>/dev/null)
+    [ -n "$stamped" ] && [ "$stamped" = "$SID" ]
+}
+
+if [ "$END_MODE" = 1 ]; then
+    # /clear and /resume end this id but not the process: SessionStart then
+    # moves the entry to the new id, so the entry is not finished. The id match
+    # alone is not enough: a nested `claude -p --resume $CLAUDE_SESSION_ID`
+    # ends with the parent's id, and marking the parent ended then let
+    # `ccs list` delete the entry of a session that was still running.
+    if [ "$REASON" != clear ] && [ "$REASON" != resume ] && owns_entry && _ccs_is_top_claude; then
+        update_entry '.ended = true'
+    fi
+    backup_transcript 0
+    exit 0
 fi
 
-# Compress to a temp path first: zstd writing in place is not atomic, and being
-# killed mid-write (the 5s hook timeout on a large transcript) would leave a
-# truncated file where a good backup used to be.
-if { zstd -qf "$TRANSCRIPT" -o "$BACKUP.tmp.$$"; } 2>/dev/null; then
-    mv "$BACKUP.tmp.$$" "$BACKUP" 2>/dev/null || rm -f "$BACKUP.tmp.$$"
-else
-    rm -f "$BACKUP.tmp.$$"
+if [ -f "$TRANSCRIPT" ] && owns_entry; then
+    # Claude Code writes its own generated title as {"type":"ai-title","aiTitle":...},
+    # refreshed as the session drifts, so the last record is current. Decode with jq
+    # rather than matching the raw text: slicing between quotes would cut a title
+    # containing an escaped quote mid-escape and leave a trailing backslash.
+    # The `type == "string"` guard keeps a non-string field from being stored as its
+    # JSON rendering (a lastPrompt array would otherwise become '[ "a", "b" ]').
+    TITLE=$(grep '"type":"ai-title"' "$TRANSCRIPT" 2>/dev/null | tail -1 \
+        | jq -r 'if (.aiTitle | type) == "string" then .aiTitle else empty end' 2>/dev/null)
+    if [ -z "$TITLE" ]; then
+        # Fall back to the last user prompt, for sessions Claude never titled
+        TITLE=$(grep '"type":"last-prompt"' "$TRANSCRIPT" 2>/dev/null | tail -1 \
+            | jq -r 'if (.lastPrompt | type) == "string" then .lastPrompt else empty end' 2>/dev/null)
+    fi
+
+    # Collapse to a single line and bound what we store
+    TITLE=$(printf '%s' "$TITLE" | tr '\n\t' '  ' | sed 's/  */ /g; s/^ //; s/ *$//' | cut -c1-120)
+
+    # The transcript path is recorded even with no title yet: `ccs resume`
+    # needs it to put a pruned transcript back in the right folder. Never
+    # clobber a title set by hand with `ccs rename` (.title_manual).
+    update_entry --arg t "$TITLE" --arg p "$TRANSCRIPT" \
+        'if (.title_manual // false) or $t == "" then . else .title = $t end | .transcript_path = $p'
 fi
 
+backup_transcript 1
 exit 0

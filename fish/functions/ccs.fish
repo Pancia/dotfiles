@@ -665,23 +665,50 @@ function _ccs_restore_transcript --description 'Put a crashed session transcript
         return 0
     end
 
-    # We can only restore to where the file actually belongs, and the only
-    # reliable source for that is the path the Stop hook recorded from the hook
-    # payload. Deriving the project dir name from cwd is not dependable, and
-    # writing a transcript to the wrong dir would make it unresumable anyway.
+    # Restore to the path the Stop hook recorded from the hook payload. Without
+    # one (the session died before its first Stop), use the project folder of
+    # the entry's cwd, which _ccs_resume_entry then cds into before resuming:
+    # Claude Code names the folder by replacing every non-alphanumeric
+    # character of the path with '-'. Giving up there used to strand sessions
+    # that had a good backup.
     set -l target
+    set -l ecwd
     if test -n "$entry_file"; and test -f "$entry_file"
         set target (jq -r '.transcript_path // ""' "$entry_file" 2>/dev/null)
+        set ecwd (jq -r '.cwd // ""' "$entry_file" 2>/dev/null)
+    end
+    # The nightly ProtonDrive copy (services/cc-transcript-backup) sits under
+    # the real folder name, which also covers worktrees and Claude Code's
+    # hashed names for long paths, so prefer it over rebuilding the name.
+    set -l nightly "$HOME/Cloud/claude-transcripts/projects/"*"/$sid.jsonl.zst"
+    if test -z "$target"; and test (count $nightly) -gt 0
+        set target "$HOME/.claude/projects/"(basename (dirname $nightly[1]))"/$sid.jsonl"
+    end
+    if test -z "$target"; and test -n "$ecwd"
+        set target "$HOME/.claude/projects/"(string replace -ra '[^A-Za-z0-9]' '-' -- $ecwd)"/$sid.jsonl"
     end
     if test -z "$target"
         return 1
     end
 
-    set -l backup (_ccs_local_backup_dir)"/$sid.jsonl.zst"
-    if not test -f "$backup"
-        set backup "$HOME/Cloud/cc-sessions"(jq -r '.cwd // ""' "$entry_file" 2>/dev/null)"/session-backups/$sid.jsonl.zst"
+    # Of the copies that exist -- the local Stop-hook copy, the nightly one and
+    # a manual ccsave -- take the newest. The local copy is throttled to one per
+    # 10 minutes, so after a crash the nightly copy can hold more of the chat.
+    set -l candidates (_ccs_local_backup_dir)"/$sid.jsonl.zst" $nightly
+    if test -n "$ecwd"
+        set -a candidates "$HOME/Cloud/cc-sessions$ecwd/session-backups/$sid.jsonl.zst"
     end
-    test -f "$backup"; or return 1
+    set -l backup
+    set -l best 0
+    for c in $candidates
+        test -f "$c"; or continue
+        set -l m (stat -f %m "$c" 2>/dev/null)
+        if test -n "$m"; and test "$m" -gt $best
+            set best $m
+            set backup $c
+        end
+    end
+    test -n "$backup"; or return 1
 
     mkdir -p (dirname "$target") 2>/dev/null
     if zstd -dqf "$backup" -o "$target" 2>/dev/null
@@ -810,10 +837,40 @@ function _ccs_open_entry_for_pid --description 'Find the open file for a pid+lst
     return 1
 end
 
+function _ccs_open_finish --description 'After claude returns: retire its entry only if it ended cleanly'
+    # A clean end is proved by SessionEnd (ccs-title-hook --end sets .ended), not
+    # by claude returning: a crash of claude under a live shell (an OOM kill, a
+    # segfault) also returns, and deleting its entry then lost the session from
+    # `ccs list`. An entry with no session id has nothing to recover.
+    set -l entry_file $argv[1]
+    set -l code $argv[2]
+    test -n "$entry_file"; and test -f "$entry_file"; or return 0
+    set -l sid (jq -r '.session_id // ""' "$entry_file" 2>/dev/null)
+    set -l ended (jq -r '.ended // false' "$entry_file" 2>/dev/null)
+    if test -z "$sid"; or test "$ended" = true
+        _ccs_open_finalize $fish_pid "$entry_file"
+        return 0
+    end
+    # The shell (the entry's pid) is still alive, so mark claude itself gone,
+    # or `ccs list` shows a "running" session that cannot be resumed.
+    set -l tmp "$entry_file.tmp.$fish_pid"
+    if jq '.claude_exited = true' "$entry_file" > "$tmp" 2>/dev/null
+        mv "$tmp" "$entry_file"
+    else
+        rm -f "$tmp"
+    end
+    echo (set_color yellow)"Claude did not end cleanly (exit $code). The session stays in `ccs list`."(set_color normal)
+end
+
 function _ccs_open_finalize --description 'Retire the open entry for this pid (clean exit)'
     set -l pid $argv[1]
-    set -l entry_file (_ccs_open_entry_for_pid $pid)
-    test -n "$entry_file"; or return 0
+    # The wrapper passes its own entry file. Looking it up by pid alone can find
+    # another entry of the same shell, such as a suspended claude's.
+    set -l entry_file $argv[2]
+    if test -z "$entry_file"
+        set entry_file (_ccs_open_entry_for_pid $pid)
+    end
+    test -n "$entry_file"; and test -f "$entry_file"; or return 0
 
     # If this session was saved but never titled, inherit the title the Stop
     # hook recorded — saves `ccsave` a Haiku round trip.
@@ -875,6 +932,13 @@ end
 function _ccs_open_scan --description 'Classify open entries for current pwd; reap garbage; print TSV'
     set -l dir (_ccs_open_dir)
     test -d "$dir"; or return 0
+    # SessionEnd saw a clean end, but the wrapper never retired the entry:
+    # claude was suspended (Ctrl-Z) when the wrapper function returned, and
+    # ended after `fg`. Retire it as the wrapper would have, title hand-off
+    # included. One grep, since this runs on every `cd`.
+    for f in (grep -l '"ended": *true' "$dir"/*.json 2>/dev/null)
+        _ccs_open_finalize "" "$f"
+    end
     # One python pass rather than a jq fork per field: this runs on every `cd`
     # via chpwd, and the old version spawned ~330 processes (~7s). Python also
     # tolerates a corrupt entry file — `jq -n inputs` aborts the whole stream on
@@ -981,8 +1045,16 @@ for name in names:
     lstart = str(e.get("pid_lstart") or "")
 
     is_alive = bool(pid) and alive.get(pid) == lstart and lstart != ""
-    if is_alive:
+    if e.get("ended") is True:
+        # Retired by the fish side before this ran; skip any that raced it.
+        continue
+    if is_alive and e.get("claude_exited") is not True:
         klass = "running"
+    elif e.get("claude_exited") is True and sid:
+        # claude died under a shell that is still open (an OOM kill, a
+        # segfault). The pid is that of the shell, so it reads as alive, and a
+        # "running" row only switches to the dead pane instead of resuming.
+        klass = "crashed"
     elif not sid:
         if now - started > GARBAGE_AGE:
             # Dead and it never captured a session id: nothing recoverable
@@ -1141,9 +1213,12 @@ function _ccs_resume_entry --description 'Resume the session an open entry holds
     # Claude Code eventually prunes transcripts; put ours back first, or
     # --resume has nothing to open. Must run before the entry is archived,
     # since it holds the path to restore to.
+    # The entry is archived only once the transcript is in place. Archiving
+    # first left a failed resume with no entry, and `ccs old` cannot resume.
     if not _ccs_session_jsonl "$sid" >/dev/null
         if not _ccs_restore_transcript "$sid" "$ef"
-            echo (set_color yellow)"Transcript for $sid is gone and could not be restored — resume will likely fail."(set_color normal)
+            echo (set_color red)"Transcript for $sid is gone and no backup was found. The entry stays in `ccs list`."(set_color normal) >&2
+            return 1
         end
     end
     _ccs_archive_entry "$ef"

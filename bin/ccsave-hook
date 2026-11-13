@@ -13,41 +13,16 @@
 INPUT=$(cat 2>/dev/null)
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 SOURCE=$(printf '%s' "$INPUT" | jq -r '.source // empty' 2>/dev/null)
-# The directory claude ACTUALLY started in, which is not necessarily the one the
-# wrapper launched it from: `--worktree` makes claude cd into the worktree after
-# the wrapper has already run. Claude Code keys its transcript directory off the
-# real cwd, so the wrapper's post-session review has to learn it from here or it
-# looks in the parent, finds nothing, and silently skips the review.
-CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
 
 # Guarded: an unset CLAUDE_ENV_FILE would otherwise make this script fail.
 if [ -n "$SESSION_ID" ] && [ -n "${CLAUDE_ENV_FILE:-}" ]; then
     { echo "export CLAUDE_SESSION_ID=$SESSION_ID" >> "$CLAUDE_ENV_FILE"; } 2>/dev/null
 fi
 
-# True when this hook belongs to the claude that the wrapper launched, not a
-# nested one. The entry records the wrapper's fish pid. Claude runs the hook
-# directly or through `sh -c`, so that claude is our parent or grandparent, and
-# its parent is the wrapper. A nested claude sits at least one shell deeper, so
-# the wrapper is never within two steps of its hooks. pid_lstart guards reuse.
-_ccs_is_top_claude() {
-    local want lstart p i pp
-    want=$(jq -r '.pid // empty' "$CCS_ENTRY_FILE" 2>/dev/null)
-    lstart=$(jq -r '.pid_lstart // empty' "$CCS_ENTRY_FILE" 2>/dev/null)
-    [ -n "$want" ] || return 1
-    p=$PPID
-    for i in 1 2; do
-        pp=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')
-        [ -n "$pp" ] || return 1
-        if [ "$pp" = "$want" ]; then
-            [ -z "$lstart" ] && return 0
-            [ "$(ps -o lstart= -p "$want" 2>/dev/null | sed 's/^ *//; s/ *$//')" = "$lstart" ]
-            return
-        fi
-        p=$pp
-    done
-    return 1
-}
+# _ccs_is_top_claude. If the library is missing, nothing counts as the top
+# claude, which only makes the hook more cautious.
+_ccs_is_top_claude() { return 1; }
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/bash/ccs-hook-lib.sh" 2>/dev/null
 
 # Stamp the ccs entry. CCS_ENTRY_FILE is exported and so inherited by every
 # descendant process, and `claude -p` runs hooks too — so a nested helper session
@@ -78,15 +53,15 @@ if [ -n "$SESSION_ID" ] && [ -n "${CCS_ENTRY_FILE:-}" ] && [ -f "$CCS_ENTRY_FILE
         TMP="$CCS_ENTRY_FILE.tmp.$$"
         # On a rotation the recorded title describes the previous conversation,
         # so drop it rather than pair an old title with a new id.
-        FILTER='.session_id = $id | .cwd = $cwd'
+        # .cwd is never written here. It is the key `ccs list` matches on, set
+        # by _ccs_open_register to the parent repo. The hook's cwd is a worktree
+        # or whatever subfolder Claude has moved to, and writing it hid the
+        # entry from `ccs list` at the repo root.
+        FILTER='.session_id = $id'
         if [ "$RESTAMP" = rotated ]; then
-            FILTER='.session_id = $id | .cwd = $cwd | .title = "" | .transcript_path = ""'
+            FILTER='.session_id = $id | .title = "" | .transcript_path = "" | del(.title_manual, .ended)'
         fi
-        # The cwd rides the same identity gate as the session id, deliberately.
-        # CCS_ENTRY_FILE is inherited by every descendant and `claude -p` runs
-        # hooks too, so an unguarded write would let a nested helper session --
-        # running in some other directory -- redirect the parent's review.
-        if { jq --arg id "$SESSION_ID" --arg cwd "$CWD" "$FILTER" "$CCS_ENTRY_FILE" > "$TMP"; } 2>/dev/null; then
+        if { jq --arg id "$SESSION_ID" "$FILTER" "$CCS_ENTRY_FILE" > "$TMP"; } 2>/dev/null; then
             # Re-check before replacing: a clean exit may have deleted the entry
             # while we worked, and we must not resurrect it.
             if [ -f "$CCS_ENTRY_FILE" ]; then
