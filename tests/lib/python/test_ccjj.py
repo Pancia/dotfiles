@@ -153,6 +153,34 @@ def test_diff_previews_without_committing(repo):
     assert repo.show("f.txt") == b"a\n"          # nothing committed
 
 
+def test_names_the_post_commit_hook_but_never_runs_it(repo, tmp_path):
+    """`commit-mine` in the vault skipped its three backups without a word. ccjj
+    must say so -- but running the hook would double it under `g run ci` and
+    put a minutes-long ProtonDrive write inside an agent's 120 s Bash timeout."""
+    ran = tmp_path / "hook-ran"
+    repo.write("vcs-hooks/post-commit", "#!/bin/sh\ntouch '%s'\n" % ran)
+    hook = os.path.join(repo.root, "vcs-hooks", "post-commit")
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+
+    os.chmod(hook, 0o644)                        # present, not executable: silent
+    repo.write("f.txt", "A\n")
+    repo.record("S1", "f.txt", old="a", new="A", original="a\n")
+    r = repo.run("commit", "-m", "one", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert "post-commit" not in r.stdout + r.stderr
+
+    os.chmod(hook, 0o755)
+    repo.commit("hook mode")                     # keep the mode change unclaimed-free
+    repo.write("f.txt", "B\n")
+    repo.record("S1", "f.txt", old="A", new="B", original="A\n")
+    r = repo.run("commit", "-m", "two", sid="S1")
+    assert r.returncode == 0, r.stderr           # the note never changes the exit code
+    assert repo.show("f.txt") == b"B\n"
+    assert "vcs-hooks/post-commit was not run" in r.stdout
+    assert not ran.exists()                      # named, never run
+
+
 # --------------------------------------------------- placement and attribution
 
 def test_patches_the_right_occurrence(repo):

@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
 # Wrapper that timestamps service output
 # With proper signal handling in services, we can use simple exec
+#
+# pipefail: without it the pipeline's status is `ts`'s, so every failed run
+# exited 0 and launchd recorded LastExitStatus 0 -- `service status` and
+# `service wait` could never see a failure.
+set -o pipefail
 cd "$1" && exec "${@:2}" 2>&1 | /opt/homebrew/bin/ts '[%Y-%m-%d %H:%M:%S]'

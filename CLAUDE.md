@@ -59,10 +59,15 @@ service status            # Status of all services
 service start <name>      # Start a service
 service stop <name>       # Stop a service
 service restart <name>    # Restart a service
+service reload <name>     # Re-read an edited plist without running the job
+service wait <name>       # Block until the current run ends (0/1 job result, 2 not running, 3 not loaded, 124 timeout)
 service log <name>        # Show logs for a service
 service create            # Create a new service
 service edit <name>       # Edit a service's script and plist
 ```
+
+- A new or changed `services/*/*.plist` is installed and loaded at the next fish start of any kind, including `fish -c` and fish scripts such as `trash` (`_ENSURE_SERVICES` in `fish/config.fish`). A RunAtLoad or KeepAlive job starts then. Rename a plist to `*.plist.disabled` to keep it out.
+- `launchctl load` ignores a job that is already loaded, so an edit to a loaded plist needs `service reload <name>`. `service restart <name>` also applies it, but then runs the job at once; for a scheduled job that is an extra run. Both stop a run in progress.
 
 ### Available Services
 

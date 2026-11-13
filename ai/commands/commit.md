@@ -54,6 +54,10 @@ It does not stop for a file a peer already committed, or a file only a peer has
 edit records on. When you and a peer both edited one file, the commit takes only
 your hunks and prints a note.
 
+`commit-mine` does not run the repo's post-commit hook. After it succeeds, do
+step 7 of the procedure below ("Run the post-commit hook"), exactly as for a
+plain commit.
+
 ### Before committing, run `ccjj audit`
 
 It lists working-copy paths no session claims. Changes you made through **Bash**
@@ -254,12 +258,31 @@ normal procedure.
    Both commands feed the report: what landed and what stayed behind are
    separate facts, and the report carries both.
 
-7. **Do not push** unless the user explicitly asked. Whether you advanced a
+7. **Run the post-commit hook.** Do this after every successful commit, on
+   every route: a plain commit, a path-scoped one, `commit-mine`, and after the
+   last commit of Split mode (once, not per commit). `g` runs this hook, but a
+   bare `jj commit`, `git commit` or `commit-mine` does not.
+
+   If `<repo root>/vcs-hooks/post-commit` exists and is executable, run it from
+   the repo root, after any bookmark move, so a backup includes it:
+
+   ```bash
+   cd "$(jj root 2>/dev/null || git rev-parse --show-toplevel)" && ./vcs-hooks/post-commit
+   ```
+
+   It can take minutes (a vault backup writes to ProtonDrive). Run it with
+   `run_in_background`, or with a 600000 ms Bash timeout. Never use the 120 s
+   default: a kill in the middle can leave a lock that breaks later backups.
+   If it exits non-zero, report it under 🔴 `FAILED` with its failing lines.
+   The commit still stands; do not undo or redo it. If the file is missing or
+   not executable, skip this step and say nothing.
+
+8. **Do not push** unless the user explicitly asked. Whether you advanced a
    `master`/`main` bookmark, and whether anything was pushed, both belong in
    the report's **Needs you** block — a commit sitting off the bookmark will
    never be pushed, and silence there reads as "done".
 
-8. **Report** using the section below. It uses the same reply format as
+9. **Report** using the section below. It uses the same reply format as
    every other recap; the contents are fixed.
 
 ## Split mode
@@ -306,6 +329,8 @@ Commit the whole working copy as a series of commits, one per concern.
    the last commit.
 6. **Bookmark**: advance `master`/`main` once, to the last commit, and
    only where the repo's CLAUDE.md says to advance it.
+7. **Post-commit hook**: run it once, after the bookmark, as in step 7 of
+   the Procedure.
 
 In the report, `NOW` names the number of commits. `LANDED` takes one bullet
 per commit, as `<change id> <subject>` with its paths.
@@ -325,7 +350,8 @@ result, and it is the only place the scope becomes checkable.
 Each item below is one label line, with its facts as bullets under it.
 
 🔴 `FAILED` — a pre-commit hook that failed, and the new commit you made instead.
-Omit it when nothing failed.
+A `vcs-hooks/post-commit` that exited non-zero, with its failing lines; the
+commit itself still stands. Omit it when nothing failed.
 
 🟢 `NOW` — a sentence or two. The subject line you committed, the commit or
 change id, and whether a `master`/`main` bookmark was advanced. Name the route

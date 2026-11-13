@@ -1779,7 +1779,24 @@ def cmd_commit(args):
     if unclaimed:
         cov = window_coverage() if os.path.isfile(marker(ROOT, MARKER_OPTIN)) else {}
         report_unclaimed(unclaimed, prefix="note: ", cov=cov, me=sid)
+    note_post_commit_hook()
     maybe_prune()
+
+
+def note_post_commit_hook():
+    """Say that the repo's vcs-hooks/post-commit was NOT run. Never run it.
+
+    `g` runs that hook after a commit chain; `ccjj commit` deliberately does not.
+    A vault's hook writes a backup to ProtonDrive and can take minutes, and an
+    agent's Bash call is killed at 120 s by default -- a kill mid-`git bundle`
+    leaves a lock that breaks every backup for the next hour. Running it here
+    would also run it twice under `g run ci` (ai_jj_commit -> ccjj commit, then g).
+    So print the reminder and leave the exit code alone.
+    """
+    hook = os.path.join(ROOT, "vcs-hooks", "post-commit")
+    if os.path.isfile(hook) and os.access(hook, os.X_OK):
+        print("note: vcs-hooks/post-commit was not run. Run it from %s in the\n"
+              "  background (it can take minutes): ./vcs-hooks/post-commit" % ROOT)
 
 
 # ----------------------------------------------------------------------- claim

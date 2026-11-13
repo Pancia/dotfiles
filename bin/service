@@ -194,6 +194,31 @@ def launchd_loaded?(label)
   system("launchctl list #{label.shellescape} >/dev/null 2>&1")
 end
 
+# One job's state from `launchctl list <label>`, or nil when it is not loaded.
+# The "PID" key is present only while a run is going. "LastExitStatus" here is
+# the raw wait status (exit 3 reads 768), unlike the decoded column of the bare
+# `launchctl list` table.
+def launchd_job(label)
+  out = %x[launchctl list #{label.shellescape} 2>/dev/null]
+  return nil unless $?.success?
+
+  pid = out[/"PID" = (\d+);/, 1]
+  last = out[/"LastExitStatus" = (-?\d+);/, 1]
+  { pid: pid && pid.to_i, last: last && last.to_i }
+end
+
+# Raw wait status -> "exit N" / "signal N", and whether it was a success.
+def decode_wait_status(raw)
+  return ["unknown", false] if raw.nil?
+  return ["signal #{-raw}", false] if raw < 0
+
+  sig = raw & 0x7f
+  return ["signal #{sig}", false] if sig != 0
+
+  code = (raw >> 8) & 0xff
+  ["exit #{code}", code.zero?]
+end
+
 class ServiceCMDS
   def self.list(opts)
     opts.info = "List my services"
@@ -292,6 +317,104 @@ class ServiceCMDS
       puts "Restarted #{full_name}"
 
       view_log!(full_name, log_args) if open_log
+    }
+  end
+  def self.reload(opts)
+    opts.info = "Re-read a service's plist without running it (restart, minus the start)."
+    opts.banner = "Usage: service reload <name>"
+    opts.separator ""
+    opts.separator "launchctl load ignores a job that is already loaded, so an edited plist"
+    opts.separator "needs unload + load. `restart` also runs the job at once; `reload` does not."
+    opts.separator "A run in progress is stopped. A RunAtLoad or KeepAlive job starts again on"
+    opts.separator "load; a scheduled job waits for its next time."
+    opts.separator ""
+    lambda { |name|
+      return puts opts.to_s unless name
+
+      full_name = normalize_service_name(name)
+      plist_dest = plist_path_in_launch_agents(full_name)
+
+      unless File.exist?(plist_dest)
+        return puts "Error: Service '#{name}' is not installed"
+      end
+
+      puts "Reloading #{full_name}..."
+      execute("launchctl stop #{full_name.shellescape}")
+      execute("launchctl unload #{plist_dest.shellescape}")
+      sleep 0.5
+      execute("launchctl load #{plist_dest.shellescape}")
+      unless launchd_loaded?(full_name)
+        warn "Error: launchd did not load #{plist_dest}"
+        exit 1
+      end
+      puts "Reloaded #{full_name} (not started)"
+    }
+  end
+  def self.wait(opts)
+    opts.info = "Wait until a service's current run ends."
+    opts.banner = "Usage: service wait <name> [--timeout SECS]"
+    timeout = nil
+    opts.on("-t", "--timeout SECS", Integer, "Give up after SECS (default 110)") { |v| timeout = v }
+    opts.separator ""
+    opts.separator "Exit codes:"
+    opts.separator "    0    the run ended with exit 0"
+    opts.separator "    1    the run ended with a non-zero exit or a signal"
+    opts.separator "    2    nothing was running when called (it does not wait for a start;"
+    opts.separator "         launchd delays a `start` of a job that ran in the last 10 s)"
+    opts.separator "    3    not loaded, or unloaded while waiting"
+    opts.separator "    124  timed out; the run is still going (call again to keep waiting)"
+    opts.separator ""
+    opts.separator "The 110 s default fits an agent's default 120 s Bash timeout. For a long"
+    opts.separator "run, pass a larger --timeout and run it in the background."
+    opts.separator ""
+    lambda { |name, *args|
+      return puts opts.to_s unless name
+
+      # Flags after <name> are not parsed by OptionParser#order!, so read them here.
+      if (v = flag_val(args, "--timeout", "-t"))
+        timeout = Integer(v, exception: false)
+        unless timeout
+          warn "Error: --timeout needs a whole number of seconds, got '#{v}'"
+          exit 1
+        end
+      end
+      timeout ||= 110
+
+      full_name = normalize_service_name(name)
+      job = launchd_job(full_name)
+      unless job
+        warn "#{full_name} is not loaded"
+        exit 3
+      end
+      unless job[:pid]
+        puts "#{full_name} is not running"
+        exit 2
+      end
+
+      pid = job[:pid]
+      deadline = Time.now + timeout
+      puts "Waiting for #{full_name} (pid #{pid}, timeout #{timeout}s)..."
+      $stdout.flush
+      loop do
+        job = launchd_job(full_name)
+        unless job
+          warn "#{full_name} was unloaded while waiting"
+          exit 3
+        end
+        # Gone, or a different pid: the run we saw has ended (a new one may have begun).
+        break if job[:pid] != pid
+
+        left = deadline - Time.now
+        if left <= 0
+          puts "#{full_name} is still running (pid #{pid}) after #{timeout}s"
+          exit 124
+        end
+        sleep [2, left].min
+      end
+
+      text, ok = decode_wait_status(job[:last])
+      puts "#{full_name} run ended: #{text}"
+      exit(ok ? 0 : 1)
     }
   end
   def self.status(opts)

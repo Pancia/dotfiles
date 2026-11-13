@@ -155,6 +155,11 @@ a whole-working-copy commit is *better*, because it also captures Bash-made
 changes this tool cannot see. When it does route, `ccjj commit` reports any paths
 no session claimed, so scoping never silently drops work.
 
+`ccjj commit` never runs the repo's `vcs-hooks/post-commit`: a vault backup can
+take minutes, and an agent's Bash timeout would kill it mid-bundle. When the hook
+is executable it prints a `note:` line saying so. `g` and `/cc:commit` run the
+hook themselves.
+
 Two details that matter:
 
 - The message is generated from the **reconstructed** diff (`ccjj commit --diff`),
