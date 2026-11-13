@@ -765,7 +765,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         hist.font = NSFont.systemFont(ofSize: 13)
         hist.toolTip = "Earlier transcripts — click one to open it and copy its `read <path>`"
         historyPopup = hist
-        rebuildHistoryMenu()
+        // Face only at build time. The list is filled on open (menuNeedsUpdate), never
+        // here: building the panel runs before the engine starts, and reading transcript
+        // heads at that point would delay the mic opening for every session.
+        rebuildHistoryMenu(populate: false)
         hist.menu?.delegate = self   // rebuilt on open, so a session that just ended shows up
         hist.setContentHuggingPriority(.required, for: .horizontal)
 
@@ -889,7 +892,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     private func setControlsEnabled(_ on: Bool) {
-        [micPopup, optionsPopup, tsCheck, refCheck, pasteCheck, completeButton, cancelButton].forEach { $0?.isEnabled = on }
+        // historyPopup too: opening a transcript while a session drains would make
+        // TextEdit frontmost, and auto-paste follows the frontmost app.
+        [micPopup, optionsPopup, historyPopup, tsCheck, refCheck, pasteCheck, completeButton, cancelButton].forEach { $0?.isEnabled = on }
         enterCheck?.isEnabled = on && pasteCheck?.state == .on
     }
 
@@ -1198,7 +1203,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     // The panel's history pull-down. Item 0 of a pull-down is its button face, never
     // shown as an entry, so it carries the icon and the list starts at item 1.
-    private func rebuildHistoryMenu() {
+    private func rebuildHistoryMenu(populate: Bool = true) {
         guard let menu = historyPopup?.menu else { return }
         menu.removeAllItems()
         menu.autoenablesItems = false
@@ -1211,7 +1216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             face.title = "🕘"
         }
         menu.addItem(face)
-        fillRecent(menu)
+        if populate { fillRecent(menu) }
     }
 
     // Shared body of both history menus: the recent list, then a way to everything older.
@@ -1232,6 +1237,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     @objc private func openTranscriptsFolder() {
+        guard !finishing else { return }   // same reason as openTranscript
         NSWorkspace.shared.open(URL(fileURLWithPath: cloudTranscriptsDir, isDirectory: true))
     }
 
@@ -1280,10 +1286,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     // First line of the file, with the engine's "[HH:MM:SS] " and any "Microphone: "
-    // source label stripped. Reads the head only: these sit in ~/Cloud/transcripts, today
-    // a plain local directory that ProtonDrive syncs, but building a menu should not
-    // depend on that — or on how long the first line of a transcript happens to be.
+    // source label stripped. Reads the head only. ~/Cloud is ProtonDrive, and an older
+    // transcript can be a "dataless" cloud-only placeholder that downloads when read, so
+    // those get no preview (checked by flag, which does not download) rather than
+    // stalling the menu on the network.
     private func transcriptPreview(_ path: String, max: Int = 44) -> String? {
+        var st = stat()
+        if lstat(path, &st) == 0, st.st_flags & 0x4000_0000 != 0 { return "☁ not downloaded" }   // SF_DATALESS
         guard let fh = FileHandle(forReadingAtPath: path) else { return nil }
         defer { try? fh.close() }
         guard let head = try? fh.read(upToCount: 512), !head.isEmpty else { return nil }
@@ -1318,7 +1327,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     // "paste where you were last", and clicking back to your editor restores it — but a
     // stop issued while the transcript is still frontmost pastes there.
     @objc private func openTranscript(_ sender: NSMenuItem) {
-        guard let path = sender.representedObject as? String else { return }
+        // Not while stopping: the status menu stays usable then, and the open would
+        // steal the auto-paste target (see setControlsEnabled).
+        guard !finishing, let path = sender.representedObject as? String else { return }
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(referenceString(for: [path]), forType: .string)
