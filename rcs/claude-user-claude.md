@@ -63,7 +63,7 @@ Say whether the work was checked, under `CHECKED` or `UNCHECKED`. A small job in
 
 End with **Needs you:** and each decision I must make. If nothing needs me, end with "Nothing needs you." Questions still open from earlier go under **Needs you**, as "Questions to me" says. Never write "Nothing needs you" while one is open. An in-character closer still sits below this, but it adds no facts, asks or recommendations.
 
-If anything is still running or pending, such as a background job, a subagent or a test, put a **Waiting on:** line directly above **Needs you:**. Name each item and say what happens when it ends. Apply this to every reply, not only recaps. Include it even when nothing needs me.
+If anything is still running or pending, such as a background job, a subagent or a test, put a ⏳ **Waiting on:** line directly above **Needs you:**. Always start it with the ⏳ mark. Name each item and say what happens when it ends. Apply this to every reply, not only recaps. Include it even when nothing needs me.
 
 Do not list each change. Do not walk through files. No code blocks unless the code is the answer.
 
@@ -169,6 +169,8 @@ Prefer `trash` over `rm` when deleting files. If `trash` fails, try `rm` as a fa
 
 To trash a file literally named `put`/`list`/`restore`/`help`, use `trash put <name>`.
 
+Before you move or delete a script, search for its file name, not its topic or its full path: `rg -l -F --hidden <name> ~/dotfiles ~/Vaults ~/.config ~/Library/LaunchAgents`, and check `crontab -l`. Callers often `cd` first and use a relative path.
+
 ## Edits made through Bash
 
 The Edit/Write hooks do not see a Bash edit (`sed -i`, `>`, a Python script).
@@ -212,6 +214,26 @@ scratchpad.
 - **Privacy:** `.cc/` files get committed, and some repos are public. Put private
   material in `.cc/private/`, such as quotes from my transcripts. Git ignores that
   folder in every repo, so it is safe from a push. It also has no backup.
+
+## Checks I make by eye or ear
+
+### Test notifications
+
+When you send a test notification, or anything else I must check by eye, send
+one at a time. Say its title and wait for my answer before the next. Give each
+test notice its own `-group`, or none, so it cannot replace one I have not seen.
+
+### Pages that play sound
+
+A published Claude artifact plays no sound for me. On 2026-11-12 the chime
+page stayed silent there, and the fallback to a rendered WAV in an `<audio>`
+element was blocked too. The same file played fine in Brave from disk.
+
+- For anything I must hear, write the page to `.cc/misc/` and open it locally:
+  `open -a "Brave Browser" <file>`. Say that it is a local file.
+- Publish it as an artifact too only if I ask, and do not expect sound there.
+- Headless Brave runs Web Audio, so test sounds there: render each one in an
+  `OfflineAudioContext` and check that it is not silent and does not clip.
 
 ## Cloud-only files in ~/Cloud
 
