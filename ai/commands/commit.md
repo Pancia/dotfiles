@@ -372,6 +372,9 @@ not `--stat`).
 🔵 `LEFT` — the paths deliberately left behind, and why. Omit it when there are
 none.
 
+🧭 **Where next:** — optional, above **Needs you**, as the global rules
+describe: directions the user could take the session after this commit.
+
 👀 **Needs you:** — always present, and after a commit it is rarely empty:
 
 - whatever stands between this commit and where it belongs — a bookmark not

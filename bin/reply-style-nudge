@@ -18,7 +18,10 @@ FORMAT_NOTE = ("[Reply format] In recaps and catch-ups, group the facts under la
                "with each label once and one bullet per fact. The labels, in order, are "
                "🔴 `BROKEN`, 🔴 `FAILED`, 🟢 `NOW`, 🟢 `CHECKED`, 🟡 `WATCH`, 🔵 `UNCHECKED` "
                "and 🔵 `NOT DONE`. Use only these labels, never a topic word. End with "
-               "👀 **Needs you:**, or \"✅ Nothing needs you.\" Give a question "
+               "👀 **Needs you:**, or \"✅ Nothing needs you.\" Above it, after real work, "
+               "an optional 🧭 **Where next:** list of directions for the session: unmarked "
+               "topics I left open, plus at most two of your ideas marked 💡 (🔮 if a guess). "
+               "Give a question "
                "a yes and no list only when what each answer does is not obvious.")
 
 def score(text):
