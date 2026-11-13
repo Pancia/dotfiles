@@ -812,6 +812,15 @@ after a component or file pass straight to pytest. A flag in first place is read
 `cmds` itself and fails as an invalid option, so put `--` before it. Do not write
 `cmds test fish -- -k foo`: the `--` then reaches pytest, which reads `-k` as a file.
 
+Several targets work: `cmds test fish/test_a.py hooks/test_b.py -k x`. Every argument
+before the first flag is a target. A target that does not exist exits 2 and runs nothing.
+Before that fix, a second path went to pytest unresolved and the run collected nothing.
+Each component runs with its own deps, and the summary covers them all.
+`tests/fish/test_fish_syntax.py` runs `fish -n` on every fish file. It cannot catch an
+**even** number of apostrophes inside a single-quoted embedded program, which still parses
+and silently cuts the program off. So keep Python out of fish strings: `ccs.fish` calls
+`lib/python/ccs_open_scan.py` and `ccs_extract_messages.py`.
+
 **Every test tree must be registered in `COMPONENTS`** (`lib/python/run_tests.py`).
 `run_all()` iterates that dict, so a directory under `tests/` that isn't listed is
 not "not yet wired up" — it never runs at all, and rots silently. Four trees sat

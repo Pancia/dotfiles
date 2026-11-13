@@ -162,8 +162,13 @@ def stream(cmd: list[str]) -> tuple[int, list[str]]:
 
 
 def run_pytest(
-    target: Path, deps: list[str], extra_args: list[str], source_path: str | None = None
+    target: Path | list[Path],
+    deps: list[str],
+    extra_args: list[str],
+    source_path: str | None = None,
 ) -> tuple[int, dict[str, int]]:
+    """Run pytest on one target, or on several in one run (same dependencies)."""
+    targets = target if isinstance(target, list) else [target]
     cmd = ["uv", "run", "--with", "pytest"]
     for dep in deps:
         cmd.extend(["--with", dep])
@@ -177,14 +182,14 @@ def run_pytest(
         if source_path:
             extra_args.append(f"--cov={DOTFILES / source_path}")
         else:
-            extra_args.append(f"--cov={target}")
+            extra_args.extend(f"--cov={t}" for t in targets)
 
     # Output is piped (so we can parse the summary), which makes pytest drop
     # colour. Put it back when we ourselves are on a terminal.
     if sys.stdout.isatty() and not any(a.startswith("--color") for a in extra_args):
         extra_args.append("--color=yes")
 
-    cmd.extend(["pytest", str(target)] + extra_args)
+    cmd.extend(["pytest", *map(str, targets)] + extra_args)
     code, lines = stream(cmd)
     return code, parse_counts(lines)
 
@@ -294,6 +299,95 @@ def run_all(extra_args: list[str], components: list[str] | None = None) -> int:
     return exit_code
 
 
+# A unit of work for one argument: (component, target). The component is None for
+# a path under tests/ that no component owns. The target is None when the whole
+# component runs, else the file or node id inside it.
+Unit = tuple[str | None, Path | None]
+
+
+def resolve_arg(arg: str) -> list[Unit] | None:
+    """What one positional argument names, or None if it names nothing."""
+    # Paths are relative to tests/, but `tests/fish/x.py` is what tab completion
+    # from the repo root produces. A node id (`x.py::test_y`) is not a file, so
+    # only the part before `::` can be checked for existence or matched.
+    target = "" if arg.rstrip("/") == "tests" else arg.removeprefix("tests/")
+    file_part = target.split("::", 1)[0].rstrip("/")
+
+    if not target:
+        return [(c, None) for c in COMPONENTS if (TESTS_DIR / c).exists()]
+    if target in ALIASES:
+        return [(ALIASES[target], None)]
+    if file_part in COMPONENTS and "::" not in target:
+        return [(file_part, None)]
+    if not (TESTS_DIR / file_part).exists():
+        return None
+    # A path inside one component runs just that file or node, with that
+    # component's dependencies. It used to run the whole component.
+    owners = [c for c in COMPONENTS if file_part.startswith(c + "/")]
+    if owners:
+        return [(max(owners, key=len), TESTS_DIR / target)]
+    # A parent directory runs every component under it (e.g. "bin" covers
+    # bin/astro, bin/ytdl and bin/exocortex-id).
+    matches = [c for c in COMPONENTS if c.startswith(file_part + "/")]
+    if matches:
+        return [(c, None) for c in matches]
+    # Fallback: a plain pytest path that no component owns
+    return [(None, TESTS_DIR / target)]
+
+
+def run_unit_group(
+    component: str | None, targets: list[Path] | None, extra_args: list[str]
+) -> tuple[int, dict[str, int]]:
+    """Run one component's share: the whole component, or some of its files."""
+    if targets is None:
+        return run_component(component, extra_args)
+    if component is None:
+        return run_pytest(targets, [], extra_args)
+    config = COMPONENTS[component]
+    return run_pytest(targets, config.get("deps", []), extra_args, config.get("source_path"))
+
+
+def run_many(positionals: list[str], extra_args: list[str]) -> int:
+    """Several paths: one pytest per component, each with its own dependencies.
+
+    Before this, every path after the first went to pytest unresolved. pytest
+    then failed on it ("file or directory not found", exit 4) and ran nothing.
+    """
+    resolved = [(arg, resolve_arg(arg)) for arg in positionals]
+    unknown = [arg for arg, units in resolved if units is None]
+    if unknown:
+        for arg in unknown:
+            print(f"Unknown component or path under {TESTS_DIR}: {arg}", file=sys.stderr)
+        return 2
+
+    # Group by component, in first-seen order. A whole component absorbs any
+    # files named inside it, since running it covers them.
+    groups: dict[str | None, list[Path] | None] = {}
+    for _, units in resolved:
+        for component, target in units:
+            if target is None:
+                groups[component] = None
+            elif component not in groups:
+                groups[component] = [target]
+            elif groups[component] is not None and target not in groups[component]:
+                groups[component].append(target)
+
+    if len(groups) == 1:
+        [(component, targets)] = groups.items()
+        return run_unit_group(component, targets, extra_args)[0]
+
+    exit_code = 0
+    results: list[tuple[str, int, dict[str, int]]] = []
+    for component, targets in groups.items():
+        code, counts = run_unit_group(component, targets, extra_args)
+        name = component if component is not None else "(no component)"
+        results.append((name, code, counts))
+        if code != 0:
+            exit_code = code
+    print_summary(results)
+    return exit_code
+
+
 def main():
     args = sys.argv[1:]
     print(f"dotfiles root: {DOTFILES}")
@@ -304,45 +398,33 @@ def main():
         # Flags only - run all with flags
         sys.exit(run_all(args))
 
-    # Paths are relative to tests/, but `tests/fish/x.py` is what tab completion
-    # from the repo root produces. A node id (`x.py::test_y`) is not a file, so
-    # only the part before `::` can be checked for existence or matched.
-    target = "" if args[0].rstrip("/") == "tests" else args[0].removeprefix("tests/")
-    file_part = target.split("::", 1)[0].rstrip("/")
+    # The leading arguments are what to run; everything from the first flag on
+    # goes to pytest untouched. Stopping there is what keeps a flag's value
+    # (`-k expr`, `--deselect x.py::t`) from being read as a path.
+    first_flag = next((i for i, a in enumerate(args) if a.startswith("-")), len(args))
+    positionals, extra = args[:first_flag], args[first_flag:]
 
-    if not target:
-        sys.exit(run_all(args[1:]))
-    elif target in ALIASES:
-        # Alias lookup
-        sys.exit(run_component(ALIASES[target], args[1:])[0])
-    elif file_part in COMPONENTS and "::" not in target:
-        # Direct component path
-        sys.exit(run_component(file_part, args[1:])[0])
-    elif (TESTS_DIR / file_part).exists():
-        # A path inside one component runs just that file or node, with that
-        # component's dependencies. It used to run the whole component.
-        owners = [c for c in COMPONENTS if file_part.startswith(c + "/")]
-        if owners:
-            config = COMPONENTS[max(owners, key=len)]
-            sys.exit(
-                run_pytest(
-                    TESTS_DIR / target, config.get("deps", []), args[1:], config.get("source_path")
-                )[0]
-            )
-        # A parent directory runs every component under it (e.g. "bin" covers
-        # bin/astro, bin/ytdl and bin/exocortex-id).
-        matches = [c for c in COMPONENTS if c.startswith(file_part + "/")]
-        if len(matches) == 1:
-            sys.exit(run_component(matches[0], args[1:])[0])
-        elif matches:
-            sys.exit(run_all(args[1:], components=matches))
-        # Fallback: treat as pytest path
-        sys.exit(run_pytest(TESTS_DIR / target, [], args[1:])[0])
-    else:
+    if len(positionals) > 1:
+        sys.exit(run_many(positionals, extra))
+
+    arg = positionals[0]
+    units = resolve_arg(arg)
+    if units is None:
         # Not a pass-through: an unknown word used to reach run_all as a pytest
         # argument, so a typo ran the whole suite (and then failed on the path).
-        print(f"Unknown component or path under {TESTS_DIR}: {args[0]}", file=sys.stderr)
+        print(f"Unknown component or path under {TESTS_DIR}: {arg}", file=sys.stderr)
         sys.exit(2)
+    if arg.rstrip("/") == "tests":
+        sys.exit(run_all(extra))
+    if len(units) > 1:
+        sys.exit(run_all(extra, components=[c for c, _ in units]))
+    [(component, target)] = units
+    if target is None:
+        sys.exit(run_component(component, extra)[0])
+    if component is None:
+        sys.exit(run_pytest(target, [], extra)[0])
+    config = COMPONENTS[component]
+    sys.exit(run_pytest(target, config.get("deps", []), extra, config.get("source_path"))[0])
 
 
 if __name__ == "__main__":
