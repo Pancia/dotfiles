@@ -127,7 +127,7 @@ not:
 |---|---|
 | shell start | adopt any orphan (one `ps` confirms its owner is really dead), render its banner unless it ran nothing, then write a fresh header |
 | `fish_preexec` | append the command |
-| `fish_postexec` | append its exit status and duration |
+| `fish_postexec` | append its exit status and duration: `done`, or `stop` when Ctrl-Z paused it |
 | `cd` | append the directory (called from `chpwd_hook`) |
 | `fish_exit` | delete the record |
 
@@ -162,6 +162,17 @@ Line-oriented, `key<TAB>percent-encoded-value`, **appended** and never rewritten
 (bar compaction every 500 commands). Scalars are last-wins on replay; `cmd` and
 `done` lines interleave into the history, and a `cmd` with no `done` after it is
 what the pane was doing when it died.
+
+**Job control.** Ctrl-Z ends a command as far as fish is concerned, so
+`fish_postexec` fires, but the program is only paused. The handler checks the
+`jobs` builtin: when the newest job is stopped and was not stopped before the
+command, it writes `stop` instead of `done`, and the readers show `stopped`.
+`fg` is journaled as the command of the job it brings back (the first row of
+`jobs`, or `jobs <pid>`), so a crash after Ctrl-Z and `fg` names the program,
+not `fg`. A `fg` with no job to bring back writes nothing; one whose argument
+is a variable keeps its own text. `bg` and `jobs` are never journaled. All of
+it is builtins, so nothing forks. Before this, `revive` offered to run `fg` in a
+new shell, which has no job to resume.
 
 Appending rather than rewriting is both the safe and the cheap choice. Fish
 cannot `fsync`, and APFS can land a rename with the data still unflushed, so

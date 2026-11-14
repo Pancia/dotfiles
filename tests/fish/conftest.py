@@ -62,6 +62,23 @@ class FishPane:
             os._exit(127)
 
         out, start, sent, sent_at = b"", time.time(), False, 0.0
+
+        def drain(seconds):
+            # Keep reading while typing. With a plain sleep here, a Ctrl-Z sent
+            # after `fg` stopped nothing (3 of 3 runs), while the same keys from
+            # a reading driver worked. Likely cause, not proved: fish blocks
+            # writing to the full pty before it hands the job the terminal.
+            nonlocal out
+            until = time.time() + seconds
+            while time.time() < until:
+                ready, _, _ = select.select([fd], [], [], 0.05)
+                if ready:
+                    try:
+                        chunk = os.read(fd, 65536)
+                    except OSError:
+                        return
+                    out += chunk
+
         while time.time() - start < budget:
             ready, _, _ = select.select([fd], [], [], 0.2)
             if ready:
@@ -74,8 +91,10 @@ class FishPane:
                 out += chunk
             if not sent and time.time() - start > settle:
                 for line in commands:
-                    os.write(fd, (line + "\n").encode())
-                    time.sleep(0.3)
+                    # A lone control key (Ctrl-Z is "\x1a") is a keypress, not a line
+                    raw = len(line) == 1 and ord(line) < 32
+                    os.write(fd, (line if raw else line + "\n").encode())
+                    drain(0.3)
                 sent, sent_at = True, time.time()
                 if not commands:
                     break

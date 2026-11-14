@@ -63,7 +63,8 @@ class Record:
         self.path = path
         self.key = path.name[:-4] if path.name.endswith(".rec") else path.name
         self.fields: dict[str, str] = {}
-        self.history: list[dict] = []   # {"cmd": str, "code": str|None, "ms": str|None}
+        # {"cmd": str, "code": str|None, "ms": str|None, "stopped": bool}
+        self.history: list[dict] = []
         try:
             self.mtime = path.stat().st_mtime
         except OSError:
@@ -89,11 +90,14 @@ class Record:
                 cmd = unquote(value)
                 own = OWN_COMMAND.fullmatch(cmd) is not None
                 if not own:
-                    self.history.append({"cmd": cmd, "code": None, "ms": None})
-            elif key == "done" and self.history and not own:
+                    self.history.append({"cmd": cmd, "code": None, "ms": None,
+                                         "stopped": False})
+            # `stop`: Ctrl-Z paused it. Closed for fish, but the program is not gone
+            elif key in ("done", "stop") and self.history and not own:
                 bits = unquote(value).split()
                 self.history[-1]["code"] = bits[0] if bits else None
                 self.history[-1]["ms"] = bits[1] if len(bits) > 1 else None
+                self.history[-1]["stopped"] = key == "stop"
 
     @property
     def guid(self) -> str:
@@ -109,6 +113,21 @@ class Record:
         if self.history and self.history[-1]["code"] is None:
             return self.history[-1]["cmd"]
         return ""
+
+    @property
+    def stopped(self) -> str:
+        """The last command, if Ctrl-Z paused it and nothing ran after it."""
+        if self.history and self.history[-1].get("stopped"):
+            return self.history[-1]["cmd"]
+        return ""
+
+    def doing(self) -> tuple[str, str]:
+        """(label, command) for the last thing this pane ran."""
+        if self.running:
+            return "running", self.running
+        if self.stopped:
+            return "stopped", self.stopped
+        return "last", self.last
 
     @property
     def last(self) -> str:
@@ -455,10 +474,9 @@ def render_list(tty: bool) -> int:
         line = f" {n:>2}  {tilde(rec.cwd) or '?'}"
         mine = f"  {off}{c}← this pane" if here and rec.pane_key == here else ""
         print(f"{line}{dim}   {ago(now - rec.mtime)} ago · {e.where()}{mine}{off}")
-        if rec.running:
-            print(f"     running  {elide(rec.running)}")
-        elif rec.last:
-            print(f"     last     {elide(rec.last)}")
+        label, doing = rec.doing()
+        if doing:
+            print(f"     {label:<8} {elide(doing)}")
         if e.claude and e.claude["title"]:
             print(f"     {dim}⎈{off} \"{elide(e.claude['title'], 66)}\"")
         elif e.place and not rec.history:
@@ -483,10 +501,9 @@ def render_here(key: str, tty: bool) -> int:
         print("  recent:")
         for cmd in recent:
             print(f"    {elide(cmd)}")
-    if rec.running:
-        print(f"    running  {elide(rec.running)}")
-    elif rec.last:
-        print(f"    last     {elide(rec.last)}")
+    label, doing = rec.doing()
+    if doing:
+        print(f"    {label:<8} {elide(doing)}")
     if e.claude and e.claude["title"]:
         print(f"    ⎈ \"{e.claude['title']}\"")
     what = "resume that Claude session" if e.claude and e.claude["session_id"] \
@@ -514,10 +531,10 @@ def render_live(tty: bool) -> int:
             if rec.guid not in tree:      # matched through the tmux fallback
                 where += "." + rec.guid.rsplit("-", 1)[1]
         mark = "*" if rec.guid == here else " "
-        doing = rec.running or rec.last or ""
+        label, doing = rec.doing()
         print(f" {mark} {where:<10} {tilde(rec.cwd) or '?':<44}{dim} {ago(now - rec.mtime)}{off}")
         if doing:
-            print(f"     {dim}{'running ' if rec.running else 'last    '}{off} {elide(doing, 66)}")
+            print(f"     {dim}{label:<8}{off} {elide(doing, 66)}")
     return 0
 
 

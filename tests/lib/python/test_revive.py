@@ -102,6 +102,20 @@ class TestRecord:
         assert rec.running == ""
         assert rec.history[-1]["code"] == "2"
 
+    def test_a_stop_closes_a_command_but_marks_it_paused(self, store):
+        p = write_record(store / "ghosts" / "G11-100.rec", {"guid": "G11"},
+                         [("cmd", "nvim a"), ("stop", "0 5")])
+        rec = revive.Record(p)
+        assert rec.running == ""
+        assert rec.stopped == "nvim a"
+        assert rec.doing() == ("stopped", "nvim a")
+        assert rec.last == "nvim a", "picking it up offers the paused program"
+
+    def test_a_command_after_a_stop_is_not_paused(self, store):
+        p = write_record(store / "ghosts" / "G12-100.rec", {"guid": "G12"},
+                         [("cmd", "nvim a"), ("stop", "0 5"), ("cmd", "ls"), ("done", "0 1")])
+        assert revive.Record(p).doing() == ("last", "ls")
+
     @pytest.mark.parametrize("cmd,own", [
         ("revive", True), ("  revive  ", True), ("revive 3", True),
         ("revive dismiss --all", True), ("revive prune --days 3", True),

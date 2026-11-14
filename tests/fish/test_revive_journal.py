@@ -23,9 +23,10 @@ def read_record(path):
             continue
         key, _, value = line.partition("\t")
         if key == "cmd":
-            history.append({"cmd": unquote(value), "code": None})
-        elif key == "done" and history:
+            history.append({"cmd": unquote(value), "code": None, "stopped": False})
+        elif key in ("done", "stop") and history:
             history[-1]["code"] = unquote(value).split()[0]
+            history[-1]["stopped"] = key == "stop"
         else:
             scalars[key] = unquote(value)
     return scalars, history
@@ -82,6 +83,29 @@ class TestJournal:
         assert list((store / "live").glob("*.rec")) == []
         assert list((store / "ghosts").glob("*.rec")) == []
 
+    def test_fg_is_journaled_as_the_job_it_brings_back(self, pane, store):
+        # Ctrl-Z, Ctrl-Z, then a bare `fg`: fish brings back the newest job.
+        # `jobs` is job control, not what the pane was for.
+        pane("FG-0001").run(["sleep 61", "\x1a", "sleep 62", "\x1a", "jobs", "fg"])
+        _, history = read_record(only((store / "live").glob("*.rec")))
+        assert [h["cmd"] for h in history] == ["sleep 61", "sleep 62", "sleep 62"], \
+            "a crash after `fg` must name the program, not `fg`"
+        assert [h["stopped"] for h in history[:2]] == [True, True], \
+            "Ctrl-Z pauses a program; it does not finish it"
+        assert history[-1]["code"] is None
+
+    def test_a_command_after_ctrl_z_is_not_taken_for_stopped(self, pane, store):
+        pane("FG-0002").run(["sleep 61", "\x1a", "fg", "\x1a", "echo after"])
+        _, history = read_record(only((store / "live").glob("*.rec")))
+        assert [(h["cmd"], h["stopped"]) for h in history] == [
+            ("sleep 61", True), ("sleep 61", True), ("echo after", False)]
+
+    def test_fg_with_no_job_leaves_the_story_alone(self, pane, store):
+        pane("FG-0003").run(["echo one", "fg"])
+        _, history = read_record(only((store / "live").glob("*.rec")))
+        assert [h["cmd"] for h in history] == ["echo one"]
+        assert history[0]["code"] == "0", "the failed `fg` does not close anything"
+
     def test_a_pane_with_no_session_id_does_not_journal(self, pane, store, tmp_path):
         p = pane("IGNORED")
         p.guid = ""            # no ITERM_SESSION_ID value worth keying on
@@ -104,6 +128,11 @@ class TestAdoption:
         assert banner.read_text().strip(), "an interesting ghost gets a rendered banner"
         assert "sleep 60" in banner.read_text()
         assert "sleep 60" in out, "and the banner is printed on the way in"
+
+    def test_a_paused_program_is_bannered_as_stopped(self, pane, store):
+        pane("ADOPT-0009").run(["echo one", "sleep 61", "\x1a"])   # dies paused
+        pane("ADOPT-0009").run(["exit"])
+        assert "stopped  sleep 61" in (store / "pending" / "ADOPT-0009").read_text()
 
     def test_a_pane_that_only_sat_at_a_prompt_gets_no_banner(self, pane, store):
         pane("QUIET-0001").run([])                                # dies, having done nothing

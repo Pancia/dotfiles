@@ -138,6 +138,8 @@ function _revive_render_banner --description 'Format a ghost record as the start
                 end
             case done
                 test $own = no; and test (count $closed) -gt 0; and set closed[-1] yes
+            case stop
+                test $own = no; and test (count $closed) -gt 0; and set closed[-1] stopped
         end
     end <$ghost
 
@@ -157,10 +159,13 @@ function _revive_render_banner --description 'Format a ghost record as the start
             echo "    $c"
         end
     end
-    if test "$closed[-1]" = no
-        echo "    running  $cmds[-1]"
-    else
-        echo "    last     $cmds[-1]"
+    switch "$closed[-1]"
+        case no
+            echo "    running  $cmds[-1]"
+        case stopped
+            echo "    stopped  $cmds[-1]"
+        case '*'
+            echo "    last     $cmds[-1]"
     end
     # a tmux record's guid is <iTerm guid>-<pane>; ccs only saw the iTerm half
     set -l bare (string match -r '^[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}' -- "$guid")
@@ -262,21 +267,71 @@ function _revive_start --description 'Claim this pane, adopting whatever its pre
     _revive_append cwd "$PWD"
 end
 
+function _revive_job_rows --description 'This shell jobs as id/group/state/command rows, newest first'
+    # `jobs` lists the job last in the foreground first, and that is the one a
+    # bare `fg` picks. All builtins: nothing forks.
+    jobs -q; or return
+    jobs $argv 2>/dev/null | string match -rv '^Job\tGroup\t'
+end
+
+function _revive_stopped_groups --description 'Process groups of the stopped jobs'
+    set -l f
+    for row in (_revive_job_rows)
+        set f (string split -m3 \t -- $row)
+        test "$f[3]" = stopped; and echo $f[2]
+    end
+end
+
 function _revive_on_preexec --on-event fish_preexec
+    set -g __revive_open no
     test -n "$__revive_rec"; or return
     # A whitespace-only commandline still fires this event (a truly empty one
     # does not), and it is not worth a history slot
     set -l trimmed (string trim -- "$argv[1]")
     test -n "$trimmed"; or return
-    _revive_append cmd "$argv[1]"
+    # Job control is not what a pane was for. `fg` is journaled as the job it
+    # brings back, so a crash after Ctrl-Z and `fg` names the real program.
+    if string match -qr '^(bg|jobs)(\s+[\w%-]+)*$' -- "$trimmed"
+        return
+    end
+    set -g __revive_stopped (_revive_stopped_groups)
+    set -g __revive_fg ""
+    set -l story "$argv[1]"
+    set -l arg
+    if string match -qr '^fg(\s+(?<arg>\S+))?$' -- "$trimmed"
+        # A variable or other word cannot be resolved here: keep the text
+        if test -z "$arg"; or string match -qr '^[0-9]+$' -- "$arg"
+            # Assigned first: `string split` with no argument reads stdin
+            set -l row (_revive_job_rows $arg)[1]
+            # no such job: `fg` fails and the pane's story is unchanged
+            test -n "$row"; or return
+            set -l job (string split -m3 \t -- "$row")
+            test (count $job) -eq 4; or return
+            set -g __revive_fg $job[2]
+            set story $job[4]
+        end
+    end
+    set -g __revive_open yes
+    _revive_append cmd "$story"
 end
 
 function _revive_on_postexec --on-event fish_postexec
     set -l code $status
+    test "$__revive_open" = yes; or return
+    set -g __revive_open no
     test -n "$__revive_rec"; or return
-    set -l trimmed (string trim -- "$argv[1]")
-    test -n "$trimmed"; or return
-    _revive_append done "$code $CMD_DURATION"
+    # Ctrl-Z ends the command for fish, but the program is only paused. The job
+    # it made, or the one `fg` brought back, is then the newest stopped job.
+    set -l what done
+    set -l row (_revive_job_rows)[1]
+    set -l top
+    test -n "$row"; and set top (string split -m3 \t -- "$row")
+    if test "$top[3]" = stopped
+        if test "$top[2]" = "$__revive_fg"; or not contains -- "$top[2]" $__revive_stopped
+            set what stop
+        end
+    end
+    _revive_append $what "$code $CMD_DURATION"
 end
 
 function _revive_on_exit --on-event fish_exit
