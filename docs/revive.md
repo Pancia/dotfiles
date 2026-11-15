@@ -42,6 +42,10 @@ Picking a ghost up dismisses it first, then:
   the same path `ccs resume` uses for a crashed entry: restore the transcript
   from backup if Claude Code pruned it, archive the entry, `cd` to the cwd the
   session actually ran in, then `my-claude-code-wrapper <launch flags> --resume`.
+- **It had nvim open** → `Reopen them in nvim? [Y/n]`, after a line naming
+  the files, and `nvim -S` on the pane's saved session. `n` falls through to
+  the command, so `v` or `vims X` stay one key away. With a Claude session too,
+  Claude wins and the session path is printed instead. See "nvim sessions".
 - **Otherwise** → the command is shown with `Run it again? [Y/n]`. Enter means
   yes; it is still asked because the command could be anything.
 
@@ -103,6 +107,9 @@ live/<guid>.rec              the shell currently in that pane
 ghosts/<guid>-<epoch>.rec    an orphan a later shell found and adopted
 pending/<guid>               that ghost's banner, pre-rendered
 dismissed/<guid>             a synthesised ghost waved off (it has no file to delete)
+live/<guid>.nvim/<pid>.vim   session of each nvim the shell's `nvim` wrapper started
+ghosts/<guid>-<epoch>.nvim/  moved here with its record on adoption
+reopen/<pid>-<epoch>.vim     a session `revive` is reopening; prune drops it after a day
 ```
 
 **One record per pane, not per shell.** A starting shell that finds an orphan at
@@ -129,7 +136,8 @@ not:
 | `fish_preexec` | append the command |
 | `fish_postexec` | append its exit status and duration: `done`, or `stop` when Ctrl-Z paused it |
 | `cd` | append the directory (called from `chpwd_hook`) |
-| `fish_exit` | delete the record |
+| `fish_exit` | delete the record and its nvim folder |
+| nvim, via the wrapper | keep `live/<guid>.nvim/<pid>.vim` current; delete it on a clean exit |
 
 `fish_exit` is what makes this usable. It fires on `exit` and when the terminal
 goes away, and **not** on SIGKILL or a power cut — exactly the line a ghost has
@@ -187,6 +195,52 @@ Values are encoded with `string escape --style=url`, which
 `urllib.parse.unquote` decodes directly — no shim on either side. Commands here
 genuinely contain newlines and tabs.
 
+## nvim sessions
+
+`v` runs fzf and then `nvim <file>`, so the journal saw only `v`, and revive
+re-ran fzf. Files opened later inside nvim were recorded nowhere. Now each nvim
+keeps a session of itself, and picking the ghost up reopens it.
+
+**Who writes one.** The `nvim` fish wrapper (`fish/functions/nvim.fish`), which
+`v`, `vim` and `vims` all reach, sets `REVIVE_NVIM_DIR` for its own child only,
+from `$__revive_rec`. It is never exported, so git's editor, `cmds` and a nested
+shell's nvim claim nothing; it is empty outside a journaling shell. The owning
+nvim unsets it at startup, so nothing it starts (`:!`, `:terminal`) inherits it.
+`command nvim` and `exec nvim` are not tracked. A parent-pid check was rejected:
+in nvim 0.11 the Lua runs in the `--embed` server, a child of the TUI process,
+and finding the shell costs a `ps` (10 ms) per start.
+
+**The module** is `nvim/lua/revive_session.lua`, loaded first in
+`nvim/init.lua` inside a `pcall`. It writes `mksession` to `<pid>.vim` 300 ms
+after a layout change and 2 s after a cursor pause, never putting a sooner save
+back. It saves with `buffers,curdir,folds,tabpages,winsize` and puts the user's
+`sessionoptions` and `v:this_session` back, so `SessionSave` is unchanged.
+Left out on purpose: terminals (a restored one re-runs its command, and revive
+never runs one without asking), help, quickfix, unnamed windows, and plugin
+buffers (any `buftype`, unlisted for the length of the save).
+
+**A power cut gives no exit hook**, so the file is kept current rather than
+written at exit. Unlike fish, nvim can flush: the write goes to `<pid>.vim.tmp`,
+libuv's fsync (F_FULLFSYNC on macOS, 4.7 ms, off the main thread) runs, and only
+then the rename. A cut mid-write keeps the previous file. Readers also require
+mksession's last line, `" vim: set ft=vim :`. An unchanged session is not
+rewritten. `mksession` itself costs about 0.2 ms.
+
+**Lifecycle.** A clean nvim exit deletes its file, so only a hard death leaves
+one. Adoption moves the folder with the record. `fish_exit` deletes it. A file
+left by an nvim that crashed under a live shell is removed at the next command
+with no job left (`jobs -q`, builtins only), because every tracked nvim is a job
+of this shell; a stopped nvim keeps its file. Dismiss and prune delete folders
+with their ghosts, and prune also drops orphaned folders.
+
+**The welcome screen.** `nvim/init.lua`'s `VimEnter` welcome buffer replaced
+the restored window, because `-S` sources before `VimEnter` and leaves
+`argc()` at 0. It now also requires `v:this_session` to be empty, which fixes
+the wrapper's `SessionRestart` path too.
+
+Known gaps: plugin windows such as fugitive come back as empty windows; tmux
+and two nvims in one pane are untested in a pty.
+
 ## Two other things it reads
 
 **Claude sessions.** `ccs` entries record `terminal.iterm_session`, so a ghost
@@ -236,7 +290,15 @@ real — `… - Nvim (nvim)`, `alt start ~/p/sanctuary (tmux)`.
 
 ## Tests
 
-`cmds test fish -k revive` and `cmds test python -k revive`.
+`cmds test fish -k revive` and `cmds test python -k revive`. The nvim tests
+(`tests/fish/test_revive_nvim.py`) need `nvim` on the PATH and skip without it.
+They use a test init that loads only the module, and `run(powercut=True)`,
+which kills every descendant before the shell: killing only fish closes the pty,
+nvim gets SIGHUP, and its clean exit deletes the session under test.
+
+The harness reads output while it types. With a plain sleep, a Ctrl-Z sent after
+`fg` stopped nothing; the likely cause is fish blocking on a full pty before it
+hands the job the terminal.
 
 The fish tests drive a **real pty** (`tests/fish/conftest.py`), because
 `fish -c` fires neither `fish_preexec` nor `fish_postexec`, and neither does

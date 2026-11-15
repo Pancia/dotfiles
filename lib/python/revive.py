@@ -19,6 +19,7 @@ Docs: docs/revive.md.
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -56,6 +57,49 @@ SCALARS = {"guid", "wtp", "pid", "lstart", "term", "cwd"}
 # pane's older ghosts. Plain words only, so `revive && make` still counts. Same
 # rule as _revive_render_banner in revive-journal.fish; the two must agree.
 OWN_COMMAND = re.compile(r"\s*revive(?:\s+[\w.-]+)*\s*")
+
+
+# The last line of every file `mksession` writes
+SESSION_TRAILER = '" vim: set ft=vim :'
+
+
+def session_files(path: Path) -> tuple[list[str], int]:
+    """(file names, how many no longer exist) from one nvim session file.
+
+    Names are the `badd` lines, resolved against the session's first `cd`.
+    """
+    names, missing, cwd = [], 0, None
+    try:
+        lines = path.read_text("utf-8", errors="replace").splitlines()
+    except OSError:
+        return [], 0
+    for line in lines:
+        if cwd is None and line.startswith("cd "):
+            cwd = os.path.expanduser(line[3:].replace("\\ ", " "))
+        m = re.match(r"badd \+\d+ (.+)$", line)
+        if m:
+            name = os.path.expanduser(m.group(1).replace("\\ ", " "))
+            names.append(name)
+            full = name if os.path.isabs(name) or cwd is None else os.path.join(cwd, name)
+            if not os.path.exists(full):
+                missing += 1
+    return names, missing
+
+
+def nvim_summary(rec: "Record") -> str:
+    """`f1, f2, f3 +2 · 1 missing · 1 more nvim`, or nothing."""
+    sessions = rec.nvim_sessions
+    if not sessions:
+        return ""
+    names, missing = session_files(sessions[0])
+    base = [os.path.basename(n) for n in names]
+    text = ", ".join(base[:3]) + (f" +{len(base) - 3}" if len(base) > 3 else "")
+    text = text or "no files"
+    if missing:
+        text += f" · {missing} missing"
+    if len(sessions) > 1:
+        text += f" · {len(sessions) - 1} more nvim"
+    return text
 
 
 class Record:
@@ -159,6 +203,28 @@ class Record:
         """
         tail = self.key[len(self.pane_key) + 1:]
         return float(tail) if tail.isdigit() else self.mtime
+
+    @property
+    def nvim_dir(self) -> Path:
+        """Where the nvims this shell started kept their sessions."""
+        return self.path.with_name(self.key + ".nvim")
+
+    @property
+    def nvim_sessions(self) -> list[Path]:
+        """Complete session files, newest first. A torn one lacks the trailer."""
+        found = []
+        try:
+            paths = list(self.nvim_dir.glob("*.vim"))
+        except OSError:
+            return []
+        for p in paths:
+            try:
+                tail = p.read_text("utf-8", errors="replace").rstrip("\n").rsplit("\n", 1)[-1]
+                if tail == SESSION_TRAILER:
+                    found.append((p.stat().st_mtime, p))
+            except OSError:
+                continue
+        return [p for _, p in sorted(found, key=lambda t: -t[0])]
 
     @property
     def pane_key(self) -> str:
@@ -479,7 +545,10 @@ def render_list(tty: bool) -> int:
             print(f"     {label:<8} {elide(doing)}")
         if e.claude and e.claude["title"]:
             print(f"     {dim}⎈{off} \"{elide(e.claude['title'], 66)}\"")
-        elif e.place and not rec.history:
+        nv = nvim_summary(rec)
+        if nv:
+            print(f"     {dim}✎ nvim{off}   {elide(nv, 66)}")
+        if e.place and not rec.history and not (e.claude and e.claude["title"]):
             print(f"     {dim}title    {elide(e.place['name'], 66)}{off}")
     print()
     print(f"{dim} revive <n> to pick one up (resumes its Claude session) · "
@@ -506,8 +575,11 @@ def render_here(key: str, tty: bool) -> int:
         print(f"    {label:<8} {elide(doing)}")
     if e.claude and e.claude["title"]:
         print(f"    ⎈ \"{e.claude['title']}\"")
+    nv = nvim_summary(rec)
+    if nv:
+        print(f"    ✎ nvim  {nv}")
     what = "resume that Claude session" if e.claude and e.claude["session_id"] \
-        else "pick it up"
+        else "reopen nvim" if nv else "pick it up"
     print(f"{dim}  revive to {what} · revive dismiss here{off}")
     return 0
 
@@ -545,7 +617,8 @@ def flat(text: str) -> str:
 def cmd_get(target: str) -> int:
     """One TSV line for the fish side:
 
-    guid, cwd, claude session id, command, ccs entry file, claude title.
+    guid, cwd, claude session id, command, ccs entry file, claude title,
+    newest nvim session file, its summary.
     The entry file is what `_ccs_resume_entry` resumes from; it carries the
     launch flags, which the session id alone does not.
     """
@@ -554,8 +627,10 @@ def cmd_get(target: str) -> int:
         return 1
     c = e.claude or {}
     cmd = e.rec.running or e.rec.last or ""
+    sessions = e.rec.nvim_sessions
     print("\t".join([e.rec.guid, e.rec.cwd, c.get("session_id", ""), flat(cmd),
-                     c.get("file", ""), flat(c.get("title", ""))]))
+                     c.get("file", ""), flat(c.get("title", "")),
+                     str(sessions[0]) if sessions else "", flat(nvim_summary(e.rec))]))
     return 0
 
 
@@ -580,6 +655,7 @@ def cmd_dismiss(target: str) -> int:
                 path.unlink()
             except OSError:
                 pass
+        shutil.rmtree(e.rec.nvim_dir, ignore_errors=True)
     print(f"Dismissed {len(chosen)}.")
     return 0
 
@@ -597,6 +673,21 @@ def cmd_prune(days: int) -> int:
                     pruned.add(rec.pane_key)
             except OSError:
                 pass
+            shutil.rmtree(rec.nvim_dir, ignore_errors=True)
+    # An nvim folder whose record is gone (an empty ghost is skipped above),
+    # and a session `revive` moved aside to reopen, kept for a day
+    try:
+        for d in (root() / "ghosts").glob("*.nvim"):
+            if not d.with_name(d.name[:-5] + ".rec").exists():
+                shutil.rmtree(d, ignore_errors=True)
+    except OSError:
+        pass
+    try:
+        for d in (root() / "reopen").iterdir():
+            if d.stat().st_mtime < time.time() - 86400:
+                shutil.rmtree(d, ignore_errors=True) if d.is_dir() else d.unlink()
+    except OSError:
+        pass
     # A banner outlives idle crashes, so it must not outlive its ghost too
     left = {rec.pane_key for rec in ghosts() if rec.interesting}
     for key in pruned - left:

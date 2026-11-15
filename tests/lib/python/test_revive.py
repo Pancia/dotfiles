@@ -178,11 +178,11 @@ class TestVerbs:
         write_record(store / "ghosts" / "GET1-12345.rec",
                      {"guid": "GET1", "cwd": "/some/dir"}, [("cmd", "make world")])
         assert revive.cmd_get("1") == 0
-        guid, cwd, session, cmd, entry, title = \
+        guid, cwd, session, cmd, entry, title, nvsess, nvsummary = \
             capsys.readouterr().out.rstrip("\n").split("\t")
         assert (guid, cwd, cmd) == ("GET1", "/some/dir", "make world"), \
             "`revive go` focuses by GUID, so the filename's -<epoch> must not leak"
-        assert (session, entry, title) == ("", "", "")
+        assert (session, entry, title, nvsess, nvsummary) == ("", "", "", "", "")
 
     def test_get_rejects_a_number_out_of_range(self, store, capsys):
         write_record(store / "ghosts" / "GET2-1.rec", {"guid": "GET2"}, [("cmd", "x")])
@@ -212,6 +212,81 @@ class TestVerbs:
     def test_list_says_so_when_there_is_nothing(self, store, capsys):
         assert revive.main(["list"]) == 1
         assert "Nothing to revive" in capsys.readouterr().out
+
+
+# ------------------------------------------------------------ nvim sessions
+
+TRAILER = revive.SESSION_TRAILER
+
+
+def write_session(folder, name, cwd, files, trailer=True, age=0):
+    folder.mkdir(parents=True, exist_ok=True)
+    body = f"cd {cwd}\n" + "".join(f"badd +1 {f}\n" for f in files)
+    p = folder / name
+    p.write_text(body + (TRAILER + "\n" if trailer else ""))
+    if age:
+        then = time.time() - age
+        os.utime(p, (then, then))
+    return p
+
+
+class TestNvimSessions:
+    def test_the_newest_complete_session_wins(self, store, tmp_path):
+        rec = write_record(store / "ghosts" / "NV1-100.rec", {"guid": "NV1"}, [("cmd", "v")])
+        folder = store / "ghosts" / "NV1-100.nvim"
+        old = write_session(folder, "1.vim", tmp_path, ["a.txt"], age=60)
+        new = write_session(folder, "2.vim", tmp_path, ["b.txt"])
+        write_session(folder, "3.vim", tmp_path, ["torn.txt"], trailer=False)
+        write_session(folder, "4.vim.tmp", tmp_path, ["tmp.txt"])
+        assert revive.Record(rec).nvim_sessions == [new, old], \
+            "a file without the mksession trailer is torn, and .tmp is a write in progress"
+
+    def test_the_summary_counts_files_gone_since(self, store, tmp_path):
+        (tmp_path / "here.txt").write_text("x")
+        (tmp_path / "with space.txt").write_text("x")
+        rec = write_record(store / "ghosts" / "NV2-100.rec", {"guid": "NV2"}, [("cmd", "v")])
+        write_session(store / "ghosts" / "NV2-100.nvim", "1.vim", tmp_path,
+                      ["here.txt", "with\\ space.txt", "gone.txt", "/abs/missing.txt"])
+        assert revive.nvim_summary(revive.Record(rec)) == \
+            "here.txt, with space.txt, gone.txt +1 · 2 missing"
+
+    def test_a_second_nvim_is_mentioned(self, store, tmp_path):
+        rec = write_record(store / "ghosts" / "NV3-100.rec", {"guid": "NV3"}, [("cmd", "v")])
+        folder = store / "ghosts" / "NV3-100.nvim"
+        write_session(folder, "1.vim", tmp_path, [], age=60)
+        write_session(folder, "2.vim", tmp_path, [])
+        assert revive.nvim_summary(revive.Record(rec)) == "no files · 1 more nvim"
+
+    def test_get_hands_fish_the_session(self, store, tmp_path, capsys):
+        write_record(store / "ghosts" / "NV4-100.rec", {"guid": "NV4"}, [("cmd", "v")])
+        p = write_session(store / "ghosts" / "NV4-100.nvim", "1.vim", tmp_path, ["a.txt"])
+        assert revive.cmd_get("1") == 0
+        fields = capsys.readouterr().out.rstrip("\n").split("\t")
+        assert fields[6:] == [str(p), "a.txt · 1 missing"]
+
+    def test_dismiss_removes_the_sessions(self, store, tmp_path):
+        write_record(store / "ghosts" / "NV5-100.rec", {"guid": "NV5"}, [("cmd", "v")])
+        write_session(store / "ghosts" / "NV5-100.nvim", "1.vim", tmp_path, ["a.txt"])
+        revive.cmd_dismiss("--all")
+        assert not (store / "ghosts" / "NV5-100.nvim").exists()
+
+    def test_prune_removes_old_and_orphaned_sessions(self, store, tmp_path):
+        old = write_record(store / "ghosts" / "NV6-1.rec", {"guid": "NV6"}, [("cmd", "v")])
+        long_ago = time.time() - 60 * 86400
+        os.utime(old, (long_ago, long_ago))
+        write_session(store / "ghosts" / "NV6-1.nvim", "1.vim", tmp_path, ["a.txt"])
+        write_session(store / "ghosts" / "NV7-2.nvim", "1.vim", tmp_path, ["a.txt"])  # no .rec
+        stale = store / "reopen" / "NV8-1.nvim-1"
+        write_session(stale, "1.vim", tmp_path, ["a.txt"])
+        long_ago = time.time() - 2 * 86400
+        os.utime(stale, (long_ago, long_ago))
+        fresh = store / "reopen" / "NV9-2.nvim-2"
+        write_session(fresh, "1.vim", tmp_path, ["a.txt"])
+        revive.cmd_prune(30)
+        assert not (store / "ghosts" / "NV6-1.nvim").exists()
+        assert not (store / "ghosts" / "NV7-2.nvim").exists()
+        assert not stale.exists()
+        assert fresh.exists(), "sessions moved aside to reopen are kept for a day"
 
 
 # ------------------------------------------------------------- the osascript
@@ -294,7 +369,7 @@ class TestSynthesised:
         assert "a crashed session" in listing
 
         assert revive.cmd_get("1") == 0
-        guid, cwd, session, _, _, title = capsys.readouterr().out.rstrip("\n").split("\t")
+        guid, cwd, session, _, _, title, _, _ = capsys.readouterr().out.rstrip("\n").split("\t")
         assert (guid, session, title) == ("OLD1", "abc123", "a crashed session")
         assert cwd == "/Users/x/vault"
 

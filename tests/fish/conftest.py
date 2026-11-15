@@ -12,6 +12,7 @@ import os
 import pty
 import select
 import signal
+import subprocess
 import time
 
 import pytest
@@ -23,19 +24,42 @@ DOTFILES = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 SETTLE = 2.6
 
 
+def descendants(pid):
+    """Every process below `pid`, from one `ps` of the whole table."""
+    rows = subprocess.run(["ps", "-A", "-o", "pid=,ppid="], capture_output=True,
+                          text=True).stdout.split("\n")
+    kids = {}
+    for row in rows:
+        bits = row.split()
+        if len(bits) == 2:
+            kids.setdefault(int(bits[1]), []).append(int(bits[0]))
+    out, todo = [], [pid]
+    while todo:
+        for child in kids.get(todo.pop(), []):
+            out.append(child)
+            todo.append(child)
+    return out
+
+
 class FishPane:
     """One interactive fish, in its own pty, journaling into a scratch store."""
 
-    def __init__(self, state_dir, guid, extra_init=""):
+    def __init__(self, state_dir, guid, extra_init="", env=None):
         self.state_dir = str(state_dir)
         self.guid = guid
         self.extra_init = extra_init
+        self.env = env or {}
 
-    def run(self, commands, budget=14.0, settle=SETTLE):
+    def run(self, commands, budget=14.0, settle=SETTLE, powercut=False):
         """Type `commands` into a fresh shell. Returns everything it printed.
 
         The shell is SIGKILLed at the end unless a command exited it, so a test
-        that wants a crash simply does not send `exit`.
+        that wants a crash simply does not send `exit`. A `None` in `commands`
+        waits a second, for a program that needs time to start.
+
+        Killing only the shell closes the pty, so its children get SIGHUP and can
+        still clean up -- nvim deletes its session then. `powercut=True` kills
+        every descendant first, which is the death a power cut gives.
         """
         init = os.path.join(self.state_dir, "init.fish")
         with open(init, "w") as fh:
@@ -55,6 +79,7 @@ class FishPane:
                 XDG_STATE_HOME=self.state_dir,
                 ITERM_SESSION_ID=f"w0t0p0:{self.guid}",
                 TERM_PROGRAM="pytest.app",
+                **self.env,
             )
             env.pop("TMUX", None)
             env.pop("TMUX_PANE", None)
@@ -91,6 +116,9 @@ class FishPane:
                 out += chunk
             if not sent and time.time() - start > settle:
                 for line in commands:
+                    if line is None:
+                        drain(1.0)
+                        continue
                     # A lone control key (Ctrl-Z is "\x1a") is a keypress, not a line
                     raw = len(line) == 1 and ord(line) < 32
                     os.write(fd, (line if raw else line + "\n").encode())
@@ -105,6 +133,12 @@ class FishPane:
             if os.waitpid(pid, os.WNOHANG)[0]:
                 break
         time.sleep(0.2)
+        if powercut:
+            for child in descendants(pid):
+                try:
+                    os.kill(child, signal.SIGKILL)
+                except OSError:
+                    pass
         try:
             os.kill(pid, signal.SIGKILL)
         except OSError:
@@ -126,8 +160,8 @@ class FishPane:
 @pytest.fixture
 def pane(tmp_path):
     """Factory: pane(guid) -> FishPane writing into this test's own store."""
-    def make(guid="TESTPANE-0001", extra_init=""):
-        return FishPane(tmp_path, guid, extra_init)
+    def make(guid="TESTPANE-0001", extra_init="", env=None):
+        return FishPane(tmp_path, guid, extra_init, env)
     return make
 
 
@@ -135,3 +169,14 @@ def pane(tmp_path):
 def store(tmp_path):
     """The journal store the panes write into."""
     return tmp_path / "term-sessions"
+
+
+@pytest.fixture
+def revive_init(tmp_path):
+    """Load the revive command into a pane, with iTerm unreachable."""
+    stub = tmp_path / "stubs"
+    stub.mkdir()
+    osa = stub / "osascript"
+    osa.write_text("#!/bin/sh\nexit 1\n")
+    osa.chmod(0o755)
+    return f"set -gx PATH {stub} $PATH\nsource {DOTFILES}/fish/functions/revive.fish\n"

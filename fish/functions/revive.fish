@@ -46,7 +46,7 @@ function _revive_go --description 'Focus the iTerm pane that now holds a ghost G
     end
 end
 
-function _revive_pick --description 'Pick up a ghost: cd there, then resume its Claude session or offer its command'
+function _revive_pick --description 'Pick up a ghost: cd there, then resume its Claude session, reopen its nvim, or offer its command'
     set -l target $argv[1]
     set -l line (_revive_py get $target)
     or return 1
@@ -57,7 +57,26 @@ function _revive_pick --description 'Pick up a ghost: cd there, then resume its 
     set -l cmd $parts[4]
     set -l entry $parts[5]
     set -l title $parts[6]
+    set -l nvsess $parts[7]
+    set -l nvsummary $parts[8]
     set -l answer ""
+
+    # Dismissing deletes the ghost's nvim folder, so it moves aside first, with
+    # every nvim's session in it. `revive prune` drops it after a day.
+    set -l keep ""
+    set -l others
+    if test -n "$nvsess"; and test -f "$nvsess"
+        set -l aside (_revive_root)/reopen/(path basename -- (path dirname -- $nvsess))-(date +%s)
+        mkdir -p (path dirname -- $aside)
+        and command mv -f (path dirname -- $nvsess) $aside
+        and set keep $aside/(path basename -- $nvsess)
+        or set keep ""
+        if test -n "$keep"
+            for f in $aside/*.vim
+                test "$f" != "$keep"; and set -a others $f
+            end
+        end
+    end
 
     # Dismissed up front: a resumed Claude holds this function for as long as
     # the session lasts, and the banner should not greet the next shell with a
@@ -69,6 +88,9 @@ function _revive_pick --description 'Pick up a ghost: cd there, then resume its 
     set -l story "$cmd"
     if test -n "$session"; and test -f "$entry"
         set story "my-claude-code-wrapper --resume $session"
+    else if test -n "$keep"
+        # the reopened nvim keeps a session of its own from here on
+        set story nvim
     end
     if test -n "$story"; and functions -q _revive_append
         _revive_append cmd "$story"
@@ -85,9 +107,35 @@ function _revive_pick --description 'Pick up a ghost: cd there, then resume its 
     # it is the whole reason the pane is being revived
     if test -n "$session"; and test -f "$entry"
         test -n "$title"; and echo "⎈ \"$title\""
+        if test -n "$keep"
+            echo (set_color brblack)"  nvim was open too: $nvsummary — nvim -S $keep"(set_color normal)
+        end
+        for f in $others
+            echo (set_color brblack)"  another nvim: nvim -S $f"(set_color normal)
+        end
         functions -q _ccs_resume_entry; or source ~/dotfiles/fish/functions/ccs.fish
         _ccs_resume_entry $entry
         return
+    end
+
+    # Reopening files runs nothing, but it is still asked: `n` falls through to
+    # the command, so `vims X` or `v` stay one key away
+    if test -n "$keep"
+        echo "  nvim had open: $nvsummary"
+        # The newest is reopened; the rest stay a day, one command away
+        for f in $others
+            echo (set_color brblack)"  another nvim: nvim -S $f"(set_color normal)
+        end
+        read -l -P "Reopen them in nvim? [Y/n] " answer
+        or return 0
+        if test -z "$answer" -o "$answer" = y -o "$answer" = Y
+            nvim -S $keep
+            command rm -f $keep
+            test (count $others) -eq 0; and command rmdir (path dirname -- $keep) 2>/dev/null
+            return
+        end
+        command rm -f $keep
+        test (count $others) -eq 0; and command rmdir (path dirname -- $keep) 2>/dev/null
     end
 
     # An arbitrary command could be anything, so it is shown and confirmed —

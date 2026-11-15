@@ -105,6 +105,27 @@ function _revive_claude_title --description 'Newest Claude session title recorde
     string replace -r '^"title": *"' '' -- "$found" | string replace -r '"$' ''
 end
 
+function _revive_nvim_files --description 'File names in the newest nvim session of a ghost folder'
+    set -l dir $argv[1]
+    test -d "$dir"; or return
+    set -l newest ""
+    set -l newest_at 0
+    set -l at
+    for f in $dir/*.vim
+        # mksession always ends with this line: without it the file is torn
+        string match -q '" vim: set ft=vim :' <$f; or continue
+        set at (path mtime -- $f)
+        if test "$at" -gt "$newest_at"
+            set newest $f
+            set newest_at $at
+        end
+    end
+    test -n "$newest"; or return
+    for name in (string match -rg '^badd \+\d+ (.+)$' <$newest)
+        path basename -- (string replace -a '\\ ' ' ' -- $name)
+    end
+end
+
 function _revive_render_banner --description 'Format a ghost record as the startup banner'
     set -l ghost $argv[1]
     set -l cwd ""
@@ -172,9 +193,16 @@ function _revive_render_banner --description 'Format a ghost record as the start
     test -n "$bare"; or set bare "$guid"
     set -l title (_revive_claude_title "$bare" "$lstart")
     test -n "$title"; and echo "    ⎈ \"$title\""
+    set -l files (_revive_nvim_files (string replace -r '\.rec$' .nvim -- $ghost))
+    if test (count $files) -gt 0
+        set -l shown_files (string join ', ' -- $files[1..3])
+        test (count $files) -gt 3; and set shown_files "$shown_files +"(math (count $files) - 3)
+        echo "    ✎ nvim  $shown_files"
+    end
     # Bare `revive` picks up this pane, so the banner needs no ghost number —
     # which it could not know anyway: numbering is only settled at listing time
     set -l what "pick this up"
+    test (count $files) -gt 0; and set what "reopen nvim"
     test -n "$title"; and set what "resume that session"
     echo (set_color brblack)"    revive to $what · revive ls for every pane · revive dismiss here"(set_color normal)
 end
@@ -215,6 +243,7 @@ end
 function _revive_start --description 'Claim this pane, adopting whatever its predecessor left'
     set -g __revive_rec ""
     set -g __revive_pending ""
+    set -g __revive_nvdir ""
     set -g __revive_lines 0
     status is-interactive; or return
 
@@ -241,6 +270,10 @@ function _revive_start --description 'Claim this pane, adopting whatever its pre
         end
         set ghost $root/ghosts/$key-(date +%s).rec
         if mv -f $rec $ghost 2>/dev/null
+            # The dead shell's nvim sessions travel with its record
+            if test -d $root/live/$key.nvim
+                command mv -f $root/live/$key.nvim (string replace -r '\.rec$' .nvim -- $ghost) 2>/dev/null
+            end
             # `exec` keeps both the pid and the start time, so a shell reload is
             # not a crash — roll the record over, but do not announce it.
             if test "$prev_pid" != "$fish_pid"; or test "$prev_lstart" != "$lstart"
@@ -259,6 +292,8 @@ function _revive_start --description 'Claim this pane, adopting whatever its pre
 
     set -g __revive_rec $rec
     set -g __revive_pending $pending
+    # where the `nvim` wrapper's children keep their sessions
+    set -g __revive_nvdir $root/live/$key.nvim
     _revive_append guid "$key"
     _revive_append wtp "$ITERM_SESSION_ID"
     _revive_append pid $fish_pid
@@ -280,6 +315,23 @@ function _revive_stopped_groups --description 'Process groups of the stopped job
         set f (string split -m3 \t -- $row)
         test "$f[3]" = stopped; and echo $f[2]
     end
+end
+
+function _revive_remember_job --description 'Note what was typed for a stopped job, by process group'
+    # Groups whose job has ended are dropped first, so the lists stay small
+    set -l live (_revive_stopped_groups)
+    set -l groups
+    set -l cmds
+    set -l i 0
+    for g in $__revive_job_groups
+        set i (math $i + 1)
+        if contains -- $g $live; and test "$g" != "$argv[1]"
+            set -a groups $g
+            set -a cmds $__revive_job_cmds[$i]
+        end
+    end
+    set -g __revive_job_groups $groups $argv[1]
+    set -g __revive_job_cmds $cmds "$argv[2]"
 end
 
 function _revive_on_preexec --on-event fish_preexec
@@ -308,10 +360,19 @@ function _revive_on_preexec --on-event fish_preexec
             set -l job (string split -m3 \t -- "$row")
             test (count $job) -eq 4; or return
             set -g __revive_fg $job[2]
-            set story $job[4]
+            # What was typed, if this shell saw the job stop. `jobs` shows a
+            # job started inside a function as that function's own source,
+            # so `v` would come back as `command nvim $argv`.
+            set -l at (contains -i -- $job[2] $__revive_job_groups)
+            if test -n "$at"
+                set story $__revive_job_cmds[$at]
+            else
+                set story $job[4]
+            end
         end
     end
     set -g __revive_open yes
+    set -g __revive_story "$story"
     _revive_append cmd "$story"
 end
 
@@ -329,9 +390,17 @@ function _revive_on_postexec --on-event fish_postexec
     if test "$top[3]" = stopped
         if test "$top[2]" = "$__revive_fg"; or not contains -- "$top[2]" $__revive_stopped
             set what stop
+            _revive_remember_job $top[2] "$__revive_story"
         end
     end
     _revive_append $what "$code $CMD_DURATION"
+    # Every nvim that writes here is a job of this shell. With no job left, a
+    # session file is one whose nvim crashed under a live shell, and a later
+    # power cut would offer an nvim that was not open. Builtins until a match.
+    if not jobs -q; and test -n "$__revive_nvdir"
+        set -l stale $__revive_nvdir/*.vim $__revive_nvdir/*.vim.tmp
+        test (count $stale) -gt 0; and command rm -f $stale
+    end
 end
 
 function _revive_on_exit --on-event fish_exit
@@ -339,7 +408,7 @@ function _revive_on_exit --on-event fish_exit
     # Closing a pane on purpose must not look like a crash. Verified: this fires
     # on `exit` and when the terminal goes away, and not on SIGKILL or a power
     # cut — exactly the line a ghost has to fall on.
-    command rm -f $__revive_rec 2>/dev/null
+    command rm -rf $__revive_rec $__revive_nvdir 2>/dev/null
 end
 
 function reviveRecordCwd --description 'Note this pane directory in its journal'

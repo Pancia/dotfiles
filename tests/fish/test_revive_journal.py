@@ -46,18 +46,6 @@ def _fish_available():
         pytest.skip("fish is not on PATH")
 
 
-@pytest.fixture
-def revive_init(tmp_path):
-    """Load the revive command into a pane, with iTerm unreachable."""
-    stub = tmp_path / "stubs"
-    stub.mkdir()
-    osa = stub / "osascript"
-    osa.write_text("#!/bin/sh\nexit 1\n")
-    osa.chmod(0o755)
-    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    return f"set -gx PATH {stub} $PATH\nsource {root}/fish/functions/revive.fish\n"
-
-
 @pytest.mark.usefixtures("_fish_available")
 class TestJournal:
     def test_a_crashed_pane_leaves_its_commands_behind(self, pane, store):
@@ -93,6 +81,14 @@ class TestJournal:
         assert [h["stopped"] for h in history[:2]] == [True, True], \
             "Ctrl-Z pauses a program; it does not finish it"
         assert history[-1]["code"] is None
+
+    def test_fg_journals_what_was_typed_for_a_function(self, pane, store):
+        # `jobs` shows a job started inside a function as the function's own
+        # source, so `v` came back as `command nvim $argv`
+        pane("FG-0004", extra_init="function w; command sleep $argv; end\n").run(
+            ["w 61", "\x1a", "echo between", "fg", "\x1a", "fg"])
+        _, history = read_record(only((store / "live").glob("*.rec")))
+        assert [h["cmd"] for h in history] == ["w 61", "echo between", "w 61", "w 61"]
 
     def test_a_command_after_ctrl_z_is_not_taken_for_stopped(self, pane, store):
         pane("FG-0002").run(["sleep 61", "\x1a", "fg", "\x1a", "echo after"])

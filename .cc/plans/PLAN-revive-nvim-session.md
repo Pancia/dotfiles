@@ -523,4 +523,7 @@ Cost: the prototype cases take 4–8 s each. Ten cases add about a minute to the
 
 **Decided 2026-11-14** (the user's session numbered these Q5–Q8):
 pick-up order `yes`, launch coverage `wrapper`, several nvims `newest`,
-help windows `drop`. Not built yet.
+help windows `drop`. Built 2026-11-14. Changes from this plan: `later()` never
+puts back a sooner save (CursorHold pushed a 300 ms save to 2 s); events are
+off during a save (unlisting fired BufDelete and re-armed it); the pick-up moves
+the whole `.nvim` folder to `reopen/<name>-<epoch>/`, so other nvims survive.

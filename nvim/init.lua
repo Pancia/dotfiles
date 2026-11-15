@@ -2,6 +2,9 @@ local HOME = os.getenv("HOME")
 package.path = HOME.."/dotfiles/nvim/lua/?.lua;" .. package.path
 package.path = HOME.."/.config/nvim/plugged/conjure/lua/?.lua;" .. package.path
 
+-- Before the plugins, so a plugin error cannot stop it (docs/revive.md)
+pcall(function() require('revive_session').setup() end)
+
 require('plugs/hop')
 if not vim.g.vscode then
     require('plugs/lsp')
@@ -91,7 +94,9 @@ end, {})
 
 vim.api.nvim_create_autocmd("VimEnter", {
     callback = function()
-        if vim.fn.argc() == 0 then
+        -- `-S` sources before VimEnter and leaves argc() at 0, so without the
+        -- session check this replaced the restored window
+        if vim.fn.argc() == 0 and vim.v.this_session == '' then
             -- Show your custom content
             vim.cmd("enew")
             local lines = {
