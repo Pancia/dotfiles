@@ -207,6 +207,8 @@ local livetranscribe = engage("seeds.livetranscribe", {})
 
 local copylink = engage("seeds.copylink", {})
 
+local rolevote = engage("seeds.rolevote", {})
+
 local _engageElapsed = (hs.timer.absoluteTime() - _engageStart) / 1e6
 table.insert(_G._profile, string.format("  seeds: %.1fms", _engageElapsed))
 

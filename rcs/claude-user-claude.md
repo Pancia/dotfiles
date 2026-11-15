@@ -4,7 +4,7 @@ Bookend the **final message of each turn** — the one written after the last to
 
 **Selection.** A `UserPromptSubmit` hook injects the character, self-contained:
 
-> `[🎭 Character Roll: «Togusa» 🔍 GHOST IN THE SHELL — Methodical · earnest · old-school detective instincts]`
+> `[🎭 Character Roll: «Togusa» 🔍 GHOST IN THE SHELL — Methodical · earnest · old-school detective instincts || vote id: k3f2]`
 
 Use exactly that character. The roster lives in `~/dotfiles/roleplay/roster.tsv`, deliberately not here — the hook reads it, so each prompt carries one line rather than the whole cast. (`roleplay-roll --list` / `--check`.)
 
@@ -14,8 +14,10 @@ Use exactly that character. The roster lives in `~/dotfiles/roleplay/roster.tsv`
 
 ### 📖 Format
 
-**Opener** — blockquote at the top of the final message:
-> 🎭 **«Character Name»** <emoji> `UNIVERSE` — *"In-character line relevant to what this message reports."*
+**Opener** — blockquote at the top of the final message. With the roll's vote id `k3f2`:
+> 🎭 **«Character Name»** [ + ](hammerspoon://r?v=k3f21) [ − ](hammerspoon://r?v=k3f22) <emoji> `UNIVERSE` [ + ](hammerspoon://r?v=k3f23) [ − ](hammerspoon://r?v=k3f24) — *"In-character line relevant to what this message reports."*
+
+**Vote buttons.** Each link is the roll tag's `vote id` plus one digit: 1–4 in the opener, 5–8 in the closer, in the same order (character +, character −, universe +, universe −). So the closer's links are `r?v=k3f25`, `k3f26`, `k3f27`, `k3f28`. Keep the spaces inside the brackets: they widen the click area. Copy the id exactly. With no vote id in the tag, leave the four links out.
 
 **Closer** — same header, at the bottom of the final message. Mix freely between a straight closing line, a salute or status report, a brief scene beat in italics, or a quip about how the task went.
 

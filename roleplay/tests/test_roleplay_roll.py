@@ -10,6 +10,7 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 from collections import Counter
 from pathlib import Path
 
@@ -24,9 +25,20 @@ SCRIPT = ROOT / "bin" / "roleplay-roll"
 REAL_ROSTER = ROOT / "roster.tsv"
 
 
-def run(*args, roster=None, seed=None, odds=None):
-    """Invoke the script, optionally against a substitute roster."""
-    env = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": str(Path.home())}
+# Hook mode writes a roll log under $XDG_STATE_HOME. Every run gets a throwaway
+# HOME and XDG_STATE_HOME, so the suite can never touch the real log.
+_FAKE_HOME = Path(tempfile.mkdtemp(prefix="roleplay-test-home-"))
+
+
+def run(*args, roster=None, seed=None, odds=None, log=None, state=None):
+    """Invoke the script, optionally against a substitute roster.
+
+    `log` sets ROLEPLAY_ROLL_LOG (None leaves it unset, "" disables logging);
+    `state` sets XDG_STATE_HOME."""
+    env = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": str(_FAKE_HOME),
+           "XDG_STATE_HOME": str(state if state is not None else _FAKE_HOME / "state")}
+    if log is not None:
+        env["ROLEPLAY_ROLL_LOG"] = str(log)
     if roster is not None:
         env["ROLEPLAY_ROSTER"] = str(roster)
     if seed is not None:
@@ -121,6 +133,80 @@ def test_backslashes_in_roster_do_not_break_json(roster):
     r = run(roster=p)
     payload = json.loads(r.stdout)
     assert "additionalContext" in payload["hookSpecificOutput"]
+
+
+VOTE_ID = re.compile(r" \|\| vote id: ([0-9a-z]{4})\]$")
+
+
+def test_hook_appends_a_vote_id(roster):
+    r = run(roster=roster("MYTH | Hermes | 🪽 | Fast · a messenger\n"))
+    ctx = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
+    assert VOTE_ID.search(ctx), ctx
+    # The name TAB universe line that awk prints for the log must not leak.
+    assert "\t" not in ctx
+    assert ctx.startswith("[🎭 Character Roll: «Hermes» 🪽 MYTH — Fast")
+
+
+def _vote_id(r):
+    m = VOTE_ID.search(json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"])
+    return m.group(1) if m else None
+
+
+def test_vote_ids_vary_in_every_position(roster):
+    """Distinct ids alone are not enough: a broken base-36 loop that repeats one
+    character ("aaaa") still gives several distinct ids in a small sample."""
+    p = roster("MYTH | Hermes | 🪽 | Fast\n")
+    ids = [i for i in (_vote_id(run(roster=p)) for _ in range(30)) if i]
+    assert len(set(ids)) >= 28
+    for pos in range(4):
+        assert len({i[pos] for i in ids}) >= 8, f"position {pos} barely varies: {ids}"
+
+
+def test_default_log_path_is_under_xdg_state_home(roster, tmp_path):
+    r = run(roster=roster("U | Name | X | t\n"), state=tmp_path)
+    log = tmp_path / "roleplay" / "rolls.tsv"
+    assert log.read_text(encoding="utf-8").split("\t")[1] == _vote_id(r)
+
+
+def test_empty_roll_log_disables_logging_and_the_id(roster, tmp_path):
+    r = run(roster=roster("U | Name | X | t\n"), log="", state=tmp_path)
+    assert r.returncode == 0
+    ctx = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
+    assert "vote id" not in ctx
+    assert not (tmp_path / "roleplay").exists()
+
+
+def test_hook_logs_the_roll(roster, tmp_path):
+    log = tmp_path / "state" / "rolls.tsv"
+    p = roster("SPICE & WOLF | Holo | 🐺 | apples\n")
+    r = run(roster=p, log=log)
+    vid = _vote_id(r)
+    assert vid
+    fields = log.read_text(encoding="utf-8").rstrip("\n").split("\t")
+    assert re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d", fields[0])
+    assert fields[1:] == [vid, "Holo", "SPICE & WOLF"]
+
+
+def test_unwritable_roll_log_still_emits_the_roll(roster, tmp_path):
+    """Fail-open: a log that cannot be written must not cost the bookend. It
+    drops the id, though, since a vote on an unlogged id cannot be traced."""
+    blocker = tmp_path / "file"
+    blocker.write_text("x")
+    r = run(roster=roster("U | Name | X | t\n"), log=blocker / "sub" / "rolls.tsv")
+    assert r.returncode == 0
+    assert r.stderr == ""
+    ctx = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
+    assert "«Name»" in ctx
+    assert "vote id" not in ctx
+
+
+def test_plain_and_list_modes_log_nothing(roster, tmp_path):
+    log = tmp_path / "rolls.tsv"
+    p = roster("U | Name | X | t\n")
+    for mode in ("--plain", "--list", "--check"):
+        out = run(mode, roster=p, log=log).stdout
+        assert "vote id" not in out
+    assert not log.exists()
 
 
 def test_plain_mode_format(roster):
