@@ -143,12 +143,13 @@ to pass its arguments and stdin to `claude -p --safe-mode`.
 | `examples.md` | 333 worked bookends, 4–5 per character. A style reference for you. The hook never reads it; `roleplay-say` reads one character's entries |
 | `docs/claude-roleplay.md` | the design: why two-stage rolls, why the roster is external, the failure modes |
 | `snippets/` | the two things you paste into your own Claude config |
-| `tests/` | 81 pytest tests driving the scripts as subprocesses. `pytest tests/` |
+| `tests/` | 90 pytest tests driving the scripts as subprocesses. `pytest tests/` |
 
 ## Usage
 
 ```bash
 roleplay-roll             # hook JSON envelope (what Claude Code calls)
+roleplay-roll --votes     # the same, plus a vote id and a roll log: see "Vote ids" below
 roleplay-roll --plain     # just the character line, for eyeballing
 roleplay-roll --list      # the whole roster, grouped by universe
 roleplay-roll --check     # validate: counts, per-character odds, duplicate names/emoji
@@ -188,9 +189,26 @@ point is that the quote stops being the default without becoming forbidden.
 | `ROLEPLAY_ROSTER` | use a different roster file |
 | `ROLEPLAY_SEED` | force the RNG seed, making a roll reproducible |
 | `ROLEPLAY_CATCHPHRASE` | `N/M` odds a signature line is unlocked. Default `1/3`; `0/1` never, `1/1` always |
+| `ROLEPLAY_ROLL_LOG` | `--votes` only: where the roll log goes. Default `$XDG_STATE_HOME/roleplay/rolls.tsv`; empty logs nothing and drops the id |
 | `ROLEPLAY_SAY_MODEL` | `roleplay-say` only: the default model when `-m` is not given |
 | `ROLEPLAY_EXAMPLES` | `roleplay-say` only: use a different examples file, or `/dev/null` for none |
 | `CLAUDE_P_TIMEOUT` | `roleplay-say` only: deadline in seconds. Default `60` |
+
+## Vote ids (optional, off by default)
+
+`roleplay-roll --votes` adds `|| vote id: k3f2` to the tag, a random 4-character id, and
+appends one line per roll (time, id, character, universe) to the roll log. The idea is that
+each reply carries small links that rate the character or universe, and the id maps a click
+back to the roll.
+
+**Nothing in this directory reads the ids.** In the original setup a Hammerspoon module
+outside `roleplay/` receives `hammerspoon://r?v=<id><slot>` links and looks the id up in the
+log, and the CLAUDE.md section there says how to write the links. Without such a receiver,
+leave `--votes` off: the id is unexplained text in every tag, and the log only grows.
+
+To turn it on, put the flag in the hook command: `"command": "roleplay-roll --votes"`. Do not
+use an env var in the settings `env` block for this: that block also reaches every shell
+command Claude runs, so a test run by hand would write the real log.
 
 ## Troubleshooting
 

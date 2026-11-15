@@ -111,6 +111,8 @@ When what each answer does is not obvious, give the question its own block:
 
 When the question makes that clear, use one line, for example: **Q2 (push):** Push to master?
 
+**Copy links.** When I must paste text somewhere myself, such as a command for another terminal, show it in a code block and add `[copy](hammerspoon://copy?text=…)` after it. Percent-encode every character except letters and digits (`urllib.parse.quote(s, safe='')`). A space is `%20`, never `+`. A line break is `%0A`.
+
 ### Questions to me
 
 Every question or decision you put to me gets an ID and a short label, for example: Q3 (turn on altera-dev). Number them in order. An ID never changes and is never reused. The label stays the same each time.
@@ -160,6 +162,10 @@ folders where it does not apply. Terminal output is not covered.
 ## Security trade-offs
 
 When automation needs a security control off to keep working (an unlocked disk, a disabled check, an open port), do not tell me to turn it off. Say what that exposes, and propose a change so it works with the control on. The same applies when you design the automation or write its alerts.
+
+## Per-reply cost
+
+When a change adds fixed text to every reply, prompt or session (a hook output, a CLAUDE.md rule, a reply format), state its size in tokens per reply before you build it. Say whether the text is input or output, and give the cheaper option if there is one.
 
 ## File Deletion
 

@@ -239,6 +239,8 @@ if cursor then seeds.cursor = cursor end
 if battery then seeds.battery = battery end
 if macro then seeds.macro = macro end
 if livetranscribe then seeds.livetranscribe = livetranscribe end
+if copylink then seeds.copylink = copylink end
+if rolevote then seeds.rolevote = rolevote end
 
 local hs_global_modifier = {"cmd", "ctrl"}
 
@@ -291,6 +293,8 @@ local function softReload()
         "seeds.battery",
         "seeds.macro",
         "seeds.livetranscribe",
+        "seeds.copylink",
+        "seeds.rolevote",
     }
 
     for _, modulePath in ipairs(seedModules) do

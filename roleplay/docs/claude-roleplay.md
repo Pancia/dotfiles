@@ -225,7 +225,8 @@ same second would get the same character.
 ## Usage
 
 ```bash
-roleplay-roll             # hook JSON envelope (what the hook calls)
+roleplay-roll             # hook JSON envelope
+roleplay-roll --votes     # the same, plus a vote id and a roll log (what the hook calls here)
 roleplay-roll --plain     # just the character line
 roleplay-roll --list      # the whole roster, grouped
 roleplay-roll --check     # validate: counts, odds, duplicate emoji/names
@@ -242,6 +243,7 @@ roleplay-say -m sonnet tests pass  # another model. The default is haiku
 | `ROLEPLAY_CATCHPHRASE` | signature-line odds as `N/M`, default `1/3`. `0/1` never, `1/1` always. Unparseable values fall back to the default rather than erroring |
 | `ROLEPLAY_ROSTER` | override the roster path (for the tests) |
 | `ROLEPLAY_SEED` | force the RNG seed, making a roll reproducible (for the tests) |
+| `ROLEPLAY_ROLL_LOG` | `--votes` only: the roll log path. Default `$XDG_STATE_HOME/roleplay/rolls.tsv`; empty logs nothing and drops the id. Set it empty for a test run with `--votes` |
 | `ROLEPLAY_SAY_MODEL` | `roleplay-say` default model when `-m` is not given |
 | `ROLEPLAY_EXAMPLES` | `roleplay-say` examples file, `/dev/null` for none |
 | `CLAUDE_P_TIMEOUT` | `roleplay-say` deadline in seconds, default `60` |
@@ -249,6 +251,19 @@ roleplay-say -m sonnet tests pass  # another model. The default is haiku
 `roleplay-say` **fails loudly**, unlike the hook: a message on stderr and exit 1,
 with stdout carrying only the finished line. A person or a script calls it, so
 nothing parses its failure as a prompt. It needs `claude-p` and `jq` on PATH.
+
+### Vote ids (`--votes`)
+
+With `--votes`, each roll gets a random 4-character id, added to the tag as
+`|| vote id: k3f2` and logged with the character and universe to `rolls.tsv`. The bookend
+format in `rcs/claude-user-claude.md` turns the id into `hammerspoon://r?v=<id><slot>` links,
+and the Hammerspoon seed `lib/lua/seeds/rolevote.lua` records each click in `votes.tsv`.
+
+**The receiver lives outside `roleplay/`,** so the flag is off by default and this directory
+stays usable on its own. Here it is on through the hook command in `rcs/claude-settings.json`
+(`roleplay-roll --votes`), not through the settings `env` block: that block also reaches
+every Bash call Claude makes, so a run by hand would write the real log. A run without the
+flag logs nothing. Seed tests: `cmds test lua`.
 
 ### When changes take effect
 

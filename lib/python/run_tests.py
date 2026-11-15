@@ -40,6 +40,16 @@ COMPONENTS = {
         "deps": [],
         "aliases": ["python"],
     },
+    # Hammerspoon seeds run under plain lua5.4 with a stub `hs`
+    # (tests/lib/lua/harness.lua), driven from pytest so the counts reach the
+    # summary. busted would need a luarocks install and reports no counts.
+    # Skips if lua5.4 is missing.
+    "lib/lua": {
+        "runner": "pytest",
+        "deps": [],
+        "aliases": ["lua", "hammerspoon"],
+        "source_path": "lib/lua/seeds",
+    },
     "bin/astro": {
         "runner": "pytest",
         "deps": ["kerykeion", "pyswisseph"],

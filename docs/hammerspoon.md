@@ -539,16 +539,32 @@ Examples:
 
 ### Reload Protocol
 
-When reloading Hammerspoon (`Cmd+Ctrl+R`):
+There are two reloads, both in `lib/lua/hammerspoon.lua`.
+
+**Soft reload (`Cmd+Ctrl+R`, the default)** keeps menubars, so Hidden Bar keeps its layout:
+
+1. Calls `softStop()`, or else `stop()`, on every seed in the `seeds` table
+2. Clears `package.loaded` for each module in the `seedModules` list, and for `hammerspoon`
+3. Requires `hammerspoon` again, which engages every seed afresh
+
+A seed missing from `seedModules` is not re-read: `require` returns its cached module, so an
+edit to it does not take effect. A seed missing from `seeds` is not stopped first. **Add every
+new seed to both lists.**
+
+**Hard reload (`Cmd+Ctrl+Shift+R`)** destroys all state:
 
 1. Creates reload flag at `/tmp/hs_reloading`
-2. Calls `stop()` on all registered seeds
+2. Calls `stop()` on every seed in the `seeds` table
 3. Executes `hs.reload()`
 4. Seeds detect reload flag and can adjust behavior
 
 ### IPC Communication
 
 Hammerspoon IPC allows external scripts to communicate with running instance:
+
+When stdin is not a terminal, `hs` reads it after it runs `-c`. From a script or the Claude
+Code Bash tool, whose stdin never closes, add `</dev/null`, or `hs` hangs after the command
+has already run.
 
 ```bash
 # From shell

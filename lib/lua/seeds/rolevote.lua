@@ -21,6 +21,10 @@
 local obj = {}
 obj._name = "rolevote"
 
+-- Hardcoded on purpose: Hammerspoon starts from launchd and has no
+-- XDG_STATE_HOME, so reading it here would always fall back to this anyway.
+-- If roleplay-roll logs elsewhere (XDG_STATE_HOME or ROLEPLAY_ROLL_LOG), pass
+-- the paths in hammerspoon.lua: engage("seeds.rolevote", {rolls = ..., votes = ...}).
 local dir = os.getenv("HOME") .. "/.local/state/roleplay"
 local config = {
     votes = dir .. "/votes.tsv",

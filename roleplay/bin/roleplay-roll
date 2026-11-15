@@ -17,7 +17,11 @@
 # never let a diagnostic reach stdout: stdout is parsed as JSON by Claude Code.
 #
 # Usage:
-#   roleplay-roll            # hook JSON envelope (the default; what the hook calls)
+#   roleplay-roll            # hook JSON envelope (the default)
+#   roleplay-roll --votes    # the same, plus a vote id in the tag and a line in
+#                            # the roll log. Only the hook should pass it: a run
+#                            # by hand with it writes the real log, so set
+#                            # ROLEPLAY_ROLL_LOG= (empty) for a test run
 #   roleplay-roll --plain    # just the character line, for eyeballing and tests
 #   roleplay-roll --list     # the whole roster grouped by universe
 #   roleplay-roll --check    # validate the roster: counts, odds, duplicate emoji/names
@@ -34,19 +38,34 @@
 #   ROLEPLAY_CATCHPHRASE  "N/M" odds that a signature line is unlocked.
 #                         Default 1/3. "0/1" never, "1/1" always. Unparseable
 #                         values fall back to the default rather than erroring.
-#   ROLEPLAY_ROLL_LOG     where hook mode logs each roll's vote id (time, id,
+#   ROLEPLAY_ROLL_LOG     where --votes logs each roll's vote id (time, id,
 #                         character, universe). Default
 #                         $XDG_STATE_HOME/roleplay/rolls.tsv; empty logs nothing.
+#
+# Votes are opt-in because this directory is shared as-is, and the thing that
+# reads the ids is not in it: a Hammerspoon seed in the dotfiles
+# (lib/lua/seeds/rolevote.lua) records a vote from a hammerspoon:// link. With
+# no receiver, an id in every tag is noise and the log only grows. The opt-in
+# is a flag on the hook command, not an env var in settings.json, because the
+# settings "env" block also reaches every Bash call, so a run by hand would log.
 
 set -uo pipefail
 
-case ${1:-} in
-    '')                 mode=hook  ;;
-    --plain | plain)    mode=plain ;;
-    --list  | list)     mode=list  ;;
-    --check | check)    mode=check ;;
-    *)                  mode=hook  ;;
-esac
+# --votes may come alone or with another mode; alone it means hook mode. Any
+# other unknown argument is hook mode too, so a settings file newer or older
+# than this script still gets a plain roll rather than nothing.
+votes=
+mode=
+for arg in "$@"; do
+    case $arg in
+        --votes)            votes=1 ;;
+        --plain | plain)    mode=${mode:-plain} ;;
+        --list  | list)     mode=${mode:-list}  ;;
+        --check | check)    mode=${mode:-check} ;;
+        *)                  mode=${mode:-hook}  ;;
+    esac
+done
+mode=${mode:-hook}
 
 # Resolve the roster relative to this script, not to $HOME, so a clone or
 # worktree elsewhere uses its own copy — same reasoning as run_tests.py deriving
@@ -262,7 +281,8 @@ case $mode in
         # Vote id: 4 random base-36 characters, one per roll. The bookends put
         # it in their vote links, and the roll log maps it back to the
         # character, so a link need not carry the name or the line. The line
-        # stays findable by searching the transcripts for the id.
+        # stays findable by searching the transcripts for the id. All of this
+        # happens only with --votes (see the header).
         vote_id=
         n=$(( ((RANDOM << 15) ^ RANDOM) % 1679616 ))
         b36=0123456789abcdefghijklmnopqrstuvwxyz
@@ -279,7 +299,7 @@ case $mode in
         state_home=${XDG_STATE_HOME:-${HOME:-}/.local/state}
         log=${ROLEPLAY_ROLL_LOG-$state_home/roleplay/rolls.tsv}
         logged=
-        if [ -n "$log" ] && [ -n "$meta" ]; then
+        if [ -n "$votes" ] && [ -n "$log" ] && [ -n "$meta" ]; then
             log_dir=${log%/*}
             {
                 { [ "$log_dir" = "$log" ] || [ -d "$log_dir" ] || mkdir -p -- "$log_dir"; } &&
