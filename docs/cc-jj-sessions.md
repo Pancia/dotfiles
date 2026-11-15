@@ -377,8 +377,12 @@ from `$CLAUDE_SESSION_ID` never takes over a journal. It used to move this proce
 whole journal into the id it was given.
 
 **`--resume` keeps the session id in a new process**, so `.owner` is rewritten when
-the recorded process has ended. If the id ever does change across a resume, the old
-journal has a dead owner and is not taken over.
+the recorded process has ended: at the first prompt by the nudge, and by every
+Edit/Write and Bash hook. Before the nudge did this, the first command after a resume
+read the session as ended: `ccjj audit` listed its own edits as claimed by nobody,
+and a peer's `should-scope` stopped counting it. The rewrite also counts toward the
+12-hour rule, so a session resumed the next day is live at once. If the id ever does
+change across a resume, the old journal has a dead owner and is not taken over.
 
 Only a live session's claim suppresses a warning. A dead session's paths are
 exactly what you want to hear about — nobody is going to commit them.

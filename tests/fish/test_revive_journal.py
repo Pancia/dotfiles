@@ -208,3 +208,24 @@ class TestTolerance:
         pane("TORN-0001").run(["exit"])
         banner = store / "pending" / "TORN-0001"
         assert "sleep 60" in banner.read_text()
+
+    def test_compaction_keeps_a_stop_after_its_command(self, tmp_path):
+        # `stop` once fell into the scalar branch: the last one was hoisted into
+        # the header and the rest dropped, so a paused job read as running
+        rec = tmp_path / "r.rec"
+        rec.write_text("guid\tG\npid\t1\ncwd\t/a\n"
+                       "cmd\tsleep%2061\nstop\t0%20500\n"
+                       "cmd\techo%20x\ndone\t0%2010\n"
+                       "cmd\tsleep%2062\nstop\t0%20600\ncwd\t/b\n")
+        # The fish_exit handler deletes $__revive_rec, so it is cleared before
+        # this shell exits
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        script = (f"source {root}/fish/functions/revive-journal.fish; "
+                  f"set -g __revive_rec {rec}; _revive_compact; "
+                  f"set -g __revive_rec ''")
+        subprocess.run(["fish", "--no-config", "-c", script], check=True, timeout=30)
+        scalars, history = read_record(rec)
+        assert [(h["cmd"], h["stopped"]) for h in history] == [
+            ("sleep 61", True), ("echo x", False), ("sleep 62", True)]
+        assert "stop" not in scalars
+        assert scalars["cwd"] == "/b"

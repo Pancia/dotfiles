@@ -55,7 +55,13 @@ class FishPane:
 
         The shell is SIGKILLed at the end unless a command exited it, so a test
         that wants a crash simply does not send `exit`. A `None` in `commands`
-        waits a second, for a program that needs time to start.
+        waits a second, for a program that needs time to start. Reading stops
+        1 s after the last entry, so output that comes later is lost: put
+        `None` entries last to wait for it.
+
+        The output is raw pty bytes, and fish's prompt, OSC codes and `\\r`
+        share lines with what a program prints. Search it (`in`,
+        `re.findall`); do not split it into lines and match their starts.
 
         Killing only the shell closes the pty, so its children get SIGHUP and can
         still clean up -- nvim deletes its session then. `powercut=True` kills

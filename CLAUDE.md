@@ -851,7 +851,7 @@ immediately because it still asserted the pre-XDG `~/.tmux.conf` destination.
 | `bin/astro` | `astro` | pytest | needs kerykeion/pyswisseph |
 | `bin/ytdl` | `ytdl` | pytest | stubs yt-dlp via PATH |
 | `bin/exocortex-id` | `exocortex` | pytest | |
-| `fish` | — | pytest | **pytest, not fishtape** — drives `fish --no-config -c` and asserts on output; needs the `fish` binary. All ~140 tests take about 2 min (the revive pty tests are most of it), so run one file when you can (`cmds test fish/test_trash.py`) |
+| `fish` | — | pytest | **pytest, not fishtape** — drives `fish --no-config`, with `-c`, or for the revive tests interactive in a real pty; needs the `fish` binary. Each pty test waits 2.6 s for fish to start, so the whole component takes about 3 min, longer than the Bash tool's 2 min default timeout. Run one file when you can (`cmds test fish/test_trash.py`), and give a full run a longer timeout |
 | `hooks` | — | pytest | runs `rcs/claude-ensure-rcs-hook.sh` |
 | `roleplay` | `roleplay` | pytest | drives the bash script as a subprocess; no deps. Tests live in `roleplay/tests/`, reached via the `tests/roleplay` symlink |
 | `svc` | `supervise`, `svc-tmux` | pytest | needs `pyte` (+ `tmux`, else those tests skip). pty-rendered status bar, orphan checks via `ps`, a private tmux socket per test |

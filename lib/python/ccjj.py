@@ -462,9 +462,12 @@ def has_activity(d):
 
 
 def journal_age_hours(jdir):
+    # .owner counts too. stamp_owner rewrites it only when the old owner is
+    # dead, so it is newer than the records only right after a resume -- and a
+    # session resumed the next day must be live at once, not after 12 hours.
     newest = 0.0
     for name in os.listdir(jdir):
-        if name.endswith(JOURNAL_SUFFIXES):
+        if name.endswith(JOURNAL_SUFFIXES) or name == ".owner":
             try:
                 newest = max(newest, os.stat(os.path.join(jdir, name)).st_mtime)
             except OSError:
@@ -921,6 +924,15 @@ def cmd_nudge(_args):
     absorb_same_process(root, me)
 
     base = os.path.join(journal_root(), repo_key(root))
+    # --resume keeps the id in a new process. Until a tool hook ran, .owner named
+    # the dead one: audit listed this session's own paths as claimed by nobody,
+    # and a peer's should-scope stopped counting it.
+    mine = os.path.join(base, me) if me else ""
+    if mine and os.path.isdir(mine):
+        try:
+            stamp_owner(mine)
+        except OSError:
+            pass
     others = []
     if os.path.isdir(base):
         for sid in sorted(os.listdir(base)):

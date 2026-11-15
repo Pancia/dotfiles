@@ -213,7 +213,11 @@ scratchpad.
     look for them there.
 - **Keep in the scratchpad:** only files that cost nothing to lose. Examples are
   throwaway test repos, copies of source trees and raw command output.
-- **Subagents:** give the `.cc/` path in the brief for any report or patch.
+- **Subagents:** give the `.cc/` path in the brief for any report or patch. A
+  brief that says "change no other file" must still allow `.cc/misc/<topic>/`
+  for code the result relies on. A plan or report never cites a scratchpad or
+  `/private/tmp` path: copy the file into `.cc/misc/<topic>/` first, and cite
+  the copy.
 - `.cc/` is tracked, so do not put large or generated trees there.
 - **Privacy:** `.cc/` files get committed, and some repos are public. Put private
   material in `.cc/private/`, such as quotes from my transcripts. Git ignores that

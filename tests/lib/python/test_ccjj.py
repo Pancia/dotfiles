@@ -3047,6 +3047,43 @@ def test_resumed_session_replaces_its_dead_owner(repo, monkeypatch):
     assert open(owner).read().startswith(str(os.getpid()) + "\t")
 
 
+def test_a_restamped_owner_makes_an_old_journal_live(repo, monkeypatch):
+    """A session resumed the next day has records over 12 hours old. Once its
+    .owner is restamped it is live again, so audit must not list its own edits
+    as claimed by nobody."""
+    monkeypatch.setenv("CLAUDE_PID", str(os.getpid()))
+    _two_files(repo)
+    _hook_edit(repo, "S1", "f.txt", "f", "F")
+    d = os.path.join(repo.journal, repo.root.replace("/", "_"), "S1")
+    old = time.time() - 13 * 3600
+    for n in os.listdir(d):
+        os.utime(os.path.join(d, n), (old, old))
+    r = repo.run("audit", sid="S1")
+    assert "claimed by no session" in r.stderr, \
+        "precondition: records alone past 12 hours read as ended"
+    _owner(repo, "S1", str(os.getpid()), _my_lstart())     # the resume restamp
+    r = repo.run("audit", sid="S1")
+    assert "claimed by no session" not in r.stderr, r.stdout + r.stderr
+
+
+def test_the_first_prompt_after_a_resume_restamps_the_owner(repo, monkeypatch):
+    """--resume keeps the id in a new process. Until a tool hook ran, .owner
+    named the dead one, so audit listed this session's own edits as claimed by
+    nobody, and a peer's should-scope stopped counting it."""
+    _two_files(repo)
+    _hook_edit(repo, "S1", "f.txt", "f", "F")
+    _owner(repo, "S1", "1", "Thu Jan  1 00:00:00 2000")      # the process before the resume
+    assert "claimed by no session" in repo.run("audit", sid="S1").stderr, \
+        "precondition: a dead owner reads as ended"
+    monkeypatch.setenv("CLAUDE_PID", str(os.getpid()))       # the resumed process
+    _nudge(repo, repo.root, "S1")
+    r = repo.run("audit", sid="S1")
+    assert "claimed by no session" not in r.stderr, r.stdout + r.stderr
+    # the peer is another process: with S1's CLAUDE_PID it would absorb S1
+    assert repo.run("should-scope", "-q", sid="S2", env={"CLAUDE_PID": ""}).returncode == 0, \
+        "a peer must count the resumed session again"
+
+
 # ---------------------------- moves and deletes: advice, previews and wording
 
 LONG = "".join("line %d\n" % i for i in range(40))

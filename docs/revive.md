@@ -167,20 +167,27 @@ during the picked-up work then leaves that work as the new ghost's story.
 ### Record format
 
 Line-oriented, `key<TAB>percent-encoded-value`, **appended** and never rewritten
-(bar compaction every 500 commands). Scalars are last-wins on replay; `cmd` and
-`done` lines interleave into the history, and a `cmd` with no `done` after it is
-what the pane was doing when it died.
+(bar compaction every 500 commands). Scalars are last-wins on replay; `cmd`,
+`done` and `stop` lines interleave into the history, and a `cmd` with no `done`
+after it is what the pane was doing when it died.
 
 **Job control.** Ctrl-Z ends a command as far as fish is concerned, so
 `fish_postexec` fires, but the program is only paused. The handler checks the
-`jobs` builtin: when the newest job is stopped and was not stopped before the
-command, it writes `stop` instead of `done`, and the readers show `stopped`.
-`fg` is journaled as the command of the job it brings back (the first row of
-`jobs`, or `jobs <pid>`), so a crash after Ctrl-Z and `fg` names the program,
-not `fg`. A `fg` with no job to bring back writes nothing; one whose argument
-is a variable keeps its own text. `bg` and `jobs` are never journaled. All of
-it is builtins, so nothing forks. Before this, `revive` offered to run `fg` in a
-new shell, which has no job to resume.
+`jobs` builtin. When the newest job is stopped, and either it was not stopped
+before the command or it is the job `fg` just brought back, it writes `stop`
+instead of `done`, and the readers show `stopped`. It also remembers what was
+typed for that job, by process group (`__revive_job_groups`,
+`__revive_job_cmds`). Each Ctrl-Z drops the groups that are no longer stopped.
+`fg` is journaled as the job it brings back: the first row of `jobs`, or
+`jobs <pid>` for `fg <pid>`. Its text is what was typed when this shell saw the
+job stop. Only a job it never saw stop, such as one started with `&`, falls
+back to the command column of `jobs`. That column is not enough on its own:
+fish shows a job started inside a function as the function's own source, so `v`
+would come back as `command nvim $argv`. So a crash after Ctrl-Z and `fg` names
+what was typed, not `fg`. A `fg` with no job to bring back writes nothing. One
+with any argument other than a number keeps its own text. `bg` and `jobs` are
+never journaled. All of it is builtins, so nothing forks. Before this, `revive`
+offered to run `fg` in a new shell, which has no job to resume.
 
 Appending rather than rewriting is both the safe and the cheap choice. Fish
 cannot `fsync`, and APFS can land a rename with the data still unflushed, so
@@ -287,6 +294,35 @@ real — `… - Nvim (nvim)`, `alt start ~/p/sanctuary (tmux)`.
 - The journal knows nothing about commands run before it was installed.
 - Picking up never runs a shell command without showing it and asking first.
   Resuming a Claude session is the one thing it does without asking.
+
+## Try it by hand
+
+Use a fake pane id, so this pane's own record is not touched. Use two new tabs,
+A and B. A tab opened before a change still runs the old handlers: the journal is
+sourced once at shell start, and `nvim` and `revive` autoload once.
+
+Power cut with nvim open:
+
+1. In A: `env ITERM_SESSION_ID=w0t0p0:TEST-1 fish`, then `echo $fish_pid`.
+2. In A: `v`, pick a file, `:vsplit`, then `:echo getpid()`. That pid is the
+   nvim server.
+3. In B, in one command, fish first: `kill -9 <fish pid> <nvim pid>`. If fish
+   lives on for a moment, its next prompt deletes the session as left by a
+   crashed nvim.
+4. nvim leaves A on its alternate screen. Run `tput rmcup` in A, or use B. Then
+   run `env ITERM_SESSION_ID=w0t0p0:TEST-1 fish` again. The banner shows
+   `✎ nvim` and the file names. `revive` offers to reopen them.
+5. Clean up: `revive dismiss here` (unless you picked it up), then `exit`.
+
+Ctrl-Z and fg:
+
+1. In A: `env ITERM_SESSION_ID=w0t0p0:TEST-1 fish`, then `v`, open a file, and
+   press Ctrl-Z.
+2. In B: `revive live`. The TEST-1 row says `gone` (no iTerm pane has that id)
+   and `stopped v`.
+3. In A: `fg`. nvim covers A, so check from B: `revive live` now says
+   `running v`.
+4. In A: `:q`, then `exit`.
 
 ## Tests
 

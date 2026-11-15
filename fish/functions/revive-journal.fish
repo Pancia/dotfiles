@@ -219,7 +219,7 @@ function _revive_compact --description 'Rewrite an overgrown record: header plus
         set parts (string split -m1 \t -- $line)
         test (count $parts) -eq 2; or continue
         switch $parts[1]
-            case cmd done
+            case cmd done stop
                 set -a tail $line
             case '*'
                 # scalars are last-wins, and `cwd` is rewritten on every cd —
