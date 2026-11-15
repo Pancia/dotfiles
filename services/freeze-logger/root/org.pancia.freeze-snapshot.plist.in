@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Root LaunchDaemon. Not a .plist on purpose: _ENSURE_SERVICES installs every
+     services/**/*.plist as a user agent. install.sh copies this to
+     /Library/LaunchDaemons/org.pancia.freeze-snapshot.plist. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>org.pancia.freeze-snapshot</string>
+        <key>ProgramArguments</key>
+        <array>
+            <string>/usr/local/sbin/freeze-snapshot</string>
+        </array>
+        <!-- Not throttled by launchd: it must run while the machine is overloaded. -->
+        <key>ProcessType</key>
+        <string>Interactive</string>
+        <key>RunAtLoad</key>
+        <true/>
+        <key>KeepAlive</key>
+        <true/>
+        <key>StandardOutPath</key>
+        <string>/Library/Logs/freeze-snapshot/daemon.log</string>
+        <key>StandardErrorPath</key>
+        <string>/Library/Logs/freeze-snapshot/daemon.log</string>
+    </dict>
+</plist>
