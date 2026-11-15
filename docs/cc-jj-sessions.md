@@ -266,8 +266,42 @@ committed it), and a path only a peer has records on. When you and a peer both
 edited one file, your reconstruction rightly lacks the peer's hunk and cannot match
 the disk. The commit takes your hunks and prints a note instead of stopping. The
 cost: your own Bash change to that same file stays uncommitted and is flagged only
-by the note, though it can still be claimed. Without this, the printed `ccjj claim` led to `claim --force`, which committed
-the peer's unfinished hunk at exit `0`.
+by the note. The note says to undo it and redo it with Edit, not to claim it:
+`claim` refuses a path a peer has records on, and `claim --force` takes the peer's
+hunks. Without this, the printed `ccjj claim` led to `claim --force`, which committed
+the peer's unfinished hunk at exit `0`. The "cannot place your edit" conflict gives
+the same advice when a peer has records on the path.
+
+### The warning at the Bash call
+
+The Bash-window hook also warns on the call that made the mix, rather than leaving
+it to the commit. It fires for a path when all three hold:
+
+1. this call's window changed the path,
+2. this session has Edit/Write records for it, and
+3. the file on disk differs from what the **newest** record on that path, from any
+   session, left.
+
+Without the third test it fired on this session's own Edits, because a window spans
+everything since the previous Bash call, and on a peer's Edit inside the window. The
+third test also makes it fire once per Bash change, and stop after `claim`. It
+offers `ccjj claim <path>`, or "undo, then redo with Edit" when a peer has records
+on the path. It is emitted as `PostToolUse` `additionalContext` JSON, the same shape
+as `rcs-sync --hook`, because a `PostToolUse` hook's plain stdout does not reach the
+model. A session with no records pays nothing; otherwise a call that changed the
+working copy pays one read-only `jj diff`, about 20 ms.
+
+A delete is not warned about: it is a whole-path change, which `claim` refuses and
+`drop_vanished()` already reconciles with the records. (Its first live run told an
+agent to claim two files it had just trashed.)
+
+It misses a Bash change made in the session's first Bash call, which only sets the
+baseline, and a peer's Edit that lands after your change inside the same window.
+
+Origin: on 2026-11-15 a session edited its files with Edit and then with `sed -i`
+and Python. Nothing said so until `commit-mine` died with "cannot place your edit".
+By then CLAUDE.md also held two other sessions' edits, so `claim` would have taken
+them, and the change had to be reverted and redone with Edit.
 
 **What `--no-claim` leaves behind.** A commit archives every window, which used to
 make a later claim impossible and also removed the session's stake, so a peer could
@@ -306,9 +340,15 @@ decides in two `test -f` and ~3 ms, without starting Python (~130 ms).
 2. `.jj/ccjj-contended` — maintained by `ccjj nudge`, which already computes
    liveness on every `UserPromptSubmit`.
 
-Gate 2 is the important one: with a single session there is nothing to
-attribute, so the snapshot is pure waste during the ~78% of active minutes that
-are uncontended. When it does run, it is **one** `jj log -T commit_id -r @`,
+Gate 2 was meant to be the important one: with a single session there is nothing
+to attribute, so the snapshot would be pure waste during the ~78% of active minutes
+that are uncontended. **In practice it stays open.** The nudge only ever *sets* the
+marker. Only `ccjj retire-all` (after a whole-copy commit) and `ccjj bash-windows
+off` remove it; `ccjj prune` does not. So once a second session has appeared, every
+later Bash call in that checkout starts Python and snapshots, alone or not. In
+`~/dotfiles` the marker was set on 2026-07-31 and never cleared, so the 78% saving
+does not happen there. This is kept on purpose: an open gate keeps every window
+claimable and the Bash-overwrite warning working. When it does run, it is **one** `jj log -T commit_id -r @`,
 which snapshots *and* returns the id in one process — 20 ms idle, 70 ms with a
 pending change on a 4000-file repo. (Never add `--ignore-working-copy`: that
 reports "No snapshot needed" and does nothing, with real changes on disk.)

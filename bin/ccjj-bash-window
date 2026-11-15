@@ -11,6 +11,9 @@
 # to attribute -- a whole-working-copy commit is strictly better, because it
 # also captures the Bash-made changes this tool cannot see -- so the ~70ms
 # snapshot is pure waste during the ~78% of active minutes that are uncontended.
+# In practice the marker, once set, is never cleared (`ccjj prune` does not
+# touch it), so in ~/dotfiles this gate stays open. See docs/cc-jj-sessions.md,
+# "Cost, and the gates".
 #
 # Same stdin-scraping shape as ~/.claude/hooks/jj-snapshot.sh. Always exits 0:
 # a recorder that fails an agent's tool call is worse than one that misses.

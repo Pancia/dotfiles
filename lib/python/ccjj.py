@@ -40,6 +40,7 @@ JJ_DEADLINE = 8          # seconds; a wedged jj must never hang the agent
 PIN_TRIES = 3            # cmd_commit's payload builds before "@- moved; re-run"
 SCHEMA = 2               # 2 adds "rel"; schema 1 records still read, see rec_rel
 ROOT = ""                # repo root, set once in main() before any subcommand
+ME = ""                  # committing session id, set by cmd_commit; for error hints
 # Everything that counts as a session's journal content. A filter that lists the
 # suffixes by hand misses the next one: an offer-only journal read as empty, so
 # the daily prune retired it.
@@ -746,6 +747,92 @@ def cmd_bash_window(_args):
     with os.fdopen(fd, "w") as fh:
         json.dump(rec, fh)
 
+    # Warn NOW, not at commit time. A Bash change to a file this session also
+    # Edited is not journaled, so the replay cannot rebuild it, and a later Edit
+    # that anchors on the Bash-made text kills the whole commit. By then the fix
+    # (claim, or undo and redo with Edit) costs far more than it does here.
+    # additionalContext, not plain stdout: a PostToolUse hook's plain stdout does
+    # not reach the model (same shape as `rcs-sync --hook`).
+    try:
+        hits = bash_overwrites(sid, d, prev, now)
+    except (Exception, SystemExit):
+        hits = []
+    if hits:
+        lines = []
+        for p, peers in hits:
+            if peers:
+                lines.append("- %s: another session also has edits recorded here, so "
+                             "`ccjj claim` would take its hunks. Undo this Bash change, "
+                             "then redo it with Edit." % p)
+            else:
+                lines.append("- %s: if the change is yours, run `ccjj claim %s` before "
+                             "your next Edit to it, or undo it, then redo it with Edit."
+                             % (p, shlex.quote(p)))
+        msg = ("[ccjj] This Bash call changed a file you also changed with Edit/Write. "
+               "commit-mine cannot replay that mix:\n" + "\n".join(lines))
+        json.dump({"hookSpecificOutput": {"hookEventName": "PostToolUse",
+                                          "additionalContext": msg}}, sys.stdout)
+
+
+def _rec_ns(name):
+    """The t_ns a record's file name starts with, for ordering across sessions."""
+    try:
+        return int(name.split("-", 1)[0])
+    except ValueError:
+        return 0
+
+
+def bash_overwrites(sid, d, prev, now):
+    """[(path, [peer sids])]: paths this window changed that this session has
+    Edit/Write records for, where the disk no longer equals what the NEWEST
+    record on that path (any session) left.
+
+    The last test is what keeps it quiet on this session's own Edits between two
+    Bash calls -- a window spans everything since the previous Bash call -- and on
+    a peer's Edit inside the window. It also makes the warning fire once per Bash
+    change rather than on every later call, and stop after `claim`.
+
+    Costs nothing extra when the session has no records (most sessions, most
+    calls); one read-only `jj diff` otherwise, about 20 ms.
+    """
+    if not record_names(d):
+        return []
+    mine = claims_of(sid)
+    if not mine:
+        return []
+    # Not a delete: that is a whole-path change, which `claim` refuses and
+    # drop_vanished() already reconciles with the records. Warning on one told
+    # the agent to claim a file it had just trashed (seen on the first live run).
+    cand = {tgt for st, _src, tgt, _t in (window_delta(prev, now) or ())
+            if tgt in mine and st != "removed"}
+    if not cand:
+        return []
+    base = os.path.join(journal_root(), repo_key(ROOT))
+    newest, holders = {}, {}
+    for s in sorted(os.listdir(base)):
+        sd = os.path.join(base, s)
+        if s == "archive" or not os.path.isdir(sd):
+            continue
+        for name in record_names(sd):
+            try:
+                with open(os.path.join(sd, name)) as fh:
+                    rec = json.load(fh)
+                rp = rec_rel(rec)
+            except (Exception, SystemExit):
+                continue      # a torn record must not silence the others
+            if rp not in cand:
+                continue
+            holders.setdefault(rp, set()).add(s)
+            if _rec_ns(name) >= newest.get(rp, (-1, None))[0]:
+                newest[rp] = (_rec_ns(name), rec)
+    out = []
+    for p in sorted(cand):
+        rec = newest.get(p, (0, None))[1]
+        if rec is not None and _record_result(rec) == working_copy_bytes(p):
+            continue
+        out.append((p, sorted(holders.get(p, set()) - {sid})))
+    return out
+
 
 def load_windows(jdir):
     if not os.path.isdir(jdir):
@@ -950,9 +1037,12 @@ def cmd_nudge(_args):
     # clearing here made two sessions fight over it: a brand-new peer has no
     # journal yet, so the established session saw "no others" and deleted the
     # marker -- and the peer could not record a window to get a journal until
-    # the marker existed. Windows silently stopped. Clearing belongs where the
-    # whole picture is known (prune / retire-all), and a stale marker only ever
-    # costs a snapshot.
+    # the marker existed. Windows silently stopped. Only `retire-all` (after a
+    # whole-copy commit) and `bash-windows off` clear it; `prune` does NOT. So
+    # once set, the marker stays, and the shell gate's contention test stays open:
+    # in ~/dotfiles it was set on 2026-07-31 and never cleared. That costs a
+    # Python start and a snapshot on every Bash call, and keeps every window
+    # claimable and the Bash-overwrite warning working. Kept that way on purpose.
     if others and os.path.isfile(marker(root, MARKER_OPTIN)):
         try:
             open(marker(root, MARKER_BUSY), "a").close()
@@ -1067,17 +1157,30 @@ def anchored_replace(target, original, old, new, path, label):
                 "  (Rarely: the file exceeds `snapshot.max-new-file-size`, 1MiB by\n"
                 "  default, and jj refused to snapshot it -- `jj st` warns.)"
                 % (path, path))
+        # With a peer's records on the path, `claim` refuses and `claim --force`
+        # takes the peer's hunks, so offering it here sent the agent into a
+        # refusal (the CLAUDE.md case in the 2026-11-15 freeze session).
+        peers = _peer_holders(path)
+        if peers:
+            fix = ("  Session(s) %s also have edits recorded on %s, so `ccjj claim`\n"
+                   "  would take their hunks. If the Bash change is yours: undo it,\n"
+                   "  then redo it with Edit, and re-run. Otherwise another session\n"
+                   "  changed the same region, or your base moved: resolve by hand."
+                   % (", ".join(s[:8] for s in peers), path))
+        else:
+            fix = ("  If the Bash change is yours, `ccjj claim %s` replaces\n"
+                   "  your records with the file as it is now. Otherwise another session\n"
+                   "  changed the same region, or your base moved: resolve by hand, or\n"
+                   "  commit this path wholesale with `--also %s` if nobody else is on it."
+                   % (shlex.quote(path), shlex.quote(path)))
         die("conflict: cannot place your edit to %s (%s).\n"
             "  The reconstruction does not contain %r.\n"
             "  Most often this means YOU also changed %s through Bash -- a\n"
             "  `sed -i`, a heredoc, a script that rewrote it. Those are not\n"
             "  journaled, so replaying only the recorded edits cannot rebuild the\n"
             "  file, and a later edit anchors on text that is missing. Check with\n"
-            "  `ccjj audit`. If the Bash change is yours, `ccjj claim %s` replaces\n"
-            "  your records with the file as it is now. Otherwise another session\n"
-            "  changed the same region, or your base moved: resolve by hand, or\n"
-            "  commit this path wholesale with `--also %s` if nobody else is on it."
-            % (path, label, old, path, shlex.quote(path), shlex.quote(path)))
+            "  `ccjj audit`.\n%s"
+            % (path, label, old, path, fix))
     if n > 1:
         # Grow the window from SMALL to large and take the first width that
         # isolates one site. Match count is monotonically non-increasing in
@@ -1446,6 +1549,8 @@ def cmd_commit(args):
     sid = args.session or os.environ.get("CLAUDE_SESSION_ID", "")
     if not sid:
         die("no --session and CLAUDE_SESSION_ID is unset")
+    global ME
+    ME = sid
 
     caller_cwd = os.getcwd()
     jdir = os.path.join(journal_root(), repo_key(ROOT), sid)
@@ -1630,10 +1735,12 @@ def cmd_commit(args):
                     # Bash-made changes anyway, and has nothing to claim.
                     refuse(unclaimed_refusal(loose, sid), 5)
                 for p in sorted(shared):
+                    # Not "can still be claimed": with a peer's records on the
+                    # path, `claim` refuses, and `claim --force` takes their hunks.
                     print("note: %s on disk differs from what this commit takes, and\n"
                           "  session(s) %s have edits there. The difference stays in the\n"
                           "  working copy. Any of it that is your own Bash change stays\n"
-                          "  uncommitted and can still be claimed."
+                          "  uncommitted: undo it, then redo it with Edit, and commit again."
                           % (p, ", ".join(s[:8] for s in peer_edits[p])), file=sys.stderr)
 
             if args.diff:
@@ -2237,6 +2344,17 @@ def peer_record_paths(me):
                 for p in paths:
                     out.setdefault(p, []).append(s)
     return out
+
+
+def _peer_holders(path):
+    """Other sessions with records on `path`, for an error hint. Never raises:
+    it runs inside a die() message, where a second failure would hide the first."""
+    if not ME:
+        return []
+    try:
+        return peer_record_paths(ME).get(path, [])
+    except (Exception, SystemExit):
+        return []
 
 
 def whole_path_diff(path):

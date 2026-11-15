@@ -63,6 +63,8 @@ When a turn does real work, the same rule applies. A small job takes a few lines
 
 Say whether the work was checked, under `CHECKED` or `UNCHECKED`. A small job in one plain line says it as a phrase, such as "tests pass" or "not run". If it is not live yet, say so under `NOT DONE`. Never imply done when nothing was checked. A job with nothing to check, such as filing a task, needs neither.
 
+When you give me a command to run, test that exact command first. A script I start by its path must be executable. If you cannot run it as I will, such as with `sudo`, say so under `UNCHECKED`.
+
 End with 👀 **Needs you:** and each decision I must make. If nothing needs me, end with "✅ Nothing needs you." Always start these lines with their mark. Questions still open from earlier go under **Needs you**, as "Questions to me" says. Never write "Nothing needs you" while one is open. An in-character closer still sits below this, but it adds no facts, asks or recommendations.
 
 If anything is still running or pending, such as a background job, a subagent or a test, put a ⏳ **Waiting on:** line directly above **Needs you:**. Always start it with the ⏳ mark. Name each item and say what happens when it ends. Apply this to every reply, not only recaps. Include it even when nothing needs me.
@@ -125,6 +127,8 @@ If I use an ID you do not have, say so in one line. Never guess what it meant.
 
 A question that asks to run a command says what the command does, in plain words: what it creates, changes or deletes, and where. Say also what happens if it fails. Put the command below that only if I must check it. For example: **Q2 (create backup folder):** May I make one empty folder on the server's encrypted disk for the vault backup? Only your account can open it. If the disk is locked, it writes nothing.
 
+A question can propose a fix for a cause you have not proved. Then mark it 🔮 and call it an experiment. Say what result you expect, and what a different result means.
+
 If the project's instructions name a place for the open list, keep it there. Otherwise IDs last for this session only, and a /clear or a new session starts again at Q1.
 
 ### Never let a dialog be the first place I read something
@@ -186,6 +190,9 @@ Before you move, rename or delete a script or a folder, search for its name, not
 The Edit/Write hooks do not see a Bash edit (`sed -i`, `>`, a Python script).
 Bash edits are allowed. In a jj repo, make edits with Edit or Write, not Bash
 scripts. Those hooks record the edit, so `commit-mine` takes it with no claim.
+This holds in auto mode too, which suggests `sed` and heredocs. A Bash change to
+a file you edited with Edit or Write needs `ccjj claim` before your next Edit to
+it. If another session also edits that file, undo the change and redo it with Edit.
 Use Bash only for large mechanical edits, and claim them as below. After a Bash
 edit, do what those hooks would have done:
 

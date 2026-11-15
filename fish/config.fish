@@ -15,7 +15,10 @@ end
 
 function _ENSURE_SERVICES
     set -l dest $HOME/Library/LaunchAgents/
-    for service_path in (find $HOME/dotfiles/services -type f -name '*.plist')
+    # services/<name>/<label>.plist only: the layout bin/service and rcs-sync use.
+    # A deeper plist (a root LaunchDaemon, say) must not load as a user agent.
+    # -type f keeps symlinks out, such as services/inari-wake-morning's.
+    for service_path in (find $HOME/dotfiles/services -maxdepth 2 -type f -name '*.plist')
         set -l plist (basename $service_path)
         set -l service_name (basename $plist .plist)
         if not test -f "$dest/$plist"; or _not_same_inode "$dest/$plist" "$service_path"

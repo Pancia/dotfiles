@@ -3652,3 +3652,162 @@ def test_records_that_differ_from_disk_stop_even_when_the_path_equals_parent(rep
     r = repo.run("commit", "-m", "x", sid="S1")
     assert r.returncode == 5, r.stdout + r.stderr
     assert "ccjj claim f.txt" in r.stderr
+
+
+# ------------------------------------------- Bash overwrites an Edited file
+#
+# The 2026-11-15 freeze session edited files with Edit, then also with `sed -i`
+# and Python in Bash. Nothing said so until the commit died with "cannot place
+# your edit", and by then CLAUDE.md held two other sessions' edits too, so the
+# fix was a scripted revert and a redo. The Bash-window hook now says so on the
+# call that made the change.
+
+def _warning(r):
+    """The additionalContext a bash-window call emitted, or ""."""
+    if not r.stdout.strip():
+        return ""
+    out = json.loads(r.stdout)["hookSpecificOutput"]
+    assert out["hookEventName"] == "PostToolUse"
+    return out["additionalContext"]
+
+
+def _overwrite_base(repo):
+    _optin(repo)
+    repo.write("f.txt", "one\ntwo\nthree\n")
+    repo.write("g.txt", "g\n")
+    repo.commit("base")
+    assert _warning(_bash(repo)) == ""                 # baseline
+
+
+def test_overwrite_own_edit_between_bash_calls_is_silent(repo):
+    """A window spans everything since the previous Bash call, so it always
+    holds this session's own Edits. Those are journaled: nothing to say."""
+    _overwrite_base(repo)
+    _hook_edit(repo, "S1", "f.txt", "two", "TWO")
+    assert _warning(_bash(repo, tuid="t2")) == ""
+
+
+def test_overwrite_sed_after_edit_warns_once_and_offers_claim(repo):
+    _overwrite_base(repo)
+    _hook_edit(repo, "S1", "f.txt", "two", "TWO")
+    repo.write("f.txt", "one\nTWO\nthree-sed\n")       # the sed
+    m = _warning(_bash(repo, tuid="t2"))
+    assert "f.txt" in m and "ccjj claim f.txt" in m, m
+    repo.write("g.txt", "g2\n")                         # a later, unrelated change
+    assert _warning(_bash(repo, tuid="t3")) == ""      # once per change, not per call
+
+
+def test_overwrite_peer_edit_inside_the_window_is_silent(repo):
+    """The newest record on the path is the peer's, and the disk matches it."""
+    _overwrite_base(repo)
+    _hook_edit(repo, "S1", "f.txt", "two", "TWO")
+    assert _warning(_bash(repo, tuid="t2")) == ""
+    _hook_edit(repo, "S2", "f.txt", "one", "ONE")
+    assert _warning(_bash(repo, tuid="t3")) == ""
+
+
+def test_overwrite_ignores_a_bash_delete_of_an_edited_file(repo):
+    """A delete is whole-path: `claim` refuses it, and drop_vanished() handles
+    the records. The first live run told the agent to claim a trashed file."""
+    _overwrite_base(repo)
+    _hook_write(repo, "S1", "new.txt", "mine\n")
+    assert _warning(_bash(repo, tuid="t2")) == ""
+    os.remove(os.path.join(repo.root, "new.txt"))
+    _hook_edit(repo, "S1", "f.txt", "two", "TWO")
+    os.remove(os.path.join(repo.root, "f.txt"))         # tracked, Edited, deleted
+    assert _warning(_bash(repo, tuid="t3")) == ""
+
+
+def test_overwrite_with_peer_records_says_redo_with_edit(repo):
+    """`claim` refuses a path a peer has records on, and `--force` takes their
+    hunks -- so offering it would send the agent into a refusal."""
+    _overwrite_base(repo)
+    _hook_edit(repo, "S2", "f.txt", "one", "ONE")
+    _hook_edit(repo, "S1", "f.txt", "two", "TWO")
+    repo.write("f.txt", repo.read("f.txt").decode().replace("three", "three-sed"))
+    m = _warning(_bash(repo, tuid="t2"))
+    assert "would take its hunks" in m and "redo it with Edit" in m, m
+    assert "ccjj claim f.txt" not in m, m
+
+
+def test_overwrite_is_silent_after_claim(repo):
+    _overwrite_base(repo)
+    _hook_edit(repo, "S1", "f.txt", "two", "TWO")
+    repo.write("f.txt", "one\nTWO\nthree-sed\n")
+    assert _warning(_bash(repo, tuid="t2"))
+    c = repo.run("claim", "f.txt", sid="S1")
+    assert c.returncode == 0, c.stderr
+    repo.write("g.txt", "g3\n")
+    assert _warning(_bash(repo, tuid="t3")) == ""
+
+
+def test_overwrite_in_the_first_bash_call_is_missed(repo):
+    """Documented gap: the first call only sets a baseline, so there is no window
+    and no warning, and the commit takes the Edit and leaves the sed behind."""
+    _optin(repo)
+    repo.write("f.txt", "one\ntwo\nthree\n")
+    repo.commit("base")
+    _hook_edit(repo, "S1", "f.txt", "two", "TWO")
+    repo.write("f.txt", "one\nTWO\nthree-sed\n")
+    assert _warning(_bash(repo)) == ""
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert repo.show("f.txt") == b"one\nTWO\nthree\n"
+    assert b"three-sed" in repo.read("f.txt")
+
+
+def test_overwrite_then_anchored_edit_kills_the_whole_commit(repo):
+    """Why the warning has to come early: an Edit that anchors on Bash-made text
+    makes the replay die, and that takes every other path down with it."""
+    _overwrite_base(repo)
+    _hook_edit(repo, "S1", "g.txt", "g", "G-edit")       # an innocent second path
+    _hook_edit(repo, "S1", "f.txt", "two", "TWO")
+    repo.write("f.txt", "one\nTWO\nthree-sed\n")
+    _bash(repo, tuid="t2")
+    _hook_edit(repo, "S1", "f.txt", "three-sed", "THREE")
+    _bash(repo, tuid="t3")
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode != 0
+    assert "cannot place your edit to f.txt" in r.stderr
+    assert "ccjj claim f.txt" in r.stderr                # nobody else is on it
+
+
+def test_cannot_place_with_peer_records_says_redo_with_edit(repo):
+    _overwrite_base(repo)
+    _hook_edit(repo, "S2", "f.txt", "one", "ONE")
+    _hook_edit(repo, "S1", "f.txt", "two", "TWO")
+    repo.write("f.txt", "ONE\nTWO\nthree-sed\n")
+    _bash(repo, tuid="t2")
+    _hook_edit(repo, "S1", "f.txt", "three-sed", "THREE")
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode != 0
+    assert "cannot place your edit to f.txt" in r.stderr
+    assert "redo it with Edit" in r.stderr, r.stderr
+    assert "ccjj claim f.txt" not in r.stderr, r.stderr
+
+
+def test_shared_path_note_says_redo_with_edit_not_claim(repo):
+    _overwrite_base(repo)
+    _hook_edit(repo, "S2", "f.txt", "one", "ONE")
+    _hook_edit(repo, "S1", "f.txt", "two", "TWO")
+    _bash(repo, tuid="t2")
+    repo.write("f.txt", repo.read("f.txt").decode().replace("three", "three-sed"))
+    _bash(repo, tuid="t3")
+    assert repo.run("claim", "f.txt", sid="S1").returncode == 1
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode == 0, r.stderr
+    assert "redo it with Edit" in r.stderr and "can still be claimed" not in r.stderr
+    assert repo.show("f.txt") == b"one\nTWO\nthree\n"       # the sed stays behind
+
+
+def test_overwrite_check_starts_no_jj_without_records(repo, tmp_path):
+    """The extra read-only `jj diff` runs only when the session has records."""
+    _overwrite_base(repo)
+    repo.write("g.txt", "g-bash\n")
+    stub, log = _counting_jj(tmp_path)
+    _bash(repo, tuid="t2", path_prepend=stub)
+    assert len(log.read_text().split()) == 1
+    _hook_edit(repo, "S1", "f.txt", "two", "TWO")
+    log.unlink()
+    _bash(repo, tuid="t3", path_prepend=stub)
+    assert len(log.read_text().split()) == 2
