@@ -290,7 +290,7 @@ The three pieces reload differently, which matters when you are editing them.
 |---|---|---|
 | `roleplay/roster.tsv` | **next prompt** | the roller is a fresh subprocess per roll that re-reads the file; nothing caches it |
 | `roleplay/examples.md` | **next session or mod reload** | the mod reads it once, at `session.start` (not on `/clear`) |
-| `ai/mods/roleplay-bookends/` | **end of the turn that saved it, in every open session** | each interactive session watches the folder; the reload cuts off a Sonnet call in flight |
+| `ai/mods/roleplay-bookends/` | **in the session that saved it: end of that turn (seen 2026-11-15); in every other open session: about ¼ s after the last save, even mid-turn (from the plugin guide, not observed)** | the reload drops the module's memory: a Sonnet call in flight is cut off, and a turn already running gets no closer. How to edit, test and type-check a mod: [ai/mods/README.md](../../ai/mods/README.md) |
 | `CLAUDE_CODE_PLUGIN_DIRS` in `rcs/claude-settings.json` | **next session** | the plugin folders are read at start |
 | `rcs/claude-user-claude.md` (prompt section) | **next session** | `~/.claude/CLAUDE.md` is supplied as context at session start, so a running session keeps the copy it began with |
 
@@ -299,6 +299,12 @@ Lagann characters put Yoko in a roll 26 calls later with nothing restarted. The
 mod row was seen live on 2026-11-15: each save reloaded the mod at the end of
 the turn. Stand-alone, hook wiring in the settings also takes effect on the next
 prompt, and a format-rule edit only in a new session.
+
+After a change to how the mod handles prompts or turns, run `claude plugin test
+ai/mods/roleplay-bookends`. Then send one typed prompt and check the screen: an
+opener under the prompt and a closer under the answer. Only then call it working.
+While `DEBUG` is true, `~/.local/state/roleplay/mod-debug.log` also shows
+`opener <turnId> who=…` and `write opener <turnId> … ok` for that turn.
 
 ### Adding a character
 

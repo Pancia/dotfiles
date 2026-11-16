@@ -106,7 +106,7 @@ EOF
 
 failed=$(echo "$summary" | /usr/bin/grep -E 'FAILED' | /usr/bin/head -3 | /usr/bin/paste -sd ';' - | /usr/bin/sed 's/;/; /g')
 notify "Media sync FAILED" "${failed:-exit $rc} — click to open Claude" \
-    "$HOME/dotfiles/bin/open-iterm-with cd ~/AKR\\; and claude \\(cat $prompt_file \\| string collect\\)"
+    "$HOME/dotfiles/bin/open-iterm-with cd ~/AKR\\; and my-claude-code-wrapper \\(cat $prompt_file \\| string collect\\)"
 telegram CLAUDE_CODE_BOT_TOKEN "❌ <b>Media sync failed</b> (exit $rc)
 $(echo "${failed:-see log}" | html_escape)
 

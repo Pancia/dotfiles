@@ -58,7 +58,7 @@ type Turn = { roll: Promise<Who | null>; prompt: string }
 // [🎭 Character Roll: «Name» 🥷 UNIVERSE — traits || extra || vote id: x]
 const WHO = /«([^»]+)»\s*(\S+)\s+(.+?)\s+—\s+([^|\]\n]+)((?:\|\|[^\]\n]*)?)/
 
-function parseWho(s: string): Who | null {
+export function parseWho(s: string): Who | null {
   const m = WHO.exec(s)
   if (!m) return null
   const parts = (m[5] ?? '').split('||').map(x => x.trim())
@@ -75,7 +75,7 @@ function norm(s: string): string {
 // end, which is the end of its last text block, where the closer belongs.
 // The "h:"/"t:" prefix keeps a prompt like "2" from being an integer-like key,
 // which JavaScript orders first and withRow would then prune at once.
-function headKey(s: string): string {
+export function headKey(s: string): string {
   return 'h:' + norm(s).slice(0, 200)
 }
 function tailKey(s: string): string {
@@ -202,7 +202,7 @@ function pendingLine(w: Who): Line {
 
 // Sets one row and drops the oldest past KEEP, so the maps (and the rows
 // that read them) stay small in a long session.
-function withRow(m: Record<string, Line>, key: string, line: Line): Record<string, Line> {
+export function withRow(m: Record<string, Line>, key: string, line: Line): Record<string, Line> {
   const next: Record<string, Line> = { ...m }
   delete next[key]
   next[key] = line

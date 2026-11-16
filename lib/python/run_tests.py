@@ -107,6 +107,16 @@ COMPONENTS = {
         "aliases": ["supervise", "svc-tmux"],
         "source_path": "bin/supervise",
     },
+    # Claude Code mods (ai/mods/<name>): their tests live beside each mod, in
+    # ai/mods/<name>/tests/, and only `claude plugin test` runs them.
+    # tests/mods/test_mod_suites.py runs it once per mod with a tests/ folder,
+    # and skips when `claude` is not on PATH.
+    "mods": {
+        "runner": "pytest",
+        "deps": [],
+        "aliases": ["roleplay-bookends"],
+        "source_path": "ai/mods",
+    },
     # Future components (tests don't exist yet):
     # "lib/lua": {
     #     "runner": "busted",

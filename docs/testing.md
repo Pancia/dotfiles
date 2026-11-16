@@ -13,6 +13,7 @@
 | `hooks` | — | pytest | runs `rcs/claude-ensure-rcs-hook.sh` |
 | `roleplay` | `roleplay` | pytest | drives the bash script as a subprocess; no deps. Tests live in `roleplay/tests/`, reached via the `tests/roleplay` symlink |
 | `svc` | `supervise`, `svc-tmux` | pytest | needs `pyte` (+ `tmux`, else those tests skip). pty-rendered status bar, orphan checks via `ps`, a private tmux socket per test |
+| `mods` | `roleplay-bookends` | pytest | `tests/mods/test_mod_suites.py` runs `claude plugin test` on each `ai/mods/*/` folder that has `tests/`; skips without `claude`. The tests themselves are `*.test.ts(x)` beside each mod. See [ai/mods/README.md](../ai/mods/README.md) |
 
 `busted` and `fishtape` runners exist in `RUNNERS` but no component uses them.
 

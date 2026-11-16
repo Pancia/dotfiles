@@ -3706,6 +3706,33 @@ def test_overwrite_peer_edit_inside_the_window_is_silent(repo):
     assert _warning(_bash(repo, tuid="t3")) == ""
 
 
+def test_overwrite_peer_commit_inside_the_window_is_silent(repo):
+    """A peer Edits the path and commits it with commit-mine inside the window,
+    which archives its records. The newest LIVE record is then this session's
+    older one, and the hook told the agent to claim or undo the peer's
+    committed change. Archived records now count for "newest"."""
+    _overwrite_base(repo)
+    _hook_edit(repo, "S1", "f.txt", "two", "TWO")
+    assert _warning(_bash(repo, tuid="t2")) == ""
+    _hook_edit(repo, "S2", "f.txt", "one", "ONE")
+    r = repo.run("commit", "-m", "peer", sid="S2")
+    assert r.returncode == 0, r.stderr
+    assert _warning(_bash(repo, tuid="t3")) == ""      # a read-only call of S1's
+
+
+def test_overwrite_warning_does_not_say_this_call_made_it(repo):
+    """The window spans everything since the previous Bash call, and is a
+    whole-copy diff: the hook cannot know that this call wrote the file, so
+    the message must not say so, nor tell the agent to undo it outright."""
+    _overwrite_base(repo)
+    _hook_edit(repo, "S1", "f.txt", "two", "TWO")
+    repo.write("f.txt", "one\nTWO\nthree-sed\n")
+    m = _warning(_bash(repo, tuid="t2"))
+    assert "since your previous Bash call" in m, m
+    assert "This Bash call changed" not in m, m
+    assert "If you did not make it, do not undo it." in m, m
+
+
 def test_overwrite_ignores_a_bash_delete_of_an_edited_file(repo):
     """A delete is whole-path: `claim` refuses it, and drop_vanished() handles
     the records. The first live run told the agent to claim a trashed file."""
@@ -3728,6 +3755,7 @@ def test_overwrite_with_peer_records_says_redo_with_edit(repo):
     m = _warning(_bash(repo, tuid="t2"))
     assert "would take its hunks" in m and "redo it with Edit" in m, m
     assert "ccjj claim f.txt" not in m, m
+    assert "probably that session's: leave it" in m, m
 
 
 def test_overwrite_is_silent_after_claim(repo):

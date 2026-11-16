@@ -762,14 +762,21 @@ def cmd_bash_window(_args):
         for p, peers in hits:
             if peers:
                 lines.append("- %s: another session also has edits recorded here, so "
-                             "`ccjj claim` would take its hunks. Undo this Bash change, "
-                             "then redo it with Edit." % p)
+                             "`ccjj claim` would take its hunks. If one of your Bash "
+                             "calls made this change, undo it, then redo it with Edit. "
+                             "If not, it is probably that session's: leave it." % p)
             else:
-                lines.append("- %s: if the change is yours, run `ccjj claim %s` before "
-                             "your next Edit to it, or undo it, then redo it with Edit."
-                             % (p, shlex.quote(p)))
-        msg = ("[ccjj] This Bash call changed a file you also changed with Edit/Write. "
-               "commit-mine cannot replay that mix:\n" + "\n".join(lines))
+                lines.append("- %s: if one of your Bash calls made the change, run "
+                             "`ccjj claim %s` before your next Edit to it, or undo it, "
+                             "then redo it with Edit. If you did not make it, do not "
+                             "undo it." % (p, shlex.quote(p)))
+        # The window spans everything since this session's previous Bash call and
+        # is a whole-copy diff, so the hook cannot tell who wrote the change. The
+        # message must not claim this call did, nor tell the agent to undo it.
+        msg = ("[ccjj] A file you changed with Edit/Write changed again since your "
+               "previous Bash call, and no Edit/Write record explains it. This Bash "
+               "call, or another session or program, made the change. commit-mine "
+               "cannot replay that mix:\n" + "\n".join(lines))
         json.dump({"hookSpecificOutput": {"hookEventName": "PostToolUse",
                                           "additionalContext": msg}}, sys.stdout)
 
@@ -785,7 +792,8 @@ def _rec_ns(name):
 def bash_overwrites(sid, d, prev, now):
     """[(path, [peer sids])]: paths this window changed that this session has
     Edit/Write records for, where the disk no longer equals what the NEWEST
-    record on that path (any session) left.
+    record on that path left: any session's live record, or one archived today
+    or yesterday by a commit.
 
     The last test is what keeps it quiet on this session's own Edits between two
     Bash calls -- a window spans everything since the previous Bash call -- and on
@@ -825,6 +833,27 @@ def bash_overwrites(sid, d, prev, now):
             holders.setdefault(rp, set()).add(s)
             if _rec_ns(name) >= newest.get(rp, (-1, None))[0]:
                 newest[rp] = (_rec_ns(name), rec)
+    # A peer that committed inside the window has had its journal archived by
+    # retire(), so its Edit is on disk with no live record, and the newest live
+    # record is this session's older one. Without this the hook told the agent
+    # to claim or undo a peer's committed change (reproduced). Archived records
+    # count for "newest" only, never as holders: their session has committed.
+    # Today's and yesterday's folders bound the cost.
+    today = datetime.date.today()
+    for day in (today - datetime.timedelta(days=1), today):
+        dd = os.path.join(base, "archive", day.isoformat())
+        if not os.path.isdir(dd):
+            continue
+        for s in sorted(os.listdir(dd)):
+            for name in record_names(os.path.join(dd, s)):
+                try:
+                    with open(os.path.join(dd, s, name)) as fh:
+                        rec = json.load(fh)
+                    rp = rec_rel(rec)
+                except (Exception, SystemExit):
+                    continue
+                if rp in cand and _rec_ns(name) >= newest.get(rp, (-1, None))[0]:
+                    newest[rp] = (_rec_ns(name), rec)
     out = []
     for p in sorted(cand):
         rec = newest.get(p, (0, None))[1]

@@ -209,7 +209,11 @@ exists: [docs/cc-jj-sessions.md](docs/cc-jj-sessions.md).
 `lib/bash/ccs-hook-lib.sh` or `services/cc-transcript-backup/`.** They share invariants
 that look removable and are not: a clean exit is proved by `SessionEnd`, no hook writes
 `.cwd`, both hooks gate on identity, and `ccs resume` archives only after the transcript is
-in place. Fixes already tried and rejected are listed there too.
+in place. Fixes already tried and rejected are listed there too. A script that starts an
+interactive session runs `my-claude-code-wrapper` by name. Bare `claude` is the binary, and
+`cc` is an abbreviation that expands only when typed; in a non-interactive fish it is the C
+compiler. From bash or Python, go through fish: `fish -c 'my-claude-code-wrapper …'`, as
+`bin/disk-cleanup` does. Otherwise the session gets no ccs entry, no review and no worktree.
 
 ### Session Review
 After each interactive Claude Code session, a background Haiku process reviews the session transcript and suggests CLAUDE.md updates. Results are written to `.cc/pending-updates-<timestamp>-<session-id>.md`.

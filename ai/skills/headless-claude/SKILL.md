@@ -54,6 +54,16 @@ Model pins: prefer floating aliases (`haiku`, `sonnet`) or a current id
 trap — they were removed from `ai-chunk-files`, `ai-merge-commit-messages`, and
 `bin/ai-commit-msg` on 2026-07-28.
 
+**Latency (measured 2026-11-15, `.cc/scripts/roleplay-b-latency.py`: one
+`--json-schema` call writing two ~25-word lines, three calls in parallel).** `haiku`
+took a median 5.7 s and about 960 output tokens, far more than the answer needs; this
+is probably thinking, but the envelope does not split it out. `--effort low` brought
+it to 4.6 s and about 720 tokens. `MAX_THINKING_TOKENS=0` in the environment made no
+measurable difference (5.5 s, 12 runs). `sonnet` took 2.8 s and 142 tokens, but cost
+about 13 times as much per call ($0.013 against $0.001). `claude-p` adds about 0.8 s
+per call (wall time minus `duration_api_ms`). For a fast, short answer, measure
+`sonnet` before you assume `haiku` is quicker.
+
 Still calling bare `claude -p` (deliberately, not pending migration):
 `services/youtube-transcribe/server.py`, `bin/tab-organize` and AKR's
 `scripts/score-day.py` / `scripts/invoice-from-worklog.py` all kill claude by pid,

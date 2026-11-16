@@ -274,19 +274,28 @@ the same advice when a peer has records on the path.
 
 ### The warning at the Bash call
 
-The Bash-window hook also warns on the call that made the mix, rather than leaving
-it to the commit. It fires for a path when all three hold:
+The Bash-window hook also warns at the first Bash call after the mix, rather than
+leaving it to the commit. It fires for a path when all three hold:
 
-1. this call's window changed the path,
+1. the window since this session's previous Bash call changed the path,
 2. this session has Edit/Write records for it, and
-3. the file on disk differs from what the **newest** record on that path, from any
-   session, left.
+3. the file on disk differs from what the **newest** record on that path left: any
+   session's live record, or one archived today or yesterday.
 
 Without the third test it fired on this session's own Edits, because a window spans
 everything since the previous Bash call, and on a peer's Edit inside the window. The
-third test also makes it fire once per Bash change, and stop after `claim`. It
-offers `ccjj claim <path>`, or "undo, then redo with Edit" when a peer has records
-on the path. It is emitted as `PostToolUse` `additionalContext` JSON, the same shape
+third test also makes it fire once per Bash change, and stop after `claim`. Archived
+records count because `commit-mine` archives a peer's journal when it commits: a
+peer that Edited the path and committed inside the window otherwise left this
+session's older record as the newest, and the hook told the agent to claim or undo
+the peer's committed change. They count for "newest" only, never as a peer holding
+the path, and only from the last two days' archive folders, to bound the cost.
+
+The window is a whole-copy diff, so the hook cannot tell who made the change: this
+call, an earlier one, another session or another program. The message says so. It
+offers `ccjj claim <path>` if one of your Bash calls made the change, or "undo, then
+redo with Edit" when a peer has records on the path, and says to leave the change
+alone if you did not make it. It is emitted as `PostToolUse` `additionalContext` JSON, the same shape
 as `rcs-sync --hook`, because a `PostToolUse` hook's plain stdout does not reach the
 model. A session with no records pays nothing; otherwise a call that changed the
 working copy pays one read-only `jj diff`, about 20 ms.
