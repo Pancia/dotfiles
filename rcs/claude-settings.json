@@ -84,6 +84,9 @@
       "~/.claude/plans"
     ]
   },
+  "deniedMcpServers": [
+    { "serverName": "claude.ai Claude Docs" }
+  ],
   "model": "opus",
   "hooks": {
     "PreToolUse": [
