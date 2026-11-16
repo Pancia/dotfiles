@@ -289,6 +289,8 @@ def call_claude(summary, system_prompt):
     except LLMOutputError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
+    # Deliberately bare `claude -p`, not claude-p: we kill claude by process group,
+    # and claude-p would orphan its own timeout+claude children.
     proc = subprocess.Popen(
         ["claude", "-p", "--safe-mode", "--system-prompt", system_prompt,
          "--output-format", "stream-json", "--verbose", "--include-partial-messages"],

@@ -6,6 +6,9 @@
         "fish":          "~/dotfiles/ai/skills/fish",
         "flet":          "~/dotfiles/ai/skills/flet",
         "headscale":     "~/dotfiles/ai/skills/headscale",
+        "ui-style":      "~/dotfiles/ai/skills/ui-style",
+        "music-server":  "~/dotfiles/ai/skills/music-server",
+        "headless-claude": "~/dotfiles/ai/skills/headless-claude",
         "*fulcrologic":  "~/projects/fulcrologic-claude-settings/skills/*"
     },
 
@@ -23,7 +26,7 @@
 
     "groups": {
         "#GLOBAL": {
-            "skills": ["cmds", "fish"],
+            "skills": ["cmds", "fish", "ui-style", "music-server", "headless-claude"],
             "agents": ["critique", "doc-writer", "optimizer"],
             "commands": ["cc:pending-updates", "cc:commit", "cc:retro", "prompt:build"]
         },

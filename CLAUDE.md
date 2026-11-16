@@ -26,45 +26,9 @@ Some configuration here glues into external projects. When debugging, check the 
 |---------|--------|
 | `fzfm` (fuzzy leader menu — `j`, `d`, `q`, `z`, `Ctrl+S`, `__fzfm_*` functions) | `~/projects/tooling/fzfm/` |
 
-## Repository Structure
-
-```
-dotfiles/
-├── fish/           # Fish shell configuration (primary shell)
-├── nvim/           # Neovim configuration (Lua + Vimscript)
-├── lib/lua/        # Hammerspoon configuration (macOS automation)
-├── rcs/            # Config files managed via rcs/MANIFEST symlinks
-├── bin/            # CLI utilities (50+ scripts)
-├── services/       # Background LaunchAgent services
-├── vpc/            # VPC workspace definitions
-├── zsh/            # Zsh configuration (legacy, deprecated)
-├── lib/            # Language-specific libraries (ruby, python, etc.)
-├── misc/           # Miscellaneous tools and data
-├── wiki/           # Personal wiki/knowledge base
-├── ai/             # AI prompts and templates
-├── roleplay/       # Claude Code roleplay bookends — self-contained, shareable as-is
-├── vendor/         # Vendored dependencies (MANIFEST.json tracked, clones gitignored)
-├── cmd/vendor/     # Vendor CLI source (Go)
-├── public/         # Static HTML pages and redirect utilities
-├── install         # Installation script
-└── Brewfile        # Homebrew packages
-```
-
 ## LaunchAgent Services
 
-Use the `service` CLI (not `launchctl` directly) for managing LaunchAgents:
-```bash
-service list              # List all services
-service status            # Status of all services
-service start <name>      # Start a service
-service stop <name>       # Stop a service
-service restart <name>    # Restart a service
-service reload <name>     # Re-read an edited plist without running the job
-service wait <name>       # Block until the current run ends (0/1 job result, 2 not running, 3 not loaded, 124 timeout)
-service log <name>        # Show logs for a service
-service create            # Create a new service
-service edit <name>       # Edit a service's script and plist
-```
+Use the `service` CLI (not `launchctl` directly) for managing LaunchAgents; `service --help` lists its subcommands (`reload`, `wait`, `create`, `edit` among them).
 
 - A new or changed `services/*/*.plist` is installed and loaded at the next fish start of any kind, including `fish -c` and fish scripts such as `trash` (`_ENSURE_SERVICES` in `fish/config.fish`). A RunAtLoad or KeepAlive job starts then. Rename a plist to `*.plist.disabled` to keep it out.
 - `launchctl load` ignores a job that is already loaded, so an edit to a loaded plist needs `service reload <name>`. `service restart <name>` also applies it, but then runs the job at once; for a scheduled job that is an extra run. Both stop a run in progress.
@@ -205,125 +169,34 @@ checkout. `bin/cc-peers` lists the other live sessions there (from Claude Code's
 and `/cc:commit` then scopes the commit and messages any peer whose files it
 committed. Tests: `tests/bin/cc-peers/test_cc_peers.py`.
 
-**Inside a worktree of a jj repo, use `git`, not `jj`.** Claude Code's
-`--worktree` creates a *git* worktree, which has no `.jj` of its own — so `jj`
-there walks up and resolves to the **parent** repo. `jj commit` in a worktree
-commits the parent's working copy, very likely a peer session's in-flight work,
-while leaving your own changes uncommitted. Commit with git instead: the parent
-picks the branch up as a jj bookmark of the same name automatically, so nothing
-is stranded. `bin/cc-worktree-nudge` injects this warning on every prompt when it
-detects the situation, because the repo's own tracked CLAUDE.md *is* loaded in
-the worktree and says the opposite.
-
 ### Session-scoped jj commits (`commit-mine`)
 
 When two Claude sessions share this working copy, **`jj commit` captures the other
-session's half-written files too** — jj snapshots the whole working copy on every
-command. Commit with `commit-mine -m "msg"` instead: it replays only *this*
-session's recorded edits onto `@-` and commits that, so the other session's work
-stays untouched and on disk. It splits a file both sessions edited, not just
-disjoint files.
+session's half-written files too**. Commit with `commit-mine -m "msg"` instead: it replays
+only *this* session's recorded Edit/Write edits onto `@-`, and splits a file both sessions
+edited. `g run ci`, `ai_jj_commit` and `/cc:commit` route to it on their own when another
+live session is here.
 
-- A `PostToolUse` hook on `Edit|Write` (`ccjj record-edit`, registered in
-  `rcs/claude-settings.json`) journals each edit with the file's pre-edit content;
-  that is what lets the replay position an edit by context instead of by
-  first-occurrence matching. Subagents share the parent's session id, so `Task`
-  work is included.
-- **Bash blind spot:** `rm`/`mv`/`sed -i`/`>` are journaled nowhere by the
-  Edit/Write hook. Declare deletions and renames with `--also <path>` (safe only
-  for whole-path changes, never for content). `ccjj audit` lists working-copy
-  changes no session claims — run it when something seems to have gone
-  uncommitted.
-- **Bash content changes, in an opted-in checkout** (`ccjj bash-windows on`): a
-  `PostToolUse` hook records the working-copy commit ids either side of each Bash
-  call, `ccjj audit` annotates unclaimed paths with what covers them, and
-  `ccjj claim <path>` prints the diff and turns it into an ordinary record.
-  Deliberately an **offer, not an attribution** — a window's delta is a
-  whole-copy diff, so it carries every write that landed inside it, including
-  another session's `Edit` and the 103 tracked files hardlinked outside this
-  repo. Reading the diff is the only detector that works.
-- **`claude-p` disables hooks** (`--safe-mode`), so a headless agent produces no
-  journal at all unless `CLAUDE_P_SAFE=0`.
-- **You do not have to remember.** `g run ci` / `ai_jj_commit` / `/cc:commit` call
-  `ccjj should-scope` and route to `commit-mine` themselves when another live
-  session is here; otherwise they commit the whole working copy as before.
-- A `UserPromptSubmit` hook injects a one-line reminder when another **live**
-  session is working in this repo — so "commit stuff" gets steered without you
-  invoking anything. Liveness is owner pid + start time, with a 12h staleness
-  fallback; `ccjj prune` retires orphaned journals, `ccjj disown <sid>` by hand.
+- **Bash blind spot:** `rm`/`mv`/`sed -i`/`>` are not journaled. Declare deletions and
+  renames with `--also <path>` (whole-path changes only, never content). For a Bash
+  content change, `ccjj claim <path>` prints the diff and records it; read the diff first,
+  because it can carry another session's writes. `ccjj audit` lists changes no session
+  claims.
+- **`claude-p` disables hooks** (`--safe-mode`), so a headless agent produces no journal
+  at all unless `CLAUDE_P_SAFE=0`.
+- Exit `4` means locked or the base moved — retry, it is not an error.
 
-Exit `4` means locked or the base moved — retry, it is not an error. Full
-mechanism, and why each guard exists, in [docs/cc-jj-sessions.md](docs/cc-jj-sessions.md).
+Full mechanism (the journal, Bash windows, liveness, `prune`/`disown`) and why each guard
+exists: [docs/cc-jj-sessions.md](docs/cc-jj-sessions.md).
 
 ### Crashed Session Titles (ccs)
 
-Every `claude` started through the wrapper registers an entry in
-`$XDG_STATE_HOME/claude-sessions/open/`. A clean exit deletes it, so an entry whose
-process is gone marks a crash. Resuming one moves it to `archive/`, which `ccs old` lists.
-
-**A clean exit is proved by `SessionEnd`, not by claude returning.** `ccs-title-hook --end`
-sets `.ended` (not for `/clear` or `/resume`, which keep the process), and the wrapper's
-`_ccs_open_finish` deletes only an ended entry or one with no session id. The id match is not
-enough to set it: a nested `claude -p --resume $CLAUDE_SESSION_ID` ends with the parent's id,
-so `--end` also requires `_ccs_is_top_claude` (`lib/bash/ccs-hook-lib.sh`, shared with
-ccsave-hook). A claude killed under a live shell (OOM, segfault) returns too, and used to lose
-its entry; now the entry is kept and marked `.claude_exited`, which `_ccs_open_scan` lists as
-crashed even though its pid (the shell) is alive. Ctrl-Z also returns: fish carries on with
-the wrapper function when its job stops. The wrapper spots the new stopped job (`jobs -p`
-before and after) and skips the review and finalize; `_ccs_open_scan` retires the entry through
-`_ccs_open_finalize` once SessionEnd has marked it. `.cwd` is the registered key (the parent repo
-for a worktree) and no hook writes it: the hook payload's cwd drifts into worktrees and
-subfolders, and writing it hid entries from `ccs list` at the root. The wrapper finds the
-transcript by id (`_ccs_session_jsonl`) instead. `ccs resume` archives only after the
-transcript is in place. With no recorded `transcript_path` it restores to the folder the
-nightly copy sits in, else the folder of the entry's cwd (Claude Code turns every
-non-alphanumeric character into `-`, and hashes paths over 200 characters). It takes the
-newest of the local copy, the nightly copy and a `ccsave` copy: the local one is throttled, so
-after a crash the nightly one can hold more. Tests:
-`tests/fish/test_ccs_session_safety.py`, `tests/hooks/test_ccs_title_hook.py`.
-
-**Off-Mac copy:** `services/cc-transcript-backup` zstd-copies every transcript under
-`~/.claude/projects`, plus `history.jsonl` and the ccs entries, to `~/Cloud/claude-transcripts/`
-nightly at 3:30. It adds and updates, **never deletes**, so a chat outlives Claude Code's
-one-year `cleanupPeriodDays`. Copies keep the original's mtime, read **before** compressing
-(a live session can append during zstd), and compare whole seconds: zstd drops sub-second
-time, so `-nt` re-copied everything each night. `ccs-state/` gets the entries and the hook's
-local copies, which hold the only copy of chats pruned before this job existed.
-
-`ccs list` shows crashed sessions with real titles, not just `crashed <date>`. A crash is
-usually power loss, so nothing can run afterwards — the title has to already be on disk:
-
-- Claude Code writes its own title into the transcript (`{"type":"ai-title","aiTitle":...}`,
-  refreshed as the session drifts). `_ccs_open_scan` reads the last one.
-- `bin/ccs-title-hook` (a `Stop` hook) copies it into the session's entry file each turn, so
-  it outlives the transcript. It also keeps a local zstd copy, for **every** session, entry
-  or not (plain `claude`, the desktop app, IDE), and unthrottled at `SessionEnd`, in
-  `$XDG_STATE_HOME/claude-sessions/transcripts/` — deliberately *not* `~/Cloud`, which is a
-  ProtonDrive symlink. That copy is throttled to one write per 10 minutes, so it can lag the
-  live transcript by up to that much. `ccs resume` puts it back via
-  `_ccs_restore_transcript` before resuming, since `--resume` needs the real file in
-  `~/.claude/projects/`.
-- `bin/ccsave-hook` (a `SessionStart` hook) stamps the real `session_id` into the entry,
-  **write-once** — except on `/clear` and compaction (`.source`), which start a new session
-  id in the same terminal and so must be followed, or ccs would keep pointing at the
-  pre-`/clear` conversation. A rotation clears the recorded title too. It also follows
-  `/resume` (`source=resume`), but only when the wrapper's pid is the hook's grandparent
-  or great-grandparent, because a nested `claude -p --resume` reports the same source.
-  Without that, an entry stays on the empty pre-`/resume` id and its real conversation
-  looks lost. Tests: `tests/hooks/test_ccsave_hook.py`.
-- Both hooks gate on identity, because `CCS_ENTRY_FILE` is inherited by every descendant and
-  `claude -p` runs hooks too: without it a nested helper session would overwrite the parent's
-  id or title. A nested session always reports `source=startup`, never `clear`.
-- `ccs rename` on a crashed session sets `.title_manual`, which stops the hook overwriting it.
-- The wrapper exports `CCS_ENTRY_FILE`; if it's unset, both hooks skip the entry (the
-  transcript copy still runs). `ccsave` keys its save on the entry's `.cwd`, not the
-  current folder, and finds the transcript by id.
-
-**Known limitation:** if you quit a session in the millisecond window while its `Stop` hook is
-mid-write, the hook can recreate the entry that `_ccs_open_finalize` just deleted, leaving a
-phantom `crashed` row in `ccs list`. Delete the entry from
-`$XDG_STATE_HOME/claude-sessions/open/` by hand. Every fix considered (tombstone files, pid
-checks) introduced a worse failure mode than the one it closed.
+**REQUIRED: read [docs/ccs.md](docs/ccs.md) before editing `fish/functions/ccs.fish`,
+`fish/functions/my-claude-code-wrapper.fish`, `bin/ccs-title-hook`, `bin/ccsave-hook`,
+`lib/bash/ccs-hook-lib.sh` or `services/cc-transcript-backup/`.** They share invariants
+that look removable and are not: a clean exit is proved by `SessionEnd`, no hook writes
+`.cwd`, both hooks gate on identity, and `ccs resume` archives only after the transcript is
+in place. Fixes already tried and rejected are listed there too.
 
 ### Session Review
 After each interactive Claude Code session, a background Haiku process reviews the session transcript and suggests CLAUDE.md updates. Results are written to `.cc/pending-updates-<timestamp>-<session-id>.md`.
@@ -337,199 +210,41 @@ After each interactive Claude Code session, a background Haiku process reviews t
 
 ### Private per-project config: the work-config vault
 
-This repo is public, so private per-project config (work `cmds.rb`, `svc.conf`)
-lives in **`~/Vaults/work-config`** at `fs-config/<absolute project path>/` — the
-private twin of `cmds/`. `cmds` and the svc tools search it after the public tree;
-`cmds init` puts anything under `~/projects/work/` there.
-
-**Edits there are only backed up when committed in the vault** (a `post-commit`
-hook bundles it to ProtonDrive). After any change, commit in the vault with git
-and check for `post-commit: backup OK`.
-
-Details, traps and restore: [docs/work-config-vault.md](docs/work-config-vault.md).
+**This repo is public.** Private per-project config (work `cmds.rb`, `svc.conf`) lives in
+`~/Vaults/work-config/fs-config/<absolute project path>/`; `cmds init` puts anything under
+`~/projects/work/` there. Commit in the vault after any change — that is the only backup.
+Details: [docs/work-config-vault.md](docs/work-config-vault.md).
 
 ### Music streaming (Navidrome + cmus mount)
 
-The library lives on the Vultr server (`ssh anthony@anthonydambrosio.me`, OpenBSD 7.8; see
-[remote/anthonydambrosio.me/README.md](remote/anthonydambrosio.me/README.md)), at
-`/music/MyMusic/my-music/<uuid>.m4a`. Phones use Navidrome over Tailscale. The Mac plays it in
-cmus through a mount.
+The **`music-server` skill** (`ai/skills/music-server/SKILL.md`) holds the full notes: the
+Vultr server and its two disks, Navidrome, `music push`, the `music-mount` rclone mount,
+`bin/cmus-add-new` and scripting cmus. Load it before touching any of those. Rules that
+must hold even without it:
 
-**Two disks, since 2026-11-10.** `/music` is a 40 GB unencrypted Vultr HDD volume that holds only
-the music and Navidrome's data, so music works after a restart with nothing unlocked. `/mnt` is
-the 100 GB encrypted softraid CRYPTO volume for private files and `remote-sync`.
-It locks on every restart, and only the user can unlock it with `~/bin/mnt` (it asks for the
-passphrase; `~/bin/unmnt` locks it). **Locked is the normal state**: nothing automatic writes
-there. Since 2026-11-12 the AKR post-commit hook encrypts its bundle on the Mac with `age` and
-writes it to `~/backups/akr` on the root disk; `remote-sync` copies that into
-`/mnt/backups/akr-age/`. The private key is `~/.config/age/akr-backup.key` and Proton Pass,
-never the server. Auto-unlocking was rejected: it needs the passphrase stored somewhere
-unattended, which defeats the lock. **`/mnt/MyMusic` is an old copy from 2026-11-10, kept by
-choice and never updated**; a README there, the login message and `bin/mnt` all say so.
-ProtonDrive is the main backup of the music.
-
-**Find disks by DUID, never by `sdN`.** Device numbers shift when a disk is added: after the music
-disk arrived, the encrypted chunk moved from `sd1` to `sd2` and the unlocked volume from `sd2` to
-`sd3`. A script that writes to `/mnt` must first run `/usr/local/bin/crypt-mounted` (exit 0 only
-when the encrypted volume is mounted there); one that writes to `/music` checks
-`mount | grep -q ' on /music '`. Unmounted, either path is a plain folder on the root disk. DUIDs:
-root `008bb05f4a333904`, encrypted chunk `30397bee4d4fc7b8`, unlocked volume `6ff93f0d9222912c`,
-music `aa81c53c88998d20`.
-
-**Boot.** `/music` is `noauto` in `/etc/fstab`, and `/etc/rc.local` fscks and mounts it in the
-background, waits for `tun0` to get 100.64.0.3, then starts Navidrome. A bad music disk therefore
-cannot stop the boot (a normal fstab entry that fails fsck drops to single-user mode, which happened
-once on `/`). Navidrome stays disabled in `rcctl`: started earlier, it would fail to bind the
-Tailscale address. `/etc/rc.shutdown` stops it.
-
-`q remote-sync` (`~/AKR/scripts/remote-sync`, moved from `~/ProtonDrive/bin/` on 2026-11-10, with
-`restic-sync`; the `q` registry in `~/.config/q/` points there) was rebuilt without `--delete`: never add it back,
-because its old `Music/MyMusic` source is empty.
-
-Syncthing runs Mac to phone over Tailscale: the Mac dials `tcp://100.64.0.2:22000`, and global
-discovery, relays and NAT mapping are off.
-
-**Navidrome** is the OpenBSD package, 0.51.1. No newer OpenBSD build exists. It binds only to
-`100.64.0.3:4533`, and pf allows that port only on `tun0`. Config is `/etc/navidrome.toml`, data
-is `/music/.navidrome` (started fresh on 2026-11-10; the old one stays in `/mnt/.navidrome`).
-Track IDs are an MD5 of the file path, so moving the music folder means a new database, a new
-user (`pancia`, same password, so clients keep working) and a full scan.
-- It reports its version as `dev`, so current Feishin in Navidrome mode sends a `missing` filter
-  that 0.51 does not have and its pages fail with SQL errors. Add the server as Subsonic/OpenSubsonic.
-- A restart does not start a scan. The schedule is `@every 1h`, counted from the restart.
-- **`music push` is the route for new tracks** (`lib/ruby/music/push.cmd.rb`; `music -n push` is a
-  dry run). It sends catalog tracks the server lacks from `$MUSIC_CLOUD`, only adding, and rewrites
-  the playlists in `/music/MyMusic/playlists/` from `$MUSIC_CATALOG`. It skips files changed in the
-  last 2 minutes, because a track is tagged after it is copied and `--ignore-existing` would keep
-  the untagged one. Navidrome picks changes up at its next hourly scan.
-- Tracks must be in the database before their playlists import correctly, and playlists import
-  only once an admin user exists. A playlist folder already scanned is not re-read until it
-  changes: `touch` the `.m3u` files and the folder, then scan. Run one scan at a time.
-
-**The mount** (`services/music-mount/`) needs the rclone remote `music-server`, which is in
-`~/.config/rclone/rclone.conf` and is not tracked. Homebrew's rclone has no `mount`, but
-`nfsmount` works without root.
-
-**Background jobs use their own keys,** because the normal key has a passphrase and is unavailable
-after a Mac restart until someone logs in. `~/.ssh/music_mount` (the mount) and `~/.ssh/server_check`
-(the daily check) have no passphrase. Both log in as the server user `musicread`, and
-`authorized_keys` limits each one: the first to `sftp-server -R` (read-only), the second to
-`/usr/local/bin/server-health`. `musicread` is in group `_navidrome`, which is how it reads `MyMusic`.
-So any new folder under `/mnt` that holds private data needs group `wheel` and mode 750 or 700. New
-folders get `/mnt`'s group (now `wheel`), but mode 755, which every account can read, `musicread`
-included. A forced command breaks rclone's hash probing, so the remote
-needs `shell_type = none` and `disable_hashcheck = true`. Repeated failed SSH logins make the server
-refuse this Mac for a couple of minutes.
-- **`$MUSIC_PLAYBACK` is the mount; `$MUSIC_LIBRARY` must never point at it.** The mount is
-  read-only, so tools that change audio files (tagging) fail.
-- `$MUSIC_LIBRARY` now equals `$MUSIC_CLOUD`, so `music import` and `import_single` write to
-  ProtonDrive and `music push` sends from there. They add the catalog entry *before* the copy,
-  so a failed copy leaves an entry with no file.
-- `music tag_from_db` and `music backup` read every file, which would download the whole library
-  from ProtonDrive. They refuse to run on a cloud or network `$MUSIC_LIBRARY`. Set it to a local
-  copy to run them.
-- The nightly `music-backup` service is off: its source drive is dead, and it had failed 221 of 222
-  runs with `music: command not found` (launchd has no such PATH). Its plist is renamed
-  `*.plist.disabled`, because `_ENSURE_SERVICES` in `fish/config.fish` reinstalls any `services/*/*.plist`
-  on shell startup, so `service stop` or deleting the installed copy does not last.
-- The settings are measured, so do not drop them casually. `--vfs-fast-fingerprint` skips a
-  full-file checksum on the server, and `--sftp-idle-timeout 0` with `ServerAliveInterval` in the
-  rclone `ssh` line avoids a new SSH login per song. Together they took the first 64 KB of an
-  uncached track from a median of 2.06 s to 0.76 s.
-- `--dir-cache-time 168h` means new server tracks can take a week to appear. `service restart
-  music-mount` shows them now.
-- Listing the 4,300-file folder takes about 107 s through the mount and 6 s with `rclone lsf`. While
-  a request is that slow, macOS prints "nfs server ... not responding" onto the terminal of the
-  blocked process, which garbles cmus until Ctrl-L. So since 2026-11-14 the `cmus` function no
-  longer adds the folder at startup: `bin/cmus-add-new` lists the server directly (about 2 s) and
-  adds only tracks cmus lacks, with `cmus-remote -l`. It never removes tracks. Files cmus cannot
-  read are offered again at each start, because cmus drops them.
-
-**Scripting cmus.** `save -l`, `save -L` and bare `save` return a hash-table order sorted by
-`lib_sort`, **not** the play order, and they ignore `:rand` (0 of 5 next tracks predicted). `save -p -`
-and `save -q -` are exact. Remote `rand` and `clear` act only when focus is on the track window, not
-the left panel, and do nothing silently otherwise: use `win-next`, and verify. cmus rewrites `lib.pl`
-and `cache` on exit, so edit those only while it is closed (`.cc/scripts/cmus-repath.py` moves them to a new
-folder). Preloading and a cmus patch were evaluated and rejected once tuning brought song start under
-2 s: [.cc/reports/REVIEW-cmus-preload-patch.md](.cc/reports/REVIEW-cmus-preload-patch.md).
+- `q remote-sync` (`~/AKR/scripts/remote-sync`) must never get `--delete` back: its old `Music/MyMusic` source is empty.
+- Find server disks by DUID, never by `sdN`. A script that writes to `/mnt` must first run `/usr/local/bin/crypt-mounted`; one that writes to `/music` checks `mount | grep -q ' on /music '`. Unmounted, either path is a plain folder on the root disk.
+- `/mnt` is encrypted and locks on every restart; only the user unlocks it (`~/bin/mnt`). Auto-unlocking was rejected. The age private key is `~/.config/age/akr-backup.key` and Proton Pass, never the server.
+- `/music` stays `noauto` in `/etc/fstab` and is mounted by `/etc/rc.local`: a normal fstab entry that fails fsck drops the boot to single-user mode.
+- Any new folder under `/mnt` that holds private data needs group `wheel` and mode 750 or 700; the default 755 is readable by `musicread`.
+- `$MUSIC_LIBRARY` must never point at the read-only mount (`$MUSIC_PLAYBACK`).
 
 ### Claude Code Project Artifacts
 
-Files in `.cc/` are Claude Code session artifacts, sorted by type:
-- `plans/PLAN-*.md` — session plans and design documents
-- `reports/` — reviews, audits and verdicts
-- `scripts/` — reproduction and one-off scripts
-- `misc/` — only what fits none of the above: patches, mockups, folders of mixed files
-- `pending-updates-<ts>-<id>.md` and `FIXME*` stay at the top, because tools look for them there
+`.cc/` follows the global layout (`plans/`, `reports/`, `scripts/`, `misc/`, `private/`).
+`chpwd` and the dashboard list plans from both `.cc/plans/` and the top of `.cc/`.
+**This repo is public, so everything in `.cc/` except `.cc/private/` is published on the
+next push.**
 
-`chpwd` and the dashboard list plans from both `.cc/plans/` and the top of `.cc/`, so a
-project that has not moved its plans still shows them.
+### Live Transcribe and whisper-serverd
 
-Tracked in git via `!.cc` in `git/gitignore_global`, and this repo is public, so
-everything there gets published on the next push.
+Full notes (build and signing, logs, history, the warm whisper server):
+[docs/live-transcribe.md](docs/live-transcribe.md). Test rules:
 
-`.cc/private/` is the exception: `.cc/private/` in the same file ignores it in
-every repo. It survives a reboot, unlike the session scratchpad, but no commit
-includes it, so it has no backup and no history. Use it for anything private,
-such as quotes from session transcripts.
-
-### Live Transcribe
-
-- Engine: `bin/live-transcribe` (Python). App: `cmd/live-transcribe-app/main.swift`, built into `bin/LiveTranscribe.app` by `./install lta`. A rebuild does not crash a running app; restart the app to load it.
-- The Makefile signs with the "LiveTranscribe Self-Signed" certificate, so the mic permission survives a rebuild. Without it, the build signs ad hoc, prints a warning, and macOS asks for the mic again.
-- Transcripts and their `.m4a` go to `~/Cloud/transcripts` (ProtonDrive). `~/transcripts` is the same folder and is the engine's default.
-- Logs: `~/.local/state/live-transcribe/last.log` is the current session; `session_<ts>.log` keeps the 20 before it. The temp recording `rec_<ts>.wav` is there while a session records; `kept_<ts>.wav` is one whose transcode failed.
-- History: the clock pull-down in the panel, the menu-bar "Recent Transcripts" submenu, and `bin/transcript-pick` (⌘Space → u → t).
-- To test the engine, use BlackHole as the mic and an `--output-dir` in the scratchpad. Never pass `--save-audio`. `.cc/scripts/live-transcribe-tail-repro.sh` does this.
 - Check `pgrep -f LiveTranscribe.app/Contents/MacOS/` first. A test run shares the warm whisper server and slows a live session.
-
-### Warm Whisper Server with Idle TTL (whisper-serverd)
-
-`bin/whisper-serverd` keeps a `whisper-server` loaded between `live-transcribe` runs, so
-repeat startups skip the 8-20s model load. `live-transcribe` touches a heartbeat file
-while it runs, and the supervisor reaps the server after `--idle-ttl` seconds without one.
-
-```bash
-whisper-serverd ensure --model large --port 8178 --idle-ttl 300   # start or adopt, wait until ready
-whisper-serverd status [--port 8178]                              # report state as JSON
-whisper-serverd stop                                              # kill the server and supervisor
-```
-
-`whisper-serverd supervise` is the internal long-lived loop. `live-transcribe` uses the
-warm server by default; `--server-url` or `--ephemeral` overrides that.
+- Use BlackHole as the mic and an `--output-dir` in the scratchpad: the default output, `~/transcripts`, is the real `~/Cloud/transcripts` folder. Never pass `--save-audio`. `.cc/scripts/live-transcribe-tail-repro.sh` does this.
 
 ## Quick Reference
-
-### Installation
-```bash
-cd ~/dotfiles
-./install all    # Run all setup tasks
-./install brew   # Just Homebrew packages
-./install nvim   # Just Neovim setup
-```
-
-### XDG Base Directories
-
-The project uses XDG Base Directory Specification for tool configuration and caches. Environment variables are set in `fish/conf.d/00_xdg.fish` (loaded first, alphabetically):
-
-| Variable | Value | Used By |
-|----------|-------|---------|
-| `XDG_CONFIG_HOME` | `~/.config` | git, tmux, docker, aws, etc. |
-| `XDG_DATA_HOME` | `~/.local/share` | cargo, bundle, gem, hex, etc. |
-| `XDG_STATE_HOME` | `~/.local/state` | history files, cache, logs |
-| `XDG_CACHE_HOME` | `~/.cache` | npm, maven, gradle, gitlibs, deps.clj |
-
-Relocated tool configs:
-- **Git**: `~/.config/git/` (replaces `~/.gitconfig`)
-- **Tmux**: `~/.config/tmux/` (replaces `~/.tmux.conf`)
-- **Cargo**: `~/.local/share/cargo` (replaces `~/.cargo`)
-- **Docker**: `~/.config/docker`
-- **AWS**: `~/.config/aws`
-- **Gradle**: `~/.local/share/gradle` (replaces `~/.gradle`)
-
-Symlinked items (data in `~/.local/`, but still accessible at `~/.`):
-- `.flet`, `.dartServer`, `.dart-tool`, `.flutter-devtools` → `~/.local/state/` and `~/.local/share/`
-- `.log` → `~/.local/state/log`
 
 ### Key Hotkeys (Hammerspoon)
 | Hotkey | Action |
@@ -544,17 +259,7 @@ Symlinked items (data in `~/.local/`, but still accessible at `~/.`):
 
 ### Hermes Commands (`Cmd+Space`)
 
-Hermes is a which-key app launcher. Commands are defined in `rcs/hermes-commands.json`.
-
-**Command types:**
-- `"shell command"` — runs and closes
-- `{"shell": "command"}` — opens in terminal, closes on exit
-- `{"interactive": "command"}` — opens in terminal, stays open when done
-- `{"shell:fish": "command"}` — runs via fish shell
-
-**Submenu keys:** Objects with `"_desc": "+name"` create submenus. `"_stay": true` keeps the menu open after running a command (used for music controls).
-
-**Generators:** `"generator:name"` dynamically builds a submenu (snippets, services, vpc).
+Hermes is a which-key app launcher; commands live in `rcs/hermes-commands.json`. Command types, submenus, generators, comments and reloading: [docs/hermes.md](docs/hermes.md).
 
 **Reserved root keys — never assign these in JSON.** They are hardcoded in the Hermes source
 (`~/projects/hermes/Sources/Hermes/HermesViewController.swift`) and **silently override** any
@@ -574,14 +279,6 @@ block (which lists currently-free root keys) before adding a top-level menu.
 The root keyspace is nearly full, so **one-off scripts go in `x` (+utils)** rather than claiming a
 root letter. Reserve new root keys for menus that will hold several related entries.
 
-**Comments:** JSON has none, but the parser skips any key beginning with `_`, so a `"_note"` key
-holding an array of strings works as a comment block at any level.
-
-**Reloading:** no rebuild needed for config edits — `CommandLoader.load()` re-reads
-`~/.config/hermes/commands.json` on every launcher open (background refresh pass), so the first
-open after an edit may show the cached menu and the next one is current. `rebuild-hermes`
-(`Cmd+Space` → `h` → `r`) is only for Swift source changes.
-
 ### Shell Commands (Fish)
 | Command | Action |
 |---------|--------|
@@ -592,23 +289,23 @@ open after an edit may show the cached menu and the next one is current. `rebuil
 | `astro` | Astrological transit tracker |
 | `ccpu` | Run claude wrapper with /cc:pending-updates (auto-detects jj/git repo) |
 | `ccsave [title]` | Save current Claude Code session to `~/Cloud/cc-sessions/` (autogenerates title if omitted); inside the AKR vault it also writes a readable markdown copy to `claude-chats/` via `akr-chat` |
-| `ccs list` / `ccs resume` | List/pick this directory's sessions: saved, running and crashed (titled — see below). Picking a running one switches to its pane |
+| `ccs list` / `ccs resume` | List/pick this directory's sessions: saved, running and crashed (titled). Picking a running one switches to its pane. See [docs/ccs.md](docs/ccs.md) |
 | `ccs old` / `ccs archive` | List this directory's archived sessions (already resumed, or pruned) |
 | `ccs prune [--dry-run]` | Archive crashed entries with no surviving transcript, backup, or saved record |
-| `commit-mine -m MSG` | Commit only *this* Claude session's edits when sessions share the working copy; `--diff` to preview, `--also PATH` for a Bash-made delete/rename |
+| `commit-mine -m MSG` | Commit only *this* Claude session's edits when sessions share the working copy; `--diff` to preview, `--also PATH` for a Bash-made delete/rename. See [docs/cc-jj-sessions.md](docs/cc-jj-sessions.md) |
 | `ccjj audit` | List working-copy changes no session claims (the Bash blind spot) |
-| `cc-worktree on\|status\|off` | Opt a repo in to per-session worktree isolation, so two Claude sessions get their own checkouts. **`on` is the whole setup** — once per checkout, permanent; `cc` then appends `--worktree` and Claude Code creates, resumes and removes the worktree itself. `on` also writes a starter `.worktreeinclude` (Claude Code's mechanism for carrying untracked local state across) from what it finds in the repo — small config only, and it *names* `node_modules`/`.venv` as deliberately excluded rather than dropping them silently: `.worktreeinclude` copies and **skips symlinks**, so a copied `node_modules` arrives with no `.bin` and fails as command-not-found. Run your installer in the worktree instead. Inside a worktree of a jj repo, **use `git`** — see above. `cc --no-worktree` opts out for one run. Refuses in `~/dotfiles` — that is what `ccjj` is for. See [docs/cc-worktree.md](docs/cc-worktree.md) |
+| `cc-worktree on\|status\|off` | Opt a repo in to per-session worktree isolation; `on` once per checkout is the whole setup, and `cc` then passes `--worktree` (`cc --no-worktree` opts out for one run). `.worktreeinclude` skips symlinks, so run your installer in the worktree rather than copying `node_modules`. Refuses in `~/dotfiles`. See [docs/cc-worktree.md](docs/cc-worktree.md) |
 | `ccjj bash-windows on\|off\|status` | Opt this checkout into recording Bash windows |
 | `ccjj claim PATH` | Accept a Bash-made change as your own, after reading the diff it prints; `-n` to preview |
 | `ccjj forget PATH` | Drop this session's journal records for a path, when one of them is wedging a commit — an inconsistent record, or a `Write` for a file you since deleted. Records are **moved**, not unlinked (`<journal>/<sid>/forgotten/`), because the edits they describe then silently stop being committed. `-n` to preview. See [.cc/plans/PLAN-ccjj-journal-fixes.md](.cc/plans/PLAN-ccjj-journal-fixes.md) for the three bugs that motivated it |
-| `revive` | What each terminal pane was doing before it died. Every interactive fish journals its pane; a pane iTerm restores after a crash adopts its predecessor's record and prints it. Bare `revive` in that pane cds back and **resumes its Claude session with the flags it was launched with** (the wrapper records them in the ccs entry, since `--resume` alone drops `--system-prompt`), or, when nvim was open, offers to reopen its files and splits from a per-pane session the `nvim` wrapper keeps (`nvim/lua/revive_session.lua`), or offers a plain command back with a `[Y/n]`. `revive ls` lists every ghost against the live window/tab/pane tree with this pane marked, `revive <n>` picks up another, `revive here` shows this pane's in full, `revive go <n>` focuses it, `revive live` shows what every open pane is doing now, `revive dismiss --all` shuts it up. Keyed on the iTerm session **GUID**, which survives a reboot — the `wNtMpK` prefix in front of it does not. A pane closed on purpose erases its own record, so only an unclean death leaves a ghost. Panes with no record but a crashed Claude session are listed too — the only source for panes older than the journal, bounded to GUIDs iTerm still has open. See [docs/revive.md](docs/revive.md) |
-| `claude-p [flags] [prompt]` | Guarded `claude -p` — hard timeout in its own process group, `.is_error` checking, and `--safe-mode` by default. Drop-in for text/json/stream-json. See below |
+| `revive` | What each terminal pane was doing before it died, keyed on the iTerm session GUID. Bare `revive` in a restored pane cds back and resumes its Claude session with its original flags, reopens its nvim files and splits, or offers its command back. `revive ls`, `<n>`, `here`, `go <n>`, `live`, `dismiss --all`. See [docs/revive.md](docs/revive.md) |
+| `claude-p [flags] [prompt]` | Guarded `claude -p` — hard timeout in its own process group, `.is_error` checking, and `--safe-mode` by default. Drop-in for text/json/stream-json. See the `headless-claude` skill |
 | `plainify [-q QUESTION] < reply` | Rewrite an assistant reply shorter and plainer with Haiku: a word budget by kind of reply plus ASD-STE100 Simplified Technical English. Prompt in `ai/templates/plainify.md`; picked on 2026-11-05 over 12 other approaches on 7 real replies. The `/plainify` mod command (`ai/mods/plainify/`, loaded in every session via `CLAUDE_CODE_PLUGIN_DIRS` in `rcs/claude-settings.json`) calls it on the last reply and shows the result in a pane |
-| `llm-output [--json]` | Extract the `<output>` envelope body from an LLM reply on stdin; nonzero exit rather than raw text when there isn't one. See below |
+| `llm-output [--json]` | Extract the `<output>` envelope body from an LLM reply on stdin; nonzero exit rather than raw text when there isn't one. See the `headless-claude` skill |
 | `site-block [list\|add\|rm\|sync]` | Block domains at the resolver level by rendering `misc/blocked-domains` (tracked) into a marked region of `/etc/hosts`. `add`/`rm` edit the list and re-sync; bare `site-block` shows the list and whether `/etc/hosts` still matches it. Entries get both `0.0.0.0` and `::` so a name can't answer over AAAA, an apex domain also picks up its `www.` form, and the first sync leaves a `/etc/hosts.site-block.bak`. **No wildcards** — `/etc/hosts` can't express one, so a site on wildcard DNS (openfront.io is) only loses the names actually listed; `dnsmasq` with `address=/example.com/0.0.0.0` is the upgrade if that gap matters. `sync` needs sudo |
 | `disk-cleanup` | Report on the latest disk snapshot (biggest consumers + growth vs a ~30-day-old baseline), then offer a Claude session to help free space. `--no-ai` report only, `--ai` skip the prompt, `--scan` fresh snapshot first. Hermes: `Cmd+Space` → `x` → `d` |
 | `claude-watchdog` | Run the runaway-claude watchdog by hand (read-only at phase 2). `CW_PHASE=1` log only; `CW_RSS_MB=200 CW_CPU_PCT=5 CW_MIN_AGE=5` to force detection. Normally launchd runs it every 60s |
-| `roleplay-roll` | Pick a roleplay character for the bookends. Runs as a `UserPromptSubmit` hook on every prompt and **fails open** — any error prints nothing and exits 0. `--list` shows the cast, `--check` validates it (duplicate names/emoji, per-character odds, signature-line config). Cast lives in `roleplay/roster.tsv`, deliberately *not* in CLAUDE.md. `ROLEPLAY_CATCHPHRASE=N/M` sets how often a character's famous quote is unlocked (default `1/3`). `--votes`, which only the hook passes, adds a vote id to the tag and writes the roll log (`$XDG_STATE_HOME/roleplay/rolls.tsv`) that the Hammerspoon `rolevote` seed reads; a run without it logs nothing, and `ROLEPLAY_ROLL_LOG=` (empty) keeps a test run with it out of the real log. The whole subsystem is self-contained in `roleplay/` so it can be handed to someone else — `bin/roleplay-roll` is a symlink into it. See [docs/claude-roleplay.md](docs/claude-roleplay.md) |
+| `roleplay-roll` | Pick the roleplay character for the bookends. A `UserPromptSubmit` hook that **fails open**: any error prints nothing and exits 0. `--list`, `--check`; `--votes` (hook only) adds a vote id and writes the roll log the `rolevote` seed reads. Cast in `roleplay/roster.tsv`, deliberately *not* in CLAUDE.md. See [docs/claude-roleplay.md](docs/claude-roleplay.md) |
 | `service` | LaunchAgent manager (list/start/stop/restart/log/status) |
 | `cmds` / work-config vault | Per-directory commands: public `cmds.rb` in `cmds/<path>/`, private ones in `~/Vaults/work-config/fs-config/<path>/`. Commit in the vault after editing — that is the backup. See [docs/work-config-vault.md](docs/work-config-vault.md) |
 | `supervise` / `svc` / `svc-tmux` | Restartable dev services (REPLs, watchers): `supervise <name>` runs one in this pane with keys (`r s c q ?`) and a status bar; `svc` inspects/restarts it from anywhere; `svc-tmux up --wait` is how a script or LLM starts them, in a dedicated `tmux -L svc` server. See `wiki/pages/supervise-svc.md` |
@@ -617,200 +314,21 @@ open after an edit may show the cached menu and the next one is current. `rebuil
 | `tab-organize check [plan-file]` | Validate a plan and show what it will do, with tab titles |
 | `tab-organize execute <plan-file>` | Apply tab organization commands via browser extension |
 
-### Headless Claude calls (`claude-p`)
+### Headless Claude calls (`claude-p`, `llm-output`)
 
-`bin/claude-p` wraps `claude -p` with the three guards it lacks. Use it everywhere a
-script or an ad-hoc command needs a headless answer.
+The **`headless-claude` skill** (`ai/skills/headless-claude/SKILL.md`) holds the full notes:
+`bin/claude-p`, the `<output>` envelope (`lib/python/llm_output.py`, `bin/llm-output`,
+`ai/templates/output_contract*.md`), `--json-schema`, SDK callers, and the tests. Load it
+before writing or editing any script or service that calls `claude -p` or the Agent SDK.
+Rules that must hold even without it:
 
-```bash
-claude-p 'prompt'                                   # -> result text
-echo prompt | claude-p --system-prompt "$sys"       # -> result text
-claude-p --model haiku --output-format json 'x'     # -> full JSON envelope
-claude-p --output-format stream-json --verbose      # -> passthrough stream
-CLAUDE_P_TIMEOUT=60 claude-p 'prompt'               # default is 180s
-CLAUDE_P_SAFE=0 claude-p 'prompt'                   # keep CLAUDE.md/hooks/MCP
-```
-
-Exit `0` ok · `1` claude errored or returned nothing · `124` timed out.
-
-**Variadic flags swallow a positional prompt.** `--tools`, `--allowed-tools`,
-`--disallowed-tools`, `--add-dir`, `--mcp-config` and `--betas` are all variadic in
-claude's argument parser, so `claude-p --tools '' 'my prompt'` eats the prompt as a
-second `--tools` value and dies with *"Input must be provided either through stdin or
-as a prompt argument"*. **Prefer the equals form everywhere:** `--tools=''`. Callers
-that pass the prompt on stdin escape it by accident.
-
-Three failure modes it closes, all observed in production:
-
-- **A wedged child outliving its caller.** GNU `timeout -k` runs claude in its own
-  process group and signals the group. On 2026-07-28 a headless claude sat at ~98%
-  CPU past 2.7GB RSS with no output until it was killed by hand; the trigger is
-  still unknown (the retired-model theory was tested and disproved — that exits
-  rc=1 in ~2s), so a deadline is the defence rather than a fix. Separately, piping
-  claude into `head`/`sed -n` does not bound it either: a reader exiting never kills
-  the writer. `claude-p` buffers to a file, so a departing reader SIGPIPEs its own
-  `cat` instead.
-- **Errors that look like answers.** A retired or unavailable `--model` sets
-  `is_error: true` while `subtype` still reads `"success"` and text mode just
-  prints the warning. **Check `.is_error`, never `.subtype` or the exit code.**
-  An *empty* body used to misroute into this branch, which is the one branch that
-  never dumps stderr — jq 1.6 reads an empty file as a successful no-op, so both
-  `type == "object"` and `.is_error == true` exit 0. A `-s` guard now runs first.
-- **LLM chatter where a payload is expected.** `--safe-mode` is passed **by
-  default** (`CLAUDE_P_SAFE=0` opts out). It disables CLAUDE.md discovery, hooks,
-  skills, plugins, custom commands/agents and MCP config, while leaving auth, model
-  selection, built-in tools and permissions normal. Measured on a realistic
-  "summarize this diff" prompt: **2/2 leaked roleplay bookends without it, 3/3 clean
-  with it.**
-
-Model pins: prefer floating aliases (`haiku`, `sonnet`) or a current id
-(`claude-sonnet-5`). Dated ids like `claude-sonnet-4-20250514` are the retirement
-trap — they were removed from `ai-chunk-files`, `ai-merge-commit-messages`, and
-`bin/ai-commit-msg` on 2026-07-28.
-
-Still calling bare `claude -p` (deliberately, not pending migration):
-`services/youtube-transcribe/server.py`, `bin/tab-organize` and AKR's
-`scripts/score-day.py` / `scripts/invoice-from-worklog.py` all kill claude by pid,
-and `claude-p` runs it under `timeout -k` in a **new process group** — so killing the
-`claude-p` pid would orphan both `timeout` and `claude`, exactly the runaway the
-wrapper exists to prevent. They pass `--safe-mode` on their own argv instead.
-(`~/projects/ereshkigal/bin/import-audio.fish` is a different repo and still unbounded.)
-
-### Constraining headless output
-
-Three layers, cheapest and strongest first. `--safe-mode` kills the *roleplay* leak
-but **not generic preamble** — safe-mode runs still volunteer unrequested
-alternatives ("Or if you want it more granular:") — so anywhere the output must be
-exactly one thing needs a layer on top.
-
-| Layer | Use when | Where |
-|---|---|---|
-| `--safe-mode` | always | `claude-p` default; hand-added to the direct-subprocess callers above |
-| `--json-schema` / SDK `output_format` | the output is data | `ccs autotitle`, `ai-chunk-files`, `ai-commit-msg`, `music ai_import`, AKR `invoice-from-worklog` |
-| `<output>` envelope | the output is long prose or markdown | `claude-batch-worker`, `sanctuary` template, `tab-organize`, youtube-transcribe summaries, AKR `score-day` / `reading_engine` / inari chat |
-
-**Schema-constrained output is validated server-side**, so compliance is not a
-request the model can decline. The decoded object arrives on `.structured_output`
-(CLI JSON envelope) or `ResultMessage.structured_output` (SDK) — never re-parse
-`.result`. A **top-level array 400s** (`input_schema.type: Input should be 'object'`),
-so wrap it: `{"chunks": [[…]]}`.
-
-**The `<output>` envelope** is `ai/templates/output_contract.md` (canonical text,
-includable via the `@<path>` mechanism `bin/ai-commit-msg`'s `load_template()`
-implements) plus `lib/python/llm_output.py` and its `bin/llm-output` CLI:
-
-```bash
-printf '%s' "$raw" | llm-output          # body on stdout
-printf '%s' "$raw" | llm-output --json   # body, validated as JSON
-llm-output --contract                    # the contract text, for building a prompt
-llm-output --contract --chat             # ditto, persona-safe wording (see below)
-```
-
-Exit `0` ok · `1` contract unavailable · `2` bad usage · `3` no usable envelope ·
-`4` envelope present but empty · `5` bad JSON. **There is deliberately no path that
-returns the raw text** — falling back is how chatter became a commit message in the
-first place. Shell callers use `--contract` rather than reading the template by path,
-so they resolve it the same way Python does and a worktree can't prompt with one
-contract while enforcing another.
-
-**Two wordings, one envelope.** `output_contract.md` (strict, the default) is written
-for headless callers, where the chatter being suppressed is the roleplay bookends — so
-it says *"no in-character opener or closer."* `output_contract_chat.md`
-(`contract("chat")`, `llm-output --contract --chat`) states the identical tag rules for
-a model that is *supposed* to have a voice: the envelope is a wrapper, the persona and
-formatting inside it are untouched, and the block itself is never to be remarked on.
-Same tags, same extractor — **picking the wrong one is a tone bug, never a parsing
-one.** `contract()` rejects an unknown variant as an `LLMOutputError`, the same way it
-reports a missing template, so a typo lands in callers' existing `except`.
-
-Reach for the chat variant wherever the block is appended to a **user turn** on a
-channel whose only legitimate speaker is a human. On 2026-08-02 the six AKR Telegram
-bots moved opus → sonnet and Inari — correctly — classified the strict contract riding
-on Anthony's messages as a prompt injection telling it to stop being itself, then spent
-three turns telling him his messages were being tampered with. It had ridden along
-silently since 2026-07-30; only the model changed. Note the envelope itself never
-broke: the tags were honoured every time, so nothing showed up in the logs. The fix was
-the chat variant **plus** a paragraph in the bots' system prompts
-(`chat_engine._CONTRACT_PREAUTH`) vouching for the block from the trusted channel — the
-template removes the reason to suspect it, the system prompt removes the standing to
-act on the suspicion.
-
-Matching is **line-anchored**: a tag only counts when it owns its line, which is what
-survives the commonest preamble shape, *"I'll put my answer in `<output>` tags:"*
-followed by the real envelope. Opens and closes must then **balance**, and the close
-is the last line-anchored `</output>` with its partner found by walking back with a
-depth counter — so an answer that legitimately quotes a *complete* envelope
-(`cc-session-review` feeds the model a CLAUDE.md documenting this contract) comes back
-whole, while a lone tag of either kind is rejected.
-
-That symmetry is load-bearing and was a bug for one afternoon. The walk raised on an
-unmatched *close* but silently returned the innermost body on an unmatched *open*, so a
-reply quoting a bare `<output>` line — which the contract permitted at the time — came
-back as a truncated fragment with exit 0. The count check also subsumes the truncation
-guard, and has to run *before* the one-line-form fallback: a document cut off at the
-token limit whose body contained `<output>PONG</output>` was otherwise silently
-replaced by `PONG`. The contract now demands balance in both directions and forbids
-anything after the closing tag; the accepted cost is that a stray `</output>` in a
-sign-off fails the whole reply rather than being ignored.
-
-**Known limitation, pinned by a test rather than fixed.** A stray line-anchored
-`<output>` in the preamble and a stray `</output>` in the postamble *cancel out* in the
-count, so the balance check passes and the depth walk latches onto the preamble's open,
-over-capturing. Nothing is lost, but the body carries tags and trailing chatter. It is
-close to irreducible: the captured region is a locally well-formed nested envelope, so
-no local rule separates "outer envelope quoting an inner one" from "narration, real
-envelope, narration". Rejecting text outside the outermost envelope fixes it and breaks
-every legitimate preamble case. Related: **indenting a lone tag does not escape it** —
-both regexes begin `^[ \t]*` — so the contract tells the model to keep a quoted tag
-inline in a sentence instead.
-
-Tests live in `tests/lib/python/test_llm_output.py`, under the `lib/python`
-component. They are mutation-checked:
-30 mutations of the regexes, the balance check, the exit-code constants, the
-`--contract` path and the SIGPIPE handling are each killed. Four lessons worth keeping
-if you add cases:
-
-- An anchoring test needs an input the *unanchored* regex matches **differently** — a
-  mid-line tag with trailing prose pins nothing, because `$` already rejects it.
-- A SIGPIPE test needs a body larger than the OS pipe buffer (~64KB), or `print()`
-  finishes before the reader exits and `BrokenPipeError` never fires. It also needs
-  `${PIPESTATUS[0]}`: `subprocess.run("cli | head -1")` reports *head's* exit code, so
-  asserting on it can never fail.
-- A test that locates a file **via the value under test** is circular. The
-  `CONTRACT_PATH` test copied the module to a temp tree using `CONTRACT_PATH.parents[2]`
-  — so the `Path.home()` regression made it copy the real module and pass.
-- Whole features can be invisible. `--contract` had no test at all, and printing it to
-  stderr instead of stdout would have silently emptied the contract out of every fish
-  caller's prompt with the suite green.
-
-**SDK callers need `cli_path`, not just `extra_args`.** The SDK's `_find_cli` returns
-its *bundled* CLI unconditionally, and those copies predate `--safe-mode` (2.1.92 in
-the system site-packages, **2.1.71** in inari's venv, against 2.1.220 on PATH), so
-without it the flag dies as `unknown option '--safe-mode'`:
-
-```python
-ClaudeAgentOptions(..., cli_path=shutil.which("claude"), extra_args={"safe-mode": None})
-```
-
-SDK MCP servers (`create_sdk_mcp_server`) **survive safe-mode** — they travel over
-the control protocol, not MCP *config* — verified by driving `reading_engine`'s
-interactive `ask_user` tool through a full pass under safe-mode.
-
-Two callsites stay lenient on purpose: inari's `generate_reply` (a hard failure means
-the phone gets nothing, so it strips bookends and warns) and `_emit_narration` (which
-forwards intermediate text live, before any `ResultMessage`). `ai_briefing`'s weekly
-review and dream consolidation get **safe-mode only, no envelope** — the agent writes
-the document itself and `msg.result` there is just a truthiness gate guarding the jj
-commit and `_run_backup_hook()`. `cc-session-review`'s `grep -q NO_UPDATES_NEEDED`
-is also left alone; its false-positive fails safe.
-
-### Neovim Prefixes
-| Prefix | Commands |
-|--------|----------|
-| `;p` | Plugin management |
-| `;s` | LSP commands |
-| `;f` | Fuzzy finder (FZF) |
-| `;;` | Show all commands |
+- Check `.is_error`, never `.subtype` or the exit code.
+- Schema output arrives on `.structured_output` (CLI) or `ResultMessage.structured_output` (SDK) — never re-parse `.result`.
+- `llm-output` deliberately has no path that returns the raw text. Do not add one.
+- Prefer floating model aliases (`haiku`, `sonnet`); dated ids are the retirement trap.
+- SDK callers need `cli_path=shutil.which("claude")`, or `--safe-mode` dies as an unknown option in the SDK's bundled CLI.
+- These call bare `claude -p` on purpose, because they kill claude by pid and `claude-p` runs it in a new process group: `services/youtube-transcribe/server.py`, `bin/tab-organize`, AKR's `scripts/score-day.py` and `scripts/invoice-from-worklog.py`. Do not migrate them; they pass `--safe-mode` themselves.
+- `cc-session-review`'s `grep -q NO_UPDATES_NEEDED` is left alone on purpose; its false positive fails safe.
 
 ### Testing
 **Always use `cmds test $argv` from the dotfiles root** — never run `pytest` (or `python -m pytest`) directly. The `cmds` script handles virtual environments and dependencies.
@@ -836,10 +354,7 @@ Several targets work: `cmds test fish/test_a.py hooks/test_b.py -k x`. Every arg
 before the first flag is a target. A target that does not exist exits 2 and runs nothing.
 Before that fix, a second path went to pytest unresolved and the run collected nothing.
 Each component runs with its own deps, and the summary covers them all.
-`tests/fish/test_fish_syntax.py` runs `fish -n` on every fish file. It cannot catch an
-**even** number of apostrophes inside a single-quoted embedded program, which still parses
-and silently cuts the program off. So keep Python out of fish strings: `ccs.fish` calls
-`lib/python/ccs_open_scan.py` and `ccs_extract_messages.py`.
+`tests/fish/test_fish_syntax.py` runs `fish -n` on every fish file; what it cannot catch is in the fish skill.
 
 **Every test tree must be registered in `COMPONENTS`** (`lib/python/run_tests.py`).
 `run_all()` iterates that dict, so a directory under `tests/` that isn't listed is
@@ -847,30 +362,7 @@ not "not yet wired up" — it never runs at all, and rots silently. Four trees s
 unregistered for months; when they were finally registered, `tests/hooks` failed
 immediately because it still asserted the pre-XDG `~/.tmux.conf` destination.
 
-| Component | Alias | Runner | Notes |
-|---|---|---|---|
-| `services/youtube_transcribe` | `yt` | pytest | needs fastapi/httpx/etc. |
-| `services/server_check` | `server-check` | pytest | fakes the server's SSH answer; parses `show.sh`, never runs it |
-| `lib/python` | `python` | pytest | |
-| `lib/lua` | `lua`, `hammerspoon` | pytest | runs Hammerspoon seeds (copylink, rolevote) under `lua5.4` with a stub `hs` (`tests/lib/lua/harness.lua`), calling their URL handlers directly; skips without `lua5.4` |
-| `bin/astro` | `astro` | pytest | needs kerykeion/pyswisseph |
-| `bin/ytdl` | `ytdl` | pytest | stubs yt-dlp via PATH |
-| `bin/exocortex-id` | `exocortex` | pytest | |
-| `fish` | — | pytest | **pytest, not fishtape** — drives `fish --no-config`, with `-c`, or for the revive tests interactive in a real pty; needs the `fish` binary. Each pty test waits 2.6 s for fish to start, so the whole component takes about 3 min, longer than the Bash tool's 2 min default timeout. Run one file when you can (`cmds test fish/test_trash.py`), and give a full run a longer timeout |
-| `hooks` | — | pytest | runs `rcs/claude-ensure-rcs-hook.sh` |
-| `roleplay` | `roleplay` | pytest | drives the bash script as a subprocess; no deps. Tests live in `roleplay/tests/`, reached via the `tests/roleplay` symlink |
-| `svc` | `supervise`, `svc-tmux` | pytest | needs `pyte` (+ `tmux`, else those tests skip). pty-rendered status bar, orphan checks via `ps`, a private tmux socket per test |
-
-`busted` and `fishtape` runners exist in `RUNNERS` but no component uses them.
-
-Each component runs as its own `pytest` subprocess, so the run ends with an
-**aggregate summary** naming every component, its counts, and one overall
-PASSED/FAILED verdict. Without it the output just ends in the last component's
-tally and reads as though nothing else ran — a real reader once saw astro's `107
-passed` and concluded the other 300 tests hadn't executed.
-
-`DOTFILES` is derived from `__file__`, not `$HOME/dotfiles`, so a clone or worktree
-elsewhere tests itself; the resolved root is printed at the top of every run.
+The component table (aliases, runners, deps) and the aggregate summary: [docs/testing.md](docs/testing.md). The `fish` component takes about 3 min, longer than the Bash tool's 2 min default timeout: run one file when you can, and give a full run a longer timeout.
 
 ### Claude Code Config (cc-config)
 
@@ -893,32 +385,7 @@ cc-config list        # Show all registered skills/agents/commands
 
 The wrapper auto-syncs on `claude` launch: if `.cc-config` exists, uses that; otherwise syncs the `"default"` group from `cc-config.json`. Running `cc-config sync` manually now updates the stamp, keeping it in sync with the wrapper's cache.
 
-## Primary Tools
-
-| Tool | Purpose | Config Location |
-|------|---------|-----------------|
-| **Fish** | Primary shell | `fish/` |
-| **Neovim** | Editor | `nvim/` |
-| **Hammerspoon** | macOS automation | `lib/lua/` |
-| **Karabiner** | Keyboard customization | `rcs/karabiner.json` |
-| **Yabai** | Window tiling | (via VPC workspaces) |
-| **Astro** | Natal charts, transits, progressions, zodiacal releasing | `bin/astro`, `~/.local/share/astro/` |
-| **uv** | Python package manager & venv tool | `fish/conf.d/uv.fish` |
-
-### Hours Calculation
-`lib/python/hours.py` - Parse time entries and calculate hours worked with optional multipliers.
-
-```python
-from lib.python.hours import calc_hours
-calc_hours([
-    "1/29 : 01:00 - 01:50 (ai-mult 2.00) - description",
-    "2/3  : 19:40 - 01:00 - no multiplier, defaults to 1x",
-])
-```
-
-Format: `DATE : HH:MM - HH:MM (ai-mult N.NN) - description`
-- Handles overnight spans (e.g. 23:55 - 01:55)
-- `(ai-mult ...)` and description are optional
+## Other Tools
 
 ### VPC Workspaces
 
@@ -939,16 +406,6 @@ Virtual Private Context (VPC) workspaces are pre-configured desktop environments
 **Yabai note:** Yabai cannot manage iTerm2 windows (empty AX roles). When a VPC has a yabai layout for iTerm, `vpc.py` passes `--maximize` to `iterm.py` which uses the iterm2 API to set the window frame directly.
 
 See [docs/vpc-schema.md](docs/vpc-schema.md) for the full VPC file format specification.
-
-### Website Crawler
-
-`bin/crawl-sitemap` — recursively crawls a website and lists all internal pages. BFS traversal, skips static assets, deduplicates.
-
-```bash
-crawl-sitemap <url>              # list all pages
-crawl-sitemap <url> -v           # show progress + depth
-crawl-sitemap <url> --depth 2    # limit crawl depth
-```
 
 ### Vendored Dependencies
 
@@ -993,17 +450,9 @@ vendor approve <name>                  # Approve current state after review
 | [docs/claude-watchdog.md](docs/claude-watchdog.md) | Runaway-headless-`claude` watchdog: phases, classification, bundle redaction, tests |
 | [docs/claude-roleplay.md](docs/claude-roleplay.md) | Claude Code character roleplay: the external roster, two-stage roll, why the cast is not inlined into CLAUDE.md, and the four symlinks that keep `roleplay/` self-contained. A symlink into `roleplay/docs/` |
 | [roleplay/README.md](roleplay/README.md) | Install guide for handing the roleplay system to someone else — written for a stranger, no dotfiles assumed |
-
-## File Locations
-
-### Entry Points
-- Fish: `fish/config.fish` -> `~/.config/fish/config.fish`
-- Neovim: `nvim/init.vim` -> `~/.config/nvim/init.vim`
-- Hammerspoon: `~/.hammerspoon/init.lua` -> loads `lib/lua/init.lua`
-
-### Important Directories
-- Functions: `fish/functions/` (169 files)
-- Seeds: `lib/lua/seeds/` (9 modules)
-- Utilities: `bin/` (50+ scripts)
-- Services: `services/` (6 LaunchAgents)
-- Workspaces: `vpc/` (10 VPC definitions)
+| [docs/ccs.md](docs/ccs.md) | Crashed session titles: entries, hooks, transcript copies and restore, and the fixes rejected |
+| [docs/live-transcribe.md](docs/live-transcribe.md) | Live Transcribe app and engine, logs, history, and the warm whisper server |
+| [docs/hermes.md](docs/hermes.md) | Hermes command types, submenus, generators, reserved keys, reloading |
+| [docs/testing.md](docs/testing.md) | Test components, aliases, runners and the aggregate summary |
+| skill `music-server` | Music server, Navidrome, the cmus mount and scripting cmus (`ai/skills/music-server/SKILL.md`) |
+| skill `headless-claude` | `claude-p`, the `<output>` envelope, `--json-schema`, SDK callers (`ai/skills/headless-claude/SKILL.md`) |

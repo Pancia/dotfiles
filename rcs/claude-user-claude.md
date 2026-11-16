@@ -175,13 +175,7 @@ When a change adds fixed text to every reply, prompt or session (a hook output, 
 
 Prefer `trash` over `rm` when deleting files. If `trash` fails, try `rm` as a fallback — but always as a separate command, never chained together (no `trash ... || rm ...`).
 
-`trash` is a subcommand CLI, usable from any shell (the `bin/trash` shim forwards to the Fish function):
-- `trash <paths>` (or `trash put <paths>`) — move files to the trash
-- `trash list [--json]` — list trashed files, newest first; `--json` emits one object per entry with a stable `id`, original `path`, and `present` flag
-- `trash restore --last` — restore the most recently trashed file
-- `trash restore <id>` — restore a specific entry by the `id` shown in `trash list` (`restore` is a top-level alias for `trash restore`)
-
-To trash a file literally named `put`/`list`/`restore`/`help`, use `trash put <name>`.
+`trash` works from any shell. `trash list`, `trash restore --last` and `trash restore <id>` undo a move: `~/dotfiles/docs/claude-global/trash.md`.
 
 Before you move, rename or delete a script or a folder, search for its name, not its topic or its full path: `rg -l -F --hidden <name> ~/dotfiles ~/Vaults ~/.config ~/projects ~/Library/LaunchAgents -g '!.venv'`. Also check `crontab -l`, and find symlinks that point at it: `find ~ -maxdepth 4 -type l -ilname '*<name>*' 2>/dev/null` (`rg` does not see symlink targets; never give it `-L`). Callers often `cd` first and use a relative path.
 
@@ -246,9 +240,8 @@ test notice its own `-group`, or none, so it cannot replace one I have not seen.
 
 ### Pages that play sound
 
-A published Claude artifact plays no sound for me. On 2026-11-12 the chime
-page stayed silent there, and the fallback to a rendered WAV in an `<audio>`
-element was blocked too. The same file played fine in Brave from disk.
+A published Claude artifact plays no sound for me, not even a WAV in an
+`<audio>` element (tested 2026-11-12). The same file plays in Brave from disk.
 
 - For anything I must hear, write the page to `.cc/misc/` and open it locally:
   `open -a "Brave Browser" <file>`. Say that it is a local file.
@@ -265,34 +258,22 @@ Before you move, add, rename or delete anything under `~/Cloud` (also reached as
 ## Finding an old Claude Code session
 
 - Do not grep the transcripts first. Each one stores the CLAUDE.md it loaded, so any word in a CLAUDE.md matches most of them. Search my prompts instead: `jq -r 'select(.display|test("WORD";"i")) | [.timestamp, .project, .sessionId] | @tsv' ~/.claude/history.jsonl`. Entries before 2025-12-13 have no session id.
-- Find the transcript by id in every project folder: `ls ~/.claude/projects/*/<id>.jsonl`. The folder name follows the path the session started from, so one project can have several (`~/TheAkashicRecords` and `~/Vaults/...`).
-- If the `.jsonl` is gone, `<id>/subagents/` may still be there, locally and in `~/Cloud/claude-transcripts/`. That backup started on 2026-11-12, so it has nothing older that was already gone.
+- Then find the transcript by id, and recover one whose `.jsonl` is gone: `~/dotfiles/docs/claude-global/old-sessions.md`.
 
 ## Web Search
 
-Prefer the built-in WebSearch tool for web searches. Kagi search (`mcp__kagi__kagi_search_fetch`) is also available as an alternative.
+Prefer the built-in WebSearch tool for web searches.
 
 ## VCS Menu (`g`)
 
-`g` is a which-key modal menu for git/jj that auto-detects the repo type. Use `g ls` to see all available commands.
+`g` is a which-key menu for git/jj that detects the repo type. `g ls` lists every command
+with its key path; `g run <keys>` runs one (e.g. `g run ci`). In jj repos `@` is always a
+mutable change, with no staging area. The jj workflow, AI commit messages and
+`vcs-hooks/post-commit`: `~/dotfiles/docs/claude-global/vcs-g-menu.md`.
 
-**Non-interactive CLI** (for scripting and AI agents):
-- `g ls` / `g help` — list all commands with key paths and shell commands
-- `g run <keys>` — execute by key path (e.g. `g run cc`, `g run ci`, `g run s`)
-
-**Jujutsu (jj) workflow:** In jj repos (`.jj/` directory), the working copy (`@`) is always a mutable change — no staging area. Key operations:
-- `jj describe` — set/update the commit message on `@` (stays in same change)
-- `jj commit` — describe `@` and create a new empty change on top (`describe` + `new`)
-- `jj new` — create new empty change on top of `@`
-- Advance + push — `jj commit` → `jj bookmark set master -r @-` → `jj git push`
-
-AI-generated commit messages available via `g run ci` (`ai_jj_commit` / `ai_git_commit`).
-
-**To commit, prefer `/cc:commit` or `g run ci` over a raw `jj commit`.** Both
-detect the VCS themselves (via `vcs-status-for-ai`, which takes the *nearest*
-marker walking up) and route to `commit-mine` when another live session shares
-the working copy. Because they compute the answer instead of assuming it, they
-stay correct in the exception below, where a hardcoded "use jj" does not.
+**To commit, prefer `/cc:commit` or `g run ci` over a raw `jj commit`.** Both detect the
+VCS themselves and route to `commit-mine` when another live session shares the working
+copy, so they stay correct in the exception below, where a hardcoded "use jj" does not.
 
 **Exception — in a git worktree of a jj repo, use `git`.** Claude Code's
 `--worktree` creates a *git* worktree with no `.jj` of its own, so `jj` there
@@ -311,8 +292,6 @@ copy is left untouched. `bin/cc-worktree-nudge` re-asserts this every prompt whe
 it detects the situation, and overrides any project CLAUDE.md that says
 otherwise.
 
-**VCS Hooks:** Repos can define `./vcs-hooks/post-commit` (executable) to run after commit-like operations through `g`.
-
 ## cmds.rb (Per-Directory Command Definitions)
 
 Projects can have a `cmds.rb` file with shell command shortcuts for human use.
@@ -329,43 +308,27 @@ commit there with git and check for `post-commit: backup OK`. Details:
 ## Shelling out to Claude (`claude -p`)
 
 Use **`claude-p`** (`~/dotfiles/bin/claude-p`), never bare `claude -p` — in scripts
-and in ad-hoc commands alike. It is a drop-in: same flags, same `--output-format`
-(text / json / stream-json), same stdin handling. It adds the three guards bare
-`claude -p` lacks:
-
-- **A hard deadline.** `timeout -k` in its own process group, so a wedged child
-  cannot outlive the call. `CLAUDE_P_TIMEOUT` (default 180s) to adjust.
-- **Real error detection.** It asks for JSON underneath and checks `.is_error`.
-  A retired or unavailable `--model` returns `is_error: true` while `subtype`
-  still reads `"success"` — so **`.is_error` is the only trustworthy signal**.
-  An unvalidated caller otherwise treats the error text as a real answer.
-- **A clean room.** `--safe-mode` by default (`CLAUDE_P_SAFE=0` to opt out), which
-  disables CLAUDE.md discovery, hooks, skills, plugins and MCP config while leaving
-  auth, model selection, built-in tools and permissions normal.
-
+and in ad-hoc commands alike. The one exception is a caller that kills claude by pid or
+process group, which `claude-p`'s own process group would orphan; those are listed in
+`~/dotfiles/CLAUDE.md` and must not be migrated. `claude-p` is a drop-in (same flags,
+output formats and stdin) that adds a hard deadline (`CLAUDE_P_TIMEOUT`, default 180s),
+`.is_error` checking, and `--safe-mode` by default (`CLAUDE_P_SAFE=0` to opt out).
 Exit codes: `0` ok · `1` claude errored or returned nothing · `124` timed out.
 
-**Never pipe a raw `claude -p` into `head`/`sed -n`.** A reader exiting does not stop
-the writer, so the claude process keeps running with nothing watching it. (`claude-p`
-buffers to a file, so that SIGPIPE lands on its own `cat`.)
+- **`.is_error` is the only trustworthy signal.** A retired `--model` returns
+  `is_error: true` while `subtype` still reads `"success"`.
+- **Never pipe a raw `claude -p` into `head`/`sed -n`.** A reader exiting does not stop
+  the writer, so claude keeps running with nothing watching it.
+- **Prefer the equals form for variadic flags:** `--tools=''`, not `--tools ''`.
+  `--tools`, `--allowed-tools`, `--disallowed-tools`, `--add-dir`, `--mcp-config` and
+  `--betas` swallow a following positional prompt.
+- `--safe-mode` stops the roleplay bookends leaking, but not ordinary preamble. A caller
+  whose output must be exactly one thing still needs `--json-schema` (for data) or the
+  `<output>` envelope (for prose) — see the `headless-claude` skill
+  (`~/dotfiles/ai/skills/headless-claude/SKILL.md`) and `llm-output`.
 
-**Prefer the equals form for variadic flags:** `--tools=''`, not `--tools ''`.
-`--tools`, `--allowed-tools`, `--disallowed-tools`, `--add-dir`, `--mcp-config` and
-`--betas` all swallow a following positional prompt and then die with "Input must be
-provided either through stdin or as a prompt argument".
-
-On 2026-07-28 a headless claude wedged at ~98% CPU past 2.7GB RSS with no output and
-had to be killed by hand. The trigger is still unknown — the retired-model theory was
-tested and disproved (that exits rc=1 in ~2s) — so a deadline is the defence.
-
-**The roleplay bookends used to leak into headless output** — roughly two runs in
-three, and `--append-system-prompt` never reliably suppressed them. `--safe-mode`
-does (measured 3/3 clean on a prompt that leaked 2/2), so `claude-p` passes it by
-default and the fallback rule at the top of this file tells a rollless session to omit
-the bookends anyway. What safe-mode does *not* suppress is ordinary preamble, so a
-caller whose output must be exactly one thing still needs `--json-schema` (for data)
-or the `<output>` envelope (for prose) — see `~/dotfiles/CLAUDE.md`,
-"Constraining headless output", and `llm-output`.
+Why each guard exists (the 2026-07-28 wedge, the leak measurements):
+`~/dotfiles/docs/claude-global/claude-p.md`.
 
 ## Background processes: `service` vs `svc`
 
@@ -385,33 +348,16 @@ anything — it's probably a launchd service, and the project likely has no
 
 ### `service` — persistent launchd agents
 
-Ruby CLI managing my `org.pancia.*` agents: **inari** (and all six Telegram
-bots), sanctuary, hermes, lakshmi, copyparty, syncthing, vpc, tv-board, ziplog,
-bookmark-manager, youtube-transcribe, wget_server, music-backup, disk-snapshot.
-Names work short or full — `inari` == `org.pancia.inari`.
-
-```
-service status                          # table: SERVICE / PID / STATUS / LAST START / AGO
-service start|stop <name>
-service restart <name> [--log]
-service log <name> -q -p [--lines N]    # agent-friendly: bounded snapshot, noise stripped
-service log <name> --grep 'Error|Traceback|Exception' -p
-```
-
-`service log` auto-detects a non-TTY and prints a bounded snapshot instead of
-hanging in `less +GF`; `-q` strips known polling noise — **only successful**
-Telegram `getUpdates` responses, so failed polls (502 / 429 / 409, and the
-"terminated by other getUpdates request" duplicate-instance alarm) still show.
-Unlike `svc`, **starting is allowed** here — launchd owns these, not my terminal.
-(`svc` services are started with `svc-tmux up`, below.)
-
-Full docs: `~/dotfiles/wiki/pages/service.md`
+Ruby CLI for my `org.pancia.*` agents (inari and the Telegram bots, sanctuary, hermes,
+syncthing and more; names work short or full). Unlike `svc`, **starting is allowed**
+here — launchd owns these. For logs use `service log <name> -q -p [--lines N]`: a
+bounded snapshot with only *successful* polling noise stripped. Full docs:
+`~/dotfiles/wiki/pages/service.md`; the agent list and log flags:
+`~/dotfiles/docs/claude-global/background-processes.md`.
 
 ### `supervise` / `svc` — ephemeral terminal-owned dev processes
 
-`supervise` and `svc` run long-lived dev
-processes in a terminal pane while an LLM can **restart** them on demand. I start
-one with `supervise <name>` (usually a `cmds` entry); an LLM uses
+I start one with `supervise <name>` in a terminal pane; an LLM uses
 `svc status|logs|restart|suspend|resume|stop <name>` to inspect/control it.
 
 **To start one, an LLM uses `svc-tmux up --wait <name>`** — never `supervise`
@@ -423,8 +369,7 @@ If `svc` reports "not running", also check whether it's a `service` after all.
 Per-project services are declared in `.svc.conf` / `.svc.local.conf`
 (`SVC_SERVICES`, `svc_port_file`, optional `svc_eval`, `svc_cmd`, `SVC_ENV`).
 
-Full docs (read if you need the config format, restart/crash semantics, or to add
-it to a project): `~/dotfiles/wiki/pages/supervise-svc.md`
+Full docs (config format, restart/crash semantics): `~/dotfiles/wiki/pages/supervise-svc.md`
 
 ### Outliving a Bash call
 

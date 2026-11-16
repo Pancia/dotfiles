@@ -109,6 +109,12 @@ printf '%s\n' $list    # RIGHT: one element per line
 printf '%s\n' "$list"  # WRONG: one line with spaces
 ```
 
+**Keep Python (and other embedded programs) out of fish strings.** An even number of
+apostrophes inside a single-quoted embedded program still parses, and silently cuts the
+program off, so `fish -n` (and `tests/fish/test_fish_syntax.py`) cannot catch it. Put the
+program in its own file instead: `ccs.fish` calls `lib/python/ccs_open_scan.py` and
+`ccs_extract_messages.py`.
+
 ## Math
 
 - **`math` builtin** — not `$(( ))`:
