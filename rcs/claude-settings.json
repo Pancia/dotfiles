@@ -6,7 +6,7 @@
     "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "CLAUDE_CODE_SKIP_AUTO_UPDATE": "1",
-    "CLAUDE_CODE_PLUGIN_DIRS": "~/dotfiles/ai/mods/plainify:~/dotfiles/ai/mods/roleplay-bookends"
+    "CLAUDE_CODE_PLUGIN_DIRS": "~/dotfiles/ai/mods/plainify:~/dotfiles/ai/mods/roleplay-bookends:~/dotfiles/ai/mods/focus-verbose"
   },
   "permissions": {
     "allow": [

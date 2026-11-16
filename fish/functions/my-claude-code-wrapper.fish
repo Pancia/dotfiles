@@ -155,7 +155,10 @@ function my-claude-code-wrapper --description "Claude Code wrapper" --wraps clau
     # Jobs that exist before claude starts, so a stopped claude can be told
     # apart from a job the shell already had.
     set -l jobs_before (jobs -p 2>/dev/null)
-    proc-label "claude [$label]" claude --verbose $wt_flag $pass_argv
+    # No --verbose: the flag overrides focus view and shows every tool result.
+    # Focus view is on by default ("briefTranscript" in ~/.claude.json, toggled
+    # by /focus). Ctrl+O still opens the full transcript.
+    proc-label "claude [$label]" claude $wt_flag $pass_argv
     set -l claude_status $status
 
     # Ctrl-Z stops claude, and fish then carries on with this function. The
