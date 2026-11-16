@@ -84,6 +84,7 @@
       "~/.claude/plans"
     ]
   },
+  "model": "opus",
   "hooks": {
     "PreToolUse": [
       {
@@ -254,11 +255,17 @@
   "modelSettings": {
     "claude-opus-5-5": {
       "effortLevel": "high"
+    },
+    "claude-fable-5-2": {
+      "effortLevel": "high"
     }
   },
+  "promptSuggestionEnabled": false,
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
+  "preferredNotifChannel": "notifications_disabled",
   "idleCompaction": false,
+  "remoteControlAtStartup": false,
   "autoMode": {
     "environment": [
       "### Org-wide",
@@ -288,5 +295,6 @@
       "**Org-specific CLIs**: None configured. `alt` (Altera's CLI), `g`, `jj`, `trash`, `service`, `svc`, `cmds`, `claude-p`, `ccjj` and `commit-mine` are personal tooling, routine for this user",
       "**Routine commands**: build, test, lint and VCS commands (git, jj, make, cmds) inside a trusted repo, including its .alt/worktrees/ and .claude/worktrees/ subdirectories"
     ]
-  }
+  },
+  "advisorModel": "fable"
 }
