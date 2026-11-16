@@ -7,7 +7,10 @@
 --   1 opener character +   2 opener character −
 --   3 opener universe  +   4 opener universe  −
 --   5-8 the same for the closer.
--- The spoken line is not stored: search the transcripts for "r?v=<id>".
+-- The spoken line is not stored here. Lines the roleplay-bookends mod wrote
+-- are in ~/.local/state/roleplay/mod-lines.jsonl under their voteId and kind
+-- (opener or closer); older lines the main model wrote: search the
+-- transcripts for "r?v=<id>".
 --
 -- Long form, from before the id existed (it carries everything itself):
 --   hammerspoon://rate?vote=up|down&kind=character|universe&name=<n>&line=<l>
@@ -112,12 +115,26 @@ function obj:start(cfg)
             hs.alert.show(SIGN[vote] .. " " .. clean(name), config.alertSeconds)
         end
     end)
+    -- hammerspoon://rolevotes — the review link in the roleplay-bookends
+    -- mod's reminder row: open a Claude session in a new iTerm tab.
+    hs.urlevent.bind("rolevotes", function()
+        local script = os.getenv("HOME") .. "/dotfiles/bin/rolevotes-review"
+        local task = hs.task.new(script, function(code, _, err)
+            if code ~= 0 then
+                hs.alert.show("rolevotes: " .. (err or ("exit " .. code)), 3)
+            end
+        end)
+        if not task or not task:start() then
+            hs.alert.show("rolevotes: cannot start " .. script, 3)
+        end
+    end)
     return self
 end
 
 function obj:stop()
     hs.urlevent.bind("r", nil)
     hs.urlevent.bind("rate", nil)
+    hs.urlevent.bind("rolevotes", nil)
 end
 
 return obj

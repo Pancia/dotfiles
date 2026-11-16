@@ -1,0 +1,1 @@
+{ "name": "roleplay-bookends", "version": "1.0.0", "description": "Sonnet writes the roleplay opener when a typed prompt's turn starts and the closer when it ends, drawn around the turn on screen only", "types": "./types/index.d.ts" }

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bookend blind test</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root { --bg:#fbfcfd; --fg:#111418; --muted:#5b6470; --line:#dde1e6; --line-strong:#b8c0ca; --field:#ffffff; --raised:#f1f3f5; --ok:#1a7f37;
+  --sans:"IBM Plex Sans", system-ui, sans-serif; --mono:"IBM Plex Mono", ui-monospace, monospace; --radius:4px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg:#0f1216; --fg:#e6e9ed; --muted:#8b95a1; --line:#262c33; --line-strong:#3d4650; --field:#161a1f; --raised:#181c22; --ok:#3fb950; } }
+:root[data-theme="dark"] { --bg:#0f1216; --fg:#e6e9ed; --muted:#8b95a1; --line:#262c33; --line-strong:#3d4650; --field:#161a1f; --raised:#181c22; --ok:#3fb950; }
+body { background:var(--bg); color:var(--fg); font:15px/1.55 var(--sans); margin:0; padding:32px 16px 120px; }
+main { max-width:760px; margin:0 auto; }
+h1 { font-size:22px; font-weight:600; margin:0; }
+.sub { color:var(--muted); margin:4px 0 22px; }
+.label { font:600 12px var(--mono); letter-spacing:.02em; text-transform:uppercase; color:var(--muted); margin:20px 0 6px; }
+.indent { padding-left:16px; }
+.num { font-family:var(--mono); font-variant-numeric:tabular-nums; color:var(--muted); display:inline-block; width:48px; font-size:12px; }
+.line { margin:2px 0; }
+.score { display:flex; gap:6px; margin-top:8px; }
+button { font:inherit; font-weight:500; border-radius:var(--radius); padding:5px 12px; cursor:pointer; }
+.primary { background:var(--fg); color:var(--bg); border:1px solid var(--fg); }
+.secondary { background:transparent; color:var(--fg); border:1px solid var(--line-strong); font-family:var(--mono); }
+.secondary.on { background:var(--raised); border-color:var(--fg); font-weight:600; }
+.secondary.on::after { content:" ✓"; }
+:focus-visible { outline:2px solid var(--fg); outline-offset:1px; }
+.bar { position:fixed; left:0; right:0; bottom:0; background:var(--bg); border-top:1px solid var(--line); padding:12px 16px; }
+.bar .in { max-width:760px; margin:0 auto; display:flex; gap:16px; align-items:center; }
+#done.ok { color:var(--ok); }
+</style></head><body><main>
+<h1>Bookend blind test</h1>
+<p class="sub">Rate each pair 1 to 5. 1 is flat or generic. 5 is sharp and in character. Context size is hidden. Your scores stay in this browser until you copy them.</p>
+<!--ITEMS-->
+</main>
+<div class="bar"><div class="in">
+  <span class="num" style="width:auto" id="done">0 / __TOTAL__ rated</span>
+  <button class="primary" id="copy">Copy scores</button>
+  <span id="msg" class="num" style="width:auto"></span>
+</div></div>
+<script>
+const KEY = "bookend-blind-2026-11-15";
+let s = {};
+try { s = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
+function paint() {
+  document.querySelectorAll(".item").forEach(it => {
+    it.querySelectorAll("button").forEach(b => b.classList.toggle("on", s[it.dataset.id] == b.dataset.v));
+  });
+  const n = Object.keys(s).length, el = document.getElementById("done");
+  el.textContent = n + " / __TOTAL__ rated"; el.classList.toggle("ok", n == __TOTAL__);
+}
+document.querySelectorAll(".item").forEach(it => it.querySelectorAll("button").forEach(b => b.onclick = () => {
+  s[it.dataset.id] = +b.dataset.v;
+  try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {}
+  paint();
+}));
+document.getElementById("copy").onclick = async () => {
+  const t = Object.keys(s).sort((a, b) => a - b).map(k => k + ":" + s[k]).join(" ");
+  try { await navigator.clipboard.writeText(t); document.getElementById("msg").textContent = "Copied. Paste it into the chat."; }
+  catch (e) { prompt("Copy these scores:", t); }
+};
+paint();
+</script></body></html>

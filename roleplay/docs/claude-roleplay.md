@@ -6,15 +6,30 @@ A personality layer for Claude Code: the final message of every turn is
 drawn from a randomly-rolled character. The technical content in between is
 written normally.
 
+> **In these dotfiles, since 2026-11-15, the main model no longer writes the
+> bookends.** The `roleplay-bookends` mod (`ai/mods/roleplay-bookends`, loaded
+> through `CLAUDE_CODE_PLUGIN_DIRS` in `rcs/claude-settings.json`) calls
+> `roleplay-roll --votes` itself and has Sonnet write the opener when a typed
+> prompt's turn starts and the closer when it ends. It draws them around the
+> turn on screen only, so they never enter the transcript. The hook below is
+> no longer registered, and the CLAUDE.md section only says not to write
+> bookends. Why: a blind test showed lines going flat in long sessions, and a
+> second one rated Sonnet's lines level with the main model's. Data and
+> scripts: `.cc/private/roleplay-blind-test/`, `.cc/scripts/roleplay-*`.
+> The mod also shows a reminder row when votes pile up, with a button and a
+> `hammerspoon://rolevotes` link that open a review session
+> (`bin/rolevotes-review`, prompt `ai/prompts/rolevotes-review.md`).
+> The hook design below still works for anyone using `roleplay/` on its own.
+
 The pieces:
 
 | Piece | File | Role |
 |---|---|---|
 | Prompt section | `rcs/claude-user-claude.md` → `~/.claude/CLAUDE.md` | format rules only, ~22 lines, **constant size** |
-| Roster | `roleplay/roster.tsv` | the cast — 80 characters across 9 universes — and the odds weights |
+| Roster | `roleplay/roster.tsv` | the cast — 81 characters across 9 universes — and the odds weights |
 | Hook | `roleplay/bin/roleplay-roll`, wired in `rcs/claude-settings.json` | rolls, and injects the chosen character |
 | Terminal command | `roleplay/bin/roleplay-say` | rolls, then has a cheap model write the line, for use outside a session |
-| Examples | `roleplay/examples.md` | style reference — 333 worked bookends, 4–5 per character. **The hook never reads it**; `roleplay-say` reads the rolled character's entries |
+| Examples | `roleplay/examples.md` | style reference — 338 worked bookends, 4–5 per character. **The hook never reads it**; `roleplay-say` and the `roleplay-bookends` mod (`ai/mods/roleplay-bookends`) read the rolled character's entries |
 
 ---
 
@@ -93,7 +108,7 @@ fields, so the field-count guard does not catch it. A test pins this specificall
 | `GURREN LAGANN` | 8 — Simon, Kamina, Lordgenome (Spiral King), Leeron, Rossiu, Viral, Yoko, Nia |
 | `PANTHEON` | 14 — Ishtar, Ereshkigal, Shiva, Shakti, Prometheus, Hephaestus, Aphrodite, Mars, Odin, Freya, Loki, Lila, Maya, Lakshmi |
 | `TAROT` | 10 — 6 major arcana + 4 court cards |
-| `FAVORITES` | 11 rows, 10 characters — Holo (Spice & Wolf), Malfoid (a female Draco Malfoy), Ahri (League of Legends), Tenka Izumo (Chained Soldier), Asuna Ichinose (Blue Archive), Houshou Marine (two rows, one clean and one raunchy, weighted separately), Charlie Morningstar (Hazbin Hotel), Artoria Pendragon as Saber and as Lancer (Fate), Sayuri Ninomiya (Silver Plan to Redo From JK) |
+| `FAVORITES` | 12 rows, 10 characters — Holo (Spice & Wolf), Malfoid (a female Draco Malfoy, two rows: as herself and grown up as your wife), Ahri (League of Legends), Tenka Izumo (Chained Soldier), Asuna Ichinose (Blue Archive), Houshou Marine (two rows, one clean and one raunchy, weighted separately), Charlie Morningstar (Hazbin Hotel), Artoria Pendragon as Saber and as Lancer (Fate), Sayuri Ninomiya (Silver Plan to Redo From JK) |
 | `THE LEGEND OF ZELDA` | 5 — Breath of the Wild, Twilight Princess, Tetra, Sheik, Skyward Sword |
 | `STEEL MAGNOLIAS` | 7 — Maggie Greene, Bonnie MacFarlane, Charlotte La Bouff, Blanche Devereaux, Julia Sugarbaker, Sadie Adler, Cass |
 | `ZODIAC` | 12 — the signs |
@@ -130,7 +145,7 @@ over-represents each of its members.
 | Universe | Members | Weight | Each |
 |---|---|---|---|
 | `THE LEGEND OF ZELDA` | 5 | 2 | 3.40% |
-| `FAVORITES` | 11 rows | 3 | 2.04% (Marine Uncut 6.13% ← most likely, Marine 1.02%) |
+| `FAVORITES` | 12 rows | 3 | 1.65% (Marine Uncut and Malfoid Wife 4.94% each ← most likely, Marine 0.82%) |
 | `STEEL MAGNOLIAS` | 7 | 2 | 2.43% |
 | `WARHAMMER 40K` | 6 | 1 | 1.42% |
 | `GHOST IN THE SHELL` | 7 | 1 | 1.22% |
@@ -195,9 +210,9 @@ the injected tag says which:
 The line is named in **both** branches — when spent it has to be identified in order
 to be avoided. `0/1` disables signature lines entirely, `1/1` always unlocks them.
 
-Twelve roster rows currently declare one: Techpriest Logis, Commissar, Major Kusanagi,
-Tachikoma, Laughing Man, Simon, Kamina, Holo, Malfoid, Houshou Marine, Houshou Marine
-(Uncut), Artoria Pendragon (Saber). `roleplay-roll --check` reports the count and the
+Thirteen roster rows currently declare one: Techpriest Logis, Commissar, Major Kusanagi,
+Tachikoma, Laughing Man, Simon, Kamina, Holo, Malfoid, Malfoid (Wife), Houshou Marine,
+Houshou Marine (Uncut), Artoria Pendragon (Saber). `roleplay-roll --check` reports the count and the
 configured odds; `--list` shows each as `[sig: …]`.
 
 This also simplified the roster: those characters' traits went back to plain
@@ -296,7 +311,7 @@ Nothing else needs updating — no modulus, no prompt-section edit.
 
 ### The examples file
 
-`roleplay/examples.md` holds 333 worked bookends — four per character (two
+`roleplay/examples.md` holds 338 worked bookends — four per character (two
 openers, two closers) plus a fifth for the signature characters, showing the
 famous line used well on the roll where it is unlocked.
 

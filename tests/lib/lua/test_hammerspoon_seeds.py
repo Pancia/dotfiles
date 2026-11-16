@@ -174,10 +174,10 @@ def test_rolevote_stop_unbinds_both_events(tmp_path):
     assert [t for k, t in recs if k == "BOUND"] == []
 
 
-def test_rolevote_binds_r_and_rate(tmp_path):
+def test_rolevote_binds_r_rate_and_rolevotes(tmp_path):
     recs = drive("seeds.rolevote", tmp_path=tmp_path,
                  config={"votes": tmp_path / "v.tsv", "rolls": tmp_path / "r.tsv"})
-    assert [t for k, t in recs if k == "BOUND"] == ["r", "rate"]
+    assert [t for k, t in recs if k == "BOUND"] == ["r", "rate", "rolevotes"]
 
 
 # --------------------------------------------------------------------------

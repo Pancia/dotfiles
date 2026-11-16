@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#
+# rolevotes-review — open a new iTerm tab with a Claude Code session that
+# reviews the roleplay bookend votes (prompt: ai/prompts/rolevotes-review.md).
+#
+# Called by the roleplay-bookends mod's reminder button and by the
+# hammerspoon://rolevotes link (lib/lua/seeds/rolevote.lua). The tab runs the
+# user's login shell (fish), so `claude` is the usual wrapper.
+
+set -euo pipefail
+
+prompt="$HOME/dotfiles/ai/prompts/rolevotes-review.md"
+[ -r "$prompt" ] || { echo "rolevotes-review: missing $prompt" >&2; exit 1; }
+
+# fish syntax: the tab's shell is fish. The prompt goes in as one argument.
+cmd="cd ~/dotfiles; and claude (cat ~/dotfiles/ai/prompts/rolevotes-review.md | string collect)"
+
+osascript - "$cmd" <<'APPLESCRIPT'
+on run argv
+    set cmd to item 1 of argv
+    tell application "iTerm"
+        activate
+        if (count of windows) is 0 then
+            create window with default profile
+        else
+            tell current window to create tab with default profile
+        end if
+        tell current session of current window to write text cmd
+    end tell
+end run
+APPLESCRIPT
