@@ -1,8 +1,9 @@
 function cmus --description 'Start cmus with random mode' --wraps cmus
-    set -l ml $MUSIC_PLAYBACK
+    # cmus-add-new adds only tracks cmus lacks, from a direct server listing.
+    # A plain `add` of the folder lists it through the slow NFS mount.
     fish -c "
         sleep 1
-        cmus-remote -C 'add $ml'
+        cmus-add-new
         while true
             cmus-remote -C player-play 2>/dev/null
             if cmus-remote -Q 2>/dev/null | string match -q 'status playing'

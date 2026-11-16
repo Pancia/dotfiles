@@ -440,8 +440,10 @@ refuse this Mac for a couple of minutes.
   music-mount` shows them now.
 - Listing the 4,300-file folder takes about 107 s through the mount and 6 s with `rclone lsf`. While
   a request is that slow, macOS prints "nfs server ... not responding" onto the terminal of the
-  blocked process, which garbles cmus until Ctrl-L. The startup `add` in `fish/functions/cmus.fish`
-  causes one such listing. It was kept on purpose.
+  blocked process, which garbles cmus until Ctrl-L. So since 2026-11-14 the `cmus` function no
+  longer adds the folder at startup: `bin/cmus-add-new` lists the server directly (about 2 s) and
+  adds only tracks cmus lacks, with `cmus-remote -l`. It never removes tracks. Files cmus cannot
+  read are offered again at each start, because cmus drops them.
 
 **Scripting cmus.** `save -l`, `save -L` and bare `save` return a hash-table order sorted by
 `lib_sort`, **not** the play order, and they ignore `:rand` (0 of 5 next tracks predicted). `save -p -`

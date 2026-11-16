@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Add the tracks the music server has but cmus does not, to the running cmus.
+#
+# Replaces `add ~/Music/music-server` at cmus startup. That add lists the whole
+# folder through the NFS mount, which took about 107 s for 4,500 files and can
+# print "nfs server not responding" over the cmus screen. A direct listing from
+# the server takes a few seconds. Only new tracks then touch the mount.
+#
+# It never removes anything from the cmus library.
+set -u
+export LC_ALL=C
+
+dir="${MUSIC_PLAYBACK:-$HOME/Music/music-server/}"
+dir="${dir%/}"
+remote="music-server:/music/MyMusic/my-music"
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+# If the server cannot be listed, the mount cannot read it either, so a full
+# folder add would only hang. Change nothing.
+if ! timeout 60 rclone lsf "$remote" --files-only --log-level ERROR > "$tmp/server"; then
+    echo "cmus-add-new: could not list the server; library unchanged" >&2
+    exit 1
+fi
+cmus-remote -C 'save -l -' > "$tmp/lib" || { echo "cmus-add-new: cmus is not running" >&2; exit 1; }
+
+# Audio files only. Names starting with a dot are partial uploads.
+grep -E '^[^.].*\.(m4a|mp3|flac|opus|ogg|aif|aiff|wav)$' "$tmp/server" \
+    | sed "s|^|$dir/|" | sort -u > "$tmp/want"
+sort -u "$tmp/lib" > "$tmp/have"
+comm -23 "$tmp/want" "$tmp/have" > "$tmp/new"
+
+added=$(wc -l < "$tmp/new" | tr -d ' ')
+if [ "$added" -gt 0 ]; then
+    tr '\n' '\0' < "$tmp/new" | xargs -0 -n 200 cmus-remote -l
+fi
+echo "cmus-add-new: added $added of $(wc -l < "$tmp/want" | tr -d ' ') server tracks"
