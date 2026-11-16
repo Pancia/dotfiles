@@ -80,6 +80,35 @@ function tailKey(s: string): string {
   return norm(s).slice(-200)
 }
 
+// The row shows a paste as "[Pasted text #1 +14 lines]" (or an image as
+// "[Image #1]") while the prompt holds the pasted text, so the head key can
+// miss. Then the row matches a stored prompt holding each typed piece around
+// the placeholders, in order, starting with the first and ending with the last.
+const PLACEHOLDER = /\[(?:Pasted text|Image) #\d+[^\]]*\]/
+function findOpener(m: Record<string, Line>, shown: string): Line | undefined {
+  const exact = m[headKey(shown)]
+  if (exact || !PLACEHOLDER.test(shown)) return exact
+  const parts = norm(shown).split(new RegExp(PLACEHOLDER.source, 'g')).map(p => p.trim())
+  // A paste with no typed text around it matches every prompt: draw nothing
+  // rather than repeat the newest opener under each such row.
+  if (parts.every(p => !p)) return undefined
+  const first = parts[0] ?? ''
+  const last = parts[parts.length - 1] ?? ''
+  const hits = Object.values(m).filter(l => {
+    const full = l.prompt
+    if (!full || !full.startsWith(first) || !full.endsWith(last)) return false
+    let at = 0
+    for (const p of parts) {
+      if (!p) continue
+      const i = full.indexOf(p, at)
+      if (i < 0) return false
+      at = i + p.length
+    }
+    return true
+  })
+  return hits[hits.length - 1]
+}
+
 // Module state: lost on a reload; reset on /clear by session.end.
 let examples = ''
 let lastAnswer = ''
@@ -218,7 +247,9 @@ async function countVotes($: EngineInterface) {
   await update($, votes, () => ({ waiting, old }))
 }
 
-async function write($: EngineInterface, kind: 'opener' | 'closer', key: string, w: Who, ask: string, turnId: string) {
+async function write(
+  $: EngineInterface, kind: 'opener' | 'closer', key: string, w: Who, ask: string, turnId: string, prompt?: string,
+) {
   const t0 = await $.clock.now()
   let text: string | null = null
   let failed: string | undefined
@@ -233,7 +264,7 @@ async function write($: EngineInterface, kind: 'opener' | 'closer', key: string,
   }
   const ms = (await $.clock.now()) - t0
   await dbg($, `write ${kind} ${turnId} ms=${ms} ${failed ?? 'ok'}`)
-  const line: Line = { ...pendingLine(w), text, ms, ...(failed ? { failed } : {}) }
+  const line: Line = { ...pendingLine(w), text, ms, ...(failed ? { failed } : {}), ...(prompt ? { prompt } : {}) }
   await setRow($, kind, key, line)
   const sessionId = await $.session.id()
   const rec = JSON.stringify({
@@ -255,14 +286,15 @@ async function startOpener($: EngineInterface, turnId: string, text: string, sub
   if (w.voteId) usedVotes.add(w.voteId)
   turns.set(turnId, { who: w, prompt: text })
   const key = headKey(text)
-  await setRow($, 'opener', key, pendingLine(w))
+  const full = norm(text).slice(0, 20000)
+  await setRow($, 'opener', key, { ...pendingLine(w), prompt: full })
   const ask =
     `Character: ${w.name} (${w.universe}) — ${w.traits}${w.extra ? `\nNote: ${w.extra}` : ''}\n` +
     exampleBlock(w.name) +
     (lastAnswer ? `\nThe assistant's previous reply ended:\n${lastAnswer.slice(-1500)}\n` : '') +
     `\nThe user just asked:\n${text.slice(-3000)}\n\n` +
     'Write the OPENER: the line at the top of the reply, reacting to this request as the work begins.'
-  await write($, 'opener', key, w, ask, turnId)
+  await write($, 'opener', key, w, ask, turnId, full)
 }
 
 async function startCloser($: EngineInterface, turnId: string, t: Turn, answerText: string) {
@@ -366,7 +398,7 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
     const inner = await next(e)
-    const l = (await read($, openers))[headKey(e.props.text)]
+    const l = findOpener(await read($, openers), e.props.text)
     if (!l) return inner
     const { Box } = $.ui.resolve(e)
     return (

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# roleplay-say — roll a character and have a cheap model write its line.
+# roleplay-say — roll a character and have Sonnet write its line.
 #
 # The hook (roleplay-roll) only names a character; the running session writes the
 # words. This does both from a plain terminal, for anywhere there is no session.
@@ -10,7 +10,7 @@
 #   roleplay-say fixing the login bug   # opener about that
 #   roleplay-say --closer shipped it    # closer about that
 #   git diff | roleplay-say -           # about whatever is on stdin
-#   roleplay-say -m sonnet tests pass   # a different model (default haiku)
+#   roleplay-say -m haiku tests pass    # a different model (default sonnet)
 #
 # UNLIKE roleplay-roll THIS FAILS LOUDLY. That script fails open because it runs
 # on every prompt and has stdout parsed as JSON. This one is typed by a person or
@@ -47,7 +47,9 @@ while [ -L "$self_src" ]; do
 done
 self_dir=$(cd -- "$(dirname -- "$self_src")" >/dev/null 2>&1 && pwd -P) || die "cannot resolve my own path"
 
-model=${ROLEPLAY_SAY_MODEL:-haiku}
+# Sonnet, not Haiku: a 2026-11-15 blind test rated Sonnet's lines level with
+# the main model's and Haiku's lower. The roleplay-bookends mod uses it too.
+model=${ROLEPLAY_SAY_MODEL:-sonnet}
 kind=opener
 use_stdin=0
 topic=()

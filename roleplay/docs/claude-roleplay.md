@@ -28,7 +28,7 @@ The pieces:
 | Prompt section | `rcs/claude-user-claude.md` → `~/.claude/CLAUDE.md` | format rules only, ~22 lines, **constant size** |
 | Roster | `roleplay/roster.tsv` | the cast — 81 characters across 9 universes — and the odds weights |
 | Hook | `roleplay/bin/roleplay-roll`, wired in `rcs/claude-settings.json` | rolls, and injects the chosen character |
-| Terminal command | `roleplay/bin/roleplay-say` | rolls, then has a cheap model write the line, for use outside a session |
+| Terminal command | `roleplay/bin/roleplay-say` | rolls, then has Sonnet write the line, for use outside a session |
 | Examples | `roleplay/examples.md` | style reference — 338 worked bookends, 4–5 per character. **The hook never reads it**; `roleplay-say` and the `roleplay-bookends` mod (`ai/mods/roleplay-bookends`) read the rolled character's entries |
 
 ---
@@ -246,11 +246,11 @@ roleplay-roll --plain     # just the character line
 roleplay-roll --list      # the whole roster, grouped
 roleplay-roll --check     # validate: counts, odds, duplicate emoji/names
 
-roleplay-say                       # roll, and have a cheap model write the line
+roleplay-say                       # roll, and have Sonnet write the line
 roleplay-say fixing the login bug  # ...about this
 roleplay-say --closer shipped it   # a closer instead of an opener
 git diff | roleplay-say -          # context from stdin, only with an explicit -
-roleplay-say -m sonnet tests pass  # another model. The default is haiku
+roleplay-say -m haiku tests pass   # another model. The default is sonnet
 ```
 
 | Env var | Effect |

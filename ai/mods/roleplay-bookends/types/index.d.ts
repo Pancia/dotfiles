@@ -6,6 +6,9 @@ export type Line = {
   ms: number
   voteId?: string
   failed?: string
+  // Opener rows: the whole prompt, normalized, to find a row whose text
+  // shows a paste as a "[Pasted text #1 …]" placeholder.
+  prompt?: string
 }
 
 // Votes since the last review: all of them, and those a week old or more.

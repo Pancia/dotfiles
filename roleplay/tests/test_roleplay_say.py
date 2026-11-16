@@ -107,10 +107,10 @@ def test_stdin_is_ignored_without_a_dash(e):
     assert "should not appear" not in e.prompt
 
 
-def test_defaults_to_an_opener_on_haiku(e):
+def test_defaults_to_an_opener_on_sonnet(e):
     e.run()
     assert "Kind: opener" in e.prompt
-    assert e.argv[e.argv.index("--model") + 1] == "haiku"
+    assert e.argv[e.argv.index("--model") + 1] == "sonnet"
 
 
 def test_closer_and_model_flags(e):
