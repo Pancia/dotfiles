@@ -2,6 +2,18 @@
 
 Personal development environment for macOS. Focused on automation, productivity, and multi-tool integration.
 
+## Dated reminders
+
+Compare each date with today's date: the `[now: …]` line a `UserPromptSubmit`
+hook adds to every prompt (`rcs/claude-settings.json`). When one has come, put
+it under **Needs you** in your first reply, then delete the entry once it is
+dealt with.
+
+- **On or after 2026-11-22:** check the roleplay-bookends mod's debug log,
+  `~/.local/state/roleplay/mod-debug.log`, for `error` or `failed` lines
+  since 2026-11-15. If it is clean, offer to set `DEBUG = false` in
+  `ai/mods/roleplay-bookends/hooks/register.tsx`, which stops the log.
+
 ## VCS
 
 This is a **jj (Jujutsu) repository**. Use `jj` rather than `git` for inspection

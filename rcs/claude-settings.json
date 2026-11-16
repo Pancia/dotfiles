@@ -173,6 +173,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "date '+[now: %a %Y-%m-%d %H:%M %Z]'",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "ccjj nudge"
           }
         ]
