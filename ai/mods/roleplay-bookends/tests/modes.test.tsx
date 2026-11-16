@@ -6,7 +6,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { matches, parseRoster, pct, pickChar } from '../hooks/register'
+import { matches, nextVote, parseRoster, pct, pickChar } from '../hooks/register'
 
 const TAG = '[🎭 Character Roll: «Togusa» 🔍 GHOST IN THE SHELL — Methodical · earnest || vote id: ab12]'
 const ROLL = JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: TAG } })
@@ -24,16 +24,25 @@ type World = {
   // fail before one answers.
   store: Map<string, unknown>; sid: string; rosterFails: number
   registered: { name: string; immediate?: true }[]
+  // Each vote's process.run argv, and how many vote runs fail next.
+  voteRuns: string[][]; voteFails: number
 }
 
 function world($: Engine, on: On, saved?: string): World {
   const clock = mock.clock(on, { now: 1_000_000 })
   const w: World = {
-    clock, asks: [], rolls: [], toasts: [], panes: [], store: new Map(), sid: 'sess-1', rosterFails: 0, registered: [],
+    clock, asks: [], rolls: [], toasts: [], panes: [], store: new Map(), sid: 'sess-1', rosterFails: 0, registered: [], voteRuns: [], voteFails: 0,
   }
   if (saved) w.store.set('mode', saved)
   on('process.run', (_, e) => {
     const cmd = e.argv.join(' ')
+    if (e.argv[2]?.includes('votes.lock')) {
+      w.voteRuns.push([...e.argv])
+      if (w.voteFails > 0) {
+        w.voteFails--
+        return { value: { exitCode: 1, stdout: '', stderr: 'disk full', isStdoutTruncated: false, isStderrTruncated: false } }
+      }
+    }
     if (cmd.includes('roleplay-roll')) w.rolls.push(cmd)
     if (cmd.includes('--roster') && w.rosterFails > 0) {
       w.rosterFails--
@@ -109,6 +118,11 @@ async function opener($: Engine, shown: string) {
   })
 }
 
+// The vote buttons a drawn bookend holds (keys rv-<id>-<slot>).
+async function voteButtons(ui: { findAll: (q: { type: 'Button' }) => Promise<readonly { key?: string }[]> }) {
+  return (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('rv-'))
+}
+
 const BAND = {
   plugin: 'roleplay-bookends',
   surface: 'terminal',
@@ -147,6 +161,9 @@ test('a share prints as a short percent', () => {
   expect(pct(0.0018)).toBe('0.18%')
   expect(pct(0.25)).toBe('25%')
   expect(pct(0.03)).toBe('3%')
+  // Halves round up, as roleplay-say's awk does.
+  expect(pct(0.125)).toBe('13%')
+  expect(pct(0.0625)).toBe('6.3%')
 })
 
 test('the search matches every word in a name or universe', () => {
@@ -175,7 +192,7 @@ test('random mode draws the odds beside the name and universe, with the vote lin
   const ui = await opener($, 'please fix the parser')
   expect((await ui.find({ type: 'Text', text: '1.2% ' }))?.text).toBe('1.2% ')
   expect((await ui.find({ type: 'Text', text: '8.5% ' }))?.text).toBe('8.5% ')
-  expect(await ui.findAll({ type: 'Link' })).toHaveLength(4)
+  expect(await voteButtons(ui)).toHaveLength(4)
   await ui.unmount()
   expect(w.rolls.some(r => r.includes('--votes'))).toBe(true)
   // The row above the prompt is always there: mode button and Pick, no Reroll.
@@ -251,6 +268,69 @@ test('a real exit rolls nothing', async ($, on) => {
   expect(w.store.get('pins')).toEqual(before)
 })
 
+test('a vote button casts, a second press clears, the other button changes it', async ($, on) => {
+  const w = world($, on)
+  const runs = w.voteRuns
+  await start($, w)
+  await submit($, w, 'please vote on this')
+  const ui = await opener($, 'please vote on this')
+  const args = (i: number) => runs[i]!.slice(4)
+  const colored = async (key: string) => (await ui.find({ key }))?.children?.[0]
+  // Slot 2: opener, character, down. Cast.
+  await ui.press({ key: 'rv-ab12-2' })
+  expect(args(0)).toEqual(['ab12', 'opener', 'down', 'character', 'Togusa'])
+  expect(w.toasts.at(-1)).toBe('− Togusa')
+  expect((await ui.find({ key: 'rv-ab12-2' }))?.props).toMatchObject({ dimColor: false })
+  expect(await colored('rv-ab12-2')).toMatchObject({ type: 'Text', props: { bold: true, color: 'error' } })
+  expect((await ui.find({ key: 'rv-ab12-1' }))?.props).toMatchObject({ dimColor: true })
+  // Slot 1, the other way on the same part: change.
+  await ui.press({ key: 'rv-ab12-1' })
+  expect(args(1)).toEqual(['ab12', 'opener', 'up', 'character', 'Togusa'])
+  expect(await colored('rv-ab12-1')).toMatchObject({ props: { color: 'success' } })
+  expect((await ui.find({ key: 'rv-ab12-2' }))?.props).toMatchObject({ dimColor: true })
+  // The same button again: clear (an empty vote).
+  await ui.press({ key: 'rv-ab12-1' })
+  expect(args(2)).toEqual(['ab12', 'opener', '', 'character', 'Togusa'])
+  expect(w.toasts.at(-1)).toBe('Vote cleared: Togusa')
+  expect((await ui.find({ key: 'rv-ab12-1' }))?.props).toMatchObject({ dimColor: true })
+  // The universe is a part of its own.
+  await ui.press({ key: 'rv-ab12-3' })
+  expect(args(3)).toEqual(['ab12', 'opener', 'up', 'universe', 'GHOST IN THE SHELL'])
+  await ui.unmount()
+})
+
+test('two quick presses on one button cast and then clear, in order', async ($, on) => {
+  const w = world($, on)
+  await start($, w)
+  await submit($, w, 'two quick presses')
+  const ui = await opener($, 'two quick presses')
+  await Promise.all([ui.press({ key: 'rv-ab12-1' }), ui.press({ key: 'rv-ab12-1' })])
+  expect(w.voteRuns.map(r => r[6])).toEqual(['up', ''])
+  expect((await ui.find({ key: 'rv-ab12-1' }))?.props).toMatchObject({ dimColor: true })
+  await ui.unmount()
+})
+
+test('a vote that fails to save changes nothing on screen', async ($, on) => {
+  const w = world($, on)
+  await start($, w)
+  await submit($, w, 'a vote on a full disk')
+  const ui = await opener($, 'a vote on a full disk')
+  w.voteFails = 1
+  await ui.press({ key: 'rv-ab12-1' })
+  expect(w.toasts.at(-1)).toBe('Vote not saved: Error: disk full')
+  expect((await ui.find({ key: 'rv-ab12-1' }))?.props).toMatchObject({ dimColor: true })
+  // The next press still casts: the failed one left no vote behind.
+  await ui.press({ key: 'rv-ab12-1' })
+  expect(w.voteRuns.at(-1)!.slice(4)).toEqual(['ab12', 'opener', 'up', 'character', 'Togusa'])
+  await ui.unmount()
+})
+
+test('a press cycle: none, cast, cleared, and the other way changes', () => {
+  expect(nextVote(undefined, 'up')).toBe('up')
+  expect(nextVote('up', 'up')).toBe(undefined)
+  expect(nextVote('up', 'down')).toBe('down')
+})
+
 test('session mode: one character from the start, no votes, no odds, Reroll changes it', async ($, on) => {
   const w = world($, on, 'session')
   await start($, w)
@@ -267,7 +347,7 @@ test('session mode: one character from the start, no votes, no odds, Reroll chan
   // No --votes roll at all, so nothing reaches the roll log.
   expect(w.rolls.filter(r => !r.includes('--roster'))).toEqual([])
   const row = await opener($, 'second request')
-  expect(await row.findAll({ type: 'Link' })).toHaveLength(0)
+  expect(await voteButtons(row)).toHaveLength(0)
   expect(await row.find({ type: 'Text', text: /%/ })).toBe(undefined)
   await row.unmount()
 
@@ -314,7 +394,7 @@ test('/roleplay random leaves session mode, and its odds come back', async ($, o
   await run($, 'random')
   await submit($, w, 'back to random please')
   const ui = await opener($, 'back to random please')
-  expect(await ui.findAll({ type: 'Link' })).toHaveLength(4)
+  expect(await voteButtons(ui)).toHaveLength(4)
   expect((await ui.find({ type: 'Text', text: '1.2% ' }))?.text).toBe('1.2% ')
   await ui.unmount()
   expect(w.toasts.some(t => t.startsWith('🎭 Random mode'))).toBe(true)

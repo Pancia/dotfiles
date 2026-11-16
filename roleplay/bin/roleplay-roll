@@ -50,8 +50,9 @@
 #                         $XDG_STATE_HOME/roleplay/rolls.tsv; empty logs nothing.
 #
 # Votes are opt-in because this directory is shared as-is, and the thing that
-# reads the ids is not in it: a Hammerspoon seed in the dotfiles
-# (lib/lua/seeds/rolevote.lua) records a vote from a hammerspoon:// link. With
+# reads the ids is not in it: in the dotfiles, the roleplay-bookends mod's
+# vote buttons (or, stand-alone, a Hammerspoon seed reading a hammerspoon://
+# link) record a vote by its id. With
 # no receiver, an id in every tag is noise and the log only grows. The opt-in
 # is a flag on the hook command, not an env var in settings.json, because the
 # settings "env" block also reaches every Bash call, so a run by hand would log.
@@ -300,7 +301,7 @@ case $mode in
         [ -n "$line" ] || exit 0
 
         # Vote id: 4 random base-36 characters, one per roll. The bookends put
-        # it in their vote links, and the roll log maps it back to the
+        # it in their vote buttons or links, and the roll log maps it back to the
         # character, so a link need not carry the name or the line. The line
         # stays findable by searching the transcripts for the id. All of this
         # happens only with --votes (see the header).
@@ -321,6 +322,17 @@ case $mode in
         log=${ROLEPLAY_ROLL_LOG-$state_home/roleplay/rolls.tsv}
         logged=
         if [ -n "$votes" ] && [ -n "$log" ] && [ -n "$meta" ]; then
+            # An id already in the log would make votes on two rolls look
+            # alike: draw again, a few times at most. One grep per prompt.
+            for _ in 1 2 3 4 5; do
+                [ -r "$log" ] && grep -q -F "	$vote_id	" "$log" 2>/dev/null || break
+                n=$(( ((RANDOM << 15) ^ RANDOM) % 1679616 ))
+                vote_id=
+                for _ in 1 2 3 4; do
+                    vote_id=${b36:n%36:1}$vote_id
+                    n=$(( n / 36 ))
+                done
+            done
             log_dir=${log%/*}
             {
                 { [ "$log_dir" = "$log" ] || [ -d "$log_dir" ] || mkdir -p -- "$log_dir"; } &&

@@ -13,6 +13,10 @@ export type Line = {
 
 export type Odds = { c: number; u: number }
 
+// A vote's direction, and what it is on.
+export type Way = 'up' | 'down'
+export type Kind = 'character' | 'universe'
+
 // Votes since the last review: all of them, and those a week old or more.
 export type VoteCount = { waiting: number; old: number }
 
@@ -44,6 +48,7 @@ declare module 'claude-code' {
       votes: VoteCount
       pin: Pin
       filter: string
+      myVotes: Record<string, Way>
     }
   }
 }

@@ -3,8 +3,9 @@
 # rolevotes-review — open a new iTerm tab with a Claude Code session that
 # reviews the roleplay bookend votes (prompt: ai/prompts/rolevotes-review.md).
 #
-# Called by the roleplay-bookends mod's reminder button and by the
-# hammerspoon://rolevotes link (lib/lua/seeds/rolevote.lua). The tab's shell is
+# Called by the roleplay-bookends mod's reminder button, and by the
+# hammerspoon://rolevotes link (lib/lua/seeds/rolevote.lua), which the mod no
+# longer draws but which still works when opened by hand. The tab's shell is
 # fish. It runs my-claude-code-wrapper by name: `claude` there is the bare
 # binary, and the `cc` abbreviation does not expand in text sent by
 # `write text`, so only the wrapper registers the session with ccs.

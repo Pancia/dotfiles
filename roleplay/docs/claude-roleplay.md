@@ -16,9 +16,9 @@ written normally.
 > bookends. Why: a blind test showed lines going flat in long sessions, and a
 > second one rated Sonnet's lines level with the main model's. Data and
 > scripts: `.cc/private/roleplay-blind-test/`, `.cc/scripts/roleplay-*`.
-> The mod also shows a reminder row when votes pile up, with a button and a
-> `hammerspoon://rolevotes` link that open a review session
-> (`bin/rolevotes-review`, prompt `ai/prompts/rolevotes-review.md`).
+> The mod also shows a reminder row when votes pile up, with a Review button
+> that opens a review session (`bin/rolevotes-review`, prompt
+> `ai/prompts/rolevotes-review.md`).
 > The hook design below still works for anyone using `roleplay/` on its own.
 >
 > **Two modes (2026-11-16).** `/roleplay random` is the mode above: a new
@@ -297,10 +297,19 @@ nothing parses its failure as a prompt. It needs `claude-p` and `jq` on PATH.
 
 With `--votes`, each roll gets a random 4-character id, added to the tag as
 `|| vote id: k3f2` and logged with the character and universe to `rolls.tsv`. Here the
-mod draws the id as `hammerspoon://r?v=<id><slot>` links (stand-alone, the bookend format in
-the prompt section does), and the Hammerspoon seed `lib/lua/seeds/rolevote.lua` records each
-click in `votes.tsv`. The vote does not store the line; the mod's
-`~/.local/state/roleplay/mod-lines.jsonl` holds it under the same vote id.
+mod draws `[ − ] [ + ]` buttons next to the name and the universe. A press writes
+`votes.tsv` itself (`castVote`); no Hammerspoon is involved. Each part (the character or the
+universe of one opener or closer) holds at most one vote: the first press casts it, the
+same button again clears it, and the other button changes it. The script writes the whole
+new file (that part's old line dropped, matched on id, roll time, place and kind; the new
+line added) to a temp file and renames it in one step, under `lockf` on `votes.lock`, so
+parallel writers lose nothing. Presses run one at a time in the mod, so two quick presses
+cast and then clear. A cast vote draws bold, + green and − red. `roleplay-roll --votes`
+draws a new id when the one it drew is already in `rolls.tsv`. Stand-alone, the bookend format in the prompt section draws
+`hammerspoon://r?v=<id><slot>` links instead, and the Hammerspoon seed
+`lib/lua/seeds/rolevote.lua` records each click in the same line format. The vote does not
+store the line; the mod's `~/.local/state/roleplay/mod-lines.jsonl` holds it under the same
+vote id.
 
 **The receiver lives outside `roleplay/`,** so the flag is off by default and this directory
 stays usable on its own. Here the mod passes it (`ownRoll` in its `register.tsx`), not the

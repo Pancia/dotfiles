@@ -117,8 +117,9 @@ function obj:start(cfg)
             hs.alert.show(SIGN[vote] .. " " .. clean(name), config.alertSeconds)
         end
     end)
-    -- hammerspoon://rolevotes — the review link in the roleplay-bookends
-    -- mod's reminder row: open a Claude session in a new iTerm tab.
+    -- hammerspoon://rolevotes: open a Claude session in a new iTerm tab to
+    -- review the votes. The roleplay-bookends mod's reminder row no longer
+    -- links here (its Review button runs bin/rolevotes-review itself).
     hs.urlevent.bind("rolevotes", function()
         local script = os.getenv("HOME") .. "/dotfiles/bin/rolevotes-review"
         local task

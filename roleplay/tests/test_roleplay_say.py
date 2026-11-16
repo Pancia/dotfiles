@@ -84,7 +84,43 @@ def e(tmp_path):
 def test_stdout_is_exactly_the_finished_line(e):
     r = e.run("anything")
     assert r.returncode == 0
-    assert r.stdout == '🎭 «Test Hero» 🧪 TESTVERSE — "A dry remark."\n'
+    # A lone character in a lone universe: both odds are 100%. Not a
+    # terminal, so no dim codes.
+    assert r.stdout == '🎭 «Test Hero» 100% 🧪 TESTVERSE 100% — "A dry remark."\n'
+
+
+def test_odds_follow_the_mod_format(e):
+    (e.tmp / "roster.tsv").write_text(
+        ROSTER + "@universe | OTHER VERSE | 3\nOTHER VERSE | Someone Else | 🐙 | wry\n",
+        encoding="utf-8",
+    )
+    # Seed 1 rolls Someone Else here, in a universe whose name has a space.
+    r = e.run("anything")
+    assert r.stdout == '🎭 «Someone Else» 75% 🐙 OTHER VERSE 75% — "A dry remark."\n'
+    # Seed 6 rolls the other one.
+    r = e.run("anything", extra_env={"ROLEPLAY_SEED": "6"})
+    assert r.stdout == '🎭 «Test Hero» 25% 🧪 TESTVERSE 25% — "A dry remark."\n'
+
+
+def test_odds_are_left_out_when_the_lookup_finds_nothing(e):
+    # A roll script older than --roster: it answers --plain only. A copy, not
+    # a link, so the script finds this roll script beside it.
+    fake = e.tmp / "bin"
+    fake.mkdir()
+    real = SCRIPT.parent
+    shutil.copy(SCRIPT, fake / "roleplay-say")
+    (fake / "roleplay-roll").write_text(
+        '#!/usr/bin/env bash\n[ "$1" = --plain ] && printf "%s" "«Test Hero» 🧪 TESTVERSE — dry"\n',
+        encoding="utf-8",
+    )
+    (fake / "roleplay-roll").chmod(0o755)
+    assert real != fake
+    r = subprocess.run(
+        [str(fake / "roleplay-say"), "x"], capture_output=True, text=True,
+        env={"PATH": f"{e.stub_dir}:{JQ_DIR}:/usr/bin:/bin", "HOME": str(Path.home()),
+             "ROLEPLAY_EXAMPLES": str(e.tmp / "examples.md")},
+    )
+    assert r.stdout == '🎭 «Test Hero» 🧪 TESTVERSE — "A dry remark."\n', r.stderr
 
 
 def test_context_is_optional(e):

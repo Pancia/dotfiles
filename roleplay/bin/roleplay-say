@@ -141,4 +141,27 @@ said=$(printf '%s' "$envelope" | jq -r '.structured_output.line // empty') \
 said=$(printf '%s' "$said" | tr '\n' ' ' | sed -e 's/^[[:space:]"*]*//' -e 's/[[:space:]"*]*$//')
 [ -n "$said" ] || die "the model returned an empty line (model: $model)"
 
+# The odds, as the roleplay-bookends mod draws them: the character's overall
+# chance after the name, its universe's share after the universe. Dim on a
+# terminal. Left out, not an error, when the roster lookup finds nothing.
+rest=${header#*» }
+emoji=${rest%% *}
+universe=${rest#* }
+odds=$(ROLEPLAY_ROLL_LOG= "$self_dir/roleplay-roll" --roster 2>/dev/null | awk -F'\t' -v n="$name" -v u="$universe" '
+    # Halves round up, as the mod rounds them: 12.5% is 13%.
+    function r(p, d,    m) { m = (d == 0) ? 1 : (d == 1) ? 10 : 100; return sprintf("%." d "f", int(p * m + 0.5) / m) }
+    function pct(x,    p, s) {
+        p = x * 100
+        s = (p >= 10) ? r(p, 0) : (p >= 1) ? r(p, 1) : r(p, 2)
+        sub(/\.0+$/, "", s)
+        return s "%"
+    }
+    $1 == u && $2 == n { print pct($7) "\t" pct($6); exit }
+')
+if [ -n "$odds" ]; then
+    dim= off=
+    [ -t 1 ] && { dim=$'\033[2m'; off=$'\033[0m'; }
+    header="«$name» $dim${odds%%$'\t'*}$off $emoji $universe $dim${odds#*$'\t'}$off"
+fi
+
 printf '🎭 %s — "%s"\n' "$header" "$said"

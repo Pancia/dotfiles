@@ -8,14 +8,15 @@
 // Display only: nothing is added to the transcript, so the main model never
 // sees these lines. Each line is appended to
 // ~/.local/state/roleplay/mod-lines.jsonl with its session, turn and vote id;
-// a vote (lib/lua/seeds/rolevote.lua) records only the vote id and slot, so
-// that log is where a voted line is found again.
+// a vote (castVote, the same line lib/lua/seeds/rolevote.lua writes for the
+// old hammerspoon:// links) records only the vote id, place and kind, so that
+// log is where a voted line is found again.
 //
 // Review: .cc/reports/REVIEW-roleplay-bookends-mod.md (2026-11-15).
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Char, Line, Mode, Odds, Pin, VoteCount } from '../types'
+import type { Char, Kind, Line, Mode, Odds, Pin, VoteCount, Way } from '../types'
 
 const openers = atom({ plugin: 'roleplay-bookends', key: 'openers' } as const, {} as Record<string, Line>)
 const closers = atom({ plugin: 'roleplay-bookends', key: 'closers' } as const, {} as Record<string, Line>)
@@ -29,15 +30,19 @@ const pin = atom({ plugin: 'roleplay-bookends', key: 'pin' } as const, { mode: n
 // The Pick pane's search text.
 const filter = atom({ plugin: 'roleplay-bookends', key: 'filter' } as const, '')
 const PICK = 'roleplay-pick'
+// The vote standing on each bookend part, from this session's buttons, by
+// `${voteId}:${place}:${kind}` (kind: character or universe). Drawn in the
+// vote's color; a press of the same button clears it, of the other changes it.
+const myVotes = atom({ plugin: 'roleplay-bookends', key: 'myVotes' } as const, {} as Record<string, Way>)
 
 // Vote reminder: a row above the prompt when more than VOTES_OLD votes have
-// waited a week or more, or more than VOTES_MANY are waiting. Its button and
-// link open a review session in a new iTerm tab (bin/rolevotes-review). The
+// waited a week or more, or more than VOTES_MANY are waiting. Its button
+// opens a review session in a new iTerm tab (bin/rolevotes-review). The
 // review writes votes-reviewed-at, which resets the count.
 const VOTES_OLD = 3
 const VOTES_MANY = 12
 const WEEK_MS = 7 * 24 * 3600 * 1000
-// Show the row whatever the count, to try the button and link.
+// Show the row whatever the count, to try the button.
 const VOTES_DEMO = false
 
 const MODEL = 'sonnet'
@@ -93,9 +98,11 @@ export function parseRoster(s: string): Char[] {
 }
 
 // A share as a short percent: 8.5%, 1.4%, 0.18%, 12%.
+// Halves round up, as roleplay-say's awk rounds them: 12.5% is 13%.
 export function pct(x: number): string {
   const p = x * 100
-  const s = p >= 10 ? p.toFixed(0) : p >= 1 ? p.toFixed(1) : p.toFixed(2)
+  const at = (d: number) => (Math.floor(p * 10 ** d + 0.5) / 10 ** d).toFixed(d)
+  const s = p >= 10 ? at(0) : p >= 1 ? at(1) : at(2)
   return `${s.replace(/\.0+$/, '')}%`
 }
 
@@ -423,6 +430,77 @@ async function choose($: EngineInterface, c: Char) {
   await $.ui.close({ id: PICK })
 }
 
+// Sets one vote in votes.tsv, in the line the rolevote Hammerspoon seed
+// writes: time, id, place, vote, kind, name, the roll's own time from
+// rolls.tsv, and an empty line field. It drops any line for the same id,
+// roll time, place and kind, so a vote changed or cleared leaves one line or
+// none; the roll time tells apart two rolls that drew the same id. $3 empty
+// only clears. The new file is written whole to a temp file and renamed in
+// one step, under a lock (lockf), so two writers cannot lose each other's
+// line and a failure leaves the old file. Arguments go in as $1..$5, never
+// into the script text: VOTE_LOCK runs VOTE_SH, passed as its $0.
+const VOTE_SH = [
+  'd="$HOME/.local/state/roleplay"; f="$d/votes.tsv"; t="$f.tmp.$$"',
+  `rolled=$(awk -F'\\t' -v id="$1" '$2 "" == id "" { t = $1 } END { print t }' "$d/rolls.tsv" 2>/dev/null)`,
+  `name=$(printf '%s' "$5" | tr '\\t\\r\\n' '   ')`,
+  '(',
+  `  if [ -f "$f" ]; then awk -F'\\t' -v id="$1" -v r="$rolled" -v p="$2" -v k="$4" '!($2 "" == id "" && $7 "" == r "" && $3 == p && $5 == k)' "$f" || exit 1; fi`,
+  `  if [ -n "$3" ]; then printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t\\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$1" "$2" "$3" "$4" "$name" "$rolled"; fi`,
+  ') > "$t" && mv "$t" "$f" || { rm -f "$t"; exit 1; }',
+].join('\n')
+const VOTE_LOCK =
+  'd="$HOME/.local/state/roleplay"; mkdir -p "$d" || exit 1; exec /usr/bin/lockf -k -t 4 "$d/votes.lock" /bin/sh -c "$0" sh "$@"'
+// Slot within a bookend (1-4): what the vote is on, and which way.
+const SLOTS: Record<number, [Kind, Way]> = {
+  1: ['character', 'up'], 2: ['character', 'down'], 3: ['universe', 'up'], 4: ['universe', 'down'],
+}
+
+// What a press does, given the vote standing on that part: none → cast,
+// the same → clear, the other → change.
+export function nextVote(standing: Way | undefined, pressed: Way): Way | undefined {
+  return standing === pressed ? undefined : pressed
+}
+
+// Presses run one at a time, in order, and each works out its vote from the
+// one before it: two quick presses on a button cast and then clear. The
+// module's copy of myVotes is filled from the state on first use (after a
+// reload, too) and leads it.
+let voteChain: Promise<void> = Promise.resolve()
+let standingNow: Record<string, Way> | null = null
+
+function castVote($: EngineInterface, l: Line, place: 'opener' | 'closer', n: number): Promise<void> {
+  voteChain = voteChain.then(() => castOne($, l, place, n)).catch(err => dbg($, `vote error ${String(err)}`))
+  return voteChain
+}
+
+async function castOne($: EngineInterface, l: Line, place: 'opener' | 'closer', n: number) {
+  const id = l.voteId
+  const slot = SLOTS[n]
+  if (!id || !slot) return
+  const [kind, pressed] = slot
+  const k = `${id}:${place}:${kind}`
+  const name = kind === 'character' ? l.name : l.universe
+  standingNow ??= { ...(await read($, myVotes)) }
+  const next = nextVote(standingNow[k], pressed)
+  try {
+    const r = await $.process.run(
+      ['sh', '-c', VOTE_LOCK, VOTE_SH, id, place, next ?? '', kind, name],
+      { timeoutMs: 6000 },
+    )
+    if (r.exitCode !== 0) throw new Error(r.stderr.trim() || `exit ${r.exitCode}`)
+  } catch (err) {
+    $.ui.toast(`Vote not saved: ${String(err)}`)
+    return
+  }
+  const now = { ...standingNow }
+  if (next) now[k] = next
+  else delete now[k]
+  standingNow = now
+  await update($, myVotes, () => now)
+  $.ui.toast(next ? `${next === 'up' ? '+' : '−'} ${name}` : `Vote cleared: ${name}`)
+  await countVotes($).catch(err => dbg($, `vote count error ${String(err)}`))
+}
+
 // Sets one row and drops the oldest past KEEP, so the maps (and the rows
 // that read them) stay small in a long session.
 export function withRow(m: Record<string, Line>, key: string, line: Line): Record<string, Line> {
@@ -745,7 +823,7 @@ export const register: Register = on => {
     const due = v.old > VOTES_OLD || v.waiting > VOTES_MANY
     const p = await read($, pin)
     const isSession = p.mode === 'session'
-    const { Box, Text, Button, Link } = $.ui.resolve(e)
+    const { Box, Text, Button } = $.ui.resolve(e)
     const shown = !isSession
       ? 'a new character each prompt'
       : p.who
@@ -787,7 +865,6 @@ export const register: Register = on => {
             }
           }}
         />
-        <Link href="hammerspoon://rolevotes" label="open review" />
       </Box>
     )
     return (
@@ -841,7 +918,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         {inner}
-        <Box marginTop={1}>{bookend($, e, l, 'opener')}</Box>
+        <Box marginTop={1}>{bookend($, e, l, 'opener', await read($, myVotes))}</Box>
       </Box>
     )
   })
@@ -855,7 +932,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         {inner}
-        <Box marginTop={1}>{bookend($, e, l, 'closer')}</Box>
+        <Box marginTop={1}>{bookend($, e, l, 'closer', await read($, myVotes))}</Box>
       </Box>
     )
   })
@@ -893,13 +970,17 @@ function wrapWords(t: string, first: number, rest: number): string[] {
 // One bookend, drawn like a blockquote in the reply: indented to the reply's
 // text, a dim bar on every row, then
 // 🎭 «Name» [−][+] emoji UNIVERSE [−][+] — "line"   (model kind 1.2s)
-// Rows are wrapped by hand so the bar runs down each one. The vote links are
-// roleplay-roll's: vote id + 1–4 on the opener, 5–8 on the closer, numbered
-// character +, character −, universe +, universe −; drawn minus first.
+// Rows are wrapped by hand so the bar runs down each one. The vote buttons
+// use roleplay-roll's vote id and the old link slots: 1–4 on the opener, 5–8
+// on the closer, numbered character +, character −, universe +, universe −;
+// drawn minus first. A press appends to votes.tsv itself (castVote).
 const INDENT = 2
 const BAR = '▎ '
-function bookend($: EngineInterface, e: Parameters<EngineInterface['ui']['resolve']>[0] & { viewport?: { columns: number } }, l: Line, kind: 'opener' | 'closer') {
-  const { Box, Text, Link } = $.ui.resolve(e)
+function bookend(
+  $: EngineInterface, e: Parameters<EngineInterface['ui']['resolve']>[0] & { viewport?: { columns: number } },
+  l: Line, kind: 'opener' | 'closer', standing: Record<string, Way>,
+) {
+  const { Box, Text, Button } = $.ui.resolve(e)
   const width = Math.max(30, (e.viewport?.columns ?? 100) - INDENT - cells(BAR) - 2)
   const meta = SHOW_TIMING ? `(${MODEL} ${kind}${l.text ? ` ${(l.ms / 1000).toFixed(1)}s` : ''})` : ''
   const bar = <Text dimColor>{BAR}</Text>
@@ -913,18 +994,26 @@ function bookend($: EngineInterface, e: Parameters<EngineInterface['ui']['resolv
   }
   const base = kind === 'opener' ? 0 : 4
   const hasVotes = !!l.voteId
-  const vote = (n: number, glyph: string) => (
-    <Link key={`v${n}`} href={`hammerspoon://r?v=${l.voteId}${base + n}`} label={` ${glyph} `} />
-  )
+  // The terminal draws a Button as [ − ]. The vote standing on that part
+  // draws its button bold in its color, + green and − red; the rest dim.
+  const vote = (n: number, glyph: string) => {
+    const slot = SLOTS[n]!
+    const isCast = standing[`${l.voteId}:${kind}:${slot[0]}`] === slot[1]
+    return (
+      <Button key={`rv-${l.voteId}-${base + n}`} label={glyph} dimColor={!isCast} onPress={() => castVote($, l, kind, n)}>
+        {isCast ? <Text bold color={slot[1] === 'up' ? 'success' : 'error'}>{glyph}</Text> : glyph}
+      </Button>
+    )
+  }
   const sp = <Text> </Text>
   // Random mode's odds, dim after the name and after the universe.
   const cOdds = l.odds ? pct(l.odds.c) : ''
   const uOdds = l.odds ? pct(l.odds.u) : ''
   const odds = (s: string) => (s ? <Text dimColor>{s} </Text> : null)
   // Head: 🎭 «Name» 1.2% [ − ] [ + ] emoji UNIVERSE 8.5% [ − ] [ + ] — ,
-  // single spaces between parts; each vote link is 3 cells plus its space.
+  // single spaces between parts; each vote button is 5 cells plus its space.
   const head =
-    cells(`🎭 «${l.name}» ${l.emoji} ${l.universe} — `) + (hasVotes ? 4 * 4 : 0) +
+    cells(`🎭 «${l.name}» ${l.emoji} ${l.universe} — `) + (hasVotes ? 4 * 6 : 0) +
     (cOdds ? cells(cOdds) + 1 : 0) + (uOdds ? cells(uOdds) + 1 : 0)
   const body = l.text ? `"${l.text}"` : 'thinking…'
   const words = meta ? `${body} ${meta}` : body
