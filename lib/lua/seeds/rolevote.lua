@@ -22,6 +22,8 @@
 -- have are left empty.
 
 local obj = {}
+-- Running rolevotes-review tasks, kept referenced until each one ends.
+obj._tasks = {}
 obj._name = "rolevote"
 
 -- Hardcoded on purpose: Hammerspoon starts from launchd and has no
@@ -119,12 +121,20 @@ function obj:start(cfg)
     -- mod's reminder row: open a Claude session in a new iTerm tab.
     hs.urlevent.bind("rolevotes", function()
         local script = os.getenv("HOME") .. "/dotfiles/bin/rolevotes-review"
-        local task = hs.task.new(script, function(code, _, err)
+        local task
+        task = hs.task.new(script, function(code, _, err)
+            obj._tasks[task] = nil
             if code ~= 0 then
-                hs.alert.show("rolevotes: " .. (err or ("exit " .. code)), 3)
+                -- "" is true in Lua: an empty stderr still needs a reason.
+                local why = (err and err ~= "") and err or ("exit " .. code)
+                hs.alert.show("rolevotes: " .. why, 3)
             end
         end)
-        if not task or not task:start() then
+        -- Held until its callback runs, or Hammerspoon may collect the task
+        -- and the failure alert never shows.
+        if task and task:start() then
+            obj._tasks[task] = true
+        else
             hs.alert.show("rolevotes: cannot start " .. script, 3)
         end
     end)

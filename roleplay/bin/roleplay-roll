@@ -2,8 +2,11 @@
 #
 # roleplay-roll — pick a character for the Claude Code roleplay bookends.
 #
-# Runs as a UserPromptSubmit hook on EVERY prompt in EVERY project, and prints a
-# hook JSON envelope naming one character from ../roster.tsv.
+# Prints a hook JSON envelope naming one character from ../roster.tsv. On its
+# own it runs as a UserPromptSubmit hook on EVERY prompt in EVERY project. In
+# Anthony's dotfiles no hook is registered: the roleplay-bookends mod
+# (ai/mods/roleplay-bookends) runs `roleplay-roll --votes` once per typed
+# prompt and parses this envelope.
 #
 # Two-stage: a UNIVERSE is chosen by weight, then a character within it, also by
 # weight. Everything weighs 1 unless an @universe or @character line in the roster
@@ -19,8 +22,8 @@
 # Usage:
 #   roleplay-roll            # hook JSON envelope (the default)
 #   roleplay-roll --votes    # the same, plus a vote id in the tag and a line in
-#                            # the roll log. Only the hook should pass it: a run
-#                            # by hand with it writes the real log, so set
+#                            # the roll log. Only the hook (or the mod) should
+#                            # pass it: a run by hand writes the real log, so set
 #                            # ROLEPLAY_ROLL_LOG= (empty) for a test run
 #   roleplay-roll --plain    # just the character line, for eyeballing and tests
 #   roleplay-roll --list     # the whole roster grouped by universe

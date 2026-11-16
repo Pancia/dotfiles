@@ -33,8 +33,9 @@ tested and disproved (that exits rc=1 in ~2s) — so a deadline is the defence.
 **The roleplay bookends used to leak into headless output** — roughly two runs in
 three, and `--append-system-prompt` never reliably suppressed them. `--safe-mode`
 does (measured 3/3 clean on a prompt that leaked 2/2), so `claude-p` passes it by
-default and the fallback rule at the top of this file tells a rollless session to omit
-the bookends anyway. What safe-mode does *not* suppress is ordinary preamble, so a
+default. Since 2026-11-15 the main model writes no bookends at all (the
+roleplay-bookends mod draws them, and only for typed prompts), so this leak is
+history. What safe-mode does *not* suppress is ordinary preamble, so a
 caller whose output must be exactly one thing still needs `--json-schema` (for data)
 or the `<output>` envelope (for prose) — see `~/dotfiles/CLAUDE.md`,
 "Constraining headless output", and `llm-output`.

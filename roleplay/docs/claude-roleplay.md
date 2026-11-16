@@ -25,9 +25,10 @@ The pieces:
 
 | Piece | File | Role |
 |---|---|---|
-| Prompt section | `rcs/claude-user-claude.md` → `~/.claude/CLAUDE.md` | format rules only, ~22 lines, **constant size** |
+| Prompt section | `rcs/claude-user-claude.md` → `~/.claude/CLAUDE.md` | here: a short note that the mod draws the bookends and the main model must not. Stand-alone: the format rules, ~22 lines, **constant size** |
+| Mod (these dotfiles) | `ai/mods/roleplay-bookends`, loaded by `CLAUDE_CODE_PLUGIN_DIRS` in `rcs/claude-settings.json` | rolls through `roleplay-roll --votes`, has Sonnet write both lines, draws them, logs them, and shows the vote reminder |
 | Roster | `roleplay/roster.tsv` | the cast — 81 characters across 9 universes — and the odds weights |
-| Hook | `roleplay/bin/roleplay-roll`, wired in `rcs/claude-settings.json` | rolls, and injects the chosen character |
+| Roller | `roleplay/bin/roleplay-roll` | rolls a character. Stand-alone it runs as a `UserPromptSubmit` hook and injects the character; here the mod calls it, and no hook is registered |
 | Terminal command | `roleplay/bin/roleplay-say` | rolls, then has Sonnet write the line, for use outside a session |
 | Examples | `roleplay/examples.md` | style reference — 338 worked bookends, 4–5 per character. **The hook never reads it**; `roleplay-say` and the `roleplay-bookends` mod (`ai/mods/roleplay-bookends`) read the rolled character's entries |
 
@@ -241,7 +242,7 @@ same second would get the same character.
 
 ```bash
 roleplay-roll             # hook JSON envelope
-roleplay-roll --votes     # the same, plus a vote id and a roll log (what the hook calls here)
+roleplay-roll --votes     # the same, plus a vote id and a roll log (what the mod calls here)
 roleplay-roll --plain     # just the character line
 roleplay-roll --list      # the whole roster, grouped
 roleplay-roll --check     # validate: counts, odds, duplicate emoji/names
@@ -270,15 +271,16 @@ nothing parses its failure as a prompt. It needs `claude-p` and `jq` on PATH.
 ### Vote ids (`--votes`)
 
 With `--votes`, each roll gets a random 4-character id, added to the tag as
-`|| vote id: k3f2` and logged with the character and universe to `rolls.tsv`. The bookend
-format in `rcs/claude-user-claude.md` turns the id into `hammerspoon://r?v=<id><slot>` links,
-and the Hammerspoon seed `lib/lua/seeds/rolevote.lua` records each click in `votes.tsv`.
+`|| vote id: k3f2` and logged with the character and universe to `rolls.tsv`. Here the
+mod draws the id as `hammerspoon://r?v=<id><slot>` links (stand-alone, the bookend format in
+the prompt section does), and the Hammerspoon seed `lib/lua/seeds/rolevote.lua` records each
+click in `votes.tsv`. The vote does not store the line; the mod's
+`~/.local/state/roleplay/mod-lines.jsonl` holds it under the same vote id.
 
 **The receiver lives outside `roleplay/`,** so the flag is off by default and this directory
-stays usable on its own. Here it is on through the hook command in `rcs/claude-settings.json`
-(`roleplay-roll --votes`), not through the settings `env` block: that block also reaches
-every Bash call Claude makes, so a run by hand would write the real log. A run without the
-flag logs nothing. Seed tests: `cmds test lua`.
+stays usable on its own. Here the mod passes it (`ownRoll` in its `register.tsx`), not the
+settings `env` block: that block also reaches every Bash call Claude makes, so a run by hand
+would write the real log. A run without the flag logs nothing. Seed tests: `cmds test lua`.
 
 ### When changes take effect
 
@@ -286,17 +288,17 @@ The three pieces reload differently, which matters when you are editing them.
 
 | Change | Takes effect | Why |
 |---|---|---|
-| `roleplay/roster.tsv` | **next prompt** | the hook is a fresh subprocess per prompt that re-reads the file; nothing caches it |
-| `rcs/claude-settings.json` (hook wiring) | **next prompt** | hooks are resolved per invocation |
+| `roleplay/roster.tsv` | **next prompt** | the roller is a fresh subprocess per roll that re-reads the file; nothing caches it |
+| `roleplay/examples.md` | **next session or mod reload** | the mod reads it once, at `session.start` (not on `/clear`) |
+| `ai/mods/roleplay-bookends/` | **end of the turn that saved it, in every open session** | each interactive session watches the folder; the reload cuts off a Sonnet call in flight |
+| `CLAUDE_CODE_PLUGIN_DIRS` in `rcs/claude-settings.json` | **next session** | the plugin folders are read at start |
 | `rcs/claude-user-claude.md` (prompt section) | **next session** | `~/.claude/CLAUDE.md` is supplied as context at session start, so a running session keeps the copy it began with |
 
-The first two were confirmed live rather than assumed: adding five Gurren Lagann
-characters put Yoko in a roll 26 calls later with nothing restarted, and the
-session that rewired this hook saw its own injected tag change from the old
-`[🎲 Character Roll: 7]` to the new self-contained form mid-conversation.
-
-The third is the one to watch. If you edit the format rules and the bookends do
-not change, that is expected — start a new session rather than debugging it.
+The roster row was confirmed live when the hook still rolled: adding five Gurren
+Lagann characters put Yoko in a roll 26 calls later with nothing restarted. The
+mod row was seen live on 2026-11-15: each save reloaded the mod at the end of
+the turn. Stand-alone, hook wiring in the settings also takes effect on the next
+prompt, and a format-rule edit only in a new session.
 
 ### Adding a character
 

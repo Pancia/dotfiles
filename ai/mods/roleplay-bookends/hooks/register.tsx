@@ -53,7 +53,7 @@ const SYS =
 type Who = { name: string; emoji: string; universe: string; traits: string; extra: string; voteId?: string }
 
 // One turn that got an opener: what its closer needs.
-type Turn = { who: Who; prompt: string }
+type Turn = { roll: Promise<Who | null>; prompt: string }
 
 // [🎭 Character Roll: «Name» 🥷 UNIVERSE — traits || extra || vote id: x]
 const WHO = /«([^»]+)»\s*(\S+)\s+(.+?)\s+—\s+([^|\]\n]+)((?:\|\|[^\]\n]*)?)/
@@ -73,17 +73,27 @@ function norm(s: string): string {
 
 // Opener rows are found by the prompt's start; closer rows by the answer's
 // end, which is the end of its last text block, where the closer belongs.
+// The "h:"/"t:" prefix keeps a prompt like "2" from being an integer-like key,
+// which JavaScript orders first and withRow would then prune at once.
 function headKey(s: string): string {
-  return norm(s).slice(0, 200)
+  return 'h:' + norm(s).slice(0, 200)
 }
 function tailKey(s: string): string {
-  return norm(s).slice(-200)
+  return 't:' + norm(s).slice(-200)
+}
+
+// Lines in a prompt as sent, for weighing a paste row's "+N lines".
+function lineCount(s: string): number {
+  return s.split('\n').length
 }
 
 // The row shows a paste as "[Pasted text #1 +14 lines]" (or an image as
 // "[Image #1]") while the prompt holds the pasted text, so the head key can
 // miss. Then the row matches a stored prompt holding each typed piece around
-// the placeholders, in order, starting with the first and ending with the last.
+// the placeholders, in order, starting with the first and ending with the
+// last, with at least as many lines as the placeholders say were pasted.
+// Of several matches, the one closest in line count wins. The full prompts
+// live in a module map, not in the drawn state, so a redraw copies none.
 const PLACEHOLDER = /\[(?:Pasted text|Image) #\d+[^\]]*\]/
 function findOpener(m: Record<string, Line>, shown: string): Line | undefined {
   const exact = m[headKey(shown)]
@@ -92,37 +102,78 @@ function findOpener(m: Record<string, Line>, shown: string): Line | undefined {
   // A paste with no typed text around it matches every prompt: draw nothing
   // rather than repeat the newest opener under each such row.
   if (parts.every(p => !p)) return undefined
+  const pasted = [...shown.matchAll(/\[Pasted text #\d+ \+(\d+) lines?\]/g)].reduce((n, x) => n + Number(x[1]), 0)
+  const want = lineCount(shown) + pasted
   const first = parts[0] ?? ''
   const last = parts[parts.length - 1] ?? ''
-  const hits = Object.values(m).filter(l => {
-    const full = l.prompt
-    if (!full || !full.startsWith(first) || !full.endsWith(last)) return false
+  let best: { key: string; gap: number } | undefined
+  for (const [key, p] of prompts) {
+    const full = p.full
+    if (!m[key] || p.lines < pasted || !full.startsWith(first) || !full.endsWith(last)) continue
     let at = 0
-    for (const p of parts) {
-      if (!p) continue
-      const i = full.indexOf(p, at)
-      if (i < 0) return false
-      at = i + p.length
+    let ok = true
+    for (const piece of parts) {
+      if (!piece) continue
+      const i = full.indexOf(piece, at)
+      if (i < 0) {
+        ok = false
+        break
+      }
+      at = i + piece.length
     }
-    return true
-  })
-  return hits[hits.length - 1]
+    if (!ok) continue
+    const gap = Math.abs(p.lines - want)
+    if (!best || gap <= best.gap) best = { key, gap }
+  }
+  return best ? m[best.key] : undefined
 }
 
 // Module state: lost on a reload; reset on /clear by session.end.
 let examples = ''
 let lastAnswer = ''
-// Typed prompts seen at submit, oldest first, waiting for their turn.
+// Typed prompts seen at submit, oldest first, waiting for their turn. One
+// folded into a running turn never starts its own, so entries expire.
 let queue: { text: string; at: number }[] = []
-// Turns that got an opener, by turn id.
+const QUEUE_MS = 10 * 60 * 1000
+// Turns that got an opener, by turn id. `roll` settles once the character is
+// known, so a turn that ends first still gets its closer.
 const turns = new Map<string, Turn>()
+// Full prompts of opener rows, by head key, for findOpener; at most KEEP.
+const prompts = new Map<string, { full: string; lines: number }>()
 // Vote ids already given to a turn, so one roll is never used twice.
 const usedVotes = new Set<string>()
+// When the reminder's Review button last ran, to ignore a double press.
+let lastReviewPress = 0
 
 function resetSession() {
   lastAnswer = ''
   queue = []
   turns.clear()
+  prompts.clear()
+}
+
+// The typed prompt a turn starts with: an exact match first, newest first;
+// failing that, the newest entry if the turn text contains it and it is long
+// enough not to be a chance substring ("y", "ok"). Expired entries drop out.
+function takeQueued(turnText: string, now: number): { text: string; at: number } | undefined {
+  queue = queue.filter(q => now - q.at < QUEUE_MS)
+  const text = norm(turnText)
+  let i = -1
+  for (let j = queue.length - 1; j >= 0; j--) {
+    if (norm(queue[j]!.text) === text) {
+      i = j
+      break
+    }
+  }
+  if (i < 0 && queue.length) {
+    const newest = norm(queue[queue.length - 1]!.text)
+    if (newest.length >= 20 && text.includes(newest)) i = queue.length - 1
+  }
+  if (i < 0) return undefined
+  const q = queue[i]!
+  // Older entries never started a turn (folded into a running one): drop them.
+  queue = queue.slice(i + 1)
+  return q
 }
 
 function samples(name: string): string[] {
@@ -248,7 +299,7 @@ async function countVotes($: EngineInterface) {
 }
 
 async function write(
-  $: EngineInterface, kind: 'opener' | 'closer', key: string, w: Who, ask: string, turnId: string, prompt?: string,
+  $: EngineInterface, kind: 'opener' | 'closer', key: string, w: Who, ask: string, turnId: string,
 ) {
   const t0 = await $.clock.now()
   let text: string | null = null
@@ -264,7 +315,7 @@ async function write(
   }
   const ms = (await $.clock.now()) - t0
   await dbg($, `write ${kind} ${turnId} ms=${ms} ${failed ?? 'ok'}`)
-  const line: Line = { ...pendingLine(w), text, ms, ...(failed ? { failed } : {}), ...(prompt ? { prompt } : {}) }
+  const line: Line = { ...pendingLine(w), text, ms, ...(failed ? { failed } : {}) }
   await setRow($, kind, key, line)
   const sessionId = await $.session.id()
   const rec = JSON.stringify({
@@ -277,28 +328,38 @@ async function write(
   )
 }
 
-async function startOpener($: EngineInterface, turnId: string, text: string, submittedAt: number) {
-  let w = HOOK_ROLLS ? await hookRoll($, submittedAt) : null
-  const via = w ? 'hook roll' : 'own roll'
-  if (!w) w = await ownRoll($)
-  await dbg($, `opener ${turnId} who=${w ? w.name : 'none'} via=${via}`)
+// Rolls the character (settling `rolled` either way), then writes the opener.
+async function startOpener(
+  $: EngineInterface, turnId: string, text: string, submittedAt: number, rolled: (w: Who | null) => void,
+) {
+  let w: Who | null = null
+  try {
+    w = HOOK_ROLLS ? await hookRoll($, submittedAt) : null
+    const via = w ? 'hook roll' : 'own roll'
+    if (!w) w = await ownRoll($)
+    await dbg($, `opener ${turnId} who=${w ? w.name : 'none'} via=${via}`)
+  } finally {
+    rolled(w)
+  }
   if (!w) return
   if (w.voteId) usedVotes.add(w.voteId)
-  turns.set(turnId, { who: w, prompt: text })
   const key = headKey(text)
-  const full = norm(text).slice(0, 20000)
-  await setRow($, 'opener', key, { ...pendingLine(w), prompt: full })
+  prompts.delete(key)
+  prompts.set(key, { full: norm(text), lines: lineCount(text) })
+  for (const k of [...prompts.keys()].slice(0, Math.max(0, prompts.size - KEEP))) prompts.delete(k)
+  await setRow($, 'opener', key, pendingLine(w))
   const ask =
     `Character: ${w.name} (${w.universe}) — ${w.traits}${w.extra ? `\nNote: ${w.extra}` : ''}\n` +
     exampleBlock(w.name) +
     (lastAnswer ? `\nThe assistant's previous reply ended:\n${lastAnswer.slice(-1500)}\n` : '') +
     `\nThe user just asked:\n${text.slice(-3000)}\n\n` +
     'Write the OPENER: the line at the top of the reply, reacting to this request as the work begins.'
-  await write($, 'opener', key, w, ask, turnId, full)
+  await write($, 'opener', key, w, ask, turnId)
 }
 
 async function startCloser($: EngineInterface, turnId: string, t: Turn, answerText: string) {
-  const w = t.who
+  const w = await t.roll
+  if (!w) return
   const key = tailKey(answerText)
   await setRow($, 'closer', key, pendingLine(w))
   const answer = answerText.replace(/^>\s*🎭.*$\n?/gm, '').trim()
@@ -312,21 +373,35 @@ async function startCloser($: EngineInterface, turnId: string, t: Turn, answerTe
 }
 
 export const register: Register = on => {
+  // Nothing here waits on a process: examples.md (read here only, so an edit
+  // reaches a session at its next start or mod reload) and the vote count
+  // load on timers. The count also refreshes every 10 minutes, so a review
+  // finished in another session clears this one's reminder row.
   on('session.start', async ($, e, next) => {
-    const r = await $.process.run(['sh', '-c', 'cat "$HOME/dotfiles/roleplay/examples.md"'], { timeoutMs: 5000 })
-    examples = r.exitCode === 0 ? r.stdout : ''
+    $.clock.after(0, async () => {
+      try {
+        const r = await $.process.run(['sh', '-c', 'cat "$HOME/dotfiles/roleplay/examples.md"'], { timeoutMs: 5000 })
+        examples = r.exitCode === 0 ? r.stdout : ''
+      } catch (err) {
+        await dbg($, `examples read error ${String(err)}`)
+      }
+    })
     // A reload kills calls in flight; their rows would say "thinking" forever.
     const stale = (m: Record<string, Line>) =>
       Object.fromEntries(Object.entries(m).map(([k, l]) => [k, l.text || l.failed ? l : { ...l, failed: 'cut off by a mod reload' }]))
     await update($, openers, stale)
     await update($, closers, stale)
     $.clock.after(0, () => countVotes($).catch(err => dbg($, `vote count error ${String(err)}`)))
+    $.clock.every(10 * 60 * 1000, () => countVotes($).catch(err => dbg($, `vote count error ${String(err)}`)))
     return next(e)
   })
 
-  // /clear ends the session in-process with no new session.start.
+  // /clear ends the session in-process with no new session.start: forget the
+  // old conversation's turns and its drawn lines.
   on('session.end', async ($, e, next) => {
     resetSession()
+    await update($, openers, () => ({}))
+    await update($, closers, () => ({}))
     return next(e)
   })
 
@@ -344,15 +419,16 @@ export const register: Register = on => {
   // The opener starts on a timer, so the turn never waits on it.
   on('turn.start', ($, e, next) => {
     if (e.agentId || !e.text) return next(e)
-    const text = norm(e.text)
-    const i = queue.findIndex(q => text === norm(q.text) || text.includes(norm(q.text)))
-    if (i < 0) return next(e)
-    const q = queue[i]!
-    // Older entries never started a turn (folded into a running one): drop them.
-    queue = queue.slice(i + 1)
+    const q = takeQueued(e.text, Date.now())
+    if (!q) return next(e)
     const turnId = e.turnId
+    let rolled: (w: Who | null) => void = () => {}
+    const roll = new Promise<Who | null>(resolve => {
+      rolled = resolve
+    })
+    turns.set(turnId, { roll, prompt: q.text })
     $.clock.after(0, () =>
-      startOpener($, turnId, q.text, q.at).catch(err => dbg($, `opener error ${turnId} ${String(err)}`)),
+      startOpener($, turnId, q.text, q.at, rolled).catch(err => dbg($, `opener error ${turnId} ${String(err)}`)),
     )
     return next(e)
   })
@@ -387,8 +463,17 @@ export const register: Register = on => {
         <Button
           key="rolevotes"
           label="Review"
-          onPress={() => {
-            void $.process.run(['sh', '-c', '"$HOME/dotfiles/bin/rolevotes-review"'], { timeoutMs: 15000 })
+          onPress={async () => {
+            // One tab per press: a second press within 30 s does nothing.
+            const now = Date.now()
+            if (now - lastReviewPress < 30000) return
+            lastReviewPress = now
+            try {
+              const r = await $.process.run(['sh', '-c', '"$HOME/dotfiles/bin/rolevotes-review"'], { timeoutMs: 15000 })
+              if (r.exitCode !== 0) $.ui.toast(`Vote review did not open: ${r.stderr.trim() || `exit ${r.exitCode}`}`)
+            } catch (err) {
+              $.ui.toast(`Vote review did not open: ${String(err)}`)
+            }
           }}
         />
         <Link href="hammerspoon://rolevotes" label="open review" />
@@ -398,6 +483,8 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
     const inner = await next(e)
+    // Only rows the user typed; a notification or peer message is never one.
+    if (e.props.origin.kind !== 'composer') return inner
     const l = findOpener(await read($, openers), e.props.text)
     if (!l) return inner
     const { Box } = $.ui.resolve(e)

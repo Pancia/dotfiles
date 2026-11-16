@@ -168,7 +168,7 @@ def test_unwritable_votes_path_alerts(tmp_path):
     assert msg.startswith("rolevote: cannot write")
 
 
-def test_rolevote_stop_unbinds_both_events(tmp_path):
+def test_rolevote_stop_unbinds_all_events(tmp_path):
     recs = drive("seeds.rolevote", ["__stop"], tmp_path=tmp_path,
                  config={"votes": tmp_path / "v.tsv", "rolls": tmp_path / "r.tsv"})
     assert [t for k, t in recs if k == "BOUND"] == []

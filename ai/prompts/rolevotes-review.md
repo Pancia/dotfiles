@@ -22,7 +22,9 @@ Steps:
    example line, or nothing. Give each suggestion an ID and let me pick.
 3. Make only the changes I accept. Run `roleplay/bin/roleplay-roll --check` and
    `cmds test roleplay` after a roster change.
-4. When I say the review is done, write the current local time to
-   ~/.local/state/roleplay/votes-reviewed-at with
-   `date '+%Y-%m-%d %H:%M:%S' > ~/.local/state/roleplay/votes-reviewed-at`.
-   That clears the reminder in Claude Code.
+4. When I say the review is done, write to
+   ~/.local/state/roleplay/votes-reviewed-at the time of the newest vote you
+   showed me, exactly as it appears in votes.tsv (YYYY-MM-DD HH:MM:SS). Not
+   the current time: votes cast during the review then stay waiting for the
+   next one. That clears the reminder in Claude Code within 10 minutes.
+   This session shows the reminder row too; ignore it.
