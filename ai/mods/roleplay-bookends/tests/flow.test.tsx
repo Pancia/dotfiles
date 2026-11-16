@@ -41,6 +41,8 @@ function world($: Engine, on: On): World {
     return { value: { isAnswered: true as const, text: `${kind} ${mark}`, usage: USAGE } }
   })
   on('session.id', () => ({ value: 'sess-1' }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  on('store.get', () => ({ value: undefined }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('prompt.submit', async (_, e) => {
     const turnId = turnFor.get(e.text)

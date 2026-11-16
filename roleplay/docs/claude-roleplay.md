@@ -20,13 +20,37 @@ written normally.
 > `hammerspoon://rolevotes` link that open a review session
 > (`bin/rolevotes-review`, prompt `ai/prompts/rolevotes-review.md`).
 > The hook design below still works for anyone using `roleplay/` on its own.
+>
+> **Two modes (2026-11-16).** `/roleplay random` is the mode above: a new
+> character on each typed prompt, with the vote links, and each bookend shows
+> dim odds after the name (the character's overall chance) and after the
+> universe (its share of rolls). `/roleplay session` keeps one character for
+> the whole session, with no vote links and no odds. A dim row above the
+> prompt is always there: a mode button that shows the mode (a press switches
+> it), then in session mode **Reroll** (a new random character, never the
+> same) and **Pick** (a pane with a search field and one row per character,
+> each with both odds), then the character, or "a new character each
+> prompt". Pick is hidden in random mode, where it would switch modes
+> unasked. `/roleplay reroll` and
+> `/roleplay pick` do the same from the prompt and put the session in session
+> mode without changing the default. The mode button and `/roleplay
+> session|random` also set the default for new sessions (the mod's
+> `$.store`). Each session's mode and character are also kept in `$.store`
+> by session id (the newest 50), so `--resume` gets them back; `/clear` rolls
+> a new character. The odds and the pick list come from `roleplay-roll
+> --roster`, read once per mod load and read again after a failure. A session
+> roll is a weighted pick by overall share in the mod, which is the script's
+> two-stage roll, and is not logged. The signature line is drawn again on
+> each turn, at a fixed 1/3 (`ROLEPLAY_CATCHPHRASE` does not reach the mod).
+> Tests: `ai/mods/roleplay-bookends/tests/modes.test.tsx`. Review:
+> `.cc/reports/REVIEW-roleplay-modes.md`.
 
 The pieces:
 
 | Piece | File | Role |
 |---|---|---|
 | Prompt section | `rcs/claude-user-claude.md` → `~/.claude/CLAUDE.md` | here: a short note that the mod draws the bookends and the main model must not. Stand-alone: the format rules, ~22 lines, **constant size** |
-| Mod (these dotfiles) | `ai/mods/roleplay-bookends`, loaded by `CLAUDE_CODE_PLUGIN_DIRS` in `rcs/claude-settings.json` | rolls through `roleplay-roll --votes`, has Sonnet write both lines, draws them, logs them, and shows the vote reminder |
+| Mod (these dotfiles) | `ai/mods/roleplay-bookends`, loaded by `CLAUDE_CODE_PLUGIN_DIRS` in `rcs/claude-settings.json` | rolls through `roleplay-roll --votes`, has Sonnet write both lines, draws them, logs them, and shows the vote reminder. `/roleplay` switches between a new character per prompt and one per session |
 | Roster | `roleplay/roster.tsv` | the cast — 81 characters across 9 universes — and the odds weights |
 | Roller | `roleplay/bin/roleplay-roll` | rolls a character. Stand-alone it runs as a `UserPromptSubmit` hook and injects the character; here the mod calls it, and no hook is registered |
 | Terminal command | `roleplay/bin/roleplay-say` | rolls, then has Sonnet write the line, for use outside a session |
@@ -246,6 +270,7 @@ roleplay-roll --votes     # the same, plus a vote id and a roll log (what the mo
 roleplay-roll --plain     # just the character line
 roleplay-roll --list      # the whole roster, grouped
 roleplay-roll --check     # validate: counts, odds, duplicate emoji/names
+roleplay-roll --roster    # one tab-separated row per character with its odds, for programs
 
 roleplay-say                       # roll, and have Sonnet write the line
 roleplay-say fixing the login bug  # ...about this

@@ -446,6 +446,45 @@ def test_check_prints_weighted_odds(roster):
     assert re.search(r"75\.00%\s+Z Other", out), out
 
 
+def test_roster_prints_the_check_odds_as_rows(roster):
+    p = roster(
+        "@universe | B | 3\n@character | Big | 3\n"
+        "A | Big | X | a | 'sig'\nA | Small | Y | b\nB | Other | Z | c\n"
+    )
+    r = run("--roster", roster=p, log="")
+    assert r.returncode == 0
+    rows = [line.split("\t") for line in r.stdout.splitlines()]
+    assert rows == [
+        ["A", "Big", "X", "a", "'sig'", "0.250000", "0.187500"],
+        ["A", "Small", "Y", "b", "", "0.250000", "0.062500"],
+        ["B", "Other", "Z", "c", "", "0.750000", "0.750000"],
+    ]
+
+
+def test_roster_lists_a_character_that_is_off_at_zero(roster):
+    p = roster("@character | Off | 0\nA | On | X | a\nA | Off | Y | b\n")
+    rows = [line.split("\t") for line in run("--roster", roster=p).stdout.splitlines()]
+    assert rows[1][1] == "Off" and rows[1][6] == "0.000000"
+
+
+def test_roster_fails_open_on_a_missing_roster(tmp_path):
+    r = run("--roster", roster=tmp_path / "missing.tsv")
+    assert (r.returncode, r.stdout, r.stderr) == (0, "", "")
+
+
+def test_roster_with_votes_writes_no_roll_log(roster, tmp_path):
+    log = tmp_path / "rolls.tsv"
+    r = run("--votes", "--roster", roster=roster("A | On | X | a\n"), log=log)
+    assert r.stdout.startswith("A\tOn\t")
+    assert not log.exists()
+
+
+def test_roster_on_the_real_roster_sums_to_one():
+    rows = [line.split("\t") for line in run("--roster").stdout.splitlines()]
+    assert all(len(r) == 7 for r in rows)
+    assert abs(sum(float(r[6]) for r in rows) - 1) < 1e-3
+
+
 def test_list_marks_what_is_off(roster):
     p = roster("@universe | B | 0\nA | On | X | a\nB | Off | Y | b\n")
     out = run("--list", roster=p).stdout

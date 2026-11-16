@@ -15,11 +15,20 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Line, VoteCount } from '../types'
+import type { Char, Line, Mode, Odds, Pin, VoteCount } from '../types'
 
 const openers = atom({ plugin: 'roleplay-bookends', key: 'openers' } as const, {} as Record<string, Line>)
 const closers = atom({ plugin: 'roleplay-bookends', key: 'closers' } as const, {} as Record<string, Line>)
 const votes = atom({ plugin: 'roleplay-bookends', key: 'votes' } as const, { waiting: 0, old: 0 } as VoteCount)
+// Two modes, set by /roleplay session|random. The saved default
+// ($.store 'mode') is read once per session; a reload keeps the session's.
+// In session mode one character writes every bookend, the vote links do not
+// show, and a row above the prompt names the character with Reroll and Pick.
+// In random mode each bookend shows its character's and universe's odds.
+const pin = atom({ plugin: 'roleplay-bookends', key: 'pin' } as const, { mode: null, who: null } as Pin)
+// The Pick pane's search text.
+const filter = atom({ plugin: 'roleplay-bookends', key: 'filter' } as const, '')
+const PICK = 'roleplay-pick'
 
 // Vote reminder: a row above the prompt when more than VOTES_OLD votes have
 // waited a week or more, or more than VOTES_MANY are waiting. Its button and
@@ -50,7 +59,7 @@ const SYS =
   "Do not use jargon from the character's universe to describe the technical work. " +
   'Never repeat the example lines. Output only the line itself: no quotes, no name, no preamble.'
 
-type Who = { name: string; emoji: string; universe: string; traits: string; extra: string; voteId?: string }
+type Who = { name: string; emoji: string; universe: string; traits: string; extra: string; voteId?: string; odds?: Odds }
 
 // One turn that got an opener: what its closer needs.
 type Turn = { roll: Promise<Who | null>; prompt: string }
@@ -65,6 +74,52 @@ export function parseWho(s: string): Who | null {
   const voteId = parts.map(x => /^vote id: (\w+)$/.exec(x)?.[1]).find(Boolean)
   const extra = parts.filter(x => x && !x.startsWith('vote id')).join(' ')
   return { name: m[1]!.trim(), emoji: m[2]!, universe: m[3]!.trim(), traits: m[4]!.trim(), extra, ...(voteId ? { voteId } : {}) }
+}
+
+// `roleplay-roll --roster`: one tab-separated row per character. Anything
+// else (an old script, a failed run) gives no rows, and then no odds show and
+// session mode rolls through the script instead.
+export function parseRoster(s: string): Char[] {
+  const out: Char[] = []
+  for (const row of s.split('\n')) {
+    const f = row.split('\t')
+    if (f.length !== 7) continue
+    const u = Number(f[5])
+    const c = Number(f[6])
+    if (!f[0] || !f[1] || Number.isNaN(u) || Number.isNaN(c)) continue
+    out.push({ universe: f[0], name: f[1], emoji: f[2]!, traits: f[3]!, sig: f[4]!, u, c })
+  }
+  return out
+}
+
+// A share as a short percent: 8.5%, 1.4%, 0.18%, 12%.
+export function pct(x: number): string {
+  const p = x * 100
+  const s = p >= 10 ? p.toFixed(0) : p >= 1 ? p.toFixed(1) : p.toFixed(2)
+  return `${s.replace(/\.0+$/, '')}%`
+}
+
+// Characters whose name or universe holds every word of the search.
+export function matches(all: readonly Char[], q: string): Char[] {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean)
+  return all.filter(c => {
+    const hay = `${c.name} ${c.universe}`.toLowerCase()
+    return words.every(w => hay.includes(w))
+  })
+}
+
+// A weighted pick by overall share, which is the script's two-stage roll.
+// `not` names a character to skip (Reroll never gives the same one back).
+export function pickChar(all: readonly Char[], r: number, not?: string): Char | null {
+  const pool = all.filter(c => c.c > 0 && c.name !== not)
+  const sum = pool.reduce((n, c) => n + c.c, 0)
+  if (!pool.length || sum <= 0) return null
+  let at = r * sum
+  for (const c of pool) {
+    at -= c.c
+    if (at < 0) return c
+  }
+  return pool[pool.length - 1]!
 }
 
 function norm(s: string): string {
@@ -144,6 +199,9 @@ const prompts = new Map<string, { full: string; lines: number }>()
 const usedVotes = new Set<string>()
 // When the reminder's Review button last ran, to ignore a double press.
 let lastReviewPress = 0
+// The roster with its odds, read once per load; empty until then.
+let roster: Char[] = []
+let rosterLoad: Promise<void> | null = null
 
 function resetSession() {
   lastAnswer = ''
@@ -197,7 +255,172 @@ function exampleBlock(name: string): string {
 }
 
 function pendingLine(w: Who): Line {
-  return { name: w.name, emoji: w.emoji, universe: w.universe, text: null, ms: 0, ...(w.voteId ? { voteId: w.voteId } : {}) }
+  return {
+    name: w.name, emoji: w.emoji, universe: w.universe, text: null, ms: 0,
+    ...(w.voteId ? { voteId: w.voteId } : {}), ...(w.odds ? { odds: w.odds } : {}),
+  }
+}
+
+// The signature line is drawn per roll at 1/3, as roleplay-roll does.
+function sigNote(sig: string): string {
+  if (!sig) return ''
+  return Math.random() < 1 / 3
+    ? `Signature line unlocked this time: you may use ${sig}.`
+    : `Signature line spent this time: do not use ${sig}; use a less-worn part of the character.`
+}
+
+// A session character as one turn's roll: the signature drawn again per turn,
+// so an unlocked draw does not invite the catchphrase on every line.
+function whoFor(c: Char): Who {
+  return { name: c.name, emoji: c.emoji, universe: c.universe, traits: c.traits, extra: sigNote(c.sig) }
+}
+
+function loadRoster($: EngineInterface): Promise<void> {
+  rosterLoad ??= (async () => {
+    try {
+      const r = await $.process.run(['sh', '-c', '"$HOME/dotfiles/roleplay/bin/roleplay-roll" --roster'], { timeoutMs: 5000 })
+      roster = parseRoster(r.stdout)
+      // Nothing read: try again at the next need rather than never.
+      if (!roster.length) rosterLoad = null
+      await dbg($, `roster ${roster.length} rows`)
+    } catch (err) {
+      // A timeout or a failed start: also try again at the next need.
+      rosterLoad = null
+      await dbg($, `roster error ${String(err)}`)
+    }
+  })()
+  return rosterLoad
+}
+
+async function sessionMode($: EngineInterface): Promise<Mode> {
+  const p = await read($, pin)
+  if (p.mode) return p.mode
+  const saved = await $.store.get('mode')
+  return saved === 'session' ? 'session' : 'random'
+}
+
+// Each session's mode and character, by session id, so a resume gets them
+// back: $.state lasts only as long as the process. The newest PINS_KEPT.
+const PINS_KEPT = 50
+type SavedPins = Record<string, Pin>
+async function savePin($: EngineInterface, p: Pin) {
+  try {
+    const sid = await $.session.id()
+    const all = ((await $.store.get('pins')) ?? {}) as SavedPins
+    const next: SavedPins = { ...all }
+    delete next[sid]
+    next[sid] = p
+    for (const k of Object.keys(next).slice(0, Math.max(0, Object.keys(next).length - PINS_KEPT))) delete next[k]
+    await $.store.set('pins', next)
+  } catch (err) {
+    await dbg($, `save pin error ${String(err)}`)
+  }
+}
+
+// Writes the session's pin and saves it under the session id.
+async function setPin($: EngineInterface, fn: (p: Pin) => Pin): Promise<Pin> {
+  const p = await update($, pin, fn)
+  await savePin($, p)
+  return p
+}
+
+// The session id whose saved pin was already looked at. A resume or /clear
+// moves to another id, which is then looked up once.
+let restoredFor = ''
+async function restorePin($: EngineInterface): Promise<Pin> {
+  const sid = await $.session.id()
+  const now = await read($, pin)
+  if (restoredFor === sid) return now
+  restoredFor = sid
+  if (now.who) return now
+  const saved = ((await $.store.get('pins')) as SavedPins | undefined)?.[sid]
+  if (!saved || (saved.mode !== 'session' && saved.mode !== 'random')) return now
+  await dbg($, `restore pin ${sid} mode=${saved.mode} who=${saved.who?.name ?? 'none'}`)
+  return update($, pin, x => (x.who ? x : saved))
+}
+
+// A new session character, never the current one. Falls back to the script
+// (no --votes: nothing logged, no vote id) when the roster did not load; its
+// tag carries no signature line, so that character gets no signature note.
+async function rollChar($: EngineInterface, not?: string): Promise<Char | null> {
+  await loadRoster($)
+  const c = pickChar(roster, Math.random(), not)
+  if (c) return c
+  for (let i = 0; i < 4; i++) {
+    const w = await ownRoll($, false)
+    if (!w) return null
+    if (w.name !== not || i === 3) return { universe: w.universe, name: w.name, emoji: w.emoji, traits: w.traits, sig: '', u: 0, c: 0 }
+  }
+  return null
+}
+
+async function setChar($: EngineInterface, c: Char) {
+  await setPin($, (p): Pin => ({ ...p, mode: 'session', who: c }))
+  $.ui.toast(`🎭 This session: «${c.name}» ${c.emoji} ${c.universe}`)
+}
+
+// Rolls a new character. A Pick made while it rolled wins.
+async function reroll($: EngineInterface) {
+  try {
+    const now = (await read($, pin)).who
+    const c = await rollChar($, now?.name)
+    if (!c) {
+      $.ui.toast('🎭 Reroll found no character: see mod-debug.log')
+      return
+    }
+    const p = await setPin($, (x): Pin => (x.who?.name === now?.name ? { ...x, mode: 'session', who: c } : x))
+    if (p.who?.name === c.name) $.ui.toast(`🎭 This session: «${c.name}» ${c.emoji} ${c.universe}`)
+  } catch (err) {
+    $.ui.toast(`🎭 Reroll failed: ${String(err)}`)
+  }
+}
+
+// /roleplay session|random and the row's mode button: this session's mode
+// and the saved default for new sessions.
+async function setMode($: EngineInterface, mode: Mode, say: boolean) {
+  await $.store.set('mode', mode)
+  const p = await startSession($, await setPin($, (x): Pin => ({ ...x, mode })))
+  if (!say) return
+  $.ui.toast(
+    mode === 'random'
+      ? '🎭 Random mode: a new character on each prompt. New sessions start this way too.'
+      : `🎭 Session mode${p.who ? `: «${p.who.name}» ${p.who.emoji} ${p.who.universe}` : ''}. New sessions start this way too.`,
+  )
+}
+
+async function openPicker($: EngineInterface) {
+  await loadRoster($)
+  if (!roster.length) {
+    $.ui.toast('🎭 The roster did not load: see mod-debug.log')
+    return
+  }
+  // An open pane keeps the text in its field, so keep the filter too.
+  if (!(await $.ui.panes()).some(x => x.id === PICK)) await update($, filter, () => '')
+  // Transparent: the pane's default backdrop is too dark to read on this
+  // terminal (plainify hit the same).
+  const r = await $.ui.open({ id: PICK, title: 'Pick a character', focus: true, closeOnEscape: true, backgroundColor: 'transparent' })
+  if (!r.isPlaced) $.ui.toast(`🎭 The pick list did not open: ${r.reason}`)
+}
+
+// Gets back a resumed session's saved pin; then, in session mode with no
+// character yet, rolls one, quietly: the row shows it. `given` is the pin a
+// caller has just written, so this need not read it back.
+async function startSession($: EngineInterface, given?: Pin): Promise<Pin> {
+  let p = given ?? (await restorePin($))
+  try {
+    if (p.mode !== 'session' || p.who) return p
+    const c = await rollChar($)
+    if (c) p = await setPin($, x => ({ ...x, who: x.who ?? c }))
+    await dbg($, `session roll who=${c ? c.name : 'none'}`)
+  } catch (err) {
+    await dbg($, `session roll error ${String(err)}`)
+  }
+  return p
+}
+
+async function choose($: EngineInterface, c: Char) {
+  await setChar($, c)
+  await $.ui.close({ id: PICK })
 }
 
 // Sets one row and drops the oldest past KEEP, so the maps (and the rows
@@ -250,13 +473,7 @@ async function hookRoll($: EngineInterface, submittedAt: number): Promise<Who | 
       const f = row.split('|').map(x => x.trim())
       if (f.length < 4 || f[0] !== universe || f[1] !== name) continue
       // The hook's 1/3 signature draw is not logged, so draw again.
-      const sig = f[4] ?? ''
-      const extra = !sig
-        ? ''
-        : Math.random() < 1 / 3
-          ? `Signature line unlocked this time: you may use ${sig}.`
-          : `Signature line spent this time: do not use ${sig}; use a less-worn part of the character.`
-      return { name, emoji: f[2]!, universe, traits: f[3]!, extra, voteId }
+      return { name, emoji: f[2]!, universe, traits: f[3]!, extra: sigNote(f[4] ?? ''), voteId }
     }
   }
   return null
@@ -264,8 +481,11 @@ async function hookRoll($: EngineInterface, submittedAt: number): Promise<Who | 
 
 // The mod's own roll. --votes logs it and puts a vote id in the tag, so the
 // vote links work as the hook's did. Its output is the hook's JSON envelope.
-async function ownRoll($: EngineInterface): Promise<Who | null> {
-  const r = await $.process.run(['sh', '-c', '"$HOME/dotfiles/roleplay/bin/roleplay-roll" --votes'], { timeoutMs: 5000 })
+async function ownRoll($: EngineInterface, votes = true): Promise<Who | null> {
+  const r = await $.process.run(
+    ['sh', '-c', `"$HOME/dotfiles/roleplay/bin/roleplay-roll"${votes ? ' --votes' : ''}`],
+    { timeoutMs: 5000 },
+  )
   try {
     const tag = JSON.parse(r.stdout)?.hookSpecificOutput?.additionalContext
     return typeof tag === 'string' ? parseWho(tag) : null
@@ -334,9 +554,21 @@ async function startOpener(
 ) {
   let w: Who | null = null
   try {
-    w = HOOK_ROLLS ? await hookRoll($, submittedAt) : null
-    const via = w ? 'hook roll' : 'own roll'
-    if (!w) w = await ownRoll($)
+    let via: string
+    // After a resume or /clear, the first prompt may come before the
+    // scheduled restore or roll: do both here too (each runs once).
+    const p = await startSession($)
+    if (p.mode === 'session') {
+      via = 'session'
+      w = p.who ? whoFor(p.who) : null
+    } else {
+      w = HOOK_ROLLS ? await hookRoll($, submittedAt) : null
+      via = w ? 'hook roll' : 'own roll'
+      if (!w) w = await ownRoll($)
+      await loadRoster($)
+      const c = w ? roster.find(x => x.name === w!.name && x.universe === w!.universe) : undefined
+      if (w && c) w = { ...w, odds: { c: c.c, u: c.u } }
+    }
     await dbg($, `opener ${turnId} who=${w ? w.name : 'none'} via=${via}`)
   } finally {
     rolled(w)
@@ -393,16 +625,67 @@ export const register: Register = on => {
     await update($, closers, stale)
     $.clock.after(0, () => countVotes($).catch(err => dbg($, `vote count error ${String(err)}`)))
     $.clock.every(10 * 60 * 1000, () => countVotes($).catch(err => dbg($, `vote count error ${String(err)}`)))
+    await $.command.register({
+      name: 'roleplay',
+      description: 'Roleplay bookends: one character per session, or a new one each prompt',
+      argumentHint: 'session | random | reroll | pick',
+      immediate: true,
+    })
+    // The mode: the session's own after a reload, else the saved default; a
+    // resumed session's saved pin then replaces both. A session-mode session
+    // rolls its character now, so the row shows it; a reload keeps its own.
+    const mode = await sessionMode($)
+    await update($, pin, p => ({ ...p, mode }))
+    $.clock.after(0, () => {
+      void loadRoster($)
+      return startSession($).then(() => undefined)
+    })
     return next(e)
   })
 
-  // /clear ends the session in-process with no new session.start: forget the
-  // old conversation's turns and its drawn lines.
+  // /clear (and an in-process resume) ends the session with no new
+  // session.start, and the process goes on under another session id: forget
+  // the old conversation's turns, lines and character. The new id's saved pin
+  // comes back if it has one (a resume); otherwise a session-mode session
+  // rolls a new character. Not on a real exit: nothing would show it.
   on('session.end', async ($, e, next) => {
     resetSession()
     await update($, openers, () => ({}))
     await update($, closers, () => ({}))
+    if (e.reason === 'clear' || e.reason === 'resume') {
+      await update($, pin, p => ({ ...p, who: null }))
+      // The id may not have moved on yet when the timer fires: wait for it,
+      // briefly, so the old session's pin is neither restored nor overwritten.
+      restoredFor = e.sessionId
+      const ended = e.sessionId
+      let tries = 0
+      const later = async (): Promise<void> => {
+        if ((await $.session.id()) === ended && ++tries < 20) {
+          $.clock.after(250, later)
+          return
+        }
+        await startSession($)
+      }
+      $.clock.after(0, later)
+    }
     return next(e)
+  })
+
+  // /roleplay session|random sets this session's mode and the saved default.
+  // reroll and pick change the character and put this session in session
+  // mode. Bare /roleplay says where things stand. Answers are toasts: a
+  // command's text would reach the main model.
+  on('command.run', { command: 'roleplay' }, async ($, e) => {
+    const arg = e.args.trim().toLowerCase()
+    if (arg === 'session' || arg === 'random') await setMode($, arg, true)
+    else if (arg === 'reroll') await reroll($)
+    else if (arg === 'pick') await openPicker($)
+    else {
+      const p = await read($, pin)
+      const now = p.mode === 'session' && p.who ? `session mode, «${p.who.name}»` : `${p.mode ?? 'random'} mode`
+      $.ui.toast(`🎭 Roleplay: ${now}. /roleplay session | random | reroll | pick`)
+    }
+    return {}
   })
 
   // Submit only notes a typed prompt, before next(e): for an idle prompt,
@@ -451,14 +734,42 @@ export const register: Register = on => {
     return result
   })
 
+  // Above the prompt, always: a dim row with the mode button (it shows the
+  // mode; a press switches it and saves the default), Reroll in session mode,
+  // and Pick, then the character or what random mode does. Buttons first, so
+  // they stay put when the name's length changes. Under it, the vote reminder
+  // when it is due.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey) return next(e)
     const v = await read($, votes)
     const due = v.old > VOTES_OLD || v.waiting > VOTES_MANY
-    if (e.props.hasSurvey || (!due && !VOTES_DEMO)) return next(e)
+    const p = await read($, pin)
+    const isSession = p.mode === 'session'
     const { Box, Text, Button, Link } = $.ui.resolve(e)
+    const shown = !isSession
+      ? 'a new character each prompt'
+      : p.who
+        ? `«${p.who.name}» ${p.who.emoji} ${p.who.universe}`
+        : 'rolling a character…'
+    const sessionRow = (
+      <Box key="rp-session" flexDirection="row" columnGap={1}>
+        <Text dimColor>🎭</Text>
+        <Button
+          key="rp-mode"
+          label={isSession ? 'session' : 'random'}
+          dimColor
+          onPress={() => setMode($, isSession ? 'random' : 'session', false)}
+        />
+        {isSession ? <Button key="rp-reroll" label="Reroll" dimColor onPress={() => reroll($)} /> : null}
+        {/* Not in random mode: a pick there would quietly switch modes. */}
+        {isSession ? <Button key="rp-pick" label="Pick" dimColor onPress={() => openPicker($)} /> : null}
+        <Text dimColor>{shown}</Text>
+      </Box>
+    )
+    if (!due && !VOTES_DEMO) return sessionRow
     const what = v.old > VOTES_OLD ? `${v.waiting} roleplay votes waiting, ${v.old} over a week old` : `${v.waiting} roleplay votes waiting`
-    return (
-      <Box flexDirection="row" columnGap={1}>
+    const voteRow = (
+      <Box key="rp-votes" flexDirection="row" columnGap={1}>
         <Text>🎭 {what}{due ? '' : ' (demo)'}</Text>
         <Button
           key="rolevotes"
@@ -477,6 +788,45 @@ export const register: Register = on => {
           }}
         />
         <Link href="hammerspoon://rolevotes" label="open review" />
+      </Box>
+    )
+    return (
+      <Box flexDirection="column">
+        {sessionRow}
+        {voteRow}
+      </Box>
+    )
+  })
+
+  // The Pick list: a search field and one row per match. Enter in the field
+  // takes the first match; a row takes its character. Escape closes.
+  on('ui.render', { component: 'Pane', requestId: PICK }, async ($, e) => {
+    const { Box, Text, Button, Input } = $.ui.resolve(e)
+    const q = await read($, filter)
+    const now = (await read($, pin)).who
+    const hits = matches(roster, q)
+    return (
+      <Box flexDirection="column">
+        <Input
+          key="rp-filter"
+          autoFocus
+          placeholder="type part of a name or universe"
+          submitLabel="pick first"
+          onInput={value => update($, filter, () => value)}
+          onSubmit={value => {
+            // Enter on an empty field picks nothing.
+            const c = value.trim() ? matches(roster, value)[0] : undefined
+            if (c) void choose($, c)
+          }}
+        />
+        {hits.length === 0 ? <Text dimColor>No character matches.</Text> : null}
+        {hits.map(c => (
+          <Button key={`rp-c:${c.universe}|${c.name}`} plain onPress={() => choose($, c)}>
+            {/* As a bookend's head: name, its odds, universe, the universe's odds. */}
+            {c.emoji} {c.name} <Text dimColor>{pct(c.c)}</Text> <Text italic color="permission">{c.universe}</Text>{' '}
+            <Text dimColor>{pct(c.u)}{now?.name === c.name ? ' · now' : ''}</Text>
+          </Button>
+        ))}
       </Box>
     )
   })
@@ -567,9 +917,15 @@ function bookend($: EngineInterface, e: Parameters<EngineInterface['ui']['resolv
     <Link key={`v${n}`} href={`hammerspoon://r?v=${l.voteId}${base + n}`} label={` ${glyph} `} />
   )
   const sp = <Text> </Text>
-  // Head: 🎭 «Name» [ − ] [ + ] emoji UNIVERSE [ − ] [ + ] — , single spaces
-  // between parts; each vote link is 3 cells plus its space.
-  const head = cells(`🎭 «${l.name}» ${l.emoji} ${l.universe} — `) + (hasVotes ? 4 * 4 : 0)
+  // Random mode's odds, dim after the name and after the universe.
+  const cOdds = l.odds ? pct(l.odds.c) : ''
+  const uOdds = l.odds ? pct(l.odds.u) : ''
+  const odds = (s: string) => (s ? <Text dimColor>{s} </Text> : null)
+  // Head: 🎭 «Name» 1.2% [ − ] [ + ] emoji UNIVERSE 8.5% [ − ] [ + ] — ,
+  // single spaces between parts; each vote link is 3 cells plus its space.
+  const head =
+    cells(`🎭 «${l.name}» ${l.emoji} ${l.universe} — `) + (hasVotes ? 4 * 4 : 0) +
+    (cOdds ? cells(cOdds) + 1 : 0) + (uOdds ? cells(uOdds) + 1 : 0)
   const body = l.text ? `"${l.text}"` : 'thinking…'
   const words = meta ? `${body} ${meta}` : body
   const rows = wrapWords(words, Math.max(0, width - head), width)
@@ -593,6 +949,7 @@ function bookend($: EngineInterface, e: Parameters<EngineInterface['ui']['resolv
         <Text>🎭 </Text>
         <Text bold italic>«{l.name}»</Text>
         {sp}
+        {odds(cOdds)}
         {hasVotes ? vote(2, '−') : null}
         {hasVotes ? sp : null}
         {hasVotes ? vote(1, '+') : null}
@@ -600,6 +957,7 @@ function bookend($: EngineInterface, e: Parameters<EngineInterface['ui']['resolv
         <Text>{l.emoji} </Text>
         <Text italic color="permission">{l.universe}</Text>
         {sp}
+        {odds(uOdds)}
         {hasVotes ? vote(4, '−') : null}
         {hasVotes ? sp : null}
         {hasVotes ? vote(3, '+') : null}
