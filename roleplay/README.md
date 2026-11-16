@@ -140,7 +140,7 @@ to pass its arguments and stdin to `claude -p --safe-mode`.
 | `bin/roleplay-roll` | the hook. bash + awk, no dependencies |
 | `roster.tsv` | the cast. Add characters here |
 | `bin/roleplay-say` | rolls a character and has a cheap model write its line, from a plain terminal |
-| `examples.md` | 333 worked bookends, 4–5 per character. A style reference for you. The hook never reads it; `roleplay-say` reads one character's entries |
+| `examples.md` | 338 worked bookends, 4–5 per character. A style reference for you. The hook never reads it; `roleplay-say` reads one character's entries |
 | `docs/claude-roleplay.md` | the design: why two-stage rolls, why the roster is external, the failure modes |
 | `snippets/` | the two things you paste into your own Claude config |
 | `tests/` | 90 pytest tests driving the scripts as subprocesses. `pytest tests/` |
