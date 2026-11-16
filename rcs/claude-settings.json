@@ -81,7 +81,8 @@
       "mcp__kagi__kagi_summarizer"
     ],
     "additionalDirectories": [
-      "~/.claude/plans"
+      "~/.claude/plans",
+      "~/.local/share/claude-scratch/runs"
     ]
   },
   "deniedMcpServers": [
@@ -296,7 +297,7 @@
       "**Primary use of Claude Code**: personal software development across many repos: dotfiles, personal tooling, and the Altera multi-agent orchestration project",
       "**Trusted repos**: ~/dotfiles, and repos under ~/projects whose origin is github.com:Pancia/* or the altera-project org, or that have no remote at all. Confidential project material is fine in the private ones; visibility alone never clears secrets into a repo",
       "**Third-party clones**: repos under ~/projects whose origin belongs to anyone else are reference or contribution checkouts. Local reads, edits, builds and tests are routine; pushing, opening PRs or posting to their remotes is not",
-      "**Org-specific CLIs**: None configured. `alt` (Altera's CLI), `g`, `jj`, `trash`, `service`, `svc`, `cmds`, `claude-p`, `ccjj` and `commit-mine` are personal tooling, routine for this user",
+      "**Org-specific CLIs**: None configured. `alt` (Altera's CLI), `g`, `jj`, `trash`, `scratch`, `service`, `svc`, `cmds`, `claude-p`, `ccjj` and `commit-mine` are personal tooling, routine for this user. `scratch discard` moves throwaway files into an audited holding area that a daily job empties after 14 days, instead of deleting them, and is how this user wants Claude to clean up",
       "**Routine commands**: build, test, lint and VCS commands (git, jj, make, cmds) inside a trusted repo, including its .alt/worktrees/ and .claude/worktrees/ subdirectories"
     ]
   },

@@ -61,6 +61,13 @@ COMPONENTS = {
         "aliases": ["ytdl"],
         "source_path": "bin/ytdl",
     },
+    # bin/scratch: each test gets its own SCRATCH_ROOT and HOME; needs git.
+    "bin/scratch": {
+        "runner": "pytest",
+        "deps": [],
+        "aliases": ["scratch"],
+        "source_path": "bin/scratch",
+    },
     "bin/exocortex-id": {
         "runner": "pytest",
         "deps": [],

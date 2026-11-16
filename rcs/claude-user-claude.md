@@ -157,7 +157,7 @@ When a change adds fixed text to every reply, prompt or session (a hook output, 
 
 ## File Deletion
 
-Prefer `trash` over `rm` when deleting files. If `trash` fails, try `rm` as a fallback — but always as a separate command, never chained together (no `trash ... || rm ...`).
+Never run `rm`. Throwaway folder: `scratch new` (not `mktemp -d`). Throwaway files you made: `scratch discard`; pass `--old` only with my yes. Anything else: `trash`; if it fails, ask. Run test scripts you wrote with Write as `sh FILE`, not `sh -c`.
 
 `trash` works from any shell. `trash list`, `trash restore --last` and `trash restore <id>` undo a move: `~/dotfiles/docs/claude-global/trash.md`.
 
@@ -202,13 +202,14 @@ scratchpad.
     folders of mixed files.
   - Only `pending-updates-*.md` and `FIXME*` files stay at the top, because tools
     look for them there.
-- **Keep in the scratchpad:** only files that cost nothing to lose. Examples are
-  throwaway test repos, copies of source trees and raw command output.
+- **Throwaway work:** test repos, copies of source trees and test output go in a
+  `scratch new` folder. It is kept 14 days and every action is logged. The
+  scratchpad is only for raw command output that costs nothing to lose.
 - **Subagents:** give the `.cc/` path in the brief for any report or patch. A
   brief that says "change no other file" must still allow `.cc/misc/<topic>/`
-  for code the result relies on. A plan or report never cites a scratchpad or
-  `/private/tmp` path: copy the file into `.cc/misc/<topic>/` first, and cite
-  the copy.
+  for code the result relies on. A plan or report never cites a scratchpad,
+  `/private/tmp` or `scratch` path: copy the file into `.cc/misc/<topic>/`
+  first, and cite the copy.
 - `.cc/` is tracked, so do not put large or generated trees there.
 - **Privacy:** `.cc/` files get committed, and some repos are public. Put private
   material in `.cc/private/`, such as quotes from my transcripts. Git ignores that

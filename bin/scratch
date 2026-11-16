@@ -1,0 +1,691 @@
+#!/usr/bin/env python3
+"""scratch: auditable throwaway space for Claude sessions (and anyone).
+
+Claude does not run `rm`. Throwaway work goes through this command instead,
+and every action is written to an audit log.
+
+  scratch new [LABEL]            make a test folder under runs/; print its path
+  scratch discard [--many] [--old] PATH...
+                                 move throwaway files into a discard batch
+  scratch ls                     runs and batches, newest first, age and size
+  scratch log [N]                the last N audit entries (default 20)
+  scratch expire [--dry-run] [--notify]
+                                 delete what is past its time (the only delete;
+                                 refused inside a Claude session)
+
+Root: $SCRATCH_ROOT, default ~/.local/share/claude-scratch. It holds runs/,
+discard/ and audit/ (JSON Lines, one file per month). It is outside /tmp on
+purpose: macOS clears /private/tmp at reboot and deletes files idle for 3
+days there (com.apple.tmp_cleaner), too soon for a spot check.
+
+Expiry (run daily by services/scratch-expire): anything older than
+SCRATCH_KEEP_DAYS (14). A run's age is its newest change; a batch's is when
+it was made. Above SCRATCH_MAX_GB (5) in all, or below SCRATCH_MIN_FREE_GB
+(10) free on the disk, the oldest go first, but never anything younger than 3
+days. A run whose scan does not finish in time is kept and logged.
+
+Every path is compared in its on-disk spelling (fcntl F_GETPATH): the disk
+ignores case, and /System/Volumes/Data/... is the same place as /..., so a
+plain text compare could be fooled.
+
+What discard refuses, moving nothing when any path is refused:
+  - another disk (a move would be a copy), anything under ~/Library (that is
+    where ~/Cloud really lives), /, $HOME and its direct children, the current
+    folder and those above it, the scratch root and its own folders;
+  - /private/tmp/claude-<uid> down to each session folder, and a session's
+    folders other than its scratchpad;
+  - sockets, FIFOs and devices;
+  - a folder holding .git or .jj, a path through one, a file or folder git or
+    jj tracks (jj: in @-), and a path another live Claude session has ccjj
+    records on;
+  - inside a Claude session, a path born before the session started, unless
+    --old is given (logged). A file saved by atomic replace looks new, so this
+    check is a speed bump, not proof: the audit log is the record;
+  - more than 20 paths without --many.
+A session scratchpad's contents, and the contents of a run this session made
+(any run, outside Claude), are throwaway by definition: only the folder
+checks apply to them.
+
+Design and critiques: .cc/plans/PLAN-scratch.md, .cc/reports/CRITIQUE-*.md,
+.cc/reports/REVIEW-scratch-build.md.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import fcntl
+import json
+import os
+import pwd
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+MAX_PATHS = 20
+FLOOR_DAYS = 3
+META = ".scratch-meta.json"
+SCAN_SECONDS = 30  # per run or batch, for expire; SCRATCH_SCAN_SECONDS overrides
+STAMP_RE = re.compile(r"^(\d{8}-\d{6})-")
+
+
+# --- settings ---------------------------------------------------------------
+
+def root() -> Path:
+    r = os.environ.get("SCRATCH_ROOT") or os.path.expanduser("~/.local/share/claude-scratch")
+    return Path(r)
+
+
+def env_num(name: str, default: float) -> float:
+    try:
+        return float(os.environ[name])
+    except (KeyError, ValueError):
+        return default
+
+
+def session() -> str | None:
+    return os.environ.get("CLAUDE_CODE_SESSION_ID") or os.environ.get("CLAUDE_SESSION_ID")
+
+
+def in_claude() -> bool:
+    return bool(os.environ.get("CLAUDECODE") or session() or os.environ.get("CLAUDE_PID"))
+
+
+def under_claude_process() -> bool:
+    """True when a `claude` process is among our ancestors: unsetting the
+    variables does not get a Claude session past expire's gate."""
+    pid = os.getppid()
+    for _ in range(30):
+        if pid <= 1:
+            return False
+        out = subprocess.run(["ps", "-o", "ppid=,comm=", "-p", str(pid)],
+                             capture_output=True, text=True).stdout.strip()
+        if not out:
+            return False
+        ppid, _, comm = out.partition(" ")
+        # Sessions may be retitled ("claude [dotfiles 11:01:11]"): the first
+        # word names the program.
+        words = comm.strip().split()
+        if words and os.path.basename(words[0]) == "claude":
+            return True
+        try:
+            pid = int(ppid)
+        except ValueError:
+            return False
+    return False
+
+
+def now() -> dt.datetime:
+    return dt.datetime.now().astimezone()
+
+
+def stamp() -> str:
+    return now().strftime("%Y%m%d-%H%M%S")
+
+
+def show(s: object) -> str:
+    """A path or name with control characters escaped, for one-line output."""
+    return re.sub(r"[\x00-\x1f\x7f]", lambda m: f"\\x{ord(m.group()):02x}", str(s))
+
+
+def die(msg: str, code: int = 1) -> None:
+    print(f"scratch: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+# --- canonical paths --------------------------------------------------------
+
+def canon_dir(p: str | Path) -> Path:
+    """An existing folder in its on-disk spelling, symlinks resolved."""
+    fd = os.open(str(p), os.O_RDONLY)
+    try:
+        return Path(fcntl.fcntl(fd, fcntl.F_GETPATH, bytes(1024)).rstrip(b"\0").decode())
+    finally:
+        os.close(fd)
+
+
+def canon_loc(raw: str) -> Path | None:
+    """The path to act on: its real parent folder in on-disk spelling, plus
+    its own name as stored there. The last part is not followed, so a
+    symlink is moved, not its target. `..` in the parent is resolved by the
+    kernel after symlinks, as `mv` would. None when it does not exist."""
+    s = os.path.expanduser(raw)
+    s = s.rstrip("/") or "/"
+    if s == "/":
+        return Path("/")
+    parent_raw, name = os.path.split(s)
+    if name in (".", ".."):
+        try:
+            return canon_dir(s)
+        except OSError:
+            return None
+    try:
+        parent = canon_dir(parent_raw or ".")
+    except OSError:
+        return None
+    try:
+        entries = os.listdir(parent)
+    except OSError:
+        return None
+    if name not in entries:
+        folded = [e for e in entries if e.casefold() == name.casefold()]
+        if len(folded) != 1:
+            return None
+        name = folded[0]
+    return parent / name
+
+
+def canon_or(p: str | Path) -> Path:
+    try:
+        return canon_dir(p)
+    except OSError:
+        return Path(os.path.realpath(p))
+
+
+# --- audit ------------------------------------------------------------------
+
+def audit(action: str, **fields) -> None:
+    d = root() / "audit"
+    d.mkdir(parents=True, exist_ok=True)
+    rec = {
+        "t": now().isoformat(timespec="seconds"),
+        "action": action,
+        "session": session(),
+        "cwd": os.getcwd(),
+        **fields,
+    }
+    with open(d / f"{now():%Y-%m}.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def ensure_root() -> Path:
+    r = root()
+    for sub in ("runs", "discard", "audit"):
+        (r / sub).mkdir(parents=True, exist_ok=True)
+    marker = r / ".scratch-root"
+    if not marker.exists():
+        marker.write_text("claude-scratch root: see ~/dotfiles/bin/scratch\n")
+    return r
+
+
+def write_meta(d: Path, **fields) -> None:
+    meta = {"created": now().isoformat(timespec="seconds"), "session": session(),
+            "cwd": os.getcwd(), **fields}
+    (d / META).write_text(json.dumps(meta, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def read_meta(d: Path) -> dict:
+    try:
+        return json.loads((d / META).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def created_at(d: Path, meta: dict) -> float:
+    """When a run or batch was made: its metadata, else the time in its name
+    (so a lost metadata file never makes it look new), else its mtime."""
+    try:
+        return dt.datetime.fromisoformat(meta["created"]).timestamp()
+    except (KeyError, ValueError, TypeError):
+        pass
+    m = STAMP_RE.match(d.name)
+    if m:
+        try:
+            return time.mktime(time.strptime(m.group(1), "%Y%m%d-%H%M%S"))
+        except ValueError:
+            pass
+    return d.lstat().st_mtime
+
+
+# --- size and age -----------------------------------------------------------
+
+def walk(p: Path, deadline: float) -> tuple[int, float, bool]:
+    """Bytes and newest mtime under p, without following symlinks. Stops at
+    the deadline; the third value says whether it got through."""
+    total = 0
+    try:
+        st = p.lstat()
+    except OSError:
+        return 0, 0.0, True
+    total += st.st_size
+    newest = st.st_mtime
+    if not stat.S_ISDIR(st.st_mode):
+        return total, newest, True
+    for dirpath, dirnames, filenames in os.walk(p, followlinks=False):
+        if time.monotonic() > deadline:
+            return total, newest, False
+        for n in dirnames + filenames:
+            try:
+                s = os.lstat(os.path.join(dirpath, n))
+            except OSError:
+                continue
+            total += s.st_size
+            newest = max(newest, s.st_mtime)
+    return total, newest, True
+
+
+def human(n: float) -> str:
+    for unit in ("B", "K", "M", "G"):
+        if n < 1024:
+            return f"{n:.0f}{unit}" if unit == "B" else f"{n:.1f}{unit}"
+        n /= 1024
+    return f"{n:.1f}T"
+
+
+def age_text(seconds: float) -> str:
+    if seconds < 3600:
+        return f"{int(seconds // 60)}m"
+    if seconds < 86400:
+        return f"{seconds / 3600:.1f}h"
+    return f"{seconds / 86400:.1f}d"
+
+
+# --- new --------------------------------------------------------------------
+
+def cmd_new(args: list[str]) -> None:
+    label = re.sub(r"[^A-Za-z0-9._-]+", "-", args[0] if args else "run").strip("-.")[:40] or "run"
+    r = ensure_root()
+    d = Path(tempfile.mkdtemp(prefix=f"{stamp()}-{label}-", dir=r / "runs"))
+    write_meta(d, label=label)
+    audit("new", path=str(d))
+    print(d)
+
+
+# --- discard: the checks ----------------------------------------------------
+
+def is_within(p: Path, base: Path) -> bool:
+    return p == base or base in p.parents
+
+
+def claude_start() -> float | None:
+    pid = os.environ.get("CLAUDE_PID", "")
+    if not pid.isdigit():
+        return None
+    out = subprocess.run(["ps", "-o", "lstart=", "-p", pid], capture_output=True, text=True,
+                         env={**os.environ, "LC_ALL": "C"}).stdout.strip()
+    if not out:
+        return None
+    try:
+        return time.mktime(time.strptime(" ".join(out.split()), "%a %b %d %H:%M:%S %Y"))
+    except ValueError:
+        return None
+
+
+def find_repo(p: Path) -> tuple[Path, str] | None:
+    """The innermost repo holding p (p itself excluded), and its kind."""
+    for d in p.parents:
+        if (d / ".jj").is_dir():
+            return d, "jj"
+        if (d / ".git").exists():
+            return d, "git"
+    return None
+
+
+def is_tracked(repo: Path, kind: str, p: Path) -> bool | None:
+    rel = str(p.relative_to(repo))
+    try:
+        if kind == "git":
+            r = subprocess.run(["git", "--literal-pathspecs", "-C", str(repo), "ls-files", "-z",
+                                "--", rel], capture_output=True, timeout=15)
+        else:
+            esc = rel.replace("\\", "\\\\").replace('"', '\\"')
+            r = subprocess.run(["jj", "--ignore-working-copy", "-R", str(repo), "file", "list",
+                                "-r", "@-", f'root:"{esc}"'], capture_output=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if r.returncode != 0:
+        return None
+    return bool(r.stdout.strip())
+
+
+def held_by_peer(p: Path) -> bool:
+    """True when another live Claude session has ccjj records on p. Fails
+    open: ccjj missing or erroring says nothing."""
+    if not shutil.which("ccjj"):
+        return False
+    try:
+        r = subprocess.run(["ccjj", "who", str(p)], capture_output=True, text=True, timeout=15,
+                           cwd=str(p.parent))
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    for line in r.stdout.splitlines():
+        f = line.split()
+        if len(f) >= 3 and f[1] == "live" and f[2] == "records" and "(this session)" not in line:
+            return True
+    return False
+
+
+def scratchpad_zone(loc: Path, tmp_claude: Path) -> str:
+    """For a path under /private/tmp/claude-<uid>: 'inside' a scratchpad,
+    'folder' (a session folder or above, or a session's other folders), or ''
+    when not under it at all."""
+    if not is_within(loc, tmp_claude):
+        return ""
+    parts = loc.relative_to(tmp_claude).parts
+    # <project>/<session>/scratchpad/<anything>
+    if len(parts) >= 4 and parts[2] == "scratchpad":
+        return "inside"
+    return "folder"
+
+
+def run_of(loc: Path, runs: Path) -> Path | None:
+    """The run folder holding loc (loc itself excluded), if any."""
+    if loc.parent == runs or not is_within(loc, runs):
+        return None
+    return runs / loc.relative_to(runs).parts[0]
+
+
+def check(raw: str, ctx: dict, old: bool) -> tuple[Path | None, str]:
+    """The path to move, or None and why."""
+    loc = canon_loc(raw)
+    if loc is None:
+        return None, "no such path"
+    if str(loc) == "/":
+        return None, "refuses /"
+    try:
+        st = loc.lstat()
+    except OSError:
+        return None, "no such path"
+    if stat.S_ISSOCK(st.st_mode) or stat.S_ISFIFO(st.st_mode) or stat.S_ISCHR(st.st_mode) \
+            or stat.S_ISBLK(st.st_mode):
+        return None, "a socket, FIFO or device"
+    home, cwd, rr, tmp_claude = ctx["home"], ctx["cwd"], ctx["root"], ctx["tmp_claude"]
+    if loc == home or loc.parent == home:
+        return None, "your home folder or a folder directly in it"
+    if is_within(cwd, loc):
+        return None, "the current folder or one above it"
+    if is_within(rr, loc):
+        return None, "the scratch root or a folder above it"
+    for sub in ("discard", "audit"):
+        if is_within(loc, rr / sub):
+            return None, f"inside scratch {sub}/"
+    if loc == rr / "runs" or loc.parent == rr:
+        return None, "a scratch folder itself"
+    if is_within(loc, home / "Library"):
+        return None, "under ~/Library (cloud folders live there): use trash"
+    try:
+        if os.lstat(loc.parent).st_dev != os.stat(rr).st_dev:
+            return None, "on another disk (a move would be a copy): use trash"
+    except OSError as e:
+        return None, f"cannot stat: {e}"
+    zone = scratchpad_zone(loc, tmp_claude)
+    if zone == "folder":
+        return None, "a Claude session folder or above, or not in its scratchpad"
+    run = run_of(loc, rr / "runs")
+    own_run = run is not None and (not in_claude() or read_meta(run).get("session") == session())
+    if zone == "inside" or own_run:
+        return loc, ""
+    if any(part in (".git", ".jj") for part in loc.parts):
+        return None, "inside a .git or .jj folder"
+    if stat.S_ISDIR(st.st_mode) and ((loc / ".git").exists() or (loc / ".jj").exists()):
+        return None, "a folder that holds a repo"
+    repo = find_repo(loc)
+    if repo:
+        tracked = is_tracked(repo[0], repo[1], loc)
+        if tracked is None:
+            return None, f"cannot tell whether {repo[1]} tracks it"
+        if tracked:
+            return None, f"tracked by {repo[1]}: a move would be a deletion to commit"
+        if repo[1] == "jj" and held_by_peer(loc):
+            return None, "another live Claude session has edits recorded on it"
+    if in_claude() and not old:
+        start = ctx["start"]
+        if start is None:
+            return None, "no CLAUDE_PID start time: ask the user before using --old"
+        if st.st_birthtime < start:
+            return None, "it existed before this session started: ask the user before using --old"
+    return loc, ""
+
+
+def cmd_discard(args: list[str]) -> None:
+    many = "--many" in args
+    old = "--old" in args
+    paths = [a for a in args if a not in ("--many", "--old")]
+    if any(a.startswith("--") for a in paths):
+        die(f"unknown option: {show([a for a in paths if a.startswith('--')][0])}")
+    if not paths:
+        die("discard needs at least one path")
+    if len(paths) > MAX_PATHS and not many:
+        die(f"{len(paths)} paths: more than {MAX_PATHS} needs --many")
+    r = ensure_root()
+    uid_tmp = os.environ.get("SCRATCH_TMP_CLAUDE") or f"/private/tmp/claude-{os.getuid()}"
+    ctx = {
+        "home": canon_or(os.path.expanduser("~")),
+        "cwd": canon_or(os.getcwd()),
+        "root": canon_or(r),
+        "tmp_claude": canon_or(uid_tmp),
+        "start": claude_start() if in_claude() else None,
+    }
+    locs: list[Path] = []
+    refused = []
+    for p in paths:
+        loc, why = check(p, ctx, old)
+        if loc is None:
+            refused.append((p, why))
+        elif loc in locs:
+            refused.append((p, "named twice"))
+        else:
+            locs.append(loc)
+    # A path inside another path in the same call would move twice.
+    for a in locs:
+        for b in locs:
+            if a != b and b in a.parents:
+                refused.append((str(a), f"inside {b}, also named"))
+    if refused:
+        for p, why in refused:
+            print(f"scratch: refused {show(p)}: {why}", file=sys.stderr)
+        audit("discard-refused", paths=[str(p) for p, _ in refused], reasons=[w for _, w in refused])
+        die("nothing was moved", 2)
+    batch = Path(tempfile.mkdtemp(prefix=f"{stamp()}-", dir=r / "discard"))
+    write_meta(batch, old=old)
+    deadline = time.monotonic() + 5
+    with open(batch / "MANIFEST.jsonl", "a", encoding="utf-8") as man:
+        for i, loc in enumerate(locs, 1):
+            dest = batch / f"{i}-{loc.name}"
+            size, _, whole = walk(loc, deadline)
+            try:
+                os.rename(loc, dest)
+            except OSError as e:
+                audit("discard-failed", path=str(loc), error=str(e), batch=str(batch))
+                die(f"could not move {show(loc)}: {e} ({i - 1} moved into {batch})")
+            rec = {"from": str(loc), "to": dest.name, "bytes": size if whole else None}
+            man.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            audit("discard", path=str(loc), to=str(dest), bytes=rec["bytes"], old=old)
+    print(f"moved {len(locs)} path(s) to {batch}")
+
+
+# --- ls and log -------------------------------------------------------------
+
+def items(r: Path, per_item: float | None = None, shared: float = 5) -> list[dict]:
+    """Every run and batch, with its age reference and size. Each scan gets
+    `per_item` seconds of its own, or all share `shared` seconds."""
+    out = []
+    shared_deadline = time.monotonic() + shared
+    for kind in ("runs", "discard"):
+        base = r / kind
+        if not base.is_dir():
+            continue
+        for d in base.iterdir():
+            if not d.is_dir() or d.is_symlink():
+                continue
+            meta = read_meta(d)
+            created = created_at(d, meta)
+            deadline = time.monotonic() + per_item if per_item else shared_deadline
+            size, newest, whole = walk(d, deadline)
+            # A run ages from its last change; a batch from when it was made
+            # (a move keeps the files' own old times).
+            ref = max(created, newest) if kind == "runs" else created
+            out.append({"kind": kind, "path": d, "ref": ref, "bytes": size, "whole": whole,
+                        "meta": meta})
+    out.sort(key=lambda x: x["ref"], reverse=True)
+    return out
+
+
+def cmd_ls(_args: list[str]) -> None:
+    r = root()
+    if not r.is_dir():
+        print("nothing yet")
+        return
+    t = time.time()
+    for it in items(r):
+        size = human(it["bytes"]) + ("" if it["whole"] else "+")
+        print(f"{it['kind']:7} {age_text(t - it['ref']):>6} {size:>7}  {show(it['path'].name)}")
+        if it["kind"] == "discard":
+            try:
+                lines = (it["path"] / "MANIFEST.jsonl").read_text(encoding="utf-8").splitlines()
+            except OSError:
+                lines = []
+            for ln in lines[:3]:
+                try:
+                    print(f"{'':24}{show(json.loads(ln)['from'])}")
+                except (ValueError, KeyError):
+                    pass
+            if len(lines) > 3:
+                print(f"{'':24}… and {len(lines) - 3} more")
+
+
+def cmd_log(args: list[str]) -> None:
+    n = int(args[0]) if args and args[0].isdigit() else 20
+    if n <= 0:
+        return
+    d = root() / "audit"
+    files = sorted(d.glob("*.jsonl")) if d.is_dir() else []
+    lines: list[str] = []
+    for f in reversed(files):
+        lines = f.read_text(encoding="utf-8").splitlines() + lines
+        if len(lines) >= n:
+            break
+    for ln in lines[-n:]:
+        try:
+            e = json.loads(ln)
+        except ValueError:
+            continue
+        what = e.get("path") or ", ".join(e.get("paths", [])) or e.get("note", "")
+        sid = (e.get("session") or "-")[:8]
+        print(f"{e.get('t', '?')}  {e.get('action', '?'):16} {sid:8}  {show(what)}")
+
+
+# --- expire -----------------------------------------------------------------
+
+def notify(msg: str) -> None:
+    subprocess.run(["osascript", "-e", f"display notification {json.dumps(msg)} with title \"scratch\""],
+                   capture_output=True)
+
+
+def delete_tree(p: Path) -> bool:
+    """Delete p, first making every folder in it writable (a read-only
+    subtree would otherwise survive). True when it is gone."""
+    for dirpath, dirnames, _ in os.walk(p, followlinks=False):
+        for n in [dirpath] + [os.path.join(dirpath, x) for x in dirnames]:
+            try:
+                if not os.path.islink(n):
+                    os.chmod(n, stat.S_IMODE(os.lstat(n).st_mode) | stat.S_IRWXU)
+            except OSError:
+                pass
+    shutil.rmtree(p, ignore_errors=True)
+    return not os.path.lexists(p)
+
+
+def cmd_expire(args: list[str]) -> None:
+    dry = "--dry-run" in args
+    # The process check guards the real root only, so tests (their own root,
+    # run from a Claude session) can still expire. Pointing SCRATCH_ROOT at
+    # the real root by another spelling does not help: both are canonical.
+    # The account's real home, not $HOME, which a caller can change.
+    real_home = pwd.getpwuid(os.getuid()).pw_dir
+    default = canon_or(os.path.join(real_home, ".local/share/claude-scratch"))
+    if not dry and (in_claude() or (canon_or(root()) == default and under_claude_process())):
+        die("expire deletes, so it does not run inside a Claude session (try --dry-run)", 3)
+    if not shutil.rmtree.avoids_symlink_attacks:
+        die("this Python's rmtree is not symlink-safe; not deleting", 3)
+    r = root()
+    if not (r / ".scratch-root").exists():
+        print("no scratch root here; nothing to do")
+        return
+    rr = canon_or(r)
+    keep = env_num("SCRATCH_KEEP_DAYS", 14) * 86400
+    max_bytes = env_num("SCRATCH_MAX_GB", 5) * 2**30
+    min_free = env_num("SCRATCH_MIN_FREE_GB", 10) * 2**30
+    floor = FLOOR_DAYS * 86400
+    t = time.time()
+    all_items = items(r, per_item=env_num("SCRATCH_SCAN_SECONDS", SCAN_SECONDS) or 1e-9)
+    # A run whose scan did not finish may hold a newer change than we saw:
+    # keep it, and say so.
+    unsure = [it for it in all_items if it["kind"] == "runs" and not it["whole"]]
+    for it in unsure:
+        audit("expire-unsure", path=str(it["path"]), note="scan did not finish; kept")
+        print(f"kept (scan did not finish): {show(it['path'])}", file=sys.stderr)
+    sure = [it for it in all_items if it not in unsure]
+    doomed = [it for it in sure if t - it["ref"] > keep]
+    left = [it for it in all_items if it not in doomed]
+    total = sum(it["bytes"] for it in left)
+    free = shutil.disk_usage(r).free + sum(it["bytes"] for it in doomed)
+    # Oldest first, never younger than the floor.
+    for it in sorted([x for x in left if x in sure], key=lambda x: x["ref"]):
+        if total <= max_bytes and free >= min_free:
+            break
+        if t - it["ref"] <= floor:
+            break
+        doomed.append(it)
+        total -= it["bytes"]
+        free += it["bytes"]
+    for it in doomed:
+        p = canon_or(it["path"])
+        if p.parent not in (rr / "runs", rr / "discard"):
+            audit("expire-skipped", path=str(p), note="outside the scratch root")
+            continue
+        why = "age" if t - it["ref"] > keep else "space"
+        if dry:
+            print(f"would delete ({why}, {age_text(t - it['ref'])}, {human(it['bytes'])}): {show(p)}")
+            continue
+        if delete_tree(p):
+            audit("expire", path=str(p), bytes=it["bytes"], reason=why)
+            print(f"deleted ({why}): {show(p)}")
+        else:
+            audit("expire-failed", path=str(p), note="some of it could not be deleted")
+            print(f"scratch: could not delete all of {show(p)}", file=sys.stderr)
+    if total > max_bytes:
+        msg = (f"scratch holds {human(total)}, over its {human(max_bytes)} cap; nothing older "
+               f"than {FLOOR_DAYS} days is left to delete")
+        print(f"scratch: {msg}", file=sys.stderr)
+        if not dry:
+            audit("expire-shortfall", note=msg)
+            if "--notify" in args:
+                notify(msg)
+    elif free < min_free:
+        # The disk is low for other reasons; scratch is not the cause. Logged,
+        # not notified: a daily notice about someone else's files is noise.
+        msg = f"disk has {human(free)} free; scratch holds {human(total)}, under its cap"
+        print(f"scratch: {msg}", file=sys.stderr)
+        if not dry:
+            audit("expire-lowdisk", note=msg)
+    # Audit months older than 12.
+    cutoff = (now().replace(day=1) - dt.timedelta(days=365)).strftime("%Y-%m")
+    for f in sorted((r / "audit").glob("*.jsonl")):
+        if f.stem < cutoff:
+            if dry:
+                print(f"would delete old audit month: {f.name}")
+            else:
+                f.unlink()
+                audit("expire-audit", path=str(f))
+
+
+def main() -> None:
+    args = sys.argv[1:]
+    if not args or args[0] in ("-h", "--help", "help"):
+        print(__doc__.split("\n\n")[1])
+        return
+    cmd, rest = args[0], args[1:]
+    fn = {"new": cmd_new, "discard": cmd_discard, "ls": cmd_ls, "log": cmd_log,
+          "expire": cmd_expire}.get(cmd)
+    if not fn:
+        die(f"unknown command: {show(cmd)} (try scratch --help)")
+    fn(rest)
+
+
+if __name__ == "__main__":
+    main()
