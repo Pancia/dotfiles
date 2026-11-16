@@ -7,6 +7,7 @@ claude-jj-snapshot-hook.sh      -> $HOME/.claude/hooks/jj-snapshot.sh
 claude-keybindings.json         -> $HOME/.claude/keybindings.json
 claude-settings.json            -> $HOME/.claude/settings.json
 claude-user-claude.md           -> $HOME/.claude/CLAUDE.md
+claude-theme-dark-light-term.json -> $HOME/.claude/themes/dark-light-term.json
 clj-kondo.edn                   -> $HOME/.config/clj-kondo/config.edn
 clojure-lsp.config.edn          -> $HOME/.config/clojure-lsp/config.edn
 clojure.deps.edn                -> $HOME/.config/clojure/deps.edn

@@ -1,0 +1,7 @@
+{
+  "name": "Dark (light terminal)",
+  "base": "dark",
+  "overrides": {
+    "userMessageBackgroundHover": "rgb(225, 225, 225)"
+  }
+}
