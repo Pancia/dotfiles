@@ -93,7 +93,7 @@ fields, so the field-count guard does not catch it. A test pins this specificall
 | `GURREN LAGANN` | 8 — Simon, Kamina, Lordgenome (Spiral King), Leeron, Rossiu, Viral, Yoko, Nia |
 | `PANTHEON` | 14 — Ishtar, Ereshkigal, Shiva, Shakti, Prometheus, Hephaestus, Aphrodite, Mars, Odin, Freya, Loki, Lila, Maya, Lakshmi |
 | `TAROT` | 10 — 6 major arcana + 4 court cards |
-| `FAVORITES` | 11 rows, 10 characters — Holo (Spice & Wolf), Malfoid (a female Draco Malfoy), Ahri (League of Legends), Tenka Izumo (Chained Soldier), Asuna Ichinose (Blue Archive), Houshou Marine (two rows, with and without innuendo, weighted separately), Charlie Morningstar (Hazbin Hotel), Artoria Pendragon as Saber and as Lancer (Fate), Sayuri Ninomiya (Silver Plan to Redo From JK) |
+| `FAVORITES` | 11 rows, 10 characters — Holo (Spice & Wolf), Malfoid (a female Draco Malfoy), Ahri (League of Legends), Tenka Izumo (Chained Soldier), Asuna Ichinose (Blue Archive), Houshou Marine (two rows, one clean and one raunchy, weighted separately), Charlie Morningstar (Hazbin Hotel), Artoria Pendragon as Saber and as Lancer (Fate), Sayuri Ninomiya (Silver Plan to Redo From JK) |
 | `THE LEGEND OF ZELDA` | 5 — Breath of the Wild, Twilight Princess, Tetra, Sheik, Skyward Sword |
 | `STEEL MAGNOLIAS` | 7 — Maggie Greene, Bonnie MacFarlane, Charlotte La Bouff, Blanche Devereaux, Julia Sugarbaker, Sadie Adler, Cass |
 | `ZODIAC` | 12 — the signs |
