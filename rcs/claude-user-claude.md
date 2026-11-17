@@ -192,12 +192,15 @@ macOS empties `/private/tmp` at reboot, and the session scratchpad is inside it.
 This rule overrides the default that sends all intermediate output to the
 scratchpad.
 
-- **Keep in `.cc/` at the project root:** anything that I or a later session may
-  want. Use a descriptive file name, and create the folder if it does not exist.
+- **Keep in `.cc/` at the project root:** session work that I or a later session
+  may want. Use a descriptive file name, and create the folder if it does not exist.
   Put each file in one of these folders, not at the top of `.cc/`:
   - `.cc/plans/`: plans and design documents, named `PLAN-<topic>.md`.
   - `.cc/reports/`: reviews, audits, verdicts and other findings.
-  - `.cc/scripts/`: reproduction scripts and one-off scripts.
+  - `.cc/scripts/`: reproduction scripts and one-off scripts. Tools that the
+    project keeps rerunning do not go here: test fixtures, real-site checks, and
+    guards that CLAUDE.md or tests point at. Put them in the project's own tree,
+    such as `dev/`. When a `.cc/` script becomes one of them, move it there.
   - `.cc/misc/`: only what fits none of the above, such as patches, mockups and
     folders of mixed files.
   - Only `pending-updates-*.md` and `FIXME*` files stay at the top, because tools
