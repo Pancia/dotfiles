@@ -6,8 +6,10 @@
 #
 #   supervise [--keep] <name> -- <command> [args...]
 #   supervise [--keep] <name>      # command from `svc_cmd <name>` in .svc.conf, via bash -c
-# `svc_setup <name>`, if defined, runs once in the supervisor before the first
-# spawn; its exports reach every respawn (credentials, JAVA_HOME, ...).
+# That command is re-read at every respawn, so an edit to svc_cmd applies on the
+# next restart. `svc_setup <name>`, if defined, runs once in the supervisor before
+# the first spawn; its exports reach every respawn (credentials, JAVA_HOME, ...).
+# An edit to svc_setup needs a new supervisor (svc-tmux down <name>; svc-tmux up <name>).
 #
 # State (all under .run/ of the cwd):
 #   .run/<name>.pid     "PID COOKIE" of THIS supervisor (cookie = start epoch)
@@ -63,9 +65,15 @@ if [ "${1:-}" = "--" ]; then shift; fi
 # Per-project config (project specifics live here, not in this script). Read
 # before the command check, so `svc_cmd` can supply the command.
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/../lib/svc/conf.sh"
-while IFS= read -r _cf; do . "$_cf"; done < <(svc_conf_files)   # top level: see conf.sh
+# A config that fails to load stops the start: half a config could launch the
+# service without what svc_setup provides (credentials). svc, by contrast, carries on.
+while IFS= read -r _cf; do   # top level: see conf.sh
+  . "$_cf" || { echo "supervise: config error in $_cf - not starting '$name'" >&2; exit 2; }
+done < <(svc_conf_files)
 declare -F svc_port_file >/dev/null || svc_port_file() { echo ""; }
+from_conf=0                  # 1: the command comes from svc_cmd, re-read on each respawn
 if [ "$#" -eq 0 ]; then
+  from_conf=1
   _cmd=""; declare -F svc_cmd >/dev/null && _cmd="$(svc_cmd "$name")"
   [ -n "$_cmd" ] || { echo "supervise: no command given, and no svc_cmd for '$name' (looked in $(svc_conf_where))" >&2; exit 2; }
   set -- bash -c "$_cmd"
@@ -406,6 +414,20 @@ while :; do
     # it), no stale restart/suspend flag from a request that raced the spawn.
     restart=0; suspend=0
     trap on_usr1 USR1
+    # Respawn (restart, resume, --keep): re-read svc_cmd, so an edit to it applies
+    # without a new supervisor (svc_setup still runs only once). In a subshell, with
+    # the old svc_cmd unset: a broken config can't kill us or pass off the old
+    # definition as new - on any failure keep the current command and say so.
+    if [ "$from_conf" = 1 ] && [ "$gen" -gt 0 ]; then
+      if _new="$(unset -f svc_cmd; _ok=1
+                 while IFS= read -r _cf; do . "$_cf" || _ok=0; done < <(svc_conf_files)
+                 [ "$_ok" = 1 ] && declare -F svc_cmd >/dev/null && svc_cmd "$name")" && [ -n "$_new" ]; then
+        [ "$_new" = "$_cmd" ] || say "[supervise] $name: svc_cmd changed - starting the new command"
+        _cmd="$_new"; set -- bash -c "$_cmd"
+      else
+        say "[supervise] $name: could not re-read svc_cmd - keeping the old command"
+      fi
+    fi
     gen=$((gen + 1))
     # Tee to the pane AND the log; $! is the command (not tee) - relied on for signalling.
     # stdin <- held-open FIFO so a REPL read blocks instead of taking SIGTTIN on the tty.

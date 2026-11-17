@@ -35,7 +35,11 @@ SVC() { "$here/svc" "$@"; }
 die() { echo "svc-tmux: $*" >&2; exit 1; }
 
 . "$here/../lib/svc/conf.sh"
-while IFS= read -r _cf; do . "$_cf"; done < <(svc_conf_files)   # top level: see conf.sh
+# A config that fails to load is reported; down/ls/attach still work, `up` refuses.
+conf_err=""
+while IFS= read -r _cf; do   # top level: see conf.sh
+  . "$_cf" || { echo "svc-tmux: config error in $_cf" >&2; conf_err="$_cf"; }
+done < <(svc_conf_files)
 SVC_SERVICES="${SVC_SERVICES:-}"
 SVC_ENV="${SVC_ENV:-}"
 
@@ -222,6 +226,7 @@ cmd_up() {
     esac
     shift
   done
+  [ -z "$conf_err" ] || die "not starting anything: fix the config error in $conf_err"
   names="$(names_or_default "$@")"
   [ -n "$names" ] || die "no services: name them, or set SVC_SERVICES (looked in $(svc_conf_where))"
   declare -F svc_cmd >/dev/null || die "no svc_cmd() (looked in $(svc_conf_where))"

@@ -82,6 +82,16 @@ original mode comes back on exit (after a `kill -9` of the supervisor, run `rese
    uses. `SVC_FS_CONFIG` overrides the root.
 3. `.svc.local.conf` in the project root — git-ignored, machine-local overrides.
 
+When config is read:
+- `svc_cmd` is re-read at every respawn (restart, resume, `--keep`), so an edit to
+  it applies on the next `svc restart`. If the config fails to load then, the old
+  command is kept and the pane says so.
+- `svc_setup` runs once per supervisor. After editing it, stop and start that
+  service: `svc-tmux down <name>; svc-tmux up <name>` (an LLM asks the user).
+- A config file that fails to load (syntax error) is reported by `svc` and
+  `svc-tmux`, which carry on with what loaded, so `svc status/stop/restart` still
+  work. `supervise` and `svc-tmux up` refuse to start a service until it is fixed.
+
 Festivar's lives in (2). Define:
 
 ```bash
@@ -221,6 +231,8 @@ all state is under the project's own `.run/`.
 - Restart a wedged/crashed/needs-classpath-reload service with
   `svc restart <name>`; diagnose a failed connection with `svc status` then
   `svc logs <name>`.
+- `svc restart` re-reads `svc_cmd`. After editing `svc_setup`, ask the user to run
+  `svc-tmux down <name>; svc-tmux up <name>`.
 - **Start** a service only with `svc-tmux up --wait <name>` (needs `svc_cmd` in
   the project's config) — never run `supervise` yourself: it would belong to your
   shell and die with it. If there is no `svc_cmd`, ask the human (`cmds <name>`).

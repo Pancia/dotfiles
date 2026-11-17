@@ -33,7 +33,11 @@ run_dir=".run"
 
 # Per-project config.
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/../lib/svc/conf.sh"
-while IFS= read -r _cf; do . "$_cf"; done < <(svc_conf_files)   # top level: see conf.sh
+# A config that fails to load is reported, not fatal: status/stop/restart work
+# from the .run/ state files, so a half-saved edit must not lock you out of them.
+while IFS= read -r _cf; do   # top level: see conf.sh
+  . "$_cf" || echo "svc: config error in $_cf - using what loaded before it" >&2
+done < <(svc_conf_files)
 SVC_SERVICES="${SVC_SERVICES:-}"
 declare -F svc_port_file >/dev/null || svc_port_file() { echo ""; }
 

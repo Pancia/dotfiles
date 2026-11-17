@@ -41,6 +41,8 @@ Write in ASD-STE100 Simplified Technical English: one idea per sentence; at most
 
 Give times in my local time zone (America/Denver: MST/MDT), never UTC. Convert timestamps from logs, events and APIs before reporting them; say "MST" only when the zone could be unclear.
 
+For a macOS process's memory, give `footprint PID` (Activity Monitor's figure), not `ps` RSS.
+
 ### Recaps
 
 When a turn does real work, the same rule applies. A small job takes a few lines. A bigger change says what is now true and what changed that I will notice. Do not use section headings. A turn that just answers a question gets a normal answer, not a recap. A report on a finished background job counts as a recap.
@@ -140,6 +142,8 @@ the recap, in your own words. If it changed nothing for me, it earns silence.
 
 The one exception: it **failed**, or it found something that blocks the work.
 Say that plainly, once.
+
+When I give a subagent a task with later steps ("review, then fix after I approve"), send those steps to that agent with SendMessage, unless I say otherwise.
 
 ## UI style
 
@@ -241,6 +245,8 @@ A published Claude artifact plays no sound for me, not even a WAV in an
 
 Many files under `~/Cloud` (ProtonDrive) are cloud-only: `stat -f %Sf` shows `dataless`, and reading one downloads it, so a bulk read can hang for minutes. `stat`, `ls -lO` and `find` do not download. Before reading many files there, select the local ones with `find DIR ! -flags +dataless`.
 
+EPERM on a read under `~/Cloud`, `~/Developer`, `~/Documents` or `~/Downloads`, when file modes allow it, is macOS privacy: a background session can lack these grants. Ask me; do not work around it.
+
 Before you move, add, rename or delete anything under `~/Cloud` (also reached as `~/ProtonDrive` and `~/Library/CloudStorage/ProtonDrive-*`), read `~/Cloud/CLAUDE.md`. Claude Code does not load it for you: a nested CLAUDE.md loads only when Read, Edit or Write touches a file under the session's start folder, and never for Bash.
 
 ## Finding an old Claude Code session
@@ -326,7 +332,7 @@ Two **unrelated** systems, both on PATH from `~/dotfiles/bin/`. Pick by lifetime
 |---|---|---|
 | Backend | launchd (`org.pancia.*`) | my terminal, or the project's `svc-tmux` server |
 | Lifetime | persistent, survives reboot/logout | dies with its pane / tmux window |
-| Declared in | `~/dotfiles/services/<name>/` (plist + script) | `.svc.conf` / `.svc.local.conf` in the project |
+| Declared in | `~/dotfiles/services/<name>/` (plist + script) | `.svc.conf`, vault `svc.conf` or `.svc.local.conf` |
 | Logs | `~/.log/services/<name>.log` | `.run/<name>.log` |
 
 **Never substitute one for the other.** Similar names, nothing else in common. If
@@ -354,7 +360,7 @@ dedicated tmux server I can `svc-tmux attach` to, and exits nonzero with the
 pane's last lines if it fails to come up. It needs `svc_cmd` in the project's
 config; without one, ask me. Stop only what you started (`svc-tmux down <name>`).
 If `svc` reports "not running", also check whether it's a `service` after all.
-Per-project services are declared in `.svc.conf` / `.svc.local.conf`
+Per-project services are declared in `.svc.conf`, the vault `svc.conf` or `.svc.local.conf`
 (`SVC_SERVICES`, `svc_port_file`, optional `svc_eval`, `svc_cmd`, `SVC_ENV`).
 
 Full docs (config format, restart/crash semantics): `~/dotfiles/wiki/pages/supervise-svc.md`

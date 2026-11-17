@@ -40,8 +40,9 @@ If `svc-tmux up` refuses because it runs in a Claude Code background session,
 ask me to run `svc-tmux up` in a terminal. Never set `SVC_TMUX_ALLOW_ANY_APP`
 yourself.
 If `svc` reports "not running", also check whether it's a `service` after all.
-Per-project services are declared in `.svc.conf` / `.svc.local.conf`
-(`SVC_SERVICES`, `svc_port_file`, optional `svc_eval`, `svc_cmd`, `SVC_ENV`).
+Per-project services are declared in `.svc.conf`, the vault `svc.conf` (next to
+the private `cmds.rb`) or `.svc.local.conf` (`SVC_SERVICES`, `svc_port_file`,
+optional `svc_eval`, `svc_cmd`, `SVC_ENV`).
 
 Full docs (read if you need the config format, restart/crash semantics, or to add
 it to a project): `~/dotfiles/wiki/pages/supervise-svc.md`

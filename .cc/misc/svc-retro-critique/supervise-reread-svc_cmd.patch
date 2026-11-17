@@ -1,0 +1,29 @@
+--- a/bin/supervise
++++ b/bin/supervise
+@@ -65,7 +65,9 @@
+ . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/../lib/svc/conf.sh"
+ while IFS= read -r _cf; do . "$_cf"; done < <(svc_conf_files)   # top level: see conf.sh
+ declare -F svc_port_file >/dev/null || svc_port_file() { echo ""; }
++from_conf=0
+ if [ "$#" -eq 0 ]; then
++  from_conf=1
+   _cmd=""; declare -F svc_cmd >/dev/null && _cmd="$(svc_cmd "$name")"
+   [ -n "$_cmd" ] || { echo "supervise: no command given, and no svc_cmd for '$name' (looked in $(svc_conf_where))" >&2; exit 2; }
+   set -- bash -c "$_cmd"
+@@ -406,6 +408,16 @@
+     # it), no stale restart/suspend flag from a request that raced the spawn.
+     restart=0; suspend=0
+     trap on_usr1 USR1
++    # Respawn (restart, resume, --keep): re-read svc_cmd, so a config edit applies
++    # without a new supervisor. Subshell: a broken config can't kill us; keep the old.
++    if [ "$from_conf" = 1 ] && [ "$gen" -gt 0 ]; then
++      if _new="$(unset -f svc_cmd; _ok=1; while IFS= read -r _cf; do . "$_cf" || _ok=0; done < <(svc_conf_files); [ "$_ok" = 1 ] && declare -F svc_cmd >/dev/null && svc_cmd "$name")" && [ -n "$_new" ]; then
++        [ "$_new" = "$_cmd" ] || say "[supervise] $name: svc_cmd changed - starting the new command"
++        _cmd="$_new"; set -- bash -c "$_cmd"
++      else
++        say "[supervise] $name: could not re-read svc_cmd - keeping the old command"
++      fi
++    fi
+     gen=$((gen + 1))
+     # Tee to the pane AND the log; $! is the command (not tee) - relied on for signalling.
+     # stdin <- held-open FIFO so a REPL read blocks instead of taking SIGTTIN on the tty.

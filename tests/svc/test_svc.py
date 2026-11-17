@@ -370,6 +370,76 @@ svc_setup() { echo x >> .setup-count; export FROM_SETUP=yes; }
         sup.wait(15)
 
 
+def web_cmd_version(proj, version):
+    """Append a later svc_cmd for web that records `version` before serving."""
+    conf = proj / ".svc.conf"
+    conf.write_text(conf.read_text() + f"""
+svc_cmd() {{ case "$1" in
+  web) echo "echo {version} > .cmd-version; exec python3 serve.py .web-port {proj.mark}" ;;
+esac; }}
+""")
+
+
+def test_restart_and_resume_rerun_an_edited_svc_cmd(proj):
+    """svc_cmd is re-read at each respawn: a config edit applies on restart or
+    resume, without starting a new supervisor."""
+    sup = subprocess.Popen([SUP, "web"], cwd=proj, stdin=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    try:
+        assert wait_for(lambda: (proj / ".web-port").exists())
+        assert not (proj / ".cmd-version").exists()
+        web_cmd_version(proj, "v2")
+        r = run([SVC, "restart", "web"], proj)
+        assert r.returncode == 0, r.stderr
+        assert read(proj / ".cmd-version").strip() == "v2", "restart runs the edited svc_cmd"
+        web_cmd_version(proj, "v3")
+        assert run([SVC, "suspend", "web"], proj).returncode == 0
+        run([SVC, "resume", "web"], proj)
+        assert wait_for(lambda: read(proj / ".cmd-version").strip() == "v3"), "resume too"
+        assert sup.poll() is None, "same supervisor throughout"
+    finally:
+        sup.terminate()
+        sup.wait(15)
+    assert sup.stderr.read().count("svc_cmd changed") == 2
+
+
+def test_a_broken_config_keeps_svc_working_and_the_old_command(proj):
+    """A config that fails to load (a half-saved edit) must not cut off
+    svc status/restart/stop, and a restart keeps the command that was running."""
+    sup = subprocess.Popen([SUP, "web"], cwd=proj, stdin=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    try:
+        assert wait_for(lambda: (proj / ".web-port").exists())
+        (proj / ".svc.conf").write_text('svc_cmd() { case "$1" in\n')   # syntax error
+        r = run([SVC, "status", "web"], proj)
+        assert r.returncode == 0 and "running" in r.stdout, r.stdout + r.stderr
+        assert "config error" in r.stderr
+        (proj / ".web-port").unlink()
+        r = run([SVC, "restart", "web"], proj)
+        assert r.returncode == 0, r.stderr
+        assert gen(proj) == ["2"] and sup.poll() is None
+        assert wait_for(lambda: (proj / ".web-port").exists()), "old command respawned"
+        assert run([SVC, "stop", "web"], proj).returncode == 0
+        assert sup.wait(15) == 0
+        assert wait_for(lambda: not marked(proj.mark))
+    finally:
+        sup.kill()
+    assert "could not re-read svc_cmd - keeping the old command" in sup.stderr.read()
+    # A new supervisor refuses to start on a broken config, naming the file.
+    r = run([SUP, "web"], proj, timeout=15)
+    assert r.returncode == 2 and "config error in ./.svc.conf" in r.stderr, r.stderr
+
+
+@needs_tmux
+def test_svc_tmux_with_a_broken_config_lists_but_will_not_start(proj, tmux_env):
+    (proj / ".svc.conf").write_text('svc_cmd() { case "$1" in\n')   # syntax error
+    r = run([SVC_TMUX, "ls"], proj, tmux_env)
+    assert r.returncode == 0 and "config error" in r.stderr, r.stdout + r.stderr
+    r = run([SVC_TMUX, "up", "web"], proj, tmux_env)
+    assert r.returncode == 1 and "fix the config error in ./.svc.conf" in r.stderr, r.stderr
+    assert tm(tmux_env, "ls") == ""
+
+
 def test_restart_waits_for_the_port_file(proj):
     """With svc_port_file but no svc_eval, 'back up' must mean the new instance
     wrote its port file - supervise deletes it on every restart."""
