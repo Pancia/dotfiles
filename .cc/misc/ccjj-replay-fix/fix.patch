@@ -1,0 +1,85 @@
+--- ccjj_orig.py	2026-11-10 16:43:57
++++ ccjj_fixed.py	2026-11-10 16:46:56
+@@ -1129,8 +1129,60 @@
+     # hook payload with lone surrogates, and `v.encode()` raised
+     # UnicodeEncodeError -- which blocked every OTHER path in the journal too.
+     return v.encode("utf-8", "surrogateescape")
++
++
++def _record_result(rec):
++    """The file as this record left it, or None when that cannot be known."""
++    if rec.get("tool") == "Write":
++        return blob(rec, "content") or b""
++    o, old, new = blob(rec, "original"), rec.get("old"), rec.get("new")
++    if o is None or old is None or new is None:
++        return None
++    ob = old.encode("utf-8", "surrogateescape")
++    nb = new.encode("utf-8", "surrogateescape")
++    if rec.get("replace_all"):
++        return o.replace(ob, nb)
++    return o.replace(ob, nb, 1) if o.count(ob) == 1 else None
+ 
+ 
++def _merge_clean(current, base, ours):
++    if current == base:
++        return ours
++    if ours == base:
++        return current
++    with tempfile.TemporaryDirectory(prefix="ccjj-merge-") as d:
++        p = []
++        for name, b in (("cur", current), ("base", base), ("ours", ours)):
++            p.append(os.path.join(d, name))
++            with open(p[-1], "wb") as fh:
++                fh.write(b)
++        r = subprocess.run(["git", "merge-file", "-p", *p], capture_output=True)
++    return r.stdout if r.returncode == 0 else None
++
++
++def committed_prefix(content, recs):
++    """How many of this path's records, counted from the first, are already in
++    `content` as a whole. Judged on the file each record LEFT, not on the
++    record alone: a later edit of the session's own inserted text hides the
++    insert from already_applied(), whose anchor then re-fires."""
++    base = blob(recs[0], "original")
++    if base is None or not content or b"\r\n" in content:
++        return 0, []
++    seen = [i for i, r in enumerate(recs)
++            if blob(r, "original") is not None and r.get("old") is not None
++            and r.get("new") is not None
++            and already_applied(content, blob(r, "original"),
++                                r["old"].encode("utf-8", "surrogateescape"),
++                                r["new"].encode("utf-8", "surrogateescape"))]
++    if not seen:
++        return 0, seen
++    for k in range(len(recs), 0, -1):
++        t = _record_result(recs[k - 1])
++        if t is not None and _merge_clean(content, base, t) == content:
++            return k, seen
++    return 0, seen
++
++
+ def build(records, present, pinned):
+     """Reconstruct, per path, '@- plus exactly this session's edits'."""
+     by_path = {}
+@@ -1141,6 +1193,21 @@
+     mine = {}
+     for path, recs in by_path.items():
+         content = jj("file", "show", "-r", "@-", fs(path)).stdout if path in present else b""
++
++        done, seen = committed_prefix(content, recs)
++        if seen and max(seen) >= done:
++            die("conflict: some of your edits to %s are already in @- (committed\n"
++                "  outside this session) and others are not, and the committed file\n"
++                "  also differs from yours there, so replaying the rest could\n"
++                "  duplicate text. Compare with:  jj diff -r @- %s\n"
++                "  If @- already has all you want:  ccjj forget %s\n"
++                "  If the file as it is on disk is right:  --also %s"
++                % (path, path, path, path))
++        if done:
++            print("note: %d of your %d edit(s) to %s are already in @- (committed\n"
++                  "  outside this session); replaying only the rest." % (done, len(recs), path),
++                  file=sys.stderr)
++            recs = recs[done:]
+ 
+         for rec in recs:
+             original = blob(rec, "original")
