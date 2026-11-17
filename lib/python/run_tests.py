@@ -61,6 +61,14 @@ COMPONENTS = {
         "aliases": ["ytdl"],
         "source_path": "bin/ytdl",
     },
+    # bin/cc-peers and the PEERS section of bin/vcs-status-for-ai: fake session
+    # registries and transcripts under tmp_path; needs git.
+    "bin/cc-peers": {
+        "runner": "pytest",
+        "deps": [],
+        "aliases": ["cc-peers"],
+        "source_path": "bin/cc-peers",
+    },
     # bin/scratch: each test gets its own SCRATCH_ROOT and HOME; needs git.
     "bin/scratch": {
         "runner": "pytest",
