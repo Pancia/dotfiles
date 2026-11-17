@@ -2611,6 +2611,38 @@ def test_an_offer_ends_once_its_path_is_committed(repo):
     assert not any("b.txt" in o["paths"] for o in offers)
 
 
+def test_an_ended_peers_offer_ends_once_its_path_goes_clean(repo):
+    """A's commit left b.txt offered; A ended. B then committed b.txt, so
+    nothing of A's is left in it. Only A's own commits pruned its offers, so
+    B's later Bash change was refused as A's until the 2-day prune."""
+    _left_behind(repo)
+    _ended(repo, "A")
+    _bash(repo, "B", tuid="t3")
+    r = repo.run("commit", "-m", "b wholesale", "--also", "b.txt", "--force",
+                 sid="B", extra=["--no-claim"])
+    assert r.returncode == 0, r.stdout + r.stderr
+    _bash(repo, "B", tuid="t4")
+    repo.write("b.txt", "A-PERL\nline2\nB-AGAIN\n")
+    _bash(repo, "B", tuid="t5")
+    r = repo.run("claim", "b.txt", sid="B")
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_an_ended_peers_offer_still_refuses_while_its_bytes_remain(repo):
+    """Safety: B commits something else; b.txt still holds A's Bash bytes."""
+    _left_behind(repo)
+    _ended(repo, "A")
+    _hook_edit(repo, "B", "c.txt", "line1", "BC")
+    r = repo.run("commit", "-m", "c only", sid="B", extra=["--no-claim"])
+    assert r.returncode == 0, r.stdout + r.stderr
+    _bash(repo, "B", tuid="t4")
+    repo.write("b.txt", "A-PERL\nline2\nB-AGAIN\n")
+    _bash(repo, "B", tuid="t5")
+    r = repo.run("claim", "b.txt", sid="B")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "A (ended)" in r.stderr
+
+
 def test_an_offer_only_journal_is_not_pruned_as_empty(repo):
     _left_behind(repo)
     assert repo.run("prune", sid="A").returncode == 0

@@ -941,6 +941,55 @@ def leave_offers(archived, jdir, only):
         write_offer(jdir, covered, wins)
 
 
+def sweep_offers(still):
+    """Drop, from EVERY journal's offers, the paths that no longer differ from @-.
+
+    leave_offers() prunes only the committing session's own offers, so an
+    offer from a session that never commits again held its stake until the
+    2-day prune -- even after a peer committed the path in full and then
+    changed it again. A path equal to @- holds no uncommitted bytes of anyone's,
+    so nothing is lost by dropping it. None (jj failed) keeps everything.
+    An emptied offer moves to spent/, as `forget` moves records to forgotten/.
+    """
+    if still is None:
+        return
+    base = os.path.join(journal_root(), repo_key(ROOT))
+    if not os.path.isdir(base):
+        return
+    for sid in os.listdir(base):
+        d = os.path.join(base, sid)
+        if sid == "archive" or not os.path.isdir(d):
+            continue
+        for name in os.listdir(d):
+            if not name.endswith(".offer"):
+                continue
+            f = os.path.join(d, name)
+            try:
+                with open(f) as fh:
+                    offer = json.load(fh)
+            except (json.JSONDecodeError, OSError):
+                continue
+            paths = offer.get("paths")
+            if not isinstance(paths, list):
+                continue
+            kept = [x for x in paths if x in still]
+            if kept == paths:
+                continue
+            try:
+                if kept:
+                    # .tmp is not a JOURNAL_SUFFIXES name, so no reader sees it.
+                    offer["paths"] = kept
+                    with open(f + ".tmp", "w") as fh:
+                        json.dump(offer, fh)
+                    os.replace(f + ".tmp", f)
+                else:
+                    spent = os.path.join(d, "spent")
+                    os.makedirs(spent, mode=0o700, exist_ok=True)
+                    os.replace(f, os.path.join(spent, name))
+            except OSError:
+                pass
+
+
 def claimable_windows(jdir, path):
     """This session's live windows, plus any an earlier commit kept for `path`."""
     wins = {(w["before"], w["after"]): w for w in load_windows(jdir)}
@@ -1936,6 +1985,9 @@ def cmd_commit(args):
         else:
             keep_unreplayed(dest, jdir, set(loaded))
             leave_offers(dest, jdir, None if args.no_claim else shared)
+    # Every session's offers, not just ours: an ended session never commits
+    # again, so its offer on a path a peer has since committed held forever.
+    sweep_offers(working_copy_paths())
 
     # We moved @- ourselves, so re-baseline the other live sessions -- otherwise
     # our own commit reads to them as someone else moving the base.
@@ -2762,7 +2814,7 @@ def report_drift(drifted, me=""):
 
 
 def status_label(status):
-    return "left by an earlier commit" if status == OFFERED else status
+    return "left uncommitted by its last commit" if status == OFFERED else status
 
 
 def report_unclaimed(unclaimed, prefix="", cov=None, me=""):

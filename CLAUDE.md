@@ -473,5 +473,6 @@ vendor approve <name>                  # Approve current state after review
 | [docs/live-transcribe.md](docs/live-transcribe.md) | Live Transcribe app and engine, logs, history, and the warm whisper server |
 | [docs/hermes.md](docs/hermes.md) | Hermes command types, submenus, generators, reserved keys, reloading |
 | [docs/testing.md](docs/testing.md) | Test components, aliases, runners and the aggregate summary |
+| [ai/mods/README.md](ai/mods/README.md) | Claude Code mods. Read it before editing or checking a mod: hot reload in every session, the pinned `tsc` command, `claude plugin test`, and the copy-to-scratch rule for a risky change |
 | skill `music-server` | Music server, Navidrome, the cmus mount and scripting cmus (`ai/skills/music-server/SKILL.md`) |
 | skill `headless-claude` | `claude-p`, the `<output>` envelope, `--json-schema`, SDK callers (`ai/skills/headless-claude/SKILL.md`) |

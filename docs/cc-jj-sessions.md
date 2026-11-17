@@ -319,7 +319,10 @@ whole-copy id pair, and a kept window spans the files that commit took, so the n
 commit stopped with exit `5` on them. The commit writes an `.offer` file instead. It
 names the paths still changed and holds the windows for them. `claim` reads it,
 peers see it as a stake, exit `5` skips it until a new Bash change touches the path,
-and later commits carry it until the path stops differing from `@-`.
+and any later `commit-mine`, by any session, drops a path from it once that path
+no longer differs from `@-` (`sweep_offers`). Before that, only the owner's own
+commits did, so an ended session's offer outlived a peer committing the path and
+blocked that peer's next claim until the 2-day prune.
 
 The `--also` refusal prints what would be committed, so that the diff can be read
 before `--force`. Use that only for a delete or rename. `--force --also` takes the

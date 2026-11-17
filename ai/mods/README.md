@@ -42,6 +42,9 @@ cmds test mods                                        # every mod that has tests
 - A test file that imports from `../hooks/register` gets its own copy of the
   module, not the one the engine loaded, and module state carries across the
   tests in one file. Test stateful code through the events instead.
+- Only `*.test.ts(x)` files run, so a shared helper such as
+  `roleplay-bookends/tests/world.tsx` is safe in `tests/`. Build its state
+  inside the function: module state carries across the tests in a file.
 - `tsc` is not on PATH. Bare `npx tsc` runs the unrelated `tsc` package, and an
   unpinned `-p typescript` installs whatever is newest, outside the pnpm
   release-age policy. Pin the version.

@@ -2,99 +2,54 @@
 // controls above the prompt, the Pick pane, and the odds drawn in random
 // mode. As in flow.test.tsx, the hooks below answer for the engine: nothing
 // runs a process or a model.
-import { expect, mock, test } from 'claude-code/testing'
-import type { Engine, MockClock } from 'claude-code/testing'
+import { expect, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { matches, nextVote, parseRoster, pct, pickChar } from '../hooks/register'
+import { ROLL, start, world as baseWorld } from './world'
+import type { World as BaseWorld } from './world'
 
-const TAG = '[🎭 Character Roll: «Togusa» 🔍 GHOST IN THE SHELL — Methodical · earnest || vote id: ab12]'
-const ROLL = JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: TAG } })
 // What `roleplay-roll --roster` prints for a three-character cast.
 const ROSTER = [
   ['GHOST IN THE SHELL', 'Togusa', '🔍', 'Methodical · earnest', '', '0.085106', '0.012158'],
   ['WARHAMMER 40K', 'Commissar', '💀', 'Stern', "'For the Emperor!'", '0.085106', '0.014184'],
   ['FAVORITES', 'Holo', '🐺', 'Wise wolf', '', '0.250000', '0.020000'],
 ].map(r => r.join('\t')).join('\n') + '\n'
-const USAGE = { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 
-type World = {
-  clock: MockClock; asks: string[]; rolls: string[]; toasts: string[]; panes: string[]
-  // The mod's $.store, the current session id, and how many --roster runs
-  // fail before one answers.
-  store: Map<string, unknown>; sid: string; rosterFails: number
-  registered: { name: string; immediate?: true }[]
+type World = BaseWorld & {
+  // Each roleplay-roll command line, and how many --roster runs fail before
+  // one answers.
+  rolls: string[]; rosterFails: number
   // Each vote's process.run argv, and how many vote runs fail next.
   voteRuns: string[][]; voteFails: number
 }
 
+// The shared engine (./world), with the roster, the roll log and vote runs
+// that can fail. Every prompt starts a turn (the shared default).
 function world($: Engine, on: On, saved?: string): World {
-  const clock = mock.clock(on, { now: 1_000_000 })
-  const w: World = {
-    clock, asks: [], rolls: [], toasts: [], panes: [], store: new Map(), sid: 'sess-1', rosterFails: 0, registered: [], voteRuns: [], voteFails: 0,
-  }
+  const w: World = Object.assign(baseWorld($, on, { run: argv => runFor(w, argv) }), {
+    rolls: [], rosterFails: 0, voteRuns: [], voteFails: 0,
+  })
   if (saved) w.store.set('mode', saved)
-  on('process.run', (_, e) => {
-    const cmd = e.argv.join(' ')
-    if (e.argv[2]?.includes('votes.lock')) {
-      w.voteRuns.push([...e.argv])
-      if (w.voteFails > 0) {
-        w.voteFails--
-        return { value: { exitCode: 1, stdout: '', stderr: 'disk full', isStdoutTruncated: false, isStderrTruncated: false } }
-      }
-    }
-    if (cmd.includes('roleplay-roll')) w.rolls.push(cmd)
-    if (cmd.includes('--roster') && w.rosterFails > 0) {
-      w.rosterFails--
-      throw new Error('timed out')
-    }
-    const stdout = cmd.includes('--roster') ? ROSTER : cmd.includes('roleplay-roll') ? ROLL : ''
-    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
-  })
-  on('model.complete', (_, e) => {
-    w.asks.push(e.prompt)
-    const kind = e.prompt.includes('OPENER') ? 'OPENER' : 'CLOSER'
-    return { value: { isAnswered: true as const, text: `${kind} line`, usage: USAGE } }
-  })
-  on('session.id', () => ({ value: w.sid }))
-  on('command.register', (_, e) => {
-    w.registered.push({ name: e.name, ...(e.immediate ? { immediate: e.immediate } : {}) })
-    return { value: { command: e.name } }
-  })
-  on('store.get', (_, e) => ({ value: structuredClone(w.store.get(e.key)) }))
-  on('store.set', (_, e) => {
-    w.store.set(e.key, structuredClone(e.value))
-    return { value: undefined }
-  })
-  on('ui.panes', () => ({
-    value: w.panes.map(id => ({ id, title: id, isShown: true, isFocused: true, isPlaced: true })),
-  }))
-  on('ui.toast', (_, e) => {
-    w.toasts.push(e.text)
-    return { value: undefined }
-  })
-  on('ui.open', (_, e) => {
-    w.panes.push(e.id)
-    return { value: { isPlaced: true } }
-  })
-  on('ui.close', (_, e) => {
-    w.panes = w.panes.filter(p => p !== e.id)
-    return { value: undefined }
-  })
-  on('session.start', (_, e) => ({ cwd: e.cwd }))
-  on('session.end', (_, e) => ({ sessionId: e.sessionId }))
-  on('prompt.submit', async (_, e) => {
-    await $.turn.start({ text: e.text, turnId: `t-${e.text.length}` })
-    return { text: e.text }
-  })
-  on('turn.start', (_, e) => ({ turnId: e.turnId }))
-  on('turn.complete', (_, e) => ({ text: e.answer }))
   return w
 }
 
-async function start($: Engine, w: World) {
-  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  await w.clock.settle()
+function runFor(w: World, argv: readonly string[]) {
+  const cmd = argv.join(' ')
+  if (argv[2]?.includes('votes.lock')) {
+    w.voteRuns.push([...argv])
+    if (w.voteFails > 0) {
+      w.voteFails--
+      return { exitCode: 1, stderr: 'disk full' }
+    }
+  }
+  if (cmd.includes('roleplay-roll')) w.rolls.push(cmd)
+  if (cmd.includes('--roster') && w.rosterFails > 0) {
+    w.rosterFails--
+    throw new Error('timed out')
+  }
+  return { stdout: cmd.includes('--roster') ? ROSTER : cmd.includes('roleplay-roll') ? ROLL : '' }
 }
 
 async function submit($: Engine, w: World, text: string) {

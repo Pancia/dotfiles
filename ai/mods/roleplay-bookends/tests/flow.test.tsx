@@ -3,60 +3,33 @@
 // Nothing here runs a process or a model: the hooks below answer for the
 // engine (process.run, model.complete, session.id), and mock.clock runs the
 // mod's $.clock.after(0, …) work when the test settles it.
-import { expect, mock, test } from 'claude-code/testing'
-import type { Engine, MockClock } from 'claude-code/testing'
+import { expect, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-// The tag `roleplay-roll --votes` prints (roleplay/bin/roleplay-roll).
-const TAG = '[🎭 Character Roll: «Togusa» 🔍 GHOST IN THE SHELL — Methodical · earnest || vote id: ab12]'
-const ROLL = JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: TAG } })
-const USAGE = { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
+import { start, world as baseWorld } from './world'
+import type { World as BaseWorld } from './world'
+
 // Markers the model's answer echoes, so a row shows whose opener it drew.
 const MARKERS = ['ALPHA', 'BRAVO', 'CHARLIE']
 
-type World = { clock: MockClock; asks: string[]; turnFor: Map<string, string> }
+type World = BaseWorld & { turnFor: Map<string, string> }
 
-// The engine beneath the mod. A prompt whose text is in `turnFor` starts that
+// The shared engine (./world). A prompt whose text is in `turnFor` starts that
 // turn before prompt.submit resolves, as an idle prompt does in a session; any
 // other prompt is folded into a running turn and starts none.
 function world($: Engine, on: On): World {
-  const clock = mock.clock(on, { now: 1_000_000 })
-  const asks: string[] = []
   const turnFor = new Map<string, string>()
-  on('process.run', (_, e) => ({
-    value: {
-      exitCode: 0,
-      stdout: e.argv.join(' ').includes('roleplay-roll') ? ROLL : '',
-      stderr: '',
-      isStdoutTruncated: false,
-      isStderrTruncated: false,
+  const w = baseWorld($, on, {
+    turnFor: text => turnFor.get(text),
+    answer: prompt => {
+      // The marker of the request itself, not of the previous reply it quotes.
+      const asked = prompt.slice(prompt.lastIndexOf('asked:'))
+      const kind = prompt.includes('OPENER') ? 'OPENER' : 'CLOSER'
+      return `${kind} ${MARKERS.find(m => asked.includes(m)) ?? 'NONE'}`
     },
-  }))
-  on('model.complete', (_, e) => {
-    asks.push(e.prompt)
-    // The marker of the request itself, not of the previous reply it quotes.
-    const asked = e.prompt.slice(e.prompt.lastIndexOf('asked:'))
-    const kind = e.prompt.includes('OPENER') ? 'OPENER' : 'CLOSER'
-    const mark = MARKERS.find(m => asked.includes(m)) ?? 'NONE'
-    return { value: { isAnswered: true as const, text: `${kind} ${mark}`, usage: USAGE } }
   })
-  on('session.id', () => ({ value: 'sess-1' }))
-  on('command.register', (_, e) => ({ value: { command: e.name } }))
-  on('store.get', () => ({ value: undefined }))
-  on('session.start', (_, e) => ({ cwd: e.cwd }))
-  on('prompt.submit', async (_, e) => {
-    const turnId = turnFor.get(e.text)
-    if (turnId) await $.turn.start({ text: e.text, turnId })
-    return { text: e.text }
-  })
-  on('turn.start', (_, e) => ({ turnId: e.turnId }))
-  on('turn.complete', (_, e) => ({ text: e.answer }))
-  return { clock, asks, turnFor }
-}
-
-async function start($: Engine, w: World) {
-  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  await w.clock.settle()
+  return Object.assign(w, { turnFor })
 }
 
 async function submit($: Engine, w: World, text: string, turnId?: string) {
