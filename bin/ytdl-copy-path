@@ -83,4 +83,12 @@ if command -v terminal-notifier >/dev/null 2>&1; then
     terminal-notifier -title "ytdl 📋 path copied" \
         -message "$(basename "$target")" \
         -group "ytdl-copy-path" >/dev/null 2>&1 || true
+
+    # The confirmation has done its job once seen; take it down after a few
+    # seconds instead of leaving it on screen. Waited out here rather than in
+    # a background child, which launchd may kill when this click handler exits.
+    # A second copy inside the window replaces this banner in place, and this
+    # timer then clears it a little early, which is harmless.
+    sleep "${YTDL_COPY_NOTICE_SECS:-5}"
+    terminal-notifier -remove "ytdl-copy-path" >/dev/null 2>&1 || true
 fi
