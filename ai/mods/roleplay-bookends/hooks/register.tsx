@@ -967,13 +967,28 @@ function wrapWords(t: string, first: number, rest: number): string[] {
   return rows
 }
 
+// A universe in capitals, as the roster writes it, in title case:
+// GHOST IN THE SHELL → Ghost in the Shell. Words with a digit stay (40K).
+const SMALL = new Set(['a', 'an', 'and', 'at', 'by', 'for', 'in', 'of', 'on', 'or', 'the', 'to'])
+export function titleCase(s: string): string {
+  if (s !== s.toUpperCase()) return s
+  return s.split(' ').map((w, i) => {
+    if (/\d/.test(w)) return w
+    const lo = w.toLowerCase()
+    return i > 0 && SMALL.has(lo) ? lo : lo.charAt(0).toUpperCase() + lo.slice(1)
+  }).join(' ')
+}
+
 // One bookend, drawn like a blockquote in the reply: indented to the reply's
-// text, a dim bar on every row, then
-// 🎭 «Name» [−][+] emoji UNIVERSE [−][+] — "line"   (model kind 1.2s)
-// Rows are wrapped by hand so the bar runs down each one. The vote buttons
-// use roleplay-roll's vote id and the old link slots: 1–4 on the opener, 5–8
-// on the closer, numbered character +, character −, universe +, universe −;
-// drawn minus first. A press appends to votes.tsv itself (castVote).
+// text, a dim bar on every row. Three parts, each on rows of its own:
+//   ▎ 🎭 Name · emoji Universe                     (dim; split in two if narrow)
+//   ▎ "line"   (model kind 1.2s)
+//   ▎ 1.2% [ − ] [ + ]   8.5% [ − ] [ + ]          (random mode only)
+// Rows are wrapped by hand so the bar runs down each one; a row of several
+// Texts in one flex row wraps each Text in its own column instead. The vote
+// buttons use roleplay-roll's vote id and the old link slots: 1–4 on the
+// opener, 5–8 on the closer, numbered character +, character −, universe +,
+// universe −; drawn minus first. A press appends to votes.tsv (castVote).
 const INDENT = 2
 const BAR = '▎ '
 function bookend(
@@ -1006,60 +1021,58 @@ function bookend(
     )
   }
   const sp = <Text> </Text>
-  // Random mode's odds, dim after the name and after the universe.
-  const cOdds = l.odds ? pct(l.odds.c) : ''
-  const uOdds = l.odds ? pct(l.odds.u) : ''
-  const odds = (s: string) => (s ? <Text dimColor>{s} </Text> : null)
-  // Head: 🎭 «Name» 1.2% [ − ] [ + ] emoji UNIVERSE 8.5% [ − ] [ + ] — ,
-  // single spaces between parts; each vote button is 5 cells plus its space.
-  const head =
-    cells(`🎭 «${l.name}» ${l.emoji} ${l.universe} — `) + (hasVotes ? 4 * 6 : 0) +
-    (cOdds ? cells(cOdds) + 1 : 0) + (uOdds ? cells(uOdds) + 1 : 0)
+  // The credit on one row when it fits, else the name and the universe each
+  // start a row, so a narrow window splits it between them.
+  const who = `🎭 ${l.name}`
+  const where = `${l.emoji} ${titleCase(l.universe)}`
+  const head = cells(`${who} · ${where}`) <= width
+    ? [`${who} · ${where}`]
+    : [...wrapWords(who, width, width), ...wrapWords(where, width, width)]
   const body = l.text ? `"${l.text}"` : 'thinking…'
-  const words = meta ? `${body} ${meta}` : body
-  const rows = wrapWords(words, Math.max(0, width - head), width)
+  const rows = wrapWords(meta ? `${body} ${meta}` : body, width, width)
   // Split the meta back off the last row so it can be drawn dim.
-  const styled = (row: string, last: boolean) => {
-    const at = last && meta ? row.lastIndexOf(meta) : -1
-    const main = at >= 0 ? row.slice(0, at) : row
+  const styled = (r: string, last: boolean) => {
+    const at = last && meta ? r.lastIndexOf(meta) : -1
+    const main = at >= 0 ? r.slice(0, at) : r
     return (
       <Text>
-        <Text italic dimColor={!l.text}>{main}</Text>
+        <Text dimColor={!l.text}>{main}</Text>
         {at >= 0 ? <Text dimColor>{meta}</Text> : null}
       </Text>
     )
   }
-  const firstFits = rows[0] !== undefined && cells(rows[0]) <= width - head
-  const firstRow = firstFits ? rows.shift() : undefined
+  // Random mode's odds, each dim before its own two buttons.
+  const cOdds = l.odds ? pct(l.odds.c) : ''
+  const uOdds = l.odds ? pct(l.odds.u) : ''
+  const odds = (s: string) => (s ? <Text dimColor>{s} </Text> : null)
   return (
     <Box paddingLeft={INDENT} flexDirection="column">
-      <Box flexDirection="row">
-        {bar}
-        <Text>🎭 </Text>
-        <Text bold italic>«{l.name}»</Text>
-        {sp}
-        {odds(cOdds)}
-        {hasVotes ? vote(2, '−') : null}
-        {hasVotes ? sp : null}
-        {hasVotes ? vote(1, '+') : null}
-        {hasVotes ? sp : null}
-        <Text>{l.emoji} </Text>
-        <Text italic color="permission">{l.universe}</Text>
-        {sp}
-        {odds(uOdds)}
-        {hasVotes ? vote(4, '−') : null}
-        {hasVotes ? sp : null}
-        {hasVotes ? vote(3, '+') : null}
-        {hasVotes ? sp : null}
-        <Text>— </Text>
-        {firstRow !== undefined ? styled(firstRow, rows.length === 0) : null}
-      </Box>
+      {head.map((r, i) => (
+        <Box key={`h${i}`} flexDirection="row">
+          {bar}
+          <Text dimColor>{r}</Text>
+        </Box>
+      ))}
       {rows.map((r, i) => (
         <Box key={`r${i}`} flexDirection="row">
           {bar}
           {styled(r, i === rows.length - 1)}
         </Box>
       ))}
+      {hasVotes || cOdds ? (
+        <Box key="v" flexDirection="row">
+          {bar}
+          {odds(cOdds)}
+          {hasVotes ? vote(2, '−') : null}
+          {hasVotes ? sp : null}
+          {hasVotes ? vote(1, '+') : null}
+          <Text>{'   '}</Text>
+          {odds(uOdds)}
+          {hasVotes ? vote(4, '−') : null}
+          {hasVotes ? sp : null}
+          {hasVotes ? vote(3, '+') : null}
+        </Box>
+      ) : null}
     </Box>
   )
 }
