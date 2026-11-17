@@ -6,6 +6,7 @@
         "  w  -> +windows mode   (same)",
         "  :  -> search mode     (intercepted at every level, not just root)",
         "Also taken by the entries below: b d e f h i j k m p q r s t u v x y z = -",
+        "Also taken: . (iterm-here)",
         "Free at root: c g l n o, digits, and most punctuation.",
         "'x' is the +utils grab bag — one-off scripts land there rather than eating a root letter."
     ],
@@ -158,6 +159,7 @@
         "s": ["Spirituality folder", "finder-here \"$HOME/Cloud/_spirituality\""],
         "t": ["Transits now", {"interactive": "astro now"}]
     },
+    ".": ["iTerm window in ~/dotfiles", "$HOME/dotfiles/bin/iterm-here $HOME/dotfiles"],
     "=": ["edit Hermes config", {"shell": "nvim ~/dotfiles/rcs/hermes-commands.json"}],
     "-": [{"shell:fish": "~/private/bin/superwhisper_status"}, "~/private/bin/superwhisper_reset"]
 }

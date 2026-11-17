@@ -99,7 +99,7 @@ When what each answer does is not obvious, give the question its own block:
 
 When the question makes that clear, use one line, for example: **Q2 (push):** Push to master?
 
-**Copy links.** When I must paste text somewhere myself, such as a command for another terminal, show it in a code block and add `[copy](hammerspoon://copy?text=…)` after it. Percent-encode every character except letters and digits (`urllib.parse.quote(s, safe='')`). A space is `%20`, never `+`. A line break is `%0A`.
+**Copy links.** When I must paste text somewhere myself, such as a command for another terminal, show it in a code block and add `[[ 📋 copy ]](hammerspoon://copy?text=…)` after it, with the brackets, emoji and spaces exactly so, to make it easy to see. The terminal draws no background color on link text, so do not try code style for that. Percent-encode every character except letters and digits (`urllib.parse.quote(s, safe='')`). A space is `%20`, never `+`. A line break is `%0A`.
 
 ### Questions to me
 

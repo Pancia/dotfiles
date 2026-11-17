@@ -115,20 +115,6 @@
                         ]
                     },
                     {
-                        "description": "eject -> iterm (centered, ~/dotfiles)",
-                        "manipulators": [
-                            {
-                                "from": {
-                                    "key_code": "eject"
-                                },
-                                "to": {
-                                    "shell_command": "/Users/anthony/dotfiles/bin/iterm-here ~/dotfiles"
-                                },
-                                "type": "basic"
-                            }
-                        ]
-                    },
-                    {
                         "description": "cmd+ctrl+q -> lock-screen-dialog",
                         "manipulators": [
                             {

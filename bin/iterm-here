@@ -1,9 +1,13 @@
 #!/Users/anthony/.pyenv/versions/3.11.11/bin/python3.11
 
+import signal
 import sys
 import iterm2
 import AppKit
-import subprocess
+
+# run_until_complete(retry=True) retries the API connection forever. If iTerm
+# never comes up, give up instead of lingering (one copy ran 16h on 2026-11-17).
+signal.alarm(30)
 
 # Ensure iTerm is running (required for iterm2 API connection)
 ws = AppKit.NSWorkspace.sharedWorkspace()
@@ -30,16 +34,9 @@ async def main(connection):
         session = window.current_tab.current_session
         await session.async_send_text(f"cd {sys.argv[1]}\n")
 
-    # Use AppleScript to activate iTerm and focus this specific window
-    window_id = window.window_id
-    subprocess.run([
-        "osascript", "-e",
-        f'''
-        tell application "iTerm2"
-            activate
-            set index of window id "{window_id}" to 1
-        end tell
-        '''
-    ])
+    # Bring iTerm and this window to the front. (The old AppleScript passed
+    # the API's "pty-..." window id where AppleScript wants an integer.)
+    await app.async_activate()
+    await window.async_activate()
 
 iterm2.run_until_complete(main, True)
