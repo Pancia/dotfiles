@@ -9,11 +9,16 @@
 
 set -g YTDL_VALID_TYPES music audio video text notes
 set -g YTDL_VALID_QUALITIES regular best
-set -g YTDL_OUTPUT_DIR ~/Cloud/ytdl
+# YTDL_OUTPUT_DIR in the environment wins, so a test can download somewhere
+# other than the real library.
+set -q YTDL_OUTPUT_DIR; or set -g YTDL_OUTPUT_DIR ~/Cloud/ytdl
 set -g YTDL_AUDIO_CODE "bestaudio"
 set -g YTDL_VIDEO_CODE "bestvideo[ext=mp4][height<=480][vcodec^=avc]+bestaudio"
 set -g YTDL_VIDEO_CODE_BEST "bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
 set -g YTDL_PLAYLIST_FMT "%(playlist_title)s"
+# yt-dlp errors that a retry with Brave's cookies can fix: YouTube's age gate,
+# and an X post that is marked sensitive or protected.
+set -g YTDL_LOGIN_ERRORS 'Sign in to confirm your age|age-restricted|login required|requires authentication|protected tweet'
 
 # Filename field separators. Every character here is deliberately inert: safe
 # unquoted in sh and inside double quotes, not markdown or Telegram emphasis,
@@ -151,9 +156,9 @@ function _ytdl_run
         end
         set -l exit_code $pipestatus[1]
 
-        # Retry with cookies if age-restricted
+        # Retry with cookies if age-restricted, or an X post that needs a login
         if test $exit_code -ne 0
-            if string match -qri 'Sign in to confirm your age|age-restricted|login required' -- "$all_output"
+            if string match -qri $YTDL_LOGIN_ERRORS -- "$all_output"
                 echo "[Age-restricted detected, retrying with cookies...]"
                 set last_milestone 0
                 yt-dlp --newline $extra_args --cookies-from-browser brave -- $ytid 2>&1 | while read -l line
@@ -184,7 +189,7 @@ function _ytdl_run
     set -l exit_code $pipestatus[1]
 
     # Retry with cookies if age-restricted
-    if test $exit_code -ne 0; and grep -qiE 'Sign in to confirm your age|age-restricted|login required' $log
+    if test $exit_code -ne 0; and grep -qiE $YTDL_LOGIN_ERRORS $log
         echo ""
         echo "[Age-restricted detected, retrying with cookies...]"
         yt-dlp $extra_args --cookies-from-browser brave -- $ytid
@@ -195,10 +200,16 @@ function _ytdl_run
     return $exit_code
 end
 
+# Args: OUT_DIR ID [FILE...]. The FILEs are the ones yt-dlp reported writing.
+# Without them, fall back to finding files by ID, which only works where
+# yt-dlp names the file by the ID it was given, as on YouTube. An X post's file
+# carries the video's own ID, not the post's.
 function _ytdl_convert_to_m4a
     set -l out_dir $argv[1]
     set -l ytid $argv[2]
-    for src_file in $out_dir/*$YTDL_SEP_ID$ytid.{mp4,webm}
+    set -l sources (string match -r -- '.*\.(?:mp4|webm)$' $argv[3..-1])
+    test (count $argv) -gt 2; or set sources $out_dir/*$YTDL_SEP_ID$ytid.{mp4,webm}
+    for src_file in $sources
         if test -f "$src_file"
             set -l m4a_file (string replace -r '\.[^.]+$' '.m4a' -- $src_file)
             if not test -f "$m4a_file"
@@ -258,30 +269,48 @@ function _ytdl_download_media
         set merge_args --merge-output-format mp4
     end
 
-    if _ytdl_run $ytid -o $output_path -f $format_code $merge_args
-        # Only convert mp4 to m4a for audio formats, not video
-        if test "$download_type" != "video"
-            _ytdl_convert_to_m4a "$YTDL_OUTPUT_DIR/$download_type" $ytid
-        end
-        return 0
-    else
-        return 1
+    # yt-dlp lists each file it ends with here, also one it had already.
+    set -l written (mktemp -t ytdl-files)
+    _ytdl_run $ytid -o $output_path -f $format_code $merge_args \
+        --print-to-file after_move:filepath $written
+    set -l rc $status
+    set -l files (cat $written)
+    command rm -f $written
+    test $rc -eq 0; or return 1
+
+    # A playlist keeps its old behaviour: the ID lookup finds nothing there,
+    # so its items stay as downloaded.
+    test "$video_type" = playlist; and set files
+
+    # Only convert mp4 to m4a for audio formats, not video
+    if test "$download_type" != "video"
+        _ytdl_convert_to_m4a "$YTDL_OUTPUT_DIR/$download_type" $ytid $files
     end
+    return 0
 end
 
 function _ytdl_download_text
     set -l ytid $argv[1]
     set -l download_type $argv[2] # "text" or "notes"
+    set -l video_type $argv[3] # "single" or "playlist"
 
     set -l out_dir "$YTDL_OUTPUT_DIR/$download_type"
     set -l out_file "$out_dir/$YTDL_SEP_BY%(channel,uploader)s$YTDL_SEP_TITLE%(title)s$YTDL_SEP_ID%(id)s.%(ext)s"
 
     # Download audio (prefer m4a to avoid opus conversion issues during transcription)
-    _ytdl_run $ytid -o $out_file -f 'bestaudio[ext=m4a]/bestaudio'
-    or return 1
+    set -l written (mktemp -t ytdl-files)
+    _ytdl_run $ytid -o $out_file -f 'bestaudio[ext=m4a]/bestaudio' \
+        --print-to-file after_move:filepath $written
+    set -l rc $status
+    set -l audio_file (cat $written)
+    command rm -f $written
+    test $rc -eq 0; or return 1
 
-    # Find the audio file we just downloaded (matches this specific ytid)
-    set -l audio_file $out_dir/*$YTDL_SEP_ID$ytid.*
+    # The file yt-dlp reported. Failing that, find it by ID, which works on
+    # YouTube only (see _ytdl_convert_to_m4a). A playlist keeps its old
+    # behaviour: the ID lookup finds nothing, so nothing is transcribed.
+    test "$video_type" = playlist; and set audio_file
+    test (count $audio_file) -gt 0; or set audio_file $out_dir/*$YTDL_SEP_ID$ytid.*
     if test (count $audio_file) -gt 0 -a -f "$audio_file[1]"
         if not string match -qr '\.(txt|srt)$' -- $audio_file[1]
             set -l txt_file (string replace -r '\.[^.]+$' '.txt' -- $audio_file[1])
@@ -497,7 +526,7 @@ switch $ytdl_type
     case music audio video
         _ytdl_download_media $video_id $ytdl_type $video_type
     case text notes
-        _ytdl_download_text $video_id $ytdl_type
+        _ytdl_download_text $video_id $ytdl_type $video_type
 end
 set -l dl_status $status
 
