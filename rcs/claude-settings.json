@@ -85,10 +85,12 @@
       "~/.local/share/claude-scratch/runs"
     ]
   },
-  "deniedMcpServers": [
-    { "serverName": "claude.ai Claude Docs" }
-  ],
   "model": "opus",
+  "deniedMcpServers": [
+    {
+      "serverName": "claude.ai Claude Docs"
+    }
+  ],
   "hooks": {
     "PreToolUse": [
       {
@@ -255,6 +257,7 @@
   "enabledPlugins": {
     "pyright-lsp@claude-plugins-official": true
   },
+  "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
   "effortLevel": "high",
   "modelSettings": {
@@ -265,9 +268,12 @@
       "effortLevel": "high"
     }
   },
+  "advisorModel": "fable",
   "promptSuggestionEnabled": false,
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
+  "theme": "custom:dark-light-term",
+  "verbose": false,
   "preferredNotifChannel": "notifications_disabled",
   "idleCompaction": false,
   "remoteControlAtStartup": false,
@@ -300,6 +306,5 @@
       "**Org-specific CLIs**: None configured. `alt` (Altera's CLI), `g`, `jj`, `trash`, `scratch`, `service`, `svc`, `cmds`, `claude-p`, `ccjj` and `commit-mine` are personal tooling, routine for this user. `scratch discard` moves throwaway files into an audited holding area that a daily job empties after 14 days, instead of deleting them, and is how this user wants Claude to clean up",
       "**Routine commands**: build, test, lint and VCS commands (git, jj, make, cmds) inside a trusted repo, including its .alt/worktrees/ and .claude/worktrees/ subdirectories"
     ]
-  },
-  "advisorModel": "fable"
+  }
 }
