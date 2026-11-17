@@ -981,7 +981,7 @@ export function titleCase(s: string): string {
 
 // One bookend, drawn like a blockquote in the reply: indented to the reply's
 // text, a dim bar on every row. Three parts, each on rows of its own:
-//   ▎ 🎭 Name · emoji Universe                     (dim; split in two if narrow)
+//   ▎ 🎭 Name emoji · Universe                     (dim; split in two if narrow)
 //   ▎ "line"   (model kind 1.2s)
 //   ▎ 1.2% [ − ] [ + ]   8.5% [ − ] [ + ]          (random mode only)
 // Rows are wrapped by hand so the bar runs down each one; a row of several
@@ -1023,8 +1023,9 @@ function bookend(
   const sp = <Text> </Text>
   // The credit on one row when it fits, else the name and the universe each
   // start a row, so a narrow window splits it between them.
-  const who = `🎭 ${l.name}`
-  const where = `${l.emoji} ${titleCase(l.universe)}`
+  // The emoji is the character's own, so it sits with the name.
+  const who = `🎭 ${l.name} ${l.emoji}`
+  const where = titleCase(l.universe)
   const head = cells(`${who} · ${where}`) <= width
     ? [`${who} · ${where}`]
     : [...wrapWords(who, width, width), ...wrapWords(where, width, width)]

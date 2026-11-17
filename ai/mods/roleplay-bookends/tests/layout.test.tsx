@@ -1,4 +1,4 @@
-// The bookend layout: a dim credit row (🎭 name · emoji Universe), the quote
+// The bookend layout: a dim credit row (🎭 name emoji · Universe), the quote
 // on rows of its own, and the odds and vote buttons on a last row. Each row is
 // wrapped by hand to the viewport, so no row is wider than it: on 2026-11-17
 // a long name and universe in one flex row wrapped each in its own column.
@@ -48,8 +48,8 @@ test('a long name and universe get a credit row of their own, and the quote foll
   const ui = await closer($, on, 60)
   const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(t => t !== '▎ ')
   // Too long for one row: the name and the universe each start their own.
-  expect(texts[0]).toBe('🎭 Julia Sugarbaker (Designing Women)')
-  expect(texts[1]).toBe('🏛 Steel Magnolias')
+  expect(texts[0]).toBe('🎭 Julia Sugarbaker (Designing Women) 🏛')
+  expect(texts[1]).toBe('Steel Magnolias')
   expect(texts.join(' ')).not.toContain('«')
   // Every hand-wrapped row fits in 60 columns less the indent, bar and margin.
   const width = 60 - 2 - 2 - 2
@@ -64,7 +64,7 @@ test('a long name and universe get a credit row of their own, and the quote foll
 test('a credit that fits stays on one row', async ($, on) => {
   const ui = await closer($, on, 120)
   const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
-  expect(texts).toContain('🎭 Julia Sugarbaker (Designing Women) · 🏛 Steel Magnolias')
+  expect(texts).toContain('🎭 Julia Sugarbaker (Designing Women) 🏛 · Steel Magnolias')
   await ui.unmount()
 })
 
