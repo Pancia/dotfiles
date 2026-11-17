@@ -85,7 +85,8 @@ def test_a_bare_component_and_an_alias_still_run_the_component(dispatch):
 
 def test_a_parent_covers_every_component_under_it(dispatch):
     _, calls = dispatch("bin")
-    assert calls == [("all", [], ["bin/astro", "bin/ytdl", "bin/exocortex-id"])]
+    assert calls == [("all", [], ["bin/astro", "bin/ytdl", "bin/cc-peers", "bin/scratch",
+                                  "bin/exocortex-id"])]
 
 
 def test_flags_only_still_run_everything(dispatch):
