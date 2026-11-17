@@ -36,6 +36,9 @@ directly (it would belong to the LLM's shell and die with it). That runs it in a
 dedicated tmux server I can `svc-tmux attach` to, and exits nonzero with the
 pane's last lines if it fails to come up. It needs `svc_cmd` in the project's
 config; without one, ask me. Stop only what you started (`svc-tmux down <name>`).
+If `svc-tmux up` refuses because it runs in a Claude Code background session,
+ask me to run `svc-tmux up` in a terminal. Never set `SVC_TMUX_ALLOW_ANY_APP`
+yourself.
 If `svc` reports "not running", also check whether it's a `service` after all.
 Per-project services are declared in `.svc.conf` / `.svc.local.conf`
 (`SVC_SERVICES`, `svc_port_file`, optional `svc_eval`, `svc_cmd`, `SVC_ENV`).

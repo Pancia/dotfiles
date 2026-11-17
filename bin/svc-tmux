@@ -14,7 +14,9 @@
 # probe), or exits nonzero with the pane's last lines - the form for LLMs.
 #
 # Design (see .cc/plans/PLAN-svc-tmux.md in ~/dotfiles):
-# - Own server: `tmux -L svc -f lib/svc/tmux.conf`; your normal tmux is untouched.
+# - Own server per project: `tmux -L svc-<dir, first 40 chars>-<hash> -f
+#   lib/svc/tmux.conf`; your normal tmux is untouched. Not created from a Claude
+#   Code background session (macOS privacy, see check_server_owner).
 # - Scrubbed env: whoever starts the tmux server fixes every window's base env,
 #   so the server starts with the caller's env MINUS session-bound variables
 #   (CLAUDE*, CCS_*, AI_AGENT, TMUX*, terminal-session ids). Not an allowlist:
@@ -27,7 +29,6 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-SOCK="${SVC_TMUX_SOCKET:-svc}"
 conf="${SVC_TMUX_CONF:-$here/../lib/svc/tmux.conf}"   # override: tests, which skip your tmux.conf
 TM() { tmux -L "$SOCK" -f "$conf" "$@"; }
 SVC() { "$here/svc" "$@"; }
@@ -40,7 +41,25 @@ SVC_ENV="${SVC_ENV:-}"
 
 root="$(pwd -P)"     # physical: the session name must not depend on how you cd'd here
 wdir="$PWD"          # logical: windows start here, so svc.conf lookups match cmds'
-S="svc-$(printf '%s' "$(basename "$root")" | tr -c 'A-Za-z0-9_-' '_')-$(printf '%s' "$root" | shasum | cut -c1-6)"
+base="$(printf '%s' "$(basename "$root")" | tr -c 'A-Za-z0-9_-' '_')"
+hash="$(printf '%s' "$root" | shasum | cut -c1-6)"
+S="svc-$base-$hash"
+# One tmux server per project, named like its session. A shared server gave every
+# project the env and macOS privacy access of whoever started it first (a Claude
+# Bash call in one project left another unable to read ProtonDrive files).
+# The socket name keeps only 40 characters of the folder name: a socket path may
+# have at most 104 bytes, and /private/tmp/tmux-UID/ already takes 22.
+# Transitional: a project whose session still lives on the old shared server
+# (`tmux -L svc`) keeps using it until `svc-tmux down`, so attach/down/ls still
+# find it. Remove this once no session runs there.
+legacy_sock="${SVC_TMUX_LEGACY_SOCKET:-svc}"   # override: tests, which never touch the real one
+if [ -n "${SVC_TMUX_SOCKET:-}" ]; then
+  SOCK="$SVC_TMUX_SOCKET"
+elif tmux -L "$legacy_sock" has-session -t "=$S" 2>/dev/null; then
+  SOCK="$legacy_sock"
+else
+  SOCK="svc-${base:0:40}-$hash"
+fi
 
 has_session() { TM has-session -t "=$S" 2>/dev/null; }
 # "<window_id> <live|dead> <pane_pid>" for the window named $1, a live one first;
@@ -69,6 +88,57 @@ up_lock() {
   done
   trap 'rmdir .run/svc-tmux.lock 2>/dev/null || true' EXIT
 }
+# macOS privacy (TCC) judges every process in the tmux server by the app that was
+# "responsible" when the server started, for the server's whole life. A Claude
+# Code background session runs under ClaudeCode.app, which has none of iTerm's
+# folder grants, so its services would get EPERM on Documents, Downloads and
+# ~/Library/CloudStorage (ProtonDrive). See .cc/reports/svc-tmux-protondrive-eperm.md.
+# Prints the pid macOS holds responsible for this process; empty if the probe is
+# unavailable (private symbol gone, or no Command Line Tools - then
+# /usr/bin/python3 is a stub that opens an install dialog, so don't run it).
+responsible_pid() {
+  xcode-select -p >/dev/null 2>&1 || return 0
+  /usr/bin/python3 -c 'import ctypes,os
+f=ctypes.CDLL(None).responsibility_get_pid_responsible_for_pid
+f.restype=ctypes.c_int; f.argtypes=[ctypes.c_int]; print(f(os.getpid()))' 2>/dev/null || true
+}
+# Refuse to create this project's server from a Claude Code background session.
+# Called only right before `tmux new-session`, so `up` for a service that runs
+# elsewhere is never refused. Joining a server that already runs is fine: it
+# keeps its own access (a shared SVC_TMUX_SOCKET has a server but no session).
+# SVC_TMUX_ALLOW_ANY_APP=1 skips this, for projects that read no protected folder.
+# Both signals read the responsible process's argv: `comm` is the path it was
+# started by (.../ClaudeCode.app/Contents/MacOS/claude for the background host;
+# its real path, versions/<v>, is the same as a foreground claude's), and the
+# host runs with --bg-pty-host.
+check_server_owner() {
+  [ "${SVC_TMUX_ALLOW_ANY_APP:-}" = 1 ] && return 0
+  TM list-sessions >/dev/null 2>&1 && return 0
+  local rpid app cmdline
+  if [ -n "${SVC_TMUX_FAKE_RESPONSIBLE:-}" ]; then   # tests: stands for both comm and command
+    app="$SVC_TMUX_FAKE_RESPONSIBLE"; cmdline="$app"
+  else
+    rpid="$(responsible_pid)"
+    case "$rpid" in
+      ''|*[!0-9]*|0)
+        echo "svc-tmux: warning: could not check which app owns this process. If it is a Claude Code background session, services may get EPERM on Documents, Downloads and cloud folders." >&2
+        return 0 ;;
+    esac
+    app="$(ps -o comm= -p "$rpid" 2>/dev/null || true)"
+    cmdline="$(ps -o command= -p "$rpid" 2>/dev/null || true)"
+  fi
+  case "$app" in *ClaudeCode.app/*) ;; *)
+    case "$cmdline" in *--bg-pty-host*) ;; *) return 0 ;; esac ;;
+  esac
+  die "refusing to start this project's tmux server from a Claude Code background session.
+  macOS would judge every service in it as the Claude Code app ($app),
+  which has no access to Documents, Downloads or cloud folders such as ProtonDrive,
+  so reads there fail with EPERM for the server's whole life.
+  Start it from a terminal or a foreground Claude session instead: svc-tmux up.
+  If you are an LLM: ask the user to run \`svc-tmux up\` in a terminal. Do not set
+  SVC_TMUX_ALLOW_ANY_APP yourself; only the user may, for a project whose services
+  read no such folder."
+}
 names_or_default() {
   if [ "$#" -gt 0 ]; then echo "$*"; else echo "$SVC_SERVICES"; fi
 }
@@ -84,6 +154,7 @@ new_window() {
   fi
   # First window creates the session - and, if no svc server runs yet, the
   # server, whose global environment is then the caller's minus these.
+  check_server_owner
   local -a unset_args=()
   for v in $(compgen -e); do
     case "$v" in

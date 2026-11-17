@@ -170,8 +170,24 @@ all state is under the project's own `.run/`.
 
 ## svc-tmux (how scripts and LLMs start services)
 
-- **Own server**: `tmux -L svc`, config `lib/svc/tmux.conf` (remain-on-exit,
-  mouse, 50k history). Your normal tmux is never touched.
+- **Own server per project**: `tmux -L svc-<dir>-<hash>`, where `<dir>` keeps
+  only the first 40 characters (a socket path may have at most 104 bytes).
+  `svc-tmux up` always prints the socket; `svc-tmux ls` prints it while a
+  session exists. Config `lib/svc/tmux.conf` (remain-on-exit, mouse, 50k
+  history). Your normal tmux is never touched. Projects used to share one
+  `tmux -L svc` server, so each got the env and macOS privacy access of whoever
+  started it first: a server started by a Claude Bash call in one project could
+  not read ProtonDrive files for another project. Transitional: a project whose
+  session still lives on that old server keeps using it until `svc-tmux down`.
+- **Not from a Claude background session**: macOS judges every process in the
+  server by the app that started it. A Claude Code background session runs
+  under `ClaudeCode.app`, which has no folder access, so `svc-tmux up` refuses
+  to create a server there (EPERM on Documents, Downloads, ProtonDrive...).
+  It spots the session by the responsible process's path (`ClaudeCode.app`) or
+  its `--bg-pty-host` flag; if the check cannot run, `up` warns and goes on.
+  Joining a running server is fine, and so is `up` for a service that already
+  runs elsewhere (nothing is created). `SVC_TMUX_ALLOW_ANY_APP=1` skips the
+  check. Details: `.cc/reports/svc-tmux-protondrive-eperm.md`.
 - **Scrubbed env**: whoever starts the server fixes every window's base env, so
   it starts with the caller's env minus session-bound variables (`CLAUDE*`,
   `CCS_*`, `AI_AGENT`, `TMUX*`, terminal-session ids) — an LLM starting it doesn't
@@ -179,13 +195,14 @@ all state is under the project's own `.run/`.
   version kept only HOME/PATH/LANG..., dropped `XDG_CONFIG_HOME`, and clojure
   then silently lost the `:local/nREPL` alias from `~/.config/clojure/deps.edn`.
   `SVC_ENV` names are copied in per window. A server started before an env fix
-  keeps its old env: `tmux -L svc kill-server` and start again.
+  keeps its old env: `svc-tmux down`, then `svc-tmux up`.
 - **Your tmux bindings**: `lib/svc/tmux.conf` sources `~/.config/tmux/tmux.conf`
   first (prefix, mouse, plugins), then its own settings.
 - **One session per project**: `svc-<dir>-<hash of realpath>`, always targeted
   with `=` (exact), so `proj` and `proj.one` never collide.
 - **Idempotent**: `up` skips a service that runs anywhere — including a `cmds`
-  pane — and `down` only stops the ones hosted in its session.
+  pane — even from a Claude background session, and `down` only stops the ones
+  hosted in its session.
 - **`up --wait`** returns 0 only when every service answers and stays up for 2s
   on the same generation (so a crash right after start is caught); a pane that
   dies fails at once with its last lines. A crashed pane stays readable
@@ -197,7 +214,7 @@ all state is under the project's own `.run/`.
   chooser with every service window showing.
 - `svc-tmux attach` nests when run inside tmux (it's a different server).
 - Server start costs ~3s (your tmux.conf's tpm `run` is synchronous) — once per
-  server. Tests point `SVC_TMUX_CONF` at a copy without it.
+  server, so once per project. Tests point `SVC_TMUX_CONF` at a copy without it.
 
 ## LLM contract
 
@@ -207,6 +224,9 @@ all state is under the project's own `.run/`.
 - **Start** a service only with `svc-tmux up --wait <name>` (needs `svc_cmd` in
   the project's config) — never run `supervise` yourself: it would belong to your
   shell and die with it. If there is no `svc_cmd`, ask the human (`cmds <name>`).
+- If `svc-tmux up` refuses because it runs in a Claude Code background session,
+  ask the user to run `svc-tmux up` in a terminal. Never set
+  `SVC_TMUX_ALLOW_ANY_APP` yourself.
 - Stop only what you started: `svc-tmux down <name>`.
 
 ## Adding it to a new project

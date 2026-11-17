@@ -63,7 +63,10 @@ That setup moves into `svc_cmd` or a sourced env file.
 ## Wrapper design
 
 - **Dedicated tmux server:** `tmux -L svc -f <own minimal conf>`. Leaves the
-  user's main server and its plugins alone.
+  user's main server and its plugins alone. *(Changed 2026-11-17: one server per
+  project, `tmux -L svc-<dir>-<hash>`, and none created from a Claude Code
+  background session — see `.cc/reports/svc-tmux-protondrive-eperm.md` and the
+  wiki.)*
 - **Clean environment (V).** *(Implemented as a denylist after the allowlist
   dropped XDG_CONFIG_HOME and broke clojure aliases — see the wiki.)* Every window inherits the env of whoever started the
   tmux *server*; later callers' env is ignored. Started by an LLM, every window

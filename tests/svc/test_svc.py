@@ -12,6 +12,7 @@ user's tmux server is never touched.
 import fcntl
 import os
 import pty
+import re
 import select
 import shutil
 import signal
@@ -490,7 +491,12 @@ def tmux_env(tmp_path):
     assert "source-file -q ~/.config/tmux/tmux.conf" in real
     conf = tmp_path / "svc-tmux.conf"
     conf.write_text(real.replace("source-file -q ~/.config/tmux/tmux.conf", ""))
-    env = dict(os.environ, SVC_TMUX_SOCKET=sock, SVC_TMUX_CONF=str(conf))
+    env = dict(os.environ, SVC_TMUX_SOCKET=sock, SVC_TMUX_CONF=str(conf),
+               # A neutral owner app: the suite must pass from a Claude Code
+               # background session too, where the real probe would refuse.
+               SVC_TMUX_FAKE_RESPONSIBLE="/Applications/iTerm.app/Contents/MacOS/iTerm2",
+               # Tests that drop SVC_TMUX_SOCKET must never look at the real `svc`.
+               SVC_TMUX_LEGACY_SOCKET=f"svctest-legacy-{uuid.uuid4().hex[:8]}")
     env.pop("TMUX", None)
     yield env
     subprocess.run(["tmux", "-L", sock, "kill-server"], capture_output=True)
@@ -526,6 +532,147 @@ def test_up_wait_is_idempotent_clean_env_and_down(proj, tmux_env):
     assert r.returncode == 0, r.stderr
     assert tm(env, "ls") == ""
     assert not marked(proj.mark)
+
+
+@needs_tmux
+def test_up_refuses_to_create_the_server_from_claude_code_app(proj, tmux_env):
+    # A Claude Code background session runs under ClaudeCode.app, which macOS
+    # gives no folder access; a server it starts keeps that for life.
+    bg = dict(tmux_env, SVC_TMUX_FAKE_RESPONSIBLE=
+              "/Users/x/.local/share/claude/ClaudeCode.app/Contents/MacOS/claude")
+    r = run([SVC_TMUX, "up", "web"], proj, bg)
+    assert r.returncode != 0
+    assert "Claude Code background session" in r.stderr and "EPERM" in r.stderr
+    assert tm(tmux_env, "ls") == "", "no server was created"
+
+    r = run([SVC_TMUX, "up", "web"], proj, dict(bg, SVC_TMUX_ALLOW_ANY_APP="1"))
+    assert r.returncode == 0, r.stdout + r.stderr
+
+    # Joining a server that already runs is fine: it keeps its own access.
+    r = run([SVC_TMUX, "up", "worker"], proj, bg)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "worker" in tm(tmux_env, "list-windows", "-a")
+    run([SVC_TMUX, "down"], proj, tmux_env)
+
+
+@needs_tmux
+def test_up_refusal_spots_the_bg_host_flag_and_tells_an_llm_to_ask(proj, tmux_env):
+    bg = dict(tmux_env, SVC_TMUX_FAKE_RESPONSIBLE="/x/claude/versions/9.9.9 --bg-pty-host /tmp/h.sock")
+    r = run([SVC_TMUX, "up", "web"], proj, bg)
+    assert r.returncode != 0
+    assert "If you are an LLM" in r.stderr and "Do not set" in r.stderr
+    assert tm(tmux_env, "ls") == ""
+
+
+@needs_tmux
+def test_up_is_not_refused_when_the_service_already_runs_elsewhere(proj, tmux_env):
+    bg = dict(tmux_env, SVC_TMUX_FAKE_RESPONSIBLE=
+              "/Users/x/.local/share/claude/ClaudeCode.app/Contents/MacOS/claude")
+    sup = subprocess.Popen([SUP, "worker"], cwd=proj, stdin=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        assert wait_for(lambda: f"sup pid {sup.pid}" in run([SVC, "status", "worker"], proj).stdout)
+        r = run([SVC_TMUX, "up", "worker"], proj, bg)
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "running elsewhere" in r.stdout
+        assert tm(tmux_env, "ls") == "", "nothing to create, so no server"
+    finally:
+        sup.terminate()
+        sup.wait(15)
+
+
+@needs_tmux
+def test_up_warns_but_proceeds_when_the_owner_probe_is_unavailable(proj, tmux_env, tmp_path):
+    # No Command Line Tools: /usr/bin/python3 would open an install dialog, so
+    # the probe is skipped (fail open) with a warning.
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir()
+    (fakebin / "xcode-select").write_text("#!/bin/sh\nexit 2\n")
+    (fakebin / "xcode-select").chmod(0o755)
+    env = dict(tmux_env, PATH=f"{fakebin}:{tmux_env['PATH']}")
+    env.pop("SVC_TMUX_FAKE_RESPONSIBLE")
+    r = run([SVC_TMUX, "up", "worker"], proj, env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "could not check which app owns this process" in r.stderr
+    run([SVC_TMUX, "down"], proj, tmux_env)
+
+
+def up_socket(stdout):
+    """The socket `svc-tmux up` reports: "session S (tmux -L <sock>; ...)"."""
+    m = re.search(r"\(tmux -L (\S+);", stdout)
+    assert m, stdout
+    return m.group(1)
+
+
+def kill_test_server(sock):
+    subprocess.run(["tmux", "-L", sock, "kill-server"], capture_output=True)
+    Path(f"/private/tmp/tmux-{os.getuid()}/{sock}").unlink(missing_ok=True)
+
+
+@needs_tmux
+def test_default_socket_is_one_server_per_project(tmp_path, tmux_env):
+    mark = f"svcmark-{uuid.uuid4().hex[:10]}"
+    env = dict(tmux_env)
+    env.pop("SVC_TMUX_SOCKET")
+    projects = [make_project(tmp_path / "pa", mark), make_project(tmp_path / "pb", mark)]
+    socks = []
+    try:
+        for d in projects:
+            r = run([SVC_TMUX, "up", "--wait", "worker"], d, env)
+            assert r.returncode == 0, r.stdout + r.stderr
+            socks.append(up_socket(r.stdout))
+        assert socks[0] != socks[1], "each project gets its own server"
+        for d, sock in zip(projects, socks):
+            sessions = subprocess.run(["tmux", "-L", sock, "ls", "-F", "#{session_name}"],
+                                      capture_output=True, text=True).stdout.split()
+            assert sessions == [run([SVC_TMUX, "session"], d, env).stdout.strip()]
+            assert f"tmux -L {sock})" in run([SVC_TMUX, "ls"], d, env).stdout
+    finally:
+        for d in projects:
+            run([SVC_TMUX, "down"], d, env)
+        for sock in socks:
+            kill_test_server(sock)
+        subprocess.run(["pkill", "-f", mark])
+
+
+@needs_tmux
+def test_a_long_folder_name_gets_a_short_socket_and_the_full_session(tmp_path, tmux_env):
+    # A socket path may have at most 104 bytes; tmux's folder takes 22 of them.
+    mark = f"svcmark-{uuid.uuid4().hex[:10]}"
+    env = dict(tmux_env)
+    env.pop("SVC_TMUX_SOCKET")
+    d = make_project(tmp_path / ("long" * 25), mark)
+    sock = None
+    try:
+        r = run([SVC_TMUX, "up", "--wait", "worker"], d, env)
+        assert r.returncode == 0, r.stdout + r.stderr
+        sock = up_socket(r.stdout)
+        assert len(sock) <= 81
+        session = run([SVC_TMUX, "session"], d, env).stdout.strip()
+        assert session.startswith("svc-" + "long" * 25 + "-")
+        assert subprocess.run(["tmux", "-L", sock, "has-session", "-t", f"={session}"]).returncode == 0
+    finally:
+        run([SVC_TMUX, "down"], d, env)
+        if sock:
+            kill_test_server(sock)
+        subprocess.run(["pkill", "-f", mark])
+
+
+@needs_tmux
+def test_a_session_on_the_old_shared_server_is_still_found(proj, tmux_env):
+    legacy = tmux_env["SVC_TMUX_LEGACY_SOCKET"]
+    old = dict(tmux_env, SVC_TMUX_SOCKET=legacy)      # how the old version made it
+    new = dict(tmux_env)
+    new.pop("SVC_TMUX_SOCKET")
+    try:
+        assert run([SVC_TMUX, "up", "--wait", "worker"], proj, old).returncode == 0
+        r = run([SVC_TMUX, "ls"], proj, new)
+        assert f"(tmux -L {legacy})" in r.stdout and "[tmux]" in r.stdout, r.stdout
+        r = run([SVC_TMUX, "down"], proj, new)
+        assert "worker       down" in r.stdout, r.stdout
+        assert not marked(proj.mark)
+    finally:
+        kill_test_server(legacy)
 
 
 @needs_tmux

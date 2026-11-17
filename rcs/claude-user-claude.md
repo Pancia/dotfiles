@@ -324,7 +324,7 @@ Two **unrelated** systems, both on PATH from `~/dotfiles/bin/`. Pick by lifetime
 
 | | `service` | `supervise` / `svc` |
 |---|---|---|
-| Backend | launchd (`org.pancia.*`) | my terminal, or the `tmux -L svc` server |
+| Backend | launchd (`org.pancia.*`) | my terminal, or the project's `svc-tmux` server |
 | Lifetime | persistent, survives reboot/logout | dies with its pane / tmux window |
 | Declared in | `~/dotfiles/services/<name>/` (plist + script) | `.svc.conf` / `.svc.local.conf` in the project |
 | Logs | `~/.log/services/<name>.log` | `.run/<name>.log` |
