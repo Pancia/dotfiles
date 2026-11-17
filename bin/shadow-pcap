@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# shadow-pcap — record when the Shadow PC client sends packets, to tell whether a
+# lost key ever left the Mac.
+#
+# Captures only packets going FROM this Mac TO the Shadow server, headers only
+# (the payload is encrypted anyway), so the files stay small. The incoming video
+# stream is not recorded.
+#
+#   shadow-pcap            # start while Shadow is streaming; Ctrl-C to stop
+#   shadow-pcap -n         # show what it would capture, do not start
+#
+# Output: ~/.local/state/shadow-pcap/<time>.pcap  (rotates: 10 x 50 MB at most)
+# Needs sudo (tcpdump opens /dev/bpf*).
+#
+# Afterwards, to find the keyboard channel: with the mouse still, tap one key
+# 5 times about 1 s apart and note the Mac time. The port that sends one burst
+# per tap is the input channel.
+set -euo pipefail
+
+dry=0
+[ "${1:-}" = "-n" ] && dry=1
+
+OUT="${SHADOW_PCAP_DIR:-$HOME/.local/state/shadow-pcap}"
+mkdir -p "$OUT"
+
+pid=$(pgrep -x ShadowPCDisplay | head -1) || { echo "ShadowPCDisplay is not running" >&2; exit 1; }
+
+# The streaming server: the remote address of the client's UDP flows.
+server=$(lsof -nP -a -p "$pid" -i UDP 2>/dev/null |
+  awk 'NR>1 {split($9, a, "->"); if (a[2] != "") {sub(/:[0-9]+$/, "", a[2]); print a[2]}}' |
+  sort | uniq -c | sort -rn | awk 'NR==1 {print $2}')
+[ -n "$server" ] || { echo "could not find the Shadow server address" >&2; exit 1; }
+
+iface=$(route -n get "$server" | awk '/interface:/ {print $2}')
+filter="dst host $server"
+file="$OUT/$(date +%Y%m%d-%H%M%S).pcap"
+
+echo "Shadow pid $pid, server $server, interface $iface"
+echo "filter: $filter"
+echo "file:   $file"
+lsof -nP -a -p "$pid" -i 2>/dev/null | awk -v s="$server" 'NR>1 && index($9, s) {print "  " $8, $9}' | sort -u
+[ "$dry" = 1 ] && exit 0
+
+echo "capturing — Ctrl-C to stop"
+# -s 96: headers only. -C/-W: rotate, at most 10 files of 50 MB.
+# -Z: drop root privileges after opening the device, so files belong to you.
+exec sudo tcpdump -i "$iface" -n -s 96 -C 50 -W 10 -Z "$USER" -w "$file" "$filter"
