@@ -7,6 +7,7 @@
         "path" : "$HOME\/Pictures\/wallpapers\/lily.png",
         "position" : [0, 25],
         "size" : [1920, 1055],
+        "space" : 2,
         "zoom" : 1
       },
       {
@@ -14,6 +15,7 @@
         "path" : "$HOME\/Pictures\/wallpapers\/fire.png",
         "position" : [0, 25],
         "size" : [1920, 1055],
+        "space" : 7,
         "zoom" : 1
       },
       {
@@ -21,6 +23,7 @@
         "path" : "$HOME\/Pictures\/wallpapers\/leona.png",
         "position" : [0, 25],
         "size" : [1916, 1051],
+        "space" : 4,
         "zoom" : 1
       },
       {
@@ -28,6 +31,7 @@
         "path" : "$HOME\/Pictures\/wallpapers\/luna.jpg",
         "position" : [1426, 25],
         "size" : [708, 1055],
+        "space" : 6,
         "zoom" : 1
       },
       {
@@ -35,6 +39,7 @@
         "path" : "$HOME\/Pictures\/wallpapers\/sunflower.png",
         "position" : [0, 25],
         "size" : [1920, 1055],
+        "space" : 12,
         "zoom" : 1
       },
       {
@@ -42,6 +47,7 @@
         "path" : "$HOME\/Pictures\/wallpapers\/kali.jpeg",
         "position" : [1285, 25],
         "size" : [708, 1055],
+        "space" : 3,
         "zoom" : 1
       },
       {
@@ -49,40 +55,46 @@
         "path" : "$HOME\/Public\/screen-savers\/celtic-loop.mov",
         "position" : [1420, 0],
         "size" : [500, 1080],
+        "space" : 1,
         "zoom" : 1
       },
       {
-        "path" : "$HOME\/ProtonDrive\/gallery\/wallpapers\/red-hood-retro-days-sunset-goddess-of-victory-nikke-moewalls-com.mp4",
+        "path" : "$HOME\/Public\/screen-savers\/red-hood-retro-days-sunset-goddess-of-victory-nikke-moewalls-com.mp4",
         "position" : [0, 25],
         "size" : [844, 1055],
+        "space" : 5,
         "zoom" : 1
       },
       {
         "lock" : true,
-        "path" : "$HOME\/ProtonDrive\/ytdl\/video\/‹‹BY››ADayASMR‹‹TITLE››Lumos Lumos Anime OVA ‘Year 8’ (ft. Say Yes) [Official Music Video]‹‹ID››qRjTJKCXeLY.mp4",
+        "path" : "$HOME\/Public\/screen-savers\/‹‹BY››ADayASMR‹‹TITLE››Lumos Lumos Anime OVA ‘Year 8’ (ft. Say Yes) [Official Music Video]‹‹ID››qRjTJKCXeLY.mp4",
         "position" : [1451, 25],
         "size" : [469, 264],
+        "space" : 9,
         "zoom" : 1
       },
       {
         "lock" : true,
-        "path" : "$HOME\/ProtonDrive\/ytdl\/video\/‹‹BY››ADayASMR‹‹TITLE››Lumos Lumos Anime Epilogue [ft. Lumos Lumos]‹‹ID››YuL-vEPe1ao.mp4",
+        "path" : "$HOME\/Public\/screen-savers\/‹‹BY››ADayASMR‹‹TITLE››Lumos Lumos Anime Epilogue [ft. Lumos Lumos]‹‹ID››YuL-vEPe1ao.mp4",
         "position" : [1451, 289],
         "size" : [469, 264],
+        "space" : 9,
         "zoom" : 1
       },
       {
         "lock" : true,
-        "path" : "$HOME\/ProtonDrive\/Media\/Android\/‹‹BY››ADayASMR‹‹TITLE››The Girl Who Loved The Boy Who Lived (ft. Lumos Lumos Waltz) [Official Music Video]‹‹ID››Hmc246DNMK0.mp4",
+        "path" : "$HOME\/Public\/screen-savers\/‹‹BY››ADayASMR‹‹TITLE››The Girl Who Loved The Boy Who Lived (ft. Lumos Lumos Waltz) [Official Music Video]‹‹ID››Hmc246DNMK0.mp4",
         "position" : [1451, 553],
         "size" : [469, 264],
+        "space" : 9,
         "zoom" : 1
       },
       {
         "lock" : true,
-        "path" : "$HOME\/ProtonDrive\/ytdl\/video\/‹‹BY››Foyege‹‹TITLE››Miss Malfoy, May I Have This Dance - Parts 1-4 (stitched).mp4",
+        "path" : "$HOME\/Public\/screen-savers\/‹‹BY››Foyege‹‹TITLE››Miss Malfoy, May I Have This Dance - Parts 1-4 (stitched).mp4",
         "position" : [1451, 817],
         "size" : [469, 263],
+        "space" : 9,
         "zoom" : 1
       }
     ]

@@ -97,7 +97,7 @@ task_vendor () {
 
 task_image_wall () {
     echo "Building image-wall..."
-    (cd cmd/image-wall && swiftc -O -framework AppKit -o ../../bin/image-wall main.swift)
+    make -C cmd/image-wall
 }
 
 task_live_transcribe_app () {

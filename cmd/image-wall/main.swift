@@ -17,6 +17,8 @@ struct ImageEntry: Codable {
     let lock: Bool?
     let audio: Bool?
     let volume: Double?
+    /// Desktop number (1-based, Mission Control order, same as yabai's space index).
+    let space: Int?
 }
 
 struct WallpapersConfig: Codable {
@@ -29,6 +31,50 @@ struct VPCConfig: Codable {
 
 func expandHome(_ path: String) -> String {
     path.replacingOccurrences(of: "$HOME", with: NSHomeDirectory())
+}
+
+// MARK: - Spaces (private SkyLight API)
+//
+// AppKit has no public way to read or set a window's space. These SkyLight calls work on a
+// process's own windows with SIP on (tested 2026-11-17, macOS 15), unlike yabai's
+// window --space, which needs its scripting addition. Space IDs change across reboots, so the
+// VPC stores the desktop number and it is mapped to an ID at load time.
+
+@_silgen_name("SLSMainConnectionID") private func SLSMainConnectionID() -> Int32
+@_silgen_name("SLSCopySpacesForWindows") private func SLSCopySpacesForWindows(_ cid: Int32, _ mask: Int32, _ wids: CFArray) -> CFArray?
+@_silgen_name("SLSMoveWindowsToManagedSpace") private func SLSMoveWindowsToManagedSpace(_ cid: Int32, _ wids: CFArray, _ sid: UInt64)
+@_silgen_name("SLSCopyManagedDisplaySpaces") private func SLSCopyManagedDisplaySpaces(_ cid: Int32) -> CFArray?
+
+/// All space IDs in Mission Control order, across displays.
+func orderedSpaceIDs() -> [UInt64] {
+    let cid = SLSMainConnectionID()
+    var ids: [UInt64] = []
+    for display in (SLSCopyManagedDisplaySpaces(cid) as? [[String: Any]]) ?? [] {
+        for space in (display["Spaces"] as? [[String: Any]]) ?? [] {
+            if let id = space["ManagedSpaceID"] as? NSNumber { ids.append(id.uint64Value) }
+        }
+    }
+    return ids
+}
+
+/// The 1-based desktop number of the window, or nil if it is on no single space.
+func spaceIndex(of window: NSWindow) -> Int? {
+    let cid = SLSMainConnectionID()
+    guard let spaces = SLSCopySpacesForWindows(cid, 0x7, [window.windowNumber] as CFArray) as? [NSNumber],
+          spaces.count == 1,
+          let i = orderedSpaceIDs().firstIndex(of: spaces[0].uint64Value) else { return nil }
+    return i + 1
+}
+
+/// Move the window to a 1-based desktop number. Does nothing if that desktop does not exist.
+func moveWindow(_ window: NSWindow, toSpace index: Int?) {
+    guard let index = index else { return }
+    let ids = orderedSpaceIDs()
+    guard index >= 1, index <= ids.count else {
+        print("Warning: desktop \(index) does not exist; leaving window on the current one")
+        return
+    }
+    SLSMoveWindowsToManagedSpace(SLSMainConnectionID(), [window.windowNumber] as CFArray, ids[index - 1])
 }
 
 // MARK: - ImageCanvasView
@@ -259,7 +305,10 @@ class WallWindow: NSWindow {
         isRestorable = false
         backgroundColor = .black
         level = .normal
-        collectionBehavior = [.moveToActiveSpace]
+        // Default (managed) behavior: a window stays on the desktop it is placed on.
+        // .moveToActiveSpace pulled a window to the current desktop whenever it became key,
+        // which undid the saved "space".
+        collectionBehavior = []
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -348,6 +397,7 @@ func createWindows(entries: [ImageEntry]) -> [WallWindow] {
 
             window.contentView = canvas
             window.orderFront(nil)
+            moveWindow(window, toSpace: entry.space)
             windows.append(window)
         } else {
             // Image file
@@ -392,6 +442,7 @@ func createWindows(entries: [ImageEntry]) -> [WallWindow] {
 
             window.contentView = canvas
             window.orderFront(nil)
+            moveWindow(window, toSpace: entry.space)
             windows.append(window)
         }
     }
@@ -442,6 +493,10 @@ func buildSnapshotEntries(windows: [WallWindow]) -> [[String: Any]] {
 
         if window.isLocked {
             entry["lock"] = true
+        }
+
+        if let space = spaceIndex(of: window) {
+            entry["space"] = space
         }
 
         if let video = canvas as? VideoCanvasView {
@@ -621,6 +676,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             observeOcclusion(for: window)
         }
 
+        // Save a window's desktop to the VPC as soon as it changes. No notification fires when a
+        // window moves to another desktop, so poll; also check when the active desktop changes.
+        ws.addObserver(self, selector: #selector(checkSpaces),
+                       name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
+        Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            self?.checkSpaces()
+        }
+
         // Register SIGUSR1 handler for snapshot
         signal(SIGUSR1, SIG_IGN) // Let dispatch source handle it
         let src = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
@@ -687,6 +750,68 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         isScreenAsleep = false
         for window in windows {
             updatePlayback(for: window)
+        }
+    }
+
+    // MARK: - Desktop autosave
+
+    /// Last desktop seen for each window. A window's first sighting only sets this, so a saved
+    /// desktop that is missing at launch (fewer desktops, display unplugged) is not overwritten.
+    private var knownSpaces: [ObjectIdentifier: Int] = [:]
+
+    @objc func checkSpaces() {
+        var changed = false
+        var live = Set<ObjectIdentifier>()
+        for window in windows {
+            let key = ObjectIdentifier(window)
+            live.insert(key)
+            guard let space = spaceIndex(of: window) else { continue }
+            if let old = knownSpaces[key], old != space { changed = true }
+            knownSpaces[key] = space
+        }
+        knownSpaces = knownSpaces.filter { live.contains($0.key) }
+        if changed { saveSpacesToVPC() }
+    }
+
+    /// Write only each entry's "space" into the VPC. Position, size and zoom stay as last saved
+    /// with "Save to VPC". Entries are matched to windows by path, in order, so duplicates work.
+    func saveSpacesToVPC() {
+        guard !configPath.isEmpty,
+              let data = try? Data(contentsOf: URL(fileURLWithPath: configPath)),
+              var vpcDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var wallpapers = vpcDict["wallpapers"] as? [String: Any],
+              var files = wallpapers["files"] as? [[String: Any]] else {
+            print("Error: Could not read VPC file to save desktops")
+            return
+        }
+
+        let home = NSHomeDirectory()
+        var pending: [(path: String, space: Int)] = windows.compactMap { window in
+            guard let canvas = wallCanvas(of: window), let space = knownSpaces[ObjectIdentifier(window)] else { return nil }
+            return (canvas.filePath.replacingOccurrences(of: home, with: "$HOME"), space)
+        }
+
+        var touched = false
+        for i in files.indices {
+            guard let path = files[i]["path"] as? String,
+                  let j = pending.firstIndex(where: { $0.path == path }) else { continue }
+            let space = pending.remove(at: j).space
+            if files[i]["space"] as? Int != space {
+                files[i]["space"] = space
+                touched = true
+            }
+        }
+        guard touched else { return }
+
+        wallpapers["files"] = files
+        vpcDict["wallpapers"] = wallpapers
+        guard let outData = try? JSONSerialization.data(withJSONObject: vpcDict, options: [.prettyPrinted, .sortedKeys]),
+              let json = String(data: outData, encoding: .utf8) else { return }
+        do {
+            try collapseNumericArrays(json).write(toFile: configPath, atomically: true, encoding: .utf8)
+            print("Saved desktops to \(configPath)")
+        } catch {
+            print("Error: Could not write to \(configPath): \(error)")
         }
     }
 
