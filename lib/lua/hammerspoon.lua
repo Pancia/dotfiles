@@ -209,6 +209,8 @@ local copylink = engage("seeds.copylink", {})
 
 local rolevote = engage("seeds.rolevote", {})
 
+local claudetheme = engage("seeds.claudetheme", {})
+
 local _engageElapsed = (hs.timer.absoluteTime() - _engageStart) / 1e6
 table.insert(_G._profile, string.format("  seeds: %.1fms", _engageElapsed))
 
@@ -241,6 +243,7 @@ if macro then seeds.macro = macro end
 if livetranscribe then seeds.livetranscribe = livetranscribe end
 if copylink then seeds.copylink = copylink end
 if rolevote then seeds.rolevote = rolevote end
+if claudetheme then seeds.claudetheme = claudetheme end
 
 local hs_global_modifier = {"cmd", "ctrl"}
 
@@ -295,6 +298,7 @@ local function softReload()
         "seeds.livetranscribe",
         "seeds.copylink",
         "seeds.rolevote",
+        "seeds.claudetheme",
     }
 
     for _, modulePath in ipairs(seedModules) do

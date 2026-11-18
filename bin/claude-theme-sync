@@ -1,0 +1,28 @@
+#!/bin/bash
+# claude-theme-sync: copy the day or night variant of the Claude Code theme
+# into ~/.claude/themes/, to match the macOS appearance. Writes only when the
+# content differs, so a running Claude Code redraws only on a real change.
+# Run by the Hammerspoon seed `claudetheme`. See ai/claude-themes/README.md.
+set -euo pipefail
+
+src_dir="$HOME/dotfiles/ai/claude-themes"
+dest_dir="$HOME/.claude/themes"
+dest="$dest_dir/dark-light-term.json"
+
+if defaults read -g AppleInterfaceStyle 2>/dev/null | grep -q Dark; then
+    mode=night
+else
+    mode=day
+fi
+src="$src_dir/dark-light-term.$mode.json"
+
+mkdir -p "$dest_dir"
+if [ -f "$dest" ] && [ ! -L "$dest" ] && cmp -s "$src" "$dest"; then
+    echo "claude-theme-sync: $mode (unchanged)"
+    exit 0
+fi
+# Replace by rename: never write through a hardlink into the repo.
+tmp="$dest_dir/.dark-light-term.json.$$"
+cp "$src" "$tmp"
+mv -f "$tmp" "$dest"
+echo "claude-theme-sync: $mode (written)"
