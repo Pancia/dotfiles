@@ -1,11 +1,12 @@
+# Outside taps must be trusted per formula: `brew trust --formula <tap>/<name>`
+# (list in ~/.config/homebrew/trust.json). Brew ignores untrusted taps.
+tap 'asmvik/formulae'
+tap 'babashka/brew'
 tap 'borkdude/brew'
-tap "clojure/tools"
 tap "homebrew/services"
 tap 'homebrew/bundle'
 tap 'homebrew/cask'
 tap 'homebrew/core'
-tap 'neovim/neovim'
-tap 'rads/bbin'
 
 # Shell & CLI Tools
 brew 'fish'
@@ -74,16 +75,17 @@ brew 'restic'
 brew 'tailscale'
 brew 'switchaudio-osx'
 brew 'terminal-notifier'
-brew 'yabai'
+brew 'asmvik/formulae/yabai'
 
 brew 'borkdude/brew/babashka'
 brew 'borkdude/brew/clj-kondo'
-brew 'rads/bbin/bbin'
+brew 'babashka/brew/bbin'
 
 # Applications
 cask 'android-platform-tools'
 cask 'bitwarden'
 cask 'blackhole-2ch'
+cask 'blender'
 cask 'claude-code'
 cask 'deluge'
 cask 'ghostty'
