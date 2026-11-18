@@ -58,11 +58,11 @@ func orderedSpaceIDs() -> [UInt64] {
 }
 
 /// The 1-based desktop number of the window, or nil if it is on no single space.
-func spaceIndex(of window: NSWindow) -> Int? {
+func spaceIndex(of window: NSWindow, in ids: [UInt64]? = nil) -> Int? {
     let cid = SLSMainConnectionID()
     guard let spaces = SLSCopySpacesForWindows(cid, 0x7, [window.windowNumber] as CFArray) as? [NSNumber],
           spaces.count == 1,
-          let i = orderedSpaceIDs().firstIndex(of: spaces[0].uint64Value) else { return nil }
+          let i = (ids ?? orderedSpaceIDs()).firstIndex(of: spaces[0].uint64Value) else { return nil }
     return i + 1
 }
 
@@ -294,6 +294,10 @@ class WallWindow: NSWindow {
         didSet { isMovableByWindowBackground = !isLocked }
     }
 
+    /// Index of this window's entry in the VPC's wallpapers.files, as the file is now.
+    /// nil for an image added since the last save. The desktop autosave updates only this entry.
+    var entryIndex: Int?
+
     init(rect: NSRect) {
         super.init(
             contentRect: rect,
@@ -329,7 +333,7 @@ func createWindows(entries: [ImageEntry]) -> [WallWindow] {
 
     var windows: [WallWindow] = []
 
-    for entry in entries {
+    for (entryIndex, entry) in entries.enumerated() {
         let expanded = expandHome(entry.path)
         let zoom = entry.zoom ?? 1.0
 
@@ -396,6 +400,7 @@ func createWindows(entries: [ImageEntry]) -> [WallWindow] {
             }
 
             window.contentView = canvas
+            window.entryIndex = entryIndex
             window.orderFront(nil)
             moveWindow(window, toSpace: entry.space)
             windows.append(window)
@@ -441,6 +446,7 @@ func createWindows(entries: [ImageEntry]) -> [WallWindow] {
             }
 
             window.contentView = canvas
+            window.entryIndex = entryIndex
             window.orderFront(nil)
             moveWindow(window, toSpace: entry.space)
             windows.append(window)
@@ -755,27 +761,37 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Desktop autosave
 
-    /// Last desktop seen for each window. A window's first sighting only sets this, so a saved
-    /// desktop that is missing at launch (fewer desktops, display unplugged) is not overwritten.
+    /// Last desktop seen for each window. A window's first sighting only sets this, and only
+    /// windows seen to change are saved, so a saved desktop that is missing at launch (fewer
+    /// desktops, display unplugged) is not overwritten until that window itself is moved.
     private var knownSpaces: [ObjectIdentifier: Int] = [:]
+    /// The desktop list at the last poll. When it changes (a desktop added or removed, a
+    /// fullscreen app, a display), indices shift for windows nobody moved, so that poll only
+    /// resets the baseline and saves nothing.
+    private var lastSpaceIDs: [UInt64]?
 
     @objc func checkSpaces() {
-        var changed = false
+        let ids = orderedSpaceIDs()
+        let listChanged = lastSpaceIDs != nil && lastSpaceIDs != ids
+        lastSpaceIDs = ids
+
+        var moved: [WallWindow] = []
         var live = Set<ObjectIdentifier>()
         for window in windows {
             let key = ObjectIdentifier(window)
             live.insert(key)
-            guard let space = spaceIndex(of: window) else { continue }
-            if let old = knownSpaces[key], old != space { changed = true }
+            guard let space = spaceIndex(of: window, in: ids) else { continue }
+            if !listChanged, let old = knownSpaces[key], old != space { moved.append(window) }
             knownSpaces[key] = space
         }
         knownSpaces = knownSpaces.filter { live.contains($0.key) }
-        if changed { saveSpacesToVPC() }
+        if !moved.isEmpty { saveSpacesToVPC(for: moved) }
     }
 
-    /// Write only each entry's "space" into the VPC. Position, size and zoom stay as last saved
-    /// with "Save to VPC". Entries are matched to windows by path, in order, so duplicates work.
-    func saveSpacesToVPC() {
+    /// Write the "space" of the given windows into their own VPC entries. Position, size and
+    /// zoom stay as last saved with "Save to VPC". An entry whose path no longer matches (the
+    /// file was edited by hand since launch) is skipped.
+    func saveSpacesToVPC(for moved: [WallWindow]) {
         guard !configPath.isEmpty,
               let data = try? Data(contentsOf: URL(fileURLWithPath: configPath)),
               var vpcDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -786,16 +802,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         let home = NSHomeDirectory()
-        var pending: [(path: String, space: Int)] = windows.compactMap { window in
-            guard let canvas = wallCanvas(of: window), let space = knownSpaces[ObjectIdentifier(window)] else { return nil }
-            return (canvas.filePath.replacingOccurrences(of: home, with: "$HOME"), space)
-        }
-
         var touched = false
-        for i in files.indices {
-            guard let path = files[i]["path"] as? String,
-                  let j = pending.firstIndex(where: { $0.path == path }) else { continue }
-            let space = pending.remove(at: j).space
+        for window in moved {
+            guard let i = window.entryIndex, files.indices.contains(i),
+                  let canvas = wallCanvas(of: window),
+                  let space = knownSpaces[ObjectIdentifier(window)] else { continue }
+            let path = files[i]["path"] as? String
+            guard path == canvas.filePath || path == canvas.filePath.replacingOccurrences(of: home, with: "$HOME") else {
+                print("Warning: VPC entry \(i) is no longer \(canvas.filePath); desktop not saved. Reload or Save to VPC.")
+                continue
+            }
             if files[i]["space"] as? Int != space {
                 files[i]["space"] = space
                 touched = true
@@ -1052,6 +1068,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             window.orderOut(nil)
         }
         windows.removeAll()
+        // A new window can reuse a freed window's address, and so its ObjectIdentifier.
+        knownSpaces.removeAll()
 
         entries = config.wallpapers.files
         windows = createWindows(entries: entries)
@@ -1152,6 +1170,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         do {
             try json.write(toFile: configPath, atomically: true, encoding: .utf8)
             print("Saved to \(configPath)")
+            // The file now lists the windows in order (buildSnapshotEntries skips the same ones).
+            var next = 0
+            for window in windows where wallCanvas(of: window) != nil {
+                window.entryIndex = next
+                next += 1
+            }
         } catch {
             print("Error: Could not write to \(configPath): \(error)")
         }
@@ -1301,6 +1325,9 @@ guard let config = try? JSONDecoder().decode(VPCConfig.self, from: configData) e
     print("Error: Could not parse wallpapers config from: \(configPath)")
     exit(1)
 }
+
+// Line-buffer stdout, so the log vpc.py redirects it to gets each message as it happens.
+setvbuf(stdout, nil, _IOLBF, 0)
 
 let app = NSApplication.shared
 app.setActivationPolicy(.regular)

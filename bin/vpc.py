@@ -851,10 +851,14 @@ class AppLauncher:
         subprocess.run(['hs', '-c', 'hs.alert.show("Wallpapers: opening...")'])
         image_wall = Path.home() / 'dotfiles' / 'bin' / 'image-wall'
         # Detach: image-wall outlives vpc.py, and an inherited stdout kept any pipe
-        # reading vpc.py's output open until the wallpapers were closed.
-        subprocess.Popen([str(image_wall), str(self.config.config_path)],
-                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, start_new_session=True)
+        # reading vpc.py's output open until the wallpapers were closed. Its warnings
+        # (missing files, missing desktops, autosave errors) go to a log instead.
+        log_path = Path.home() / '.log' / 'image-wall.log'
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, 'ab') as log:
+            subprocess.Popen([str(image_wall), str(self.config.config_path)],
+                             stdin=subprocess.DEVNULL, stdout=log,
+                             stderr=subprocess.STDOUT, start_new_session=True)
         subprocess.run(['hs', '-c', 'hs.alert.show("Wallpapers: done!")'])
         print("  image-wall done")
 
