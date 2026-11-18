@@ -10,6 +10,7 @@ This file sits outside every mod folder, so editing it reloads nothing.
 | `plainify` | the `/plainify` command: rewrites the last reply shorter and plainer | `CLAUDE.md`, the `plainify` row |
 | `roleplay-bookends` | Sonnet writes the roleplay opener and closer around each turn | [roleplay/docs/claude-roleplay.md](../../roleplay/docs/claude-roleplay.md) |
 | `focus-verbose` | `/focus off` also turns verbose on | — |
+| `reply-links` | in the fullscreen terminal, an answer line under a question (`【Q4: yes* \| no】`, taught by the mod's own system-prompt section) is drawn as buttons, and question labels and Where-next IDs become links; a click fills the prompt box (never sends) | comments in `hooks/linkify.ts` |
 
 ## Editing a mod
 
