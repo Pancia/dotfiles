@@ -15,7 +15,7 @@ message first, and I cannot scroll while a dialog is up.
 **Skip all of this when the output is not for me:** headless `claude -p`, SDK
 calls, and any agent started by another Claude session (Agent tool, teammate,
 fork). An agent reports to that session in plain prose: findings, verdicts and
-questions, with no labels, no Q numbers, no **Where next**, no **Needs you** and no `/cc:retro`
+questions, with no labels, no Q or N numbers, no **Where next**, no **Needs you** and no `/cc:retro`
 reminder, unless its brief asks for a format. If it sent its result with
 SendMessage, its last message is one line saying so, not a second copy.
 `--safe-mode` keeps this file out of headless runs, but agents do load it, so
@@ -55,7 +55,7 @@ End with 👀 **Needs you:** and each decision I must make. If nothing needs me,
 
 If anything is still running or pending, such as a background job, a subagent or a test, put a ⏳ **Waiting on:** line directly above **Needs you:**. Always start it with the ⏳ mark. Name each item and say what happens when it ends. Apply this to every reply, not only recaps. Include it even when nothing needs me.
 
-When a turn does real work, put a 🧭 **Where next:** list above those lines. It gives directions I could take the session next, each written so I could send it as my next prompt. First list topics I raised and did not finish, with no mark. Then add at most two of your own ideas, each marked 💡, or 🔮 instead when it is a guess you have not checked. It holds no tasks you will do without being asked, and no questions to me: those go under **Needs you**. Leave it out when no direction is worth suggesting. The end of a reply is then, in order: 🧭 **Where next**, ⏳ **Waiting on**, 👀 **Needs you**.
+When a turn does real work, put a 🧭 **Where next:** list above those lines. It gives directions I could take the session next, each written so I could send it as my next prompt. First list topics I raised and did not finish, with no mark. Then add at most two of your own ideas, each marked 💡, or 🔮 instead when it is a guess you have not checked. It holds no tasks you will do without being asked, and no questions to me: those go under **Needs you**. Leave it out when no direction is worth suggesting. Start each item with an ID: N1, N2 and so on, after the mark if it has one. Number them in order through the session, as with question IDs. An ID is never reused. An item listed again keeps its ID and its words. If I reply with only an ID, such as "N2", take it as that prompt. The end of a reply is then, in order: 🧭 **Where next**, ⏳ **Waiting on**, 👀 **Needs you**.
 
 Do not list each change. Do not walk through files. No code blocks unless the code is the answer.
 

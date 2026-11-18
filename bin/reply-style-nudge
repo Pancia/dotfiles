@@ -20,14 +20,16 @@ FORMAT_NOTE = ("[Reply format] In recaps and catch-ups, group the facts under la
                "and 🔵 `NOT DONE`. Use only these labels, never a topic word. End with "
                "👀 **Needs you:**, or \"✅ Nothing needs you.\" Above it, after real work, "
                "an optional 🧭 **Where next:** list of directions for the session: unmarked "
-               "topics I left open, plus at most two of your ideas marked 💡 (🔮 if a guess). "
+               "topics I left open, plus at most two of your ideas marked 💡 (🔮 if a guess), "
+               "each numbered N1, N2 … through the session, never reused. "
                "Give a question "
                "a yes and no list only when what each answer does is not obvious.")
 
 def score(text):
     text = "\n".join(l for l in text.split("\n") if not l.startswith("> 🎭"))
     text = re.sub(r"```.*?```", " ", text, flags=re.S)
-    ids = re.findall(r"\b[mwr]-\d+\b|\b[A-PR-Z]\d{1,2}[a-d]?\b", text)
+    # Q (questions) and N (Where next items) are IDs the rules ask for, so not counted.
+    ids = re.findall(r"\b[mwr]-\d+\b|\b[A-MOPR-Z]\d{1,2}[a-d]?\b", text)
     plain = re.sub(r"^\s*(#+|[-*])\s+", "", text, flags=re.M).replace("**", "")
     return len(plain.split()), len(ids)
 

@@ -373,7 +373,8 @@ not `--stat`).
 none.
 
 🧭 **Where next:** — optional, above **Needs you**, as the global rules
-describe: directions the user could take the session after this commit.
+describe: directions the user could take the session after this commit, each
+with its N ID.
 
 👀 **Needs you:** — always present, and after a commit it is rarely empty:
 
