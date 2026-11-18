@@ -1,5 +1,10 @@
 # Review: reply-links mod
 
+> Note (2026-11-18): this review covers the first version, which guessed buttons from
+> question wording. That parser was replaced by the taught answer line. The repro folder
+> `.cc/misc/reply-links-review/` was removed. Its `proto/hooks/register.tsx` fix is now in
+> `ai/mods/reply-links/hooks/register.tsx`.
+
 Date: 2026-11-17. Scope: `ai/mods/reply-links/hooks/linkify.ts`, `hooks/register.tsx` and
 `tests/*.test.ts(x)`. The mod was not edited.
 

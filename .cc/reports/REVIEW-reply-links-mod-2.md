@@ -1,5 +1,9 @@
 # Review 2: reply-links mod (answer-line version)
 
+> Note (2026-11-18): `.cc/misc/reply-links-review-2/` was removed. Its repro tests are now
+> `ai/mods/reply-links/tests/review-*.test.ts(x)` (renamed from `review2-*`), run with
+> `claude plugin test ai/mods/reply-links`. `scan.py` was not kept.
+
 Date: 2026-11-17. Scope: `ai/mods/reply-links/hooks/linkify.ts`, `hooks/register.tsx`,
 `tests/*.test.ts(x)`, and the RULE text next to `~/.claude/CLAUDE.md` ("Reply format",
 "Questions to me"). The mod was not edited.

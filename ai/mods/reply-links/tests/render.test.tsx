@@ -104,6 +104,66 @@ test('with a pass-through mod beneath, the buttons still draw', {
   await ui.unmount()
 })
 
+// Mods beneath that rewrite the reply's text on its way to the engine. A test
+// plugin's register runs on its own, so each spells its strings inline: it
+// cannot use a variable from this file.
+const toMain = {
+  name: 'rewriter',
+  tier: 'append' as const,
+  register(on: On) {
+    on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) =>
+      next({ ...e, props: { ...e.props, text: e.props.text.replace('master', 'main') } }),
+    )
+  },
+}
+const toKeepDrop = {
+  name: 'rewriter',
+  tier: 'append' as const,
+  register(on: On) {
+    on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) =>
+      next({ ...e, props: { ...e.props, text: e.props.text.replace('【Q2: yes | no】', '【Q2: keep | drop】') } }),
+    )
+  },
+}
+const noAnswerLine = {
+  name: 'rewriter',
+  tier: 'append' as const,
+  register(on: On) {
+    on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) =>
+      next({ ...e, props: { ...e.props, text: e.props.text.replace('\n【Q2: yes | no】', '') } }),
+    )
+  },
+}
+
+test('a rewrite beneath is drawn, not the text this mod received', {
+  plugins: [toMain],
+}, async $ => {
+  const ui = await mount($, '**Q2 (push):** Push to master?\n【Q2: yes | no】')
+  expect(await ui.find({ type: 'Markdown', text: /Push to main\?/ })).toBeDefined()
+  expect(await ui.find({ type: 'Markdown', text: /master/ })).toBeUndefined()
+  expect((await ui.findAll({ type: 'Button' })).length).toBe(2)
+  await ui.unmount()
+})
+
+test('answers rewritten beneath become the buttons', {
+  plugins: [toKeepDrop],
+}, async ($, on) => {
+  const box = promptBox(on)
+  const ui = await mount($, '**Q2 (push):** Push to master?\n【Q2: yes | no】')
+  expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['[ keep ]', '[ drop ]'])
+  await ui.press({ key: 'b1-1' })
+  expect(box.text).toBe('Q2 (push): drop')
+  await ui.unmount()
+})
+
+test('an answer line removed beneath leaves no buttons', {
+  plugins: [noAnswerLine],
+}, async $ => {
+  const ui = await mount($, '**Q2 (push):** Push to master?\n【Q2: yes | no】')
+  expect((await ui.findAll({ type: 'Button' })).length).toBe(0)
+  await ui.unmount()
+})
+
 test('a label link then its answer button completes the label', async ($, on) => {
   const box = promptBox(on)
   const ui = await mount($, '**Q2 (push):** Push to master?\n【Q2: yes | no】')

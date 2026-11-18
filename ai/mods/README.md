@@ -16,6 +16,22 @@ This file sits outside every mod folder, so editing it reloads nothing.
 
 - **Edit `ai/mods/<name>` directly.** A copy in `~/.claude/dev-mods/<session>/`
   matters only to the session that made the mod.
+- **A new mod, in the session that writes it.** That session read
+  `CLAUDE_CODE_PLUGIN_DIRS` at its start, so it cannot load the new folder from
+  there. Create the mod in `ai/mods/<name>`, then link it into the session's mods
+  folder: `ln -s ~/dotfiles/ai/mods/<name> ~/.claude/dev-mods/<session-id>/<name>`.
+  - Edit only by the `ai/mods` path. A path through the link is outside the repo,
+    so `commit-mine` cannot record it.
+  - Add the mod to `CLAUDE_CODE_PLUGIN_DIRS` last, when it works. Until then no
+    other session loads it, so a half-done save reaches only this session.
+  - Then remove the link.
+  - The link is documented (the plugin guide: "A plugin folder given as a link is
+    watched at the folder the link names") but not yet checked live. To check it:
+    make a throwaway mod whose `register` raises a `$.ui.toast` with a version
+    string, link it in, and confirm the toast. Edit the target by its real path
+    and confirm the new string at the end of the turn. If nothing reloads, write
+    in the dev-mods folder and copy the result into `ai/mods` once, before the
+    commit.
 - **A save reaches every open session.** In the session that saved it, the mod
   reloads at the end of that turn. In every other open session it reloads about a
   quarter second after the last save, even in the middle of a turn. A reload runs
@@ -26,6 +42,20 @@ This file sits outside every mod folder, so editing it reloads nothing.
   throws at run time unloads the mod. For a risky change, copy the folder to a
   scratch directory, test it there, then copy the result in.
 - Files a mod does not import (tests, this README) reload nothing when saved.
+
+## Drawing
+
+- **Two mods on one component.** To redraw a component another mod may wrap,
+  call `next(e)` first. Replace the single `{ type: 'engine' }` node in the tree
+  it returns, and keep the rest of that tree (see `swapEngine` in
+  `reply-links/hooks/register.tsx`). With zero or several engine nodes, return
+  the tree as it came. Do not judge from `next.trace` outcomes: a hooks-module
+  hook always reads `returned`. Draw from the props in the engine trace entry's
+  `received`, not from `e.props`, or a rewrite by a mod beneath is lost.
+- **Button hover.** A Button shows the pointer by setting `inverse` on its label.
+  A label already drawn `inverse` shows no change, and a `hover` override cannot
+  undo it. Fill a button with `backgroundColor` and `color` instead (checked
+  2026-11-17).
 
 ## Checking a mod
 

@@ -58,8 +58,9 @@ export const register: Register = on => {
       return next(e)
     }
 
-    const linked = linkify(e.props.text)
-    if (isPlain(linked)) return next(e)
+    // Cheap check first: a reply with nothing to draw goes on untouched.
+    const quick = linkify(e.props.text)
+    if (isPlain(quick)) return next(e)
 
     // Run the plugins beneath first, then put our drawing where the engine's
     // own node is in what they returned, so a wrapper beneath (the roleplay
@@ -68,6 +69,14 @@ export const register: Register = on => {
     // plugin beneath drew the reply its own way: keep that.
     const inner = await next(e)
     if (countEngine(inner) !== 1) return inner
+
+    // Draw the props the engine node would have drawn: a plugin beneath may
+    // have rewritten them on the way down. The engine's trace entry holds
+    // them; without one, our own props.
+    const core = next.trace.find(t => t.plugin === 'engine')?.received
+    const props = core?.component === 'AssistantMessage' && typeof core.props.text === 'string' ? core.props : e.props
+    const linked = props.text === e.props.text ? quick : linkify(props.text)
+    if (isPlain(linked)) return inner
 
     const { Box, Text, Markdown, Button } = $.ui.resolve(e)
 
@@ -150,7 +159,7 @@ export const register: Register = on => {
     const mine = (
       <Box flexDirection="row">
         <Box width={2} flexShrink={0}>
-          <Text>{e.props.isFirstOfReply ? '⏺' : ' '}</Text>
+          <Text>{props.isFirstOfReply ? '⏺' : ' '}</Text>
         </Box>
         <Box flexDirection="column" flexGrow={1} flexShrink={1}>
           {parts}

@@ -216,7 +216,12 @@ scratchpad.
   brief that says "change no other file" must still allow `.cc/misc/<topic>/`
   for code the result relies on. A plan or report never cites a scratchpad,
   `/private/tmp` or `scratch` path: copy the file into `.cc/misc/<topic>/`
-  first, and cite the copy.
+  first, and cite the copy. A subagent shares its parent's session id, so its
+  Edit and Write calls go into the parent's next `commit-mine`. A brief sends
+  copies of source trees and test runs to `scratch new`, and keeps only files a
+  report cites in `.cc/misc/<topic>/`. Unless committing is its task, a subagent
+  runs no `ccjj claim` or `commit-mine`. It reports a Bash change to its caller
+  instead. That overrides "Edits made through Bash".
 - `.cc/` is tracked, so do not put large or generated trees there.
 - **Privacy:** `.cc/` files get committed, and some repos are public. Put private
   material in `.cc/private/`, such as quotes from my transcripts. Git ignores that
