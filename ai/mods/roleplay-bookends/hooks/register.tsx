@@ -1042,19 +1042,35 @@ export const register: Register = on => {
             ? `«${p.who.name}» ${p.who.emoji} ${p.who.universe}`
             : 'rolling a character…'
     const nextMode = MODES[(MODES.indexOf(mode) + 1) % MODES.length]!
+    // Wrapped by hand, as the bookends are: a flex row squeezes the text into
+    // a narrow column of its own (seen 2026-11-18). The text stays beside the
+    // buttons when it fits in the band's width; otherwise it takes rows of
+    // its own under them, indented past the 🎭. A button draws as `[ label ]`.
+    const labels = isPinned ? [mode, 'Reroll', 'Pick'] : [mode]
+    const head = cells('🎭') + labels.reduce((n, l) => n + 1 + cells(l) + 4, 0)
+    const width = Math.max(20, e.props.bodyColumns)
+    const inline = head + 1 + cells(shown) <= width
+    const below = inline ? [] : wrapWords(shown, width - 3, width - 3)
     const sessionRow = (
-      <Box key="rp-session" flexDirection="row" columnGap={1}>
-        <Text dimColor>🎭</Text>
-        <Button
-          key="rp-mode"
-          label={mode}
-          dimColor
-          onPress={() => setMode($, nextMode, false)}
-        />
-        {isPinned ? <Button key="rp-reroll" label="Reroll" dimColor onPress={() => reroll($, 'button')} /> : null}
-        {/* Not in random mode: a pick there would quietly switch modes. */}
-        {isPinned ? <Button key="rp-pick" label="Pick" dimColor onPress={() => openPicker($)} /> : null}
-        <Text dimColor>{shown}</Text>
+      <Box key="rp-session" flexDirection="column">
+        <Box flexDirection="row" columnGap={1}>
+          <Text dimColor>🎭</Text>
+          <Button
+            key="rp-mode"
+            label={mode}
+            dimColor
+            onPress={() => setMode($, nextMode, false)}
+          />
+          {isPinned ? <Button key="rp-reroll" label="Reroll" dimColor onPress={() => reroll($, 'button')} /> : null}
+          {/* Not in random mode: a pick there would quietly switch modes. */}
+          {isPinned ? <Button key="rp-pick" label="Pick" dimColor onPress={() => openPicker($)} /> : null}
+          {inline ? <Text dimColor>{shown}</Text> : null}
+        </Box>
+        {below.map((t, i) => (
+          <Box key={`rp-shown-${i}`} paddingLeft={3}>
+            <Text dimColor>{t}</Text>
+          </Box>
+        ))}
       </Box>
     )
     if (!due && !VOTES_DEMO) return sessionRow

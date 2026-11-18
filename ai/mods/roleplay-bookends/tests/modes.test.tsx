@@ -429,6 +429,20 @@ test('universe mode rolls inside the pinned universe, never the same character t
   await ui.unmount()
 })
 
+test('in a narrow band the mode text moves under the buttons, wrapped to the band', async ($, on) => {
+  const w = world($, on, 'universe')
+  w.store.set('pins', GHOST_PIN)
+  await start($, w)
+  const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns: 50 } })
+  const texts = (await band.findAll({ type: 'Text' })).map(t => t.text)
+  // The 🎭 and the three buttons take the first row; the text never shares it.
+  expect(texts).toContain('🎭')
+  expect(texts).toContain('a new character each prompt from Ghost in the')
+  expect(texts).toContain('Shell')
+  expect((await band.findAll({ type: 'Button' })).map(b => b.key)).toEqual(['rp-mode', 'rp-reroll', 'rp-pick'])
+  await band.unmount()
+})
+
 test('universe mode: Reroll changes the universe and keeps the mode', async ($, on) => {
   const w = world($, on, 'universe')
   w.store.set('pins', GHOST_PIN)
