@@ -163,6 +163,29 @@ func isVideoFile(_ path: String) -> Bool {
 
 // MARK: - VideoCanvasView
 
+/// "1:05", or "1:02:05" past an hour.
+func formatTime(_ seconds: Double) -> String {
+    let s = Int(max(0, seconds.isFinite ? seconds : 0))
+    if s >= 3600 { return String(format: "%d:%02d:%02d", s / 3600, (s / 60) % 60, s % 60) }
+    return String(format: "%d:%02d", s / 60, s % 60)
+}
+
+/// Takes no mouse events, so clicks, scrolls and right-clicks reach the canvas behind it.
+class PassthroughView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+/// The controls bar. A click on its background neither drags the window nor saves an undo step.
+class ControlsBarView: NSVisualEffectView {
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func mouseDown(with event: NSEvent) {}
+}
+
+/// A label in the controls bar. A drag that starts on it does not move the window.
+class BarLabel: NSTextField {
+    override var mouseDownCanMoveWindow: Bool { false }
+}
+
 class VideoCanvasView: NSView {
     let filePath: String
     var zoom: Double
@@ -179,6 +202,20 @@ class VideoCanvasView: NSView {
     private var playerLayer: AVPlayerLayer!
     private var looper: AVPlayerLooper!
     private var playerItem: AVPlayerItem!
+    /// Holds playerLayer, so the controls bar (a sibling subview) always draws above the video.
+    private let playerHost = PassthroughView()
+
+    /// Set when the user pauses. Uncovering the window or waking the screen does not resume it.
+    private(set) var userPaused = false
+
+    private var controlsBar: ControlsBarView?
+    private var playButton: NSButton!
+    private var elapsedLabel: NSTextField!
+    private var remainingLabel: NSTextField!
+    private var scrubSlider: NSSlider!
+    private var timeObserver: Any?
+    private var isScrubbing = false
+    var controlsVisible: Bool { controlsBar != nil }
 
     init(url: URL, zoom: Double, filePath: String, audioEnabled: Bool = false, volume: Float = 1.0) {
         self.filePath = filePath
@@ -198,16 +235,24 @@ class VideoCanvasView: NSView {
         playerLayer = AVPlayerLayer(player: player)
         playerLayer.videoGravity = .resizeAspectFill
         playerLayer.backgroundColor = NSColor.black.cgColor
-        layer?.addSublayer(playerLayer)
+        playerHost.wantsLayer = true
+        addSubview(playerHost)
+        playerHost.layer?.addSublayer(playerLayer)
 
         player.play()
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
+    deinit {
+        if let o = timeObserver { player?.removeTimeObserver(o) }
+    }
+
     override func layout() {
         super.layout()
+        playerHost.frame = bounds
         updatePlayerLayerFrame()
+        layoutControls()
     }
 
     private func updatePlayerLayerFrame() {
@@ -261,10 +306,174 @@ class VideoCanvasView: NSView {
     }
 
     func pause() { player?.pause() }
-    func resume() { player?.play() }
+    func resume() { if !userPaused { player?.play() } }
 
     var filename: String {
         (filePath as NSString).lastPathComponent
+    }
+
+    // MARK: Playback position
+    // AVPlayerLooper swaps in a new item at each loop, so read player.currentItem every time.
+
+    var currentSeconds: Double {
+        let t = player.currentTime().seconds
+        return t.isFinite ? t : 0
+    }
+
+    var durationSeconds: Double? {
+        guard let d = player.currentItem?.duration.seconds, d.isFinite, d > 0 else { return nil }
+        return d
+    }
+
+    /// "0:42 / 2:10"
+    var timeDescription: String {
+        "\(formatTime(currentSeconds)) / \(durationSeconds.map(formatTime) ?? "--:--")"
+    }
+
+    func togglePause() {
+        userPaused.toggle()
+        if userPaused {
+            player.pause()
+        } else if let w = window as? WallWindow, let delegate = NSApp.delegate as? AppDelegate {
+            // Plays only if the window is uncovered (or has audio) and the screen is awake.
+            delegate.updatePlayback(for: w)
+        } else {
+            player.play()
+        }
+        refreshControls()
+    }
+
+    /// exact: false allows 0.1 s of slack, which keeps a slider drag responsive.
+    func seek(to seconds: Double, exact: Bool = true) {
+        let target = max(0, seconds)
+        pendingSeek = target
+        let tol = exact ? CMTime.zero : CMTime(seconds: 0.1, preferredTimescale: 600)
+        player.seek(to: CMTime(seconds: target, preferredTimescale: 600),
+                    toleranceBefore: tol, toleranceAfter: tol) { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                if self.pendingSeek == target { self.pendingSeek = nil }
+                self.refreshControls()
+            }
+        }
+    }
+
+    /// Target of the seek still in flight. Quick j/l presses add to it, because
+    /// currentTime() still reads the old position until the seek lands.
+    private var pendingSeek: Double?
+
+    /// Going back stops at the start. Going forward past the end wraps, as the video loops.
+    func seek(by delta: Double) {
+        var target = (pendingSeek ?? currentSeconds) + delta
+        if let d = durationSeconds, target >= d { target = target.truncatingRemainder(dividingBy: d) }
+        seek(to: target)
+    }
+
+    func restart() { seek(to: 0) }
+
+    /// Steps a frame forward or back. Pauses first, as QuickTime does.
+    func step(frames: Int) {
+        userPaused = true
+        player.pause()
+        pendingSeek = nil
+        player.currentItem?.step(byCount: frames)
+        refreshControls()
+    }
+
+    // MARK: Controls bar
+
+    func setControlsVisible(_ show: Bool) {
+        guard show != controlsVisible else { return }
+        if show { buildControls() } else { teardownControls() }
+    }
+
+    private func buildControls() {
+        let bar = ControlsBarView()
+        bar.material = .hudWindow
+        bar.blendingMode = .withinWindow
+        bar.state = .active
+        bar.appearance = NSAppearance(named: .darkAqua)
+        bar.wantsLayer = true
+        bar.layer?.cornerRadius = 10
+        bar.layer?.masksToBounds = true
+
+        playButton = NSButton(title: "", target: self, action: #selector(controlPlayPause))
+        playButton.isBordered = false
+        playButton.imagePosition = .imageOnly
+
+        func timeLabel(_ align: NSTextAlignment) -> NSTextField {
+            let l = BarLabel(labelWithString: "0:00")
+            l.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+            l.textColor = .labelColor
+            l.alignment = align
+            return l
+        }
+        elapsedLabel = timeLabel(.right)
+        remainingLabel = timeLabel(.left)
+
+        scrubSlider = NSSlider(value: 0, minValue: 0, maxValue: 1, target: self, action: #selector(controlScrub(_:)))
+        scrubSlider.isContinuous = true
+        scrubSlider.controlSize = .small
+
+        for v in [playButton!, elapsedLabel!, scrubSlider!, remainingLabel!] { bar.addSubview(v) }
+        addSubview(bar)
+        controlsBar = bar
+        layoutControls()
+
+        timeObserver = player.addPeriodicTimeObserver(
+            forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main
+        ) { [weak self] _ in self?.refreshControls() }
+        refreshControls()
+    }
+
+    private func teardownControls() {
+        if let o = timeObserver { player.removeTimeObserver(o) }
+        timeObserver = nil
+        controlsBar?.removeFromSuperview()
+        controlsBar = nil
+        isScrubbing = false
+    }
+
+    private func layoutControls() {
+        guard let bar = controlsBar else { return }
+        let w = max(140, min(bounds.width - 24, 560))
+        let h: CGFloat = 32
+        bar.frame = NSRect(x: (bounds.width - w) / 2, y: 12, width: w, height: h)
+        let labelW: CGFloat = bounds.width < 260 ? 0 : 52
+        playButton.frame = NSRect(x: 8, y: 6, width: 20, height: 20)
+        elapsedLabel.frame = NSRect(x: 30, y: 9, width: labelW, height: 14)
+        remainingLabel.frame = NSRect(x: w - 8 - labelW, y: 9, width: labelW, height: 14)
+        let sx = 30 + labelW + 6
+        scrubSlider.frame = NSRect(x: sx, y: 6, width: max(20, w - 8 - labelW - 6 - sx), height: 20)
+    }
+
+    private func refreshControls() {
+        guard controlsBar != nil else { return }
+        let symbol = userPaused ? "play.fill" : "pause.fill"
+        if #available(macOS 11.0, *), let img = NSImage(systemSymbolName: symbol, accessibilityDescription: userPaused ? "Play" : "Pause") {
+            playButton.image = img
+        } else {
+            playButton.title = userPaused ? "▶" : "❚❚"
+        }
+        playButton.contentTintColor = .white
+        let t = currentSeconds
+        elapsedLabel.stringValue = formatTime(t)
+        if let d = durationSeconds {
+            remainingLabel.stringValue = "-" + formatTime(d - t)
+            if !isScrubbing { scrubSlider.doubleValue = min(1, t / d) }
+        } else {
+            remainingLabel.stringValue = "--:--"
+        }
+    }
+
+    @objc private func controlPlayPause() { togglePause() }
+
+    @objc private func controlScrub(_ sender: NSSlider) {
+        guard let d = durationSeconds else { return }
+        let type = NSApp.currentEvent?.type
+        isScrubbing = type == .leftMouseDown || type == .leftMouseDragged
+        seek(to: sender.doubleValue * d, exact: !isScrubbing)
+        elapsedLabel.stringValue = formatTime(sender.doubleValue * d)
     }
 }
 
@@ -321,6 +530,32 @@ class WallWindow: NSWindow {
             (NSApplication.shared.delegate as? AppDelegate)?.imageUndoManager.saveState(for: self)
         }
         super.mouseDown(with: event)
+    }
+
+    /// Video keys, as in the QuickTime seed: j/l 10 s, arrows 5 s, k or space pause,
+    /// , and . a frame, 0 restart. They work on a locked window too.
+    override func keyDown(with event: NSEvent) {
+        guard let video = contentView as? VideoCanvasView,
+              event.modifierFlags.intersection([.command, .control, .option]).isEmpty else {
+            super.keyDown(with: event)
+            return
+        }
+        switch event.keyCode {
+        case 123: video.seek(by: -5); return
+        case 124: video.seek(by: 5); return
+        case 49: if !event.isARepeat { video.togglePause() }; return
+        default: break
+        }
+        switch event.charactersIgnoringModifiers?.lowercased() {
+        case "j": video.seek(by: -10)
+        case "l": video.seek(by: 10)
+        // Holding k or 0 must not flicker or keep restarting; held j/l/arrows still repeat.
+        case "k": if !event.isARepeat { video.togglePause() }
+        case ",": video.step(frames: -1)
+        case ".": video.step(frames: 1)
+        case "0": if !event.isARepeat { video.restart() }
+        default: super.keyDown(with: event)
+        }
     }
 }
 
@@ -900,7 +1135,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for window in windows {
             guard let canvas = wallCanvas(of: window) else { continue }
             let submenu = NSMenu()
-            addImageMenuItems(to: submenu, canvas: canvas as NSView)
+            // No key hints here: with several videos, a typed key would pick the first one's item.
+            addImageMenuItems(to: submenu, canvas: canvas as NSView, keyHints: false)
             let item = NSMenuItem(title: canvas.filename, action: nil, keyEquivalent: "")
             item.submenu = submenu
             menu.addItem(item)
@@ -927,7 +1163,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return menu
     }
 
-    func addImageMenuItems(to menu: NSMenu, canvas view: NSView) {
+    func addImageMenuItems(to menu: NSMenu, canvas view: NSView, keyHints: Bool = true) {
         guard let canvas = view as? WallCanvas else { return }
         let canvasView = canvas as NSView
 
@@ -951,6 +1187,49 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let volumeItem = NSMenuItem()
             volumeItem.view = volumeContainer
             menu.addItem(volumeItem)
+
+            menu.addItem(NSMenuItem.separator())
+
+            // Playback. The keys shown work while the window is focused (WallWindow.keyDown).
+            let timeItem = NSMenuItem(title: video.timeDescription, action: nil, keyEquivalent: "")
+            timeItem.isEnabled = false
+            menu.addItem(timeItem)
+
+            func playbackItem(_ title: String, _ action: Selector, key: String, tag: Int = 0) {
+                let item = NSMenuItem(title: title, action: action, keyEquivalent: keyHints ? key : "")
+                item.keyEquivalentModifierMask = []
+                item.target = self
+                item.representedObject = video
+                item.tag = tag
+                menu.addItem(item)
+            }
+            playbackItem(video.userPaused ? "Play" : "Pause", #selector(doTogglePause(_:)), key: "k")
+            playbackItem("Back 10 Seconds", #selector(doSeekBy(_:)), key: "j", tag: -10)
+            playbackItem("Forward 10 Seconds", #selector(doSeekBy(_:)), key: "l", tag: 10)
+            playbackItem("Restart", #selector(doRestart(_:)), key: "0")
+
+            let posLabel = NSTextField(labelWithString: "Position")
+            posLabel.font = NSFont.menuFont(ofSize: 0)
+            posLabel.frame = NSRect(x: 20, y: 3, width: 56, height: 18)
+            let duration = video.durationSeconds
+            let posSlider = NSSlider(value: duration.map { min(1, video.currentSeconds / $0) } ?? 0,
+                                     minValue: 0, maxValue: 1, target: self, action: #selector(doSliderPosition(_:)))
+            posSlider.frame = NSRect(x: 78, y: 0, width: 122, height: 24)
+            posSlider.isContinuous = true
+            posSlider.isEnabled = duration != nil
+            objc_setAssociatedObject(posSlider, &kCanvasKey, canvasView, .OBJC_ASSOCIATION_ASSIGN)
+            let posContainer = NSView(frame: NSRect(x: 0, y: 0, width: 212, height: 24))
+            posContainer.addSubview(posLabel)
+            posContainer.addSubview(posSlider)
+            let posItem = NSMenuItem()
+            posItem.view = posContainer
+            menu.addItem(posItem)
+
+            let controlsItem = NSMenuItem(title: "Show Controls", action: #selector(doToggleControls(_:)), keyEquivalent: "")
+            controlsItem.target = self
+            controlsItem.representedObject = video
+            controlsItem.state = video.controlsVisible ? .on : .off
+            menu.addItem(controlsItem)
 
             menu.addItem(NSMenuItem.separator())
         }
@@ -1202,6 +1481,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func doSliderVolume(_ sender: NSSlider) {
         guard let video = objc_getAssociatedObject(sender, &kCanvasKey) as? VideoCanvasView else { return }
         video.volume = sender.floatValue
+    }
+
+    @objc func doTogglePause(_ sender: NSMenuItem) {
+        (sender.representedObject as? VideoCanvasView)?.togglePause()
+    }
+
+    @objc func doSeekBy(_ sender: NSMenuItem) {
+        (sender.representedObject as? VideoCanvasView)?.seek(by: Double(sender.tag))
+    }
+
+    @objc func doRestart(_ sender: NSMenuItem) {
+        (sender.representedObject as? VideoCanvasView)?.restart()
+    }
+
+    @objc func doToggleControls(_ sender: NSMenuItem) {
+        guard let video = sender.representedObject as? VideoCanvasView else { return }
+        video.setControlsVisible(!video.controlsVisible)
+    }
+
+    @objc func doSliderPosition(_ sender: NSSlider) {
+        guard let video = objc_getAssociatedObject(sender, &kCanvasKey) as? VideoCanvasView,
+              let d = video.durationSeconds else { return }
+        let type = NSApp.currentEvent?.type
+        video.seek(to: sender.doubleValue * d, exact: !(type == .leftMouseDown || type == .leftMouseDragged))
     }
 
     @objc func doSetZoom(_ sender: NSMenuItem) {
