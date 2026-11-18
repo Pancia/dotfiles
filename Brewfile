@@ -1,5 +1,6 @@
 # Outside taps must be trusted per formula: `brew trust --formula <tap>/<name>`
-# (list in ~/.config/homebrew/trust.json). Brew ignores untrusted taps.
+# The list is rcs/homebrew-trust.json (linked to ~/.config/homebrew/trust.json
+# by rcs/MANIFEST), so a new Mac gets it. Brew ignores untrusted taps.
 tap 'asmvik/formulae'
 tap 'babashka/brew'
 tap 'borkdude/brew'

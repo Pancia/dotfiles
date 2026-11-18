@@ -21,6 +21,7 @@ gitconfig                       -> $HOME/.config/git/config
 jj-config.toml                  -> $HOME/.config/jj/config.toml
 gradle.properties               -> $HOME/.local/share/gradle/gradle.properties
 hammerspoon.lua                 -> $HOME/.hammerspoon/init.lua
+homebrew-trust.json             -> $HOME/.config/homebrew/trust.json
 ideavimrc                       -> $HOME/.config/ideavim/ideavimrc
 ignore                          -> $HOME/.ignore
 karabiner.json                  -> $HOME/.config/karabiner/karabiner.json
