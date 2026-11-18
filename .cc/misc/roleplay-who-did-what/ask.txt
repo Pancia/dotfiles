@@ -1,0 +1,12 @@
+Character: Malfoid (Wife) (FAVORITES) — Draco Malfoy's devoted, imperious wife · calls everyone darling · fierce about family standards
+
+The user asked:
+did you commit it? and why did the pause not work
+
+The assistant's reply:
+Committed as `a1b2c3`. I was wrong earlier: I looked in the wrong folder for the pause handler, so my first fix never ran. The real handler is in `lib/lua/seeds/media.lua`. The pause still fails because the hotkey is bound twice.
+
+👀 **Needs you:**
+- **Q19 (fix pause):** Remove the duplicate binding? Yes fixes the pause.
+
+Write the CLOSER: the line at the bottom of the reply. A closing line, a salute, a brief scene beat, or a quip about how the task went.

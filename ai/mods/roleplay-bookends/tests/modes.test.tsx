@@ -6,7 +6,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { matches, nextVote, parseRoster, pct, pickChar } from '../hooks/register'
+import { SYS, matchUniverses, matches, nextVote, parseRoster, pct, pickChar, pickUniverse, titleCase } from '../hooks/register'
 import { ROLL, start, world as baseWorld } from './world'
 import type { World as BaseWorld } from './world'
 
@@ -23,13 +23,16 @@ type World = BaseWorld & {
   rolls: string[]; rosterFails: number
   // Each vote's process.run argv, and how many vote runs fail next.
   voteRuns: string[][]; voteFails: number
+  // What --roster prints, and a universe whose rolls print nothing (nobody
+  // in it can roll), as the script does.
+  roster: string; deadUniverse: string
 }
 
 // The shared engine (./world), with the roster, the roll log and vote runs
 // that can fail. Every prompt starts a turn (the shared default).
 function world($: Engine, on: On, saved?: string): World {
   const w: World = Object.assign(baseWorld($, on, { run: argv => runFor(w, argv) }), {
-    rolls: [], rosterFails: 0, voteRuns: [], voteFails: 0,
+    rolls: [], rosterFails: 0, voteRuns: [], voteFails: 0, roster: ROSTER, deadUniverse: '',
   })
   if (saved) w.store.set('mode', saved)
   return w
@@ -49,7 +52,8 @@ function runFor(w: World, argv: readonly string[]) {
     w.rosterFails--
     throw new Error('timed out')
   }
-  return { stdout: cmd.includes('--roster') ? ROSTER : cmd.includes('roleplay-roll') ? ROLL : '' }
+  if (w.deadUniverse && argv.includes(`--universe=${w.deadUniverse}`)) return { stdout: '' }
+  return { stdout: cmd.includes('--roster') ? w.roster : cmd.includes('roleplay-roll') ? ROLL : '' }
 }
 
 async function submit($: Engine, w: World, text: string) {
@@ -157,7 +161,7 @@ test('random mode draws the odds beside the name and universe, with the vote lin
   await band.unmount()
 })
 
-test('the mode button switches mode, saves the default, and shows Reroll in session mode', async ($, on) => {
+test('the mode button cycles random, session, universe; saves the default; shows Reroll outside random', async ($, on) => {
   const w = world($, on)
   await start($, w)
   expect(w.registered).toEqual([{ name: 'roleplay', immediate: true }])
@@ -166,7 +170,15 @@ test('the mode button switches mode, saves the default, and shows Reroll in sess
   await w.clock.settle()
   expect(w.store.get('mode')).toBe('session')
   expect((await band.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['session', 'Reroll', 'Pick'])
-  expect((await band.find({ type: 'Text', text: /«/ }))?.text).toMatch(/^«/)
+  const named = (await band.find({ type: 'Text', text: /«/ }))?.text ?? ''
+  const who = parseRoster(ROSTER).find(c => named.startsWith(`«${c.name}»`))!
+  expect(who).toBeDefined()
+  // From session mode, the button carries the character's universe over.
+  await band.press({ key: 'rp-mode' })
+  await w.clock.settle()
+  expect(w.store.get('mode')).toBe('universe')
+  expect((await band.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['universe', 'Reroll', 'Pick'])
+  expect((await band.find({ type: 'Text', text: /from / }))?.text).toBe(`a new character each prompt from ${titleCase(who.universe)}`)
   await band.press({ key: 'rp-mode' })
   await w.clock.settle()
   expect(w.store.get('mode')).toBe('random')
@@ -353,4 +365,162 @@ test('/roleplay random leaves session mode, and its odds come back', async ($, o
   expect((await ui.find({ type: 'Text', text: '1.2% ' }))?.text).toBe('1.2% ')
   await ui.unmount()
   expect(w.toasts.some(t => t.startsWith('🎭 Random mode'))).toBe(true)
+})
+
+test('a weighted universe pick follows the universe shares and can skip one', () => {
+  const all = parseRoster(ROSTER)
+  // Shares 0.085, 0.085, 0.25 of 0.42: GHOST first, FAVORITES the last 60%.
+  expect(pickUniverse(all, 0)).toBe('GHOST IN THE SHELL')
+  expect(pickUniverse(all, 0.3)).toBe('WARHAMMER 40K')
+  expect(pickUniverse(all, 0.9)).toBe('FAVORITES')
+  expect(pickUniverse(all, 0, 'GHOST IN THE SHELL')).toBe('WARHAMMER 40K')
+  expect(pickUniverse([], 0.5)).toBe(null)
+  expect(matchUniverses(all, 'ghost').map(x => x.name)).toEqual(['GHOST IN THE SHELL'])
+})
+
+const GHOST_PIN = { 'sess-1': { mode: 'universe', who: null, universe: 'GHOST IN THE SHELL' } }
+
+test('universe mode rolls inside the pinned universe, never the same character twice running', async ($, on) => {
+  const w = world($, on, 'universe')
+  w.store.set('pins', GHOST_PIN)
+  await start($, w)
+  const band = await $.ui.mount(BAND)
+  expect((await band.find({ type: 'Text', text: /from / }))?.text).toBe('a new character each prompt from Ghost in the Shell')
+  await band.unmount()
+  await submit($, w, 'first universe request')
+  await submit($, w, 'second universe request')
+  const rolls = w.rolls.filter(r => r.includes('--votes'))
+  expect(rolls).toHaveLength(2)
+  for (const r of rolls) expect(r).toContain('--universe=GHOST IN THE SHELL')
+  expect(rolls[0]).not.toContain('--not=')
+  expect(rolls[1]).toContain('--not=Togusa')
+  // Votes as in random mode; the character's odds are its share of the universe.
+  const ui = await opener($, 'second universe request')
+  expect(await voteButtons(ui)).toHaveLength(4)
+  expect((await ui.find({ type: 'Text', text: '14% ' }))?.text).toBe('14% ')
+  expect((await ui.find({ type: 'Text', text: '8.5% ' }))?.text).toBe('8.5% ')
+  await ui.unmount()
+})
+
+test('universe mode: Reroll changes the universe and keeps the mode', async ($, on) => {
+  const w = world($, on, 'universe')
+  w.store.set('pins', GHOST_PIN)
+  await start($, w)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'rp-reroll' })
+  await w.clock.settle()
+  const pins = w.store.get('pins') as Record<string, { mode: string; universe: string }>
+  expect(pins['sess-1']?.mode).toBe('universe')
+  expect(pins['sess-1']?.universe).not.toBe('GHOST IN THE SHELL')
+  expect(w.toasts.at(-1)).toMatch(/^🎭 This session's universe: /)
+  await band.unmount()
+})
+
+test('universe mode: Pick lists universes, and a row sets the session universe', async ($, on) => {
+  const w = world($, on, 'universe')
+  w.store.set('pins', GHOST_PIN)
+  await start($, w)
+  await run($, 'pick')
+  const pane = await $.ui.mount(PANE)
+  const rows = await pane.findAll({ type: 'Button' })
+  expect(rows).toHaveLength(3)
+  expect(rows[0]?.text).toMatch(/Ghost in the Shell 8.5% · 1 character · now/)
+  await pane.input({ key: 'rp-filter', text: 'warham' })
+  await pane.unmount()
+  expect(w.panes).toEqual([])
+  const pins = w.store.get('pins') as Record<string, { mode: string; universe: string }>
+  expect(pins['sess-1']).toMatchObject({ mode: 'universe', universe: 'WARHAMMER 40K' })
+  await submit($, w, 'a request after the universe pick')
+  expect(w.rolls.at(-1)).toContain('--universe=WARHAMMER 40K')
+})
+
+test('a pinned universe that left the roster is replaced', async ($, on) => {
+  const w = world($, on, 'universe')
+  w.store.set('pins', { 'sess-1': { mode: 'universe', who: null, universe: 'GONE' } })
+  await start($, w)
+  const pins = w.store.get('pins') as Record<string, { universe: string }>
+  expect(['GHOST IN THE SHELL', 'WARHAMMER 40K', 'FAVORITES']).toContain(pins['sess-1']?.universe)
+})
+
+test('/clear gives a universe-mode session a new universe pin under the new id', async ($, on) => {
+  const w = world($, on, 'universe')
+  w.store.set('pins', GHOST_PIN)
+  await start($, w)
+  w.sid = 'sess-2'
+  await $.session.end({ reason: 'clear', sessionId: 'sess-1', resume: { id: 'sess-1' } })
+  await w.clock.settle()
+  const pins = w.store.get('pins') as Record<string, { mode: string; universe: string | null }>
+  expect(pins['sess-2']?.mode).toBe('universe')
+  expect(pins['sess-2']?.universe).toBeTruthy()
+  expect(pins['sess-1']?.universe).toBe('GHOST IN THE SHELL')
+})
+
+test('/roleplay universe from random mode rolls a universe and says so', async ($, on) => {
+  const w = world($, on)
+  await start($, w)
+  await run($, 'universe')
+  expect(w.store.get('mode')).toBe('universe')
+  expect(w.toasts.at(-1)).toMatch(/^🎭 Universe mode: a new character on each prompt, from /)
+})
+
+test('session mode into universe mode keeps the character\'s universe, and the first roll skips that character', async ($, on) => {
+  const w = world($, on, 'session')
+  const holo = parseRoster(ROSTER)[2]!
+  w.store.set('pins', { 'sess-1': { mode: 'session', who: holo } })
+  await start($, w)
+  await run($, 'universe')
+  expect(w.toasts.at(-1)).toBe('🎭 Universe mode: a new character on each prompt, from Favorites. New sessions start this way too.')
+  await submit($, w, 'first prompt in the universe')
+  const roll = w.rolls.filter(r => r.includes('--votes')).at(-1)
+  expect(roll).toContain('--universe=FAVORITES')
+  expect(roll).toContain('--not=Holo')
+})
+
+test('a pinned universe nobody can roll: this turn gets a random roll, and the session another universe', async ($, on) => {
+  const w = world($, on, 'universe')
+  w.store.set('pins', GHOST_PIN)
+  w.deadUniverse = 'GHOST IN THE SHELL'
+  await start($, w)
+  await submit($, w, 'a prompt in a dead universe')
+  // The fallback roll still writes a bookend, with random mode's odds.
+  expect(w.asks.find(a => a.includes('OPENER'))).toContain('Character: Togusa')
+  const ui = await opener($, 'a prompt in a dead universe')
+  expect((await ui.find({ type: 'Text', text: '1.2% ' }))?.text).toBe('1.2% ')
+  await ui.unmount()
+  const pins = w.store.get('pins') as Record<string, { mode: string; universe: string }>
+  expect(pins['sess-1']?.mode).toBe('universe')
+  expect(pins['sess-1']?.universe).not.toBe('GHOST IN THE SHELL')
+  expect(w.toasts.at(-1)).toMatch(/^🎭 Nobody in Ghost in the Shell can roll\. This session's universe: /)
+  // The roster was read again, in case it changed.
+  expect(w.rolls.filter(r => r.includes('--roster')).length).toBeGreaterThanOrEqual(2)
+})
+
+test('Pick does not list a universe that cannot roll', async ($, on) => {
+  const w = world($, on, 'universe')
+  w.roster = ROSTER + ['BENCHED', 'Nobody', '🪑', 'Off', '', '0.000000', '0.000000'].join('\t') + '\n'
+  w.store.set('pins', GHOST_PIN)
+  await start($, w)
+  await run($, 'pick')
+  const pane = await $.ui.mount(PANE)
+  expect(await pane.findAll({ type: 'Button' })).toHaveLength(3)
+  expect(await pane.find({ type: 'Button', text: /Benched/ })).toBe(undefined)
+  await pane.unmount()
+})
+
+test('picking the universe already pinned keeps skipping the last character', async ($, on) => {
+  const w = world($, on, 'universe')
+  w.store.set('pins', GHOST_PIN)
+  await start($, w)
+  await submit($, w, 'a prompt before the re-pick')
+  await run($, 'pick')
+  const pane = await $.ui.mount(PANE)
+  await pane.press({ key: 'rp-u:GHOST IN THE SHELL' })
+  await pane.unmount()
+  await submit($, w, 'a prompt after the re-pick')
+  expect(w.rolls.at(-1)).toContain('--not=Togusa')
+})
+
+test('the writer is told who did the work: the assistant, not the user or the character', () => {
+  expect(SYS).toContain('There are three parties.')
+  expect(SYS).toContain('Never say "you" or "I" for something the assistant did')
 })

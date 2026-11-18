@@ -32,8 +32,9 @@ written normally.
 > each with both odds), then the character, or "a new character each
 > prompt". Pick is hidden in random mode, where it would switch modes
 > unasked. `/roleplay reroll` and
-> `/roleplay pick` do the same from the prompt and put the session in session
-> mode without changing the default. The mode button and `/roleplay
+> `/roleplay pick` do the same from the prompt and, from random mode, put the
+> session in session mode without changing the default (in universe mode they
+> change the universe; see below). The mode button and `/roleplay
 > session|random` also set the default for new sessions (the mod's
 > `$.store`). Each session's mode and character are also kept in `$.store`
 > by session id (the newest 50), so `--resume` gets them back; `/clear` rolls
@@ -44,13 +45,40 @@ written normally.
 > each turn, at a fixed 1/3 (`ROLEPLAY_CATCHPHRASE` does not reach the mod).
 > Tests: `ai/mods/roleplay-bookends/tests/modes.test.tsx`. Review:
 > `.cc/reports/REVIEW-roleplay-modes.md`.
+>
+> **Universe mode (2026-11-17).** `/roleplay universe` keeps one universe for
+> the whole session and rolls a new character from it on each typed prompt,
+> never the same one twice in a row (a mod reload forgets the last one, so
+> the first roll after it may repeat). The vote links show, as in random mode.
+> The character's odds are its share within the universe (they ignore the
+> skipped character); the universe's odds are its usual share of rolls. The
+> mode button cycles random → session → universe. In universe mode,
+> **Reroll** rolls a new universe (weighted, never the same) and **Pick**
+> lists universes, not characters. A universe at 0% (benched, or all its
+> characters off) never rolls and is not in Pick: `--roster` cannot tell the
+> two apart, and a pinned universe nobody can roll gives no bookend. Each roll
+> is `roleplay-roll --votes --universe=NAME --not=LAST`, so it is logged and
+> votable. If a roll prints nothing (the universe was renamed or switched off
+> after the roster loaded), that turn gets a random roll, the roster is read
+> again, and the session gets another universe, with a toast. `/clear` rolls
+> a new universe; `--resume` gets it back. Entering universe mode from
+> session mode keeps the session character's universe, and the first roll
+> skips that character; from random mode it returns to the universe the
+> session last had, or rolls one. Review:
+> `.cc/reports/REVIEW-roleplay-universe-mode.md`.
+>
+> **Who did what (2026-11-17).** The writer's system prompt names three
+> parties: the user wrote the request, the assistant did the work and wrote
+> the reply, and the character only comments. Before it, a reply where the
+> assistant said "I was wrong" got lines blaming the user, 6 times in 8.
+> `.cc/reports/REPORT-roleplay-who-did-what.md`.
 
 The pieces:
 
 | Piece | File | Role |
 |---|---|---|
 | Prompt section | `rcs/claude-user-claude.md` → `~/.claude/CLAUDE.md` | here: a short note that the mod draws the bookends and the main model must not. Stand-alone: the format rules, ~22 lines, **constant size** |
-| Mod (these dotfiles) | `ai/mods/roleplay-bookends`, loaded by `CLAUDE_CODE_PLUGIN_DIRS` in `rcs/claude-settings.json` | rolls through `roleplay-roll --votes`, has Sonnet write both lines, draws them, logs them, and shows the vote reminder. `/roleplay` switches between a new character per prompt and one per session |
+| Mod (these dotfiles) | `ai/mods/roleplay-bookends`, loaded by `CLAUDE_CODE_PLUGIN_DIRS` in `rcs/claude-settings.json` | rolls through `roleplay-roll --votes`, has Sonnet write both lines, draws them, logs them, and shows the vote reminder. `/roleplay` switches between a new character per prompt, a new character per prompt from one universe, and one character per session |
 | Roster | `roleplay/roster.tsv` | the cast — 81 characters across 9 universes — and the odds weights |
 | Roller | `roleplay/bin/roleplay-roll` | rolls a character. Stand-alone it runs as a `UserPromptSubmit` hook and injects the character; here the mod calls it, and no hook is registered |
 | Terminal command | `roleplay/bin/roleplay-say` | rolls, then has Sonnet write the line, for use outside a session |

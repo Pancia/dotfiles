@@ -21,11 +21,15 @@ import type { Char, Kind, Line, Mode, Odds, Pin, VoteCount, Way } from '../types
 const openers = atom({ plugin: 'roleplay-bookends', key: 'openers' } as const, {} as Record<string, Line>)
 const closers = atom({ plugin: 'roleplay-bookends', key: 'closers' } as const, {} as Record<string, Line>)
 const votes = atom({ plugin: 'roleplay-bookends', key: 'votes' } as const, { waiting: 0, old: 0 } as VoteCount)
-// Two modes, set by /roleplay session|random. The saved default
+// Three modes, set by /roleplay random|universe|session. The saved default
 // ($.store 'mode') is read once per session; a reload keeps the session's.
 // In session mode one character writes every bookend, the vote links do not
 // show, and a row above the prompt names the character with Reroll and Pick.
 // In random mode each bookend shows its character's and universe's odds.
+// Universe mode pins one universe for the session and rolls a new character
+// from it on each prompt (never the previous one twice in a row, except
+// after a mod reload, which forgets the previous one), with odds and vote
+// links as in random mode; Reroll and Pick change the universe.
 const pin = atom({ plugin: 'roleplay-bookends', key: 'pin' } as const, { mode: null, who: null } as Pin)
 // The Pick pane's search text.
 const filter = atom({ plugin: 'roleplay-bookends', key: 'filter' } as const, '')
@@ -57,8 +61,17 @@ const DEBUG = true
 // Rows kept per map; older ones lose their bookend row.
 const KEEP = 40
 
-const SYS =
-  "You write one short in-character line for a character who bookends an AI coding assistant's replies to its user. " +
+// The "three parties" sentences stop a line from crediting or blaming the
+// user for what the assistant did: the old prompt gave "you admitted you'd
+// looked in the wrong folder" for a reply where the assistant admitted it,
+// 6 times in 8 on that reply; this one 0 in 10 (2026-11-17,
+// .cc/reports/REPORT-roleplay-who-did-what.md).
+export const SYS =
+  "You write one short in-character line for a character who bookends an AI coding assistant's replies to its user, " +
+  'and speaks to the user. There are three parties. The user wrote only their request. ' +
+  'The assistant did the work and wrote the reply, so in the reply "I" and "we" mean the assistant and "you" means the user. ' +
+  'The character is neither: it watches and comments. ' +
+  'Never say "you" or "I" for something the assistant did, found, said or admitted; if the line mentions it, the assistant did it. ' +
   "At most 25 words, in the character's own voice, about this specific work. " +
   'A plain status sentence with no character in it is a failure. ' +
   "Do not use jargon from the character's universe to describe the technical work. " +
@@ -113,6 +126,41 @@ export function matches(all: readonly Char[], q: string): Char[] {
     const hay = `${c.name} ${c.universe}`.toLowerCase()
     return words.every(w => hay.includes(w))
   })
+}
+
+// The mode button's order. Session comes before universe, so a press from
+// session mode carries the session character's universe over (setMode).
+export const MODES: readonly Mode[] = ['random', 'session', 'universe']
+export function isMode(x: unknown): x is Mode {
+  return typeof x === 'string' && (MODES as readonly string[]).includes(x)
+}
+
+// Each universe once, in roster order, with its share of rolls and members.
+export type Universe = { name: string; u: number; members: number }
+export function universes(all: readonly Char[]): Universe[] {
+  const out = new Map<string, Universe>()
+  for (const c of all) {
+    const x = out.get(c.universe)
+    if (x) x.members++
+    else out.set(c.universe, { name: c.universe, u: c.u, members: 1 })
+  }
+  return [...out.values()]
+}
+
+// A weighted pick of a universe by its share of rolls, as the script's stage
+// 1. A universe with share 0 never rolls, and Pick does not list it: the
+// roster cannot tell a benched universe from one whose members are all off,
+// and a pinned universe nobody can roll gives no bookend.
+export function pickUniverse(all: readonly Char[], r: number, not?: string): string | null {
+  const pool = universes(all).filter(x => x.u > 0 && x.name !== not)
+  const sum = pool.reduce((n, x) => n + x.u, 0)
+  if (!pool.length || sum <= 0) return null
+  let at = r * sum
+  for (const x of pool) {
+    at -= x.u
+    if (at < 0) return x.name
+  }
+  return pool[pool.length - 1]!.name
 }
 
 // A weighted pick by overall share, which is the script's two-stage roll.
@@ -200,6 +248,9 @@ const QUEUE_MS = 10 * 60 * 1000
 // Turns that got an opener, by turn id. `roll` settles once the character is
 // known, so a turn that ends first still gets its closer.
 const turns = new Map<string, Turn>()
+// Universe mode: the last character rolled, passed as --not so the same one
+// never writes two prompts in a row.
+let lastInUniverse = ''
 // Full prompts of opener rows, by head key, for findOpener; at most KEEP.
 const prompts = new Map<string, { full: string; lines: number }>()
 // Vote ids already given to a turn, so one roll is never used twice.
@@ -212,6 +263,7 @@ let rosterLoad: Promise<void> | null = null
 
 function resetSession() {
   lastAnswer = ''
+  lastInUniverse = ''
   queue = []
   turns.clear()
   prompts.clear()
@@ -303,7 +355,7 @@ async function sessionMode($: EngineInterface): Promise<Mode> {
   const p = await read($, pin)
   if (p.mode) return p.mode
   const saved = await $.store.get('mode')
-  return saved === 'session' ? 'session' : 'random'
+  return isMode(saved) ? saved : 'random'
 }
 
 // Each session's mode and character, by session id, so a resume gets them
@@ -339,11 +391,11 @@ async function restorePin($: EngineInterface): Promise<Pin> {
   const now = await read($, pin)
   if (restoredFor === sid) return now
   restoredFor = sid
-  if (now.who) return now
+  if (now.who || now.universe) return now
   const saved = ((await $.store.get('pins')) as SavedPins | undefined)?.[sid]
-  if (!saved || (saved.mode !== 'session' && saved.mode !== 'random')) return now
-  await dbg($, `restore pin ${sid} mode=${saved.mode} who=${saved.who?.name ?? 'none'}`)
-  return update($, pin, x => (x.who ? x : saved))
+  if (!saved || !isMode(saved.mode)) return now
+  await dbg($, `restore pin ${sid} mode=${saved.mode} who=${saved.who?.name ?? 'none'} universe=${saved.universe ?? 'none'}`)
+  return update($, pin, x => (x.who || x.universe ? x : { ...saved, universe: saved.universe ?? null }))
 }
 
 // A new session character, never the current one. Falls back to the script
@@ -361,37 +413,111 @@ async function rollChar($: EngineInterface, not?: string): Promise<Char | null> 
   return null
 }
 
+// A new session universe, never the current one. Falls back to the script's
+// own roll (its universe) when the roster did not load.
+async function rollUniverse($: EngineInterface, not?: string): Promise<string | null> {
+  await loadRoster($)
+  const u = pickUniverse(roster, Math.random(), not)
+  if (u) return u
+  for (let i = 0; i < 4; i++) {
+    const w = await ownRoll($, false)
+    if (!w) return null
+    if (w.universe !== not || i === 3) return w.universe
+  }
+  return null
+}
+
+function universeToast($: EngineInterface, u: string) {
+  $.ui.toast(`🎭 This session's universe: ${titleCase(u)}`)
+}
+
+// Picking the universe already pinned keeps the last character, so the next
+// roll still skips it.
+async function setUniverse($: EngineInterface, u: string) {
+  const was = (await read($, pin)).universe ?? null
+  await setPin($, (p): Pin => ({ ...p, mode: 'universe', universe: u }))
+  if (was !== u) lastInUniverse = ''
+  universeToast($, u)
+}
+
+// A universe roll that printed nothing: nobody in `u` can roll (all off, or
+// the universe was renamed after the roster loaded). Reads the roster again
+// and pins another universe, unless something else changed the pin first.
+async function replaceUniverse($: EngineInterface, u: string) {
+  rosterLoad = null
+  const next = await rollUniverse($, u)
+  await dbg($, `universe ${u} gave no roll; now ${next ?? 'none'}`)
+  if (!next) return
+  const p = await setPin($, (x): Pin => (x.mode === 'universe' && x.universe === u ? { ...x, universe: next } : x))
+  if (p.universe !== next) return
+  lastInUniverse = ''
+  $.ui.toast(`🎭 Nobody in ${titleCase(u)} can roll. This session's universe: ${titleCase(next)}`)
+}
+
 async function setChar($: EngineInterface, c: Char) {
   await setPin($, (p): Pin => ({ ...p, mode: 'session', who: c }))
   $.ui.toast(`🎭 This session: «${c.name}» ${c.emoji} ${c.universe}`)
 }
 
-// Rolls a new character. A Pick made while it rolled wins.
+// Rolls a new character, or in universe mode a new universe. A Pick made
+// while it rolled wins.
 async function reroll($: EngineInterface) {
   try {
-    const now = (await read($, pin)).who
+    const p0 = await read($, pin)
+    if (p0.mode === 'universe') {
+      const was = p0.universe ?? null
+      const u = await rollUniverse($, was ?? undefined)
+      if (!u) {
+        $.ui.toast('🎭 Reroll found no universe: see mod-debug.log')
+        return
+      }
+      // Only if nothing changed meanwhile: not the universe (a Pick), not the
+      // mode (a switch to another mode while this rolled).
+      const p = await setPin($, (x): Pin =>
+        x.mode === 'universe' && (x.universe ?? null) === was ? { ...x, universe: u } : x,
+      )
+      if (p.universe === u) {
+        lastInUniverse = ''
+        universeToast($, u)
+      }
+      return
+    }
+    const now = p0.who
     const c = await rollChar($, now?.name)
     if (!c) {
       $.ui.toast('🎭 Reroll found no character: see mod-debug.log')
       return
     }
-    const p = await setPin($, (x): Pin => (x.who?.name === now?.name ? { ...x, mode: 'session', who: c } : x))
+    // /roleplay reroll from random mode moves to session mode; from session
+    // mode it applies only if the session is still in session mode.
+    const p = await setPin($, (x): Pin =>
+      x.mode === p0.mode && x.who?.name === now?.name ? { ...x, mode: 'session', who: c } : x,
+    )
     if (p.who?.name === c.name) $.ui.toast(`🎭 This session: «${c.name}» ${c.emoji} ${c.universe}`)
   } catch (err) {
     $.ui.toast(`🎭 Reroll failed: ${String(err)}`)
   }
 }
 
-// /roleplay session|random and the row's mode button: this session's mode
-// and the saved default for new sessions.
+// /roleplay random|session|universe and the row's mode button: this
+// session's mode and the saved default for new sessions. Into universe mode
+// from session mode, the session character's universe; from random mode,
+// the universe this session last had, if any.
 async function setMode($: EngineInterface, mode: Mode, say: boolean) {
   await $.store.set('mode', mode)
-  const p = await startSession($, await setPin($, (x): Pin => ({ ...x, mode })))
+  // From session mode into universe mode: the universe of the character the
+  // session had, and the first roll in it is someone else.
+  const was = await read($, pin)
+  const carry = mode === 'universe' && was.mode === 'session' && was.who ? was.who : null
+  const p = await startSession($, await setPin($, (x): Pin => ({ ...x, mode, ...(carry ? { universe: carry.universe } : {}) })))
+  if (carry) lastInUniverse = carry.name
   if (!say) return
   $.ui.toast(
     mode === 'random'
       ? '🎭 Random mode: a new character on each prompt. New sessions start this way too.'
-      : `🎭 Session mode${p.who ? `: «${p.who.name}» ${p.who.emoji} ${p.who.universe}` : ''}. New sessions start this way too.`,
+      : mode === 'universe'
+        ? `🎭 Universe mode: a new character on each prompt${p.universe ? `, from ${titleCase(p.universe)}` : ''}. New sessions start this way too.`
+        : `🎭 Session mode${p.who ? `: «${p.who.name}» ${p.who.emoji} ${p.who.universe}` : ''}. New sessions start this way too.`,
   )
 }
 
@@ -405,16 +531,31 @@ async function openPicker($: EngineInterface) {
   if (!(await $.ui.panes()).some(x => x.id === PICK)) await update($, filter, () => '')
   // Transparent: the pane's default backdrop is too dark to read on this
   // terminal (plainify hit the same).
-  const r = await $.ui.open({ id: PICK, title: 'Pick a character', focus: true, closeOnEscape: true, backgroundColor: 'transparent' })
+  const title = (await read($, pin)).mode === 'universe' ? 'Pick a universe' : 'Pick a character'
+  const r = await $.ui.open({ id: PICK, title, focus: true, closeOnEscape: true, backgroundColor: 'transparent' })
   if (!r.isPlaced) $.ui.toast(`🎭 The pick list did not open: ${r.reason}`)
 }
 
 // Gets back a resumed session's saved pin; then, in session mode with no
-// character yet, rolls one, quietly: the row shows it. `given` is the pin a
-// caller has just written, so this need not read it back.
+// character yet, rolls one, quietly: the row shows it. In universe mode it
+// does the same for the universe, and also rolls a new one when the pinned
+// universe is no longer in the roster (an old pin, a renamed universe), or
+// every prompt would get no bookend. `given` is the pin a caller has just
+// written, so this need not read it back.
 async function startSession($: EngineInterface, given?: Pin): Promise<Pin> {
   let p = given ?? (await restorePin($))
   try {
+    if (p.mode === 'universe') {
+      const was = p.universe ?? null
+      if (was) {
+        await loadRoster($)
+        if (!roster.length || roster.some(c => c.universe === was)) return p
+      }
+      const u = await rollUniverse($)
+      if (u) p = await setPin($, x => ({ ...x, universe: (x.universe ?? null) === was ? u : x.universe }))
+      await dbg($, `universe roll ${u ?? 'none'}${was ? ` (was ${was}, gone from the roster)` : ''}`)
+      return p
+    }
     if (p.mode !== 'session' || p.who) return p
     const c = await rollChar($)
     if (c) p = await setPin($, x => ({ ...x, who: x.who ?? c }))
@@ -428,6 +569,18 @@ async function startSession($: EngineInterface, given?: Pin): Promise<Pin> {
 async function choose($: EngineInterface, c: Char) {
   await setChar($, c)
   await $.ui.close({ id: PICK })
+}
+
+async function chooseUniverse($: EngineInterface, u: string) {
+  await setUniverse($, u)
+  await $.ui.close({ id: PICK })
+}
+
+// Universes that can roll (share above 0) whose name holds every word of the
+// search.
+export function matchUniverses(all: readonly Char[], q: string): Universe[] {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean)
+  return universes(all).filter(x => x.u > 0 && words.every(w => x.name.toLowerCase().includes(w)))
 }
 
 // Sets one vote in votes.tsv, in the line the rolevote Hammerspoon seed
@@ -559,9 +712,17 @@ async function hookRoll($: EngineInterface, submittedAt: number): Promise<Who | 
 
 // The mod's own roll. --votes logs it and puts a vote id in the tag, so the
 // vote links work as the hook's did. Its output is the hook's JSON envelope.
-async function ownRoll($: EngineInterface, votes = true): Promise<Who | null> {
+// `universe` rolls only within that universe and `not` skips one character
+// (universe mode). Names hold spaces, so they go in as arguments ("$@"),
+// never into the script text; the first word after it is $0.
+async function ownRoll($: EngineInterface, votes = true, universe?: string, not?: string): Promise<Who | null> {
+  const args = [
+    ...(votes ? ['--votes'] : []),
+    ...(universe ? [`--universe=${universe}`] : []),
+    ...(not ? [`--not=${not}`] : []),
+  ]
   const r = await $.process.run(
-    ['sh', '-c', `"$HOME/dotfiles/roleplay/bin/roleplay-roll"${votes ? ' --votes' : ''}`],
+    ['sh', '-c', '"$HOME/dotfiles/roleplay/bin/roleplay-roll" "$@"', 'sh', ...args],
     { timeoutMs: 5000 },
   )
   try {
@@ -639,7 +800,26 @@ async function startOpener(
     if (p.mode === 'session') {
       via = 'session'
       w = p.who ? whoFor(p.who) : null
+    } else if (p.mode === 'universe' && p.universe) {
+      via = 'universe'
+      const u = p.universe
+      w = await ownRoll($, true, u, lastInUniverse || undefined)
+      const fell = !w
+      if (w) lastInUniverse = w.name
+      else {
+        // Nobody in it can roll: this turn gets a random roll, and the
+        // session another universe.
+        via = 'universe gave none, own roll'
+        w = await ownRoll($)
+        $.clock.after(0, () => replaceUniverse($, u).catch(err => dbg($, `replace universe error ${String(err)}`)))
+      }
+      await loadRoster($)
+      const c = w ? roster.find(x => x.name === w!.name && x.universe === w!.universe) : undefined
+      // The character's share within the universe, and the universe's own;
+      // a fallback roll's odds are random mode's.
+      if (w && c) w = { ...w, odds: { c: fell ? c.c : c.u > 0 ? c.c / c.u : 0, u: c.u } }
     } else {
+      // Random mode, and universe mode while it has no universe yet.
       w = HOOK_ROLLS ? await hookRoll($, submittedAt) : null
       via = w ? 'hook roll' : 'own roll'
       if (!w) w = await ownRoll($)
@@ -705,8 +885,8 @@ export const register: Register = on => {
     $.clock.every(10 * 60 * 1000, () => countVotes($).catch(err => dbg($, `vote count error ${String(err)}`)))
     await $.command.register({
       name: 'roleplay',
-      description: 'Roleplay bookends: one character per session, or a new one each prompt',
-      argumentHint: 'session | random | reroll | pick',
+      description: 'Roleplay bookends: a new character each prompt, from one universe, or one character per session',
+      argumentHint: 'random | universe | session | reroll | pick',
       immediate: true,
     })
     // The mode: the session's own after a reload, else the saved default; a
@@ -731,7 +911,7 @@ export const register: Register = on => {
     await update($, openers, () => ({}))
     await update($, closers, () => ({}))
     if (e.reason === 'clear' || e.reason === 'resume') {
-      await update($, pin, p => ({ ...p, who: null }))
+      await update($, pin, p => ({ ...p, who: null, universe: null }))
       // The id may not have moved on yet when the timer fires: wait for it,
       // briefly, so the old session's pin is neither restored nor overwritten.
       restoredFor = e.sessionId
@@ -749,19 +929,25 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // /roleplay session|random sets this session's mode and the saved default.
-  // reroll and pick change the character and put this session in session
-  // mode. Bare /roleplay says where things stand. Answers are toasts: a
-  // command's text would reach the main model.
+  // /roleplay random|universe|session sets this session's mode and the saved
+  // default. In universe mode reroll and pick change the universe; otherwise
+  // they change the character and put this session in session mode. Bare
+  // /roleplay says where things stand. Answers are toasts: a command's text
+  // would reach the main model.
   on('command.run', { command: 'roleplay' }, async ($, e) => {
     const arg = e.args.trim().toLowerCase()
-    if (arg === 'session' || arg === 'random') await setMode($, arg, true)
+    if (isMode(arg)) await setMode($, arg, true)
     else if (arg === 'reroll') await reroll($)
     else if (arg === 'pick') await openPicker($)
     else {
       const p = await read($, pin)
-      const now = p.mode === 'session' && p.who ? `session mode, «${p.who.name}»` : `${p.mode ?? 'random'} mode`
-      $.ui.toast(`🎭 Roleplay: ${now}. /roleplay session | random | reroll | pick`)
+      const now =
+        p.mode === 'session' && p.who
+          ? `session mode, «${p.who.name}»`
+          : p.mode === 'universe' && p.universe
+            ? `universe mode, ${titleCase(p.universe)}`
+            : `${p.mode ?? 'random'} mode`
+      $.ui.toast(`🎭 Roleplay: ${now}. /roleplay random | universe | session | reroll | pick`)
     }
     return {}
   })
@@ -813,8 +999,9 @@ export const register: Register = on => {
   })
 
   // Above the prompt, always: a dim row with the mode button (it shows the
-  // mode; a press switches it and saves the default), Reroll in session mode,
-  // and Pick, then the character or what random mode does. Buttons first, so
+  // mode; a press moves to the next of random → session → universe and saves
+  // the default), Reroll and Pick outside random mode, then the character,
+  // the universe, or what random mode does. Buttons first, so
   // they stay put when the name's length changes. Under it, the vote reminder
   // when it is due.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -822,25 +1009,32 @@ export const register: Register = on => {
     const v = await read($, votes)
     const due = v.old > VOTES_OLD || v.waiting > VOTES_MANY
     const p = await read($, pin)
-    const isSession = p.mode === 'session'
+    const mode: Mode = p.mode ?? 'random'
+    const isPinned = mode !== 'random'
     const { Box, Text, Button } = $.ui.resolve(e)
-    const shown = !isSession
-      ? 'a new character each prompt'
-      : p.who
-        ? `«${p.who.name}» ${p.who.emoji} ${p.who.universe}`
-        : 'rolling a character…'
+    const shown =
+      mode === 'random'
+        ? 'a new character each prompt'
+        : mode === 'universe'
+          ? p.universe
+            ? `a new character each prompt from ${titleCase(p.universe)}`
+            : 'rolling a universe…'
+          : p.who
+            ? `«${p.who.name}» ${p.who.emoji} ${p.who.universe}`
+            : 'rolling a character…'
+    const nextMode = MODES[(MODES.indexOf(mode) + 1) % MODES.length]!
     const sessionRow = (
       <Box key="rp-session" flexDirection="row" columnGap={1}>
         <Text dimColor>🎭</Text>
         <Button
           key="rp-mode"
-          label={isSession ? 'session' : 'random'}
+          label={mode}
           dimColor
-          onPress={() => setMode($, isSession ? 'random' : 'session', false)}
+          onPress={() => setMode($, nextMode, false)}
         />
-        {isSession ? <Button key="rp-reroll" label="Reroll" dimColor onPress={() => reroll($)} /> : null}
+        {isPinned ? <Button key="rp-reroll" label="Reroll" dimColor onPress={() => reroll($)} /> : null}
         {/* Not in random mode: a pick there would quietly switch modes. */}
-        {isSession ? <Button key="rp-pick" label="Pick" dimColor onPress={() => openPicker($)} /> : null}
+        {isPinned ? <Button key="rp-pick" label="Pick" dimColor onPress={() => openPicker($)} /> : null}
         <Text dimColor>{shown}</Text>
       </Box>
     )
@@ -876,11 +1070,41 @@ export const register: Register = on => {
   })
 
   // The Pick list: a search field and one row per match. Enter in the field
-  // takes the first match; a row takes its character. Escape closes.
+  // takes the first match; a row takes its character, or in universe mode
+  // its universe. Escape closes.
   on('ui.render', { component: 'Pane', requestId: PICK }, async ($, e) => {
     const { Box, Text, Button, Input } = $.ui.resolve(e)
     const q = await read($, filter)
-    const now = (await read($, pin)).who
+    const p = await read($, pin)
+    if (p.mode === 'universe') {
+      const hits = matchUniverses(roster, q)
+      return (
+        <Box flexDirection="column">
+          <Input
+            key="rp-filter"
+            autoFocus
+            placeholder="type part of a universe"
+            submitLabel="pick first"
+            onInput={value => update($, filter, () => value)}
+            onSubmit={value => {
+              const x = value.trim() ? matchUniverses(roster, value)[0] : undefined
+              if (x) void chooseUniverse($, x.name)
+            }}
+          />
+          {hits.length === 0 ? <Text dimColor>No universe matches.</Text> : null}
+          {hits.map(x => (
+            <Button key={`rp-u:${x.name}`} plain onPress={() => chooseUniverse($, x.name)}>
+              <Text italic color="permission">{titleCase(x.name)}</Text>{' '}
+              <Text dimColor>
+                {pct(x.u)} · {x.members} {x.members === 1 ? 'character' : 'characters'}
+                {p.universe === x.name ? ' · now' : ''}
+              </Text>
+            </Button>
+          ))}
+        </Box>
+      )
+    }
+    const now = p.who
     const hits = matches(roster, q)
     return (
       <Box flexDirection="column">
@@ -983,7 +1207,7 @@ export function titleCase(s: string): string {
 // text, a dim bar on every row. Three parts, each on rows of its own:
 //   ▎ 🎭 Name emoji · Universe                     (dim; split in two if narrow)
 //   ▎ "line"   (model kind 1.2s)
-//   ▎ 1.2% [ − ] [ + ]   8.5% [ − ] [ + ]          (random mode only)
+//   ▎ 1.2% [ − ] [ + ]   8.5% [ − ] [ + ]          (random and universe mode)
 // Rows are wrapped by hand so the bar runs down each one; a row of several
 // Texts in one flex row wraps each Text in its own column instead. The vote
 // buttons use roleplay-roll's vote id and the old link slots: 1–4 on the
@@ -1042,7 +1266,7 @@ function bookend(
       </Text>
     )
   }
-  // Random mode's odds, each dim before its own two buttons.
+  // The odds (random and universe mode), each dim before its own two buttons.
   const cOdds = l.odds ? pct(l.odds.c) : ''
   const uOdds = l.odds ? pct(l.odds.u) : ''
   const odds = (s: string) => (s ? <Text dimColor>{s} </Text> : null)

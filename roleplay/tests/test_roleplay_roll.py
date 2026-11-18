@@ -765,3 +765,93 @@ def test_dotfiles_bin_symlink_is_wired_up():
         pytest.skip("not installed in a dotfiles tree")
     assert shim.resolve() == SCRIPT.resolve()
     assert "«" in _roll(shim).stdout
+
+
+# --------------------------------------------------------------------------
+# --universe=NAME and --not=NAME: the mod's universe mode
+# --------------------------------------------------------------------------
+
+TWO_UNIVERSES = (
+    "MYTH | Hermes | 🪽 | fast\nMYTH | Athena | 🦉 | wise\n"
+    "SPACE | Ripley | 🚀 | tough\nSPACE | Bishop | 🤖 | calm\n"
+)
+
+
+def test_universe_flag_rolls_only_inside_that_universe(roster):
+    p = roster(TWO_UNIVERSES)
+    for seed in range(40):
+        out = run("--plain", "--universe=SPACE", roster=p, seed=seed).stdout
+        assert " SPACE — " in out
+
+
+def test_universe_flag_with_spaces_in_the_name(roster):
+    p = roster("THE OLD WEST | Doc | 🤠 | dry\nMYTH | Hermes | 🪽 | fast\n")
+    for seed in range(20):
+        assert "«Doc»" in run("--plain", "--universe=THE OLD WEST", roster=p, seed=seed).stdout
+
+
+def test_unknown_universe_fails_open(roster):
+    r = run("--universe=NOWHERE", roster=roster(TWO_UNIVERSES))
+    assert r.returncode == 0
+    assert r.stdout == ""
+
+
+def test_universe_with_no_member_that_can_roll_fails_open(roster):
+    p = roster(TWO_UNIVERSES + "@character | Ripley | 0\n@character | Bishop | 0\n")
+    r = run("--plain", "--universe=SPACE", roster=p)
+    assert (r.returncode, r.stdout) == (0, "")
+
+
+def test_a_benched_universe_still_rolls_when_named(roster):
+    p = roster(TWO_UNIVERSES + "@universe | SPACE | 0\n")
+    assert " SPACE — " in run("--plain", "--universe=SPACE", roster=p).stdout
+
+
+def test_not_flag_skips_that_character(roster):
+    p = roster(TWO_UNIVERSES)
+    for seed in range(40):
+        out = run("--plain", "--universe=SPACE", "--not=Ripley", roster=p, seed=seed).stdout
+        assert "«Bishop»" in out
+
+
+def test_not_flag_gives_way_when_nobody_else_can_roll(roster):
+    p = roster("SOLO | Lone | 🐺 | quiet\n")
+    assert "«Lone»" in run("--plain", "--not=Lone", roster=p).stdout
+
+
+def test_universe_flag_with_votes_still_emits_the_envelope(roster, tmp_path):
+    log = tmp_path / "rolls.tsv"
+    r = run("--votes", "--universe=MYTH", roster=roster(TWO_UNIVERSES), log=log)
+    tag = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
+    assert " MYTH — " in tag and "vote id:" in tag
+    assert log.read_text().rstrip("\n").split("\t")[3] == "MYTH"
+
+
+def test_a_backslash_in_a_universe_name_still_matches(roster):
+    """awk -v would read the backslash as an escape; the names go in by ENVIRON."""
+    p = roster("A\\\\B | Doc | 🤠 | dry\nMYTH | Hermes | 🪽 | fast\n")
+    for seed in range(10):
+        assert "«Doc»" in run("--plain", "--universe=A\\\\B", roster=p, seed=seed).stdout
+
+
+def test_an_empty_universe_flag_rolls_as_usual(roster):
+    p = roster(TWO_UNIVERSES)
+    for seed in range(5):
+        assert run("--plain", "--universe=", roster=p, seed=seed).stdout == run("--plain", roster=p, seed=seed).stdout
+
+
+def test_not_flag_without_universe_skips_that_character(roster):
+    p = roster("SOLO | Lone | 🐺 | quiet\nSOLO | Pair | 🦊 | sly\n")
+    for seed in range(30):
+        assert "«Pair»" in run("--plain", "--not=Lone", roster=p, seed=seed).stdout
+
+
+def test_not_flag_keeps_the_other_weights(roster):
+    """Skipping one character leaves the rest at their own shares."""
+    p = roster(
+        "U | Skip | 1 | a\nU | Heavy | 2 | b\nU | Light | 3 | c\n"
+        "@character | Heavy | 9\n"
+    )
+    heavy = sum("«Heavy»" in run("--plain", "--not=Skip", roster=p, seed=s).stdout for s in range(100))
+    # Heavy is 9 of 10 once Skip is out.
+    assert heavy >= 80, heavy
