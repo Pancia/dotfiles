@@ -7,7 +7,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { SYS, matchUniverses, matches, nextVote, parseRoster, pct, pickChar, pickUniverse, titleCase } from '../hooks/register'
-import { ROLL, start, world as baseWorld } from './world'
+import { ROLL, pins, start, world as baseWorld } from './world'
 import type { World as BaseWorld } from './world'
 
 // What `roleplay-roll --roster` prints for a three-character cast.
@@ -209,30 +209,57 @@ test('a resumed session gets its saved mode and character back', async ($, on) =
   expect(w.asks.find(a => a.includes('OPENER'))).toContain('Character: Holo (FAVORITES)')
 })
 
+test('a resumed session gets its pin back from its own key', async ($, on) => {
+  const w = world($, on, 'random')
+  const holo = parseRoster(ROSTER)[2]!
+  w.store.set('pin:sess-1', { mode: 'session', who: holo })
+  await start($, w)
+  await submit($, w, 'carry on')
+  expect(w.asks.find(a => a.includes('OPENER'))).toContain('Character: Holo (FAVORITES)')
+})
+
+test('a session-mode session keeps its character when the mod starts again', async ($, on) => {
+  const w = world($, on, 'session')
+  await start($, w)
+  const first = (pins(w) as Record<string, { who: { name: string } }>)['sess-1']?.who.name
+  expect(first).toBeDefined()
+  for (let i = 0; i < 5; i++) await start($, w)
+  expect((pins(w) as Record<string, { who: { name: string } }>)['sess-1']?.who.name).toBe(first)
+  await submit($, w, 'carry on')
+  expect(w.asks.find(a => a.includes('OPENER'))).toContain(`Character: ${first} (`)
+})
+
+test('a random-mode session saves its mode at start, under its own key', async ($, on) => {
+  const w = world($, on, 'random')
+  await start($, w)
+  expect(w.store.get('pin:sess-1')).toMatchObject({ mode: 'random', who: null })
+  expect(w.store.get('pins')).toBeUndefined()
+})
+
 test('/clear gives a session-mode session a new character, saved under the new id', async ($, on) => {
   const w = world($, on, 'session')
   await start($, w)
-  const first = (w.store.get('pins') as Record<string, { who: { name: string } }>)['sess-1']?.who.name
+  const first = (pins(w) as Record<string, { who: { name: string } }>)['sess-1']?.who.name
   expect(first).toBeDefined()
   w.sid = 'sess-2'
   await $.session.end({ reason: 'clear', sessionId: 'sess-1', resume: { id: 'sess-1' } })
   await w.clock.settle()
-  const pins = w.store.get('pins') as Record<string, { mode: string; who: { name: string } | null }>
-  expect(pins['sess-2']?.mode).toBe('session')
-  expect(pins['sess-2']?.who?.name).toBeDefined()
+  const saved = pins(w) as Record<string, { mode: string; who: { name: string } | null }>
+  expect(saved['sess-2']?.mode).toBe('session')
+  expect(saved['sess-2']?.who?.name).toBeDefined()
   // The old session's pin is left as it was, for a later resume.
-  expect(pins['sess-1']?.who?.name).toBe(first)
+  expect(saved['sess-1']?.who?.name).toBe(first)
 })
 
 test('a real exit rolls nothing', async ($, on) => {
   const w = world($, on, 'session')
   await start($, w)
-  const before = w.store.get('pins')
+  const before = pins(w)
   await $.session.end({ reason: 'prompt_input_exit', sessionId: 'sess-1', resume: { id: 'sess-1' } })
   // Past the wait a /clear allows for the session id to move on.
   await w.clock.advance(10_000)
   await w.clock.settle()
-  expect(w.store.get('pins')).toEqual(before)
+  expect(pins(w)).toEqual(before)
 })
 
 test('a vote button casts, a second press clears, the other button changes it', async ($, on) => {
@@ -409,9 +436,9 @@ test('universe mode: Reroll changes the universe and keeps the mode', async ($, 
   const band = await $.ui.mount(BAND)
   await band.press({ key: 'rp-reroll' })
   await w.clock.settle()
-  const pins = w.store.get('pins') as Record<string, { mode: string; universe: string }>
-  expect(pins['sess-1']?.mode).toBe('universe')
-  expect(pins['sess-1']?.universe).not.toBe('GHOST IN THE SHELL')
+  const saved = pins(w) as Record<string, { mode: string; universe: string }>
+  expect(saved['sess-1']?.mode).toBe('universe')
+  expect(saved['sess-1']?.universe).not.toBe('GHOST IN THE SHELL')
   expect(w.toasts.at(-1)).toMatch(/^🎭 This session's universe: /)
   await band.unmount()
 })
@@ -428,8 +455,8 @@ test('universe mode: Pick lists universes, and a row sets the session universe',
   await pane.input({ key: 'rp-filter', text: 'warham' })
   await pane.unmount()
   expect(w.panes).toEqual([])
-  const pins = w.store.get('pins') as Record<string, { mode: string; universe: string }>
-  expect(pins['sess-1']).toMatchObject({ mode: 'universe', universe: 'WARHAMMER 40K' })
+  const saved = pins(w) as Record<string, { mode: string; universe: string }>
+  expect(saved['sess-1']).toMatchObject({ mode: 'universe', universe: 'WARHAMMER 40K' })
   await submit($, w, 'a request after the universe pick')
   expect(w.rolls.at(-1)).toContain('--universe=WARHAMMER 40K')
 })
@@ -438,8 +465,8 @@ test('a pinned universe that left the roster is replaced', async ($, on) => {
   const w = world($, on, 'universe')
   w.store.set('pins', { 'sess-1': { mode: 'universe', who: null, universe: 'GONE' } })
   await start($, w)
-  const pins = w.store.get('pins') as Record<string, { universe: string }>
-  expect(['GHOST IN THE SHELL', 'WARHAMMER 40K', 'FAVORITES']).toContain(pins['sess-1']?.universe)
+  const saved = pins(w) as Record<string, { universe: string }>
+  expect(['GHOST IN THE SHELL', 'WARHAMMER 40K', 'FAVORITES']).toContain(saved['sess-1']?.universe)
 })
 
 test('/clear gives a universe-mode session a new universe pin under the new id', async ($, on) => {
@@ -449,10 +476,10 @@ test('/clear gives a universe-mode session a new universe pin under the new id',
   w.sid = 'sess-2'
   await $.session.end({ reason: 'clear', sessionId: 'sess-1', resume: { id: 'sess-1' } })
   await w.clock.settle()
-  const pins = w.store.get('pins') as Record<string, { mode: string; universe: string | null }>
-  expect(pins['sess-2']?.mode).toBe('universe')
-  expect(pins['sess-2']?.universe).toBeTruthy()
-  expect(pins['sess-1']?.universe).toBe('GHOST IN THE SHELL')
+  const saved = pins(w) as Record<string, { mode: string; universe: string | null }>
+  expect(saved['sess-2']?.mode).toBe('universe')
+  expect(saved['sess-2']?.universe).toBeTruthy()
+  expect(saved['sess-1']?.universe).toBe('GHOST IN THE SHELL')
 })
 
 test('/roleplay universe from random mode rolls a universe and says so', async ($, on) => {
@@ -487,9 +514,9 @@ test('a pinned universe nobody can roll: this turn gets a random roll, and the s
   const ui = await opener($, 'a prompt in a dead universe')
   expect((await ui.find({ type: 'Text', text: '1.2% ' }))?.text).toBe('1.2% ')
   await ui.unmount()
-  const pins = w.store.get('pins') as Record<string, { mode: string; universe: string }>
-  expect(pins['sess-1']?.mode).toBe('universe')
-  expect(pins['sess-1']?.universe).not.toBe('GHOST IN THE SHELL')
+  const saved = pins(w) as Record<string, { mode: string; universe: string }>
+  expect(saved['sess-1']?.mode).toBe('universe')
+  expect(saved['sess-1']?.universe).not.toBe('GHOST IN THE SHELL')
   expect(w.toasts.at(-1)).toMatch(/^🎭 Nobody in Ghost in the Shell can roll\. This session's universe: /)
   // The roster was read again, in case it changed.
   expect(w.rolls.filter(r => r.includes('--roster')).length).toBeGreaterThanOrEqual(2)

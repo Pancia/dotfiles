@@ -75,6 +75,11 @@ export function world($: Engine, on: On, opts: WorldOpts = {}): World {
     w.store.set(e.key, structuredClone(e.value))
     return { value: undefined }
   })
+  on('store.delete', (_, e) => {
+    w.store.delete(e.key)
+    return { value: undefined }
+  })
+  on('store.keys', () => ({ value: [...w.store.keys()] }))
   on('ui.panes', () => ({
     value: w.panes.map(id => ({ id, title: id, isShown: true, isFocused: true, isPlaced: true })),
   }))
@@ -105,4 +110,12 @@ export function world($: Engine, on: On, opts: WorldOpts = {}): World {
 export async function start($: Engine, w: World) {
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await w.clock.settle()
+}
+
+// Each session's saved pin by session id: the mod's `pin:<id>` keys, over the
+// old single `pins` map a test may have set up.
+export function pins(w: World): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...((w.store.get('pins') as Record<string, unknown> | undefined) ?? {}) }
+  for (const [k, v] of w.store) if (k.startsWith('pin:')) out[k.slice(4)] = v
+  return out
 }

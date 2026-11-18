@@ -358,22 +358,33 @@ async function sessionMode($: EngineInterface): Promise<Mode> {
   return isMode(saved) ? saved : 'random'
 }
 
-// Each session's mode and character, by session id, so a resume gets them
-// back: $.state lasts only as long as the process. The newest PINS_KEPT.
-const PINS_KEPT = 50
+// Each session's mode and character, saved under its own key `pin:<session
+// id>`, so a resume gets them back, and so does a mod reload that comes back
+// without the session's $.state (seen 2026-11-17: a session-mode session got
+// a new character at a reload). One key per session: the old single `pins`
+// map was read, changed and written whole by every open session, so two
+// sessions saving at once lost one pin. That map is still read for a pin
+// saved before the change. The newest PINS_KEPT keys stay.
+const PINS_KEPT = 200
+const PIN_KEY = 'pin:'
 type SavedPins = Record<string, Pin>
 async function savePin($: EngineInterface, p: Pin) {
   try {
-    const sid = await $.session.id()
-    const all = ((await $.store.get('pins')) ?? {}) as SavedPins
-    const next: SavedPins = { ...all }
-    delete next[sid]
-    next[sid] = p
-    for (const k of Object.keys(next).slice(0, Math.max(0, Object.keys(next).length - PINS_KEPT))) delete next[k]
-    await $.store.set('pins', next)
+    const key = PIN_KEY + (await $.session.id())
+    // Delete first, so the key moves to the end of the store's order.
+    await $.store.delete(key)
+    await $.store.set(key, p)
+    const keys = (await $.store.keys()).filter(k => k.startsWith(PIN_KEY))
+    for (const k of keys.slice(0, Math.max(0, keys.length - PINS_KEPT))) await $.store.delete(k)
   } catch (err) {
     await dbg($, `save pin error ${String(err)}`)
   }
+}
+
+async function loadPin($: EngineInterface, sid: string): Promise<Pin | null> {
+  const own = (await $.store.get(PIN_KEY + sid)) as Pin | undefined
+  const saved = own ?? ((await $.store.get('pins')) as SavedPins | undefined)?.[sid]
+  return saved && isMode(saved.mode) ? { ...saved, universe: saved.universe ?? null } : null
 }
 
 // Writes the session's pin and saves it under the session id.
@@ -391,11 +402,13 @@ async function restorePin($: EngineInterface): Promise<Pin> {
   const now = await read($, pin)
   if (restoredFor === sid) return now
   restoredFor = sid
-  if (now.who || now.universe) return now
-  const saved = ((await $.store.get('pins')) as SavedPins | undefined)?.[sid]
-  if (!saved || !isMode(saved.mode)) return now
+  const saved = await loadPin($, sid)
+  // A session with nothing saved saves what it has now, random mode too: else
+  // a reload without $.state would give it the saved default mode instead.
+  if (!saved && now.mode) await savePin($, now)
+  if (now.who || now.universe || !saved) return now
   await dbg($, `restore pin ${sid} mode=${saved.mode} who=${saved.who?.name ?? 'none'} universe=${saved.universe ?? 'none'}`)
-  return update($, pin, x => (x.who || x.universe ? x : { ...saved, universe: saved.universe ?? null }))
+  return update($, pin, x => (x.who || x.universe ? x : saved))
 }
 
 // A new session character, never the current one. Falls back to the script
@@ -455,15 +468,17 @@ async function replaceUniverse($: EngineInterface, u: string) {
 }
 
 async function setChar($: EngineInterface, c: Char) {
+  await dbg($, `pick who=${c.name}`)
   await setPin($, (p): Pin => ({ ...p, mode: 'session', who: c }))
   $.ui.toast(`🎭 This session: «${c.name}» ${c.emoji} ${c.universe}`)
 }
 
 // Rolls a new character, or in universe mode a new universe. A Pick made
 // while it rolled wins.
-async function reroll($: EngineInterface) {
+async function reroll($: EngineInterface, from: string) {
   try {
     const p0 = await read($, pin)
+    await dbg($, `reroll from=${from} mode=${p0.mode ?? 'none'} who=${p0.who?.name ?? 'none'} universe=${p0.universe ?? 'none'}`)
     if (p0.mode === 'universe') {
       const was = p0.universe ?? null
       const u = await rollUniverse($, was ?? undefined)
@@ -504,6 +519,7 @@ async function reroll($: EngineInterface) {
 // from session mode, the session character's universe; from random mode,
 // the universe this session last had, if any.
 async function setMode($: EngineInterface, mode: Mode, say: boolean) {
+  await dbg($, `set mode=${mode} from=${say ? 'command' : 'button'}`)
   await $.store.set('mode', mode)
   // From session mode into universe mode: the universe of the character the
   // session had, and the first roll in it is someone else.
@@ -892,8 +908,11 @@ export const register: Register = on => {
     // The mode: the session's own after a reload, else the saved default; a
     // resumed session's saved pin then replaces both. A session-mode session
     // rolls its character now, so the row shows it; a reload keeps its own.
+    const had = await read($, pin)
     const mode = await sessionMode($)
     await update($, pin, p => ({ ...p, mode }))
+    // Whether $.state came through this load: a reload should keep it.
+    void dbg($, `start ${await $.session.id()} state mode=${had.mode ?? 'none'} who=${had.who?.name ?? 'none'} universe=${had.universe ?? 'none'}`)
     $.clock.after(0, () => {
       void loadRoster($)
       return startSession($).then(() => undefined)
@@ -937,7 +956,7 @@ export const register: Register = on => {
   on('command.run', { command: 'roleplay' }, async ($, e) => {
     const arg = e.args.trim().toLowerCase()
     if (isMode(arg)) await setMode($, arg, true)
-    else if (arg === 'reroll') await reroll($)
+    else if (arg === 'reroll') await reroll($, 'command')
     else if (arg === 'pick') await openPicker($)
     else {
       const p = await read($, pin)
@@ -1032,7 +1051,7 @@ export const register: Register = on => {
           dimColor
           onPress={() => setMode($, nextMode, false)}
         />
-        {isPinned ? <Button key="rp-reroll" label="Reroll" dimColor onPress={() => reroll($)} /> : null}
+        {isPinned ? <Button key="rp-reroll" label="Reroll" dimColor onPress={() => reroll($, 'button')} /> : null}
         {/* Not in random mode: a pick there would quietly switch modes. */}
         {isPinned ? <Button key="rp-pick" label="Pick" dimColor onPress={() => openPicker($)} /> : null}
         <Text dimColor>{shown}</Text>
