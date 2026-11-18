@@ -17,6 +17,13 @@ const SECTION = 'reply-links:answer-buttons'
 // Drawn dim at the start of each row of answer buttons.
 const PREFIX = '↳ 💬'
 
+// The fill of a button that is not the recommended one: a mid gray, seen on a
+// dark and a light terminal alike. `text` was white here: the theme is the
+// dark one in both macOS modes, and the terminal's own light colors fix only
+// the text, so a white fill vanished on the light background (2026-11-18).
+// A raw color, a little lighter than the theme's `inactive` (153).
+const FILL = 'rgb(185,185,185)'
+
 // The system-prompt section that asks for answer lines: about 250 tokens,
 // once per session (after the cache boundary, so cached across its turns).
 // Each answer line then costs about 10 output tokens; 【 and 】 are one token
@@ -109,7 +116,38 @@ export const register: Register = on => {
     }
 
     const parts = linked.segments.map((s, i) =>
-      s.kind === 'markdown' ? (
+      s.kind === 'item' ? (
+        // "- 💡 [ N1 ] text": the ID filled as an answer button is, the text
+        // after it wrapping in its own column. One blank row after the last
+        // item of the list, when more text follows.
+        <Box
+          key={`item${i}`}
+          flexDirection="row"
+          marginLeft={s.indent}
+          marginBottom={i < linked.segments.length - 1 && linked.segments[i + 1]?.kind !== 'item' ? 1 : 0}
+        >
+          <Box key={`lead${i}`} flexShrink={0}>
+            <Text>{s.mark ? `${s.lead}${s.mark} ` : s.lead}</Text>
+          </Box>
+          <Box key={`cell${i}`} flexShrink={0} marginRight={1}>
+            <Button key={`n${i}`} label={s.id} plain onPress={() => run(linked.actions.get(s.href))}>
+              <Text backgroundColor={FILL} color="inverseText">
+                {`[ ${s.id} ]`}
+              </Text>
+            </Button>
+          </Box>
+          {s.rest ? (
+            <Box key={`rest${i}`} flexGrow={1} flexShrink={1}>
+              <Markdown
+                key={`md${i}`}
+                text={s.rest}
+                onLinkPress={link => run(linked.actions.get(link.href))}
+                pressableLinks={s.hrefs}
+              />
+            </Box>
+          ) : null}
+        </Box>
+      ) : s.kind === 'markdown' ? (
         <Markdown
           key={`md${i}`}
           text={s.text}
@@ -143,7 +181,7 @@ export const register: Register = on => {
                 onPress={() => run({ kind: 'fill', text: a.text })}
               >
                 <Text
-                  backgroundColor={a.isPrimary ? 'claude' : 'text'}
+                  backgroundColor={a.isPrimary ? 'claude' : FILL}
                   color="inverseText"
                   bold={a.isPrimary}
                 >

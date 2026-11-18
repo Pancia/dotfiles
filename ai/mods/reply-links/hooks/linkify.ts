@@ -25,7 +25,10 @@
 //                                           that fills "Q4 (commit): "
 //   🧭 **Where next:**
 //   - N3 💡 Try the inline version          a Where-next item, only in that
-//                                           list: a link that fills its text
+//                                           list: its ID is drawn as a filled
+//                                           button, "[ N3 ]", that fills its
+//                                           text. An indented line after it
+//                                           wraps on with the item.
 //
 // Links get a placeholder https address (Markdown draws only https, http and
 // file links). The mod answers a plain click on one itself, so the address
@@ -40,6 +43,9 @@ export type Answer = { label: string; text: string; isPrimary: boolean }
 export type Segment =
   | { kind: 'markdown'; text: string; hrefs: string[] }
   | { kind: 'buttons'; answers: Answer[]; indent: number }
+  // A Where-next item: `lead` is its bullet ("- "), `mark` its 💡 or 🔮,
+  // `href` the key of its fill action, `rest` the markdown after the ID.
+  | { kind: 'item'; indent: number; lead: string; mark: string; id: string; href: string; rest: string; hrefs: string[] }
 
 export type Linked = { segments: Segment[]; actions: Map<string, Action> }
 
@@ -236,13 +242,36 @@ export function linkify(src: string): Linked {
     const n = inWhereNext ? N_ITEM.exec(line) : null
     if (n) {
       const [, lead = '', id = '', rest = ''] = n
-      const prompt = rest
-        .replace(/^[\s:.—–-]+/, '')
+      const shown = rest.replace(/^[\s:.—–-]+/, '')
+      const prompt = shown
         .replace(/^(?:💡|🔮)\s*/u, '')
         .replace(/\*\*/g, '')
         .trim()
-      md.push(`${lead}[${id}](${link({ kind: 'fill', text: prompt || id })})${links(rest)}`)
-      if (hrefs.length >= MAX_LINKS) flush()
+      flush()
+      const bullet = /^(\s*)([-*])\s+(?:(💡|🔮)\s*)?$/u.exec(lead)
+      const href = add({ kind: 'fill', text: prompt || id })
+      // The item's own links: `links` pushes onto `hrefs`, so take them off.
+      const text = links(shown)
+      segments.push({
+        kind: 'item',
+        indent: bullet?.[1]?.length ?? 0,
+        lead: `${bullet?.[2] ?? '-'} `,
+        mark: bullet?.[3] ?? '',
+        id,
+        href,
+        rest: text,
+        hrefs,
+      })
+      hrefs = []
+      continue
+    }
+
+    // An indented line right after an item wraps on with it.
+    const last = segments[segments.length - 1]
+    if (inWhereNext && md.length === 0 && last?.kind === 'item' && /^\s+\S/.test(line)) {
+      last.rest = `${last.rest} ${links(line.trim())}`.trim()
+      last.hrefs.push(...hrefs)
+      hrefs = []
       continue
     }
 

@@ -92,7 +92,19 @@ test('a bold question label is a link that fills the label', async () => {
 test('a Where-next item fills its own prompt text', async () => {
   const l = linkify('🧭 **Where next:**\n- N1 Finish the band\n- 💡 N2 Try **bold** idea\n- 🔮 N3: guess\n- N4 💡 Mark after')
   expect(fills(l)).toEqual(['Finish the band', 'Try bold idea', 'guess', 'Mark after'])
-  expect(markdown(l)[0]?.split('\n')[2]).toBe('- 💡 [N2](https://reply-links.invalid/1) Try **bold** idea')
+  const items = l.segments.flatMap(s => (s.kind === 'item' ? [`${s.lead}${s.mark}|${s.id}|${s.rest}`] : []))
+  expect(items).toEqual(['- |N1|Finish the band', '- 💡|N2|Try **bold** idea', '- 🔮|N3|guess', '- |N4|💡 Mark after'])
+  expect(markdown(l)).toEqual(['🧭 **Where next:**'])
+})
+
+test('a wrapped Where-next line joins its item, and its links still answer', async () => {
+  const l = linkify('🧭 **Where next:**\n  - N1 a long item\n    [[ 📋 copy ]](hammerspoon://copy?text=x)\n- N2 second\n\n👀 **Needs you:** none')
+  const items = l.segments.flatMap(s => (s.kind === 'item' ? [[s.indent, s.rest, s.hrefs.length]] : []))
+  expect(items).toEqual([
+    [2, 'a long item [[ 📋 copy ]](https://reply-links.invalid/1)', 1],
+    [0, 'second', 0],
+  ])
+  expect(markdown(l)).toEqual(['🧭 **Where next:**', '👀 **Needs you:** none'])
 })
 
 test('an N bullet outside the Where-next list is not a link', async () => {

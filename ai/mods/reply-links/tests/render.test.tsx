@@ -35,11 +35,24 @@ function promptBox(on: On) {
 test('an answer button fills an empty box, a link after it appends', async ($, on) => {
   const box = promptBox(on)
   const ui = await mount($, REPLY)
-  // Segments: md0 (Done + Q1 + bullets), row1, md2 (N1).
+  // Segments: md0 (Done + Q1 + bullets), row1, md2 (Where next), item3 (N1).
   await ui.press({ key: 'b1-0' })
   expect(box.text).toBe('Q1 (renew certificate): yes')
-  await ui.press({ key: 'md2', link: { href: 'https://reply-links.invalid/1' } })
+  await ui.press({ key: 'n3' })
   expect(box.text).toBe('Q1 (renew certificate): yes\nTry the band too')
+  await ui.unmount()
+})
+
+test('a Where-next ID draws as a filled button, its text beside it', async ($, on) => {
+  const box = promptBox(on)
+  const ui = await mount($, '🧭 **Where next:**\n- N1 Finish **it**\n- 💡 N2 Try more\n\n👀 **Needs you:** none')
+  expect((await ui.find({ key: 'n1' }))?.type).toBe('Button')
+  expect((await ui.find({ key: 'md1' }))?.type).toBe('Markdown')
+  expect((await ui.find({ key: 'lead2' }))?.text).toBe('- 💡 ')
+  await ui.press({ key: 'n2' })
+  expect(box.text).toBe('Try more')
+  await ui.press({ key: 'n1' })
+  expect(box.text).toBe('Try more\nFinish it')
   await ui.unmount()
 })
 
