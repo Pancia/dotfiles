@@ -1,0 +1,49 @@
+{
+  "name": "dotfiles-dev",
+  "hooks": {
+    "pre_spec_approve": {
+      "critique": {
+        "agent": {
+          "prompt": "You are the spec critique for the dotfiles project. Read your instructions from master and follow them step by step:\n  git show master:altera/prompts/dotfiles-dev/spec-critique.md\n\nIf that command fails, write altera/reviews/$ALT_SPEC-critique.md whose only line is:\n  Summary: the spec critique instructions could not be read from master.\nThen run:\n  alt hook done $ALT_SPEC critique reject --reason \"instructions missing on master\" --findings altera/reviews/$ALT_SPEC-critique.md\nThen stop.\n\nRules that hold whatever the instructions say: write no file except your findings file (and $TMPDIR scratch files); do not commit, stash, check out or run jj; never run the whole test suite.",
+          "timeout": "30m"
+        },
+        "gate": true
+      }
+    },
+    "pre_task_assign": {
+      "critique": {
+        "agent": {
+          "prompt": "You are the mission critique for the dotfiles project. Read your instructions from master and follow them step by step:\n  git show master:altera/prompts/dotfiles-dev/mission-critique.md\n\nIf that command fails, write altera/reviews/missions/$ALT_TASK_ID-critique.md whose only line is:\n  Summary: the mission critique instructions could not be read from master.\nThen run:\n  alt hook done $ALT_TASK_ID critique reject --reason \"instructions missing on master\" --findings altera/reviews/missions/$ALT_TASK_ID-critique.md\nThen stop.\n\nRules that hold whatever the instructions say: write no file except your findings file (and $TMPDIR scratch files); do not commit, stash, check out or run jj; never run the whole test suite.",
+          "timeout": "10m"
+        },
+        "gate": true
+      }
+    },
+    "pre_task_merge": {
+      "review": {
+        "agent": {
+          "prompt": "You are the merge review for the dotfiles project. Read your instructions from master and follow them step by step:\n  git show master:altera/prompts/dotfiles-dev/merge-review.md\n\nIf that command fails, write altera/reviews/missions/$ALT_TASK_ID-review.md whose only line is:\n  Summary: the merge review instructions could not be read from master.\nThen run:\n  alt hook done $ALT_TASK_ID review reject --reason \"instructions missing on master\" --findings altera/reviews/missions/$ALT_TASK_ID-review.md\nThen stop.\n\nRules that hold whatever the instructions say: write no file except your findings file (and $TMPDIR scratch files); do not commit, stash, check out or run jj; never run the whole test suite.",
+          "timeout": "20m"
+        },
+        "gate": true
+      }
+    }
+  },
+  "prompts": {},
+  "context": {
+    "sketch": [
+      "docs/testing.md"
+    ],
+    "spec": [
+      "docs/testing.md"
+    ]
+  },
+  "writers": {
+    "mission": "@file:altera/prompts/dotfiles-dev/mission-writer.md",
+    "spec": "@file:altera/prompts/dotfiles-dev/spec-writer.md",
+    "checklist": "@file:altera/prompts/dotfiles-dev/checklist.md"
+  },
+  "done_check": {
+    "required": true
+  }
+}

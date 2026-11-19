@@ -3,8 +3,7 @@
   "default_branch": "master",
   "test_command": "",
   "constraints": {
-    "budget_ceiling": 100,
-    "max_workers": 4,
+    "max_workers": 1,
     "max_queue_depth": 10
   },
   "heartbeat_timeouts": {
@@ -12,7 +11,7 @@
     "critical_timeout": "10m",
     "dead_timeout": "20m"
   },
-  "default_workflow": "default",
+  "default_workflow": "dotfiles-dev",
   "prompts": {},
   "sandbox": {
     "worker": {
@@ -62,6 +61,16 @@
       ]
     }
   },
-  "source_guard": {},
-  "tui_hotkeys": {}
+  "source_guard": {
+    "protected_prefixes": [
+      "internal/",
+      "cmd/"
+    ]
+  },
+  "tui_hotkeys": {},
+  "checkout_landing": "warn",
+  "landing": {
+    "mode": "review",
+    "accept": "manual"
+  }
 }

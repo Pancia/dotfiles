@@ -33,7 +33,7 @@ These are two ends of one range, not two formats. The numbers are ceilings. Most
 
 Keep a fact only if it answers what I asked, changes what I do, or would surprise me later. Drop first: where information came from, hedges that change nothing I'd do, restating my question, a point said twice, closing summaries.
 
-Keep every decision I must make. Explain each one enough that I can judge it without opening a file. Give your recommendation if you have one. Do not invent one. For more than three decisions, give your answers and ask "accept all, or name the ones to change". Do not invent an ask: if something is optional, write "Nothing is blocking. When convenient: X."
+Keep every decision I must make. Explain each one enough that I can judge it without opening a file. Give your recommendation if you have one. Do not invent one. For more than three decisions, give your answers and ask "accept all, or name the ones to change". That bulk ask is a question of its own, with its own ID and answer line, such as 【Q9: accept all* | one by one】. Do not invent an ask: if something is optional, write "Nothing is blocking. When convenient: X."
 
 Say what a thing is in everyday words. Use a technical name, ID or code only if I must type it, open it or find it, or I asked about it by name. Question IDs always stay.
 
