@@ -951,9 +951,9 @@ def main():
                             "killed on exit. Uses a private port, never the shared one.")
     parser.add_argument("--idle-ttl",
                        type=int,
-                       default=300,
+                       default=30,
                        help="Seconds to keep the shared warm server alive after the last "
-                            "transcriber exits (default: 300; minimum 60)")
+                            "transcriber exits (default: 30; minimum 20, two heartbeat intervals)")
     parser.add_argument("--debug",
                        action="store_true",
                        help="Verbose per-chunk VAD/level diagnostics (the signal meter is always on)")
@@ -1040,7 +1040,7 @@ def main():
         if args.ephemeral:
             args.server_port = _free_port()
         else:
-            ttl = max(60, args.idle_ttl)
+            ttl = max(2 * HEARTBEAT_INTERVAL, args.idle_ttl)
             if ttl != args.idle_ttl:
                 print(f"Note: --idle-ttl raised to {ttl}s (minimum)", file=sys.stderr)
             try:

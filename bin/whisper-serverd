@@ -52,9 +52,9 @@ MODEL_MAP = {
 VAD_MODEL = MODEL_DIR / "silero-v6.2.0.ggml"
 
 DEFAULT_PORT = 8178
-DEFAULT_IDLE_TTL = 300
+DEFAULT_IDLE_TTL = 30
 READY_TIMEOUT = 60      # seconds to wait for the server to load its model
-REAP_INTERVAL = 30      # seconds between idle checks
+REAP_INTERVAL = 5       # seconds between idle checks; reap lands ttl + 5-10s after the last heartbeat
 REAP_DEBOUNCE = 2       # consecutive idle-exceeded checks required before reaping
 
 

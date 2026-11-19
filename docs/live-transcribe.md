@@ -12,10 +12,12 @@
 
 `bin/whisper-serverd` keeps a `whisper-server` loaded between `live-transcribe` runs, so
 repeat startups skip the 8-20s model load. `live-transcribe` touches a heartbeat file
-while it runs, and the supervisor reaps the server after `--idle-ttl` seconds without one.
+while it runs, and the supervisor reaps the server after `--idle-ttl` seconds without one
+(default 30, minimum 20; checked every 5s, so the reap lands 5-10s after the TTL). A running
+supervisor keeps the TTL it started with; adopting it does not change it.
 
 ```bash
-whisper-serverd ensure --model large --port 8178 --idle-ttl 300   # start or adopt, wait until ready
+whisper-serverd ensure --model large --port 8178 --idle-ttl 30    # start or adopt, wait until ready
 whisper-serverd status [--port 8178]                              # report state as JSON
 whisper-serverd stop                                              # kill the server and supervisor
 ```
