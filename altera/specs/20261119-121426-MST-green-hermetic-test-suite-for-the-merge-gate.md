@@ -99,7 +99,7 @@ This spec was written against `master` at **1898647d** and re-checked by the spe
 - R4.6 Docs:
   - Add an "Isolation" section to `docs/testing.md`: what is set, what is removed, the `PATH` rule, why uv is pinned, the opt-out key, and that `cmds test` gets the same isolation.
   - Add one paragraph to the CLAUDE.md "Testing" section.
-  - Both say plainly: **after this row merges, `hooks`, `astro` and `roleplay` fail under `cmds test` until HOOKS, ASTRO and REST-A land.** The brief tells the operator the same. (rev 1)
+  - Both say plainly, with the exact phrase "until HOOKS, ASTRO and REST-A land" so CANARY can find and remove it: **after this row merges, `hooks`, `astro` and `roleplay` fail under `cmds test` until HOOKS, ASTRO and REST-A land.** The brief tells the operator the same. (rev 1)
 - Not a live path: `lib/python/run_tests.py` runs only under `cmds test` and the gate.
 
 ### R5 Astro offline (row ASTRO)
@@ -171,13 +171,13 @@ This spec was written against `master` at **1898647d** and re-checked by the spe
 - R12.1 New file `tests/lib/python/test_hermetic_env.py`:
   - `test_home_is_a_throwaway`: `HOME` differs from `pwd.getpwuid(os.getuid()).pw_dir` and lies under the system temp folder;
   - `test_dotfiles_in_home_is_the_tree_under_test`;
-  - `test_no_test_names_the_live_checkout`: scans `tests/**/*.py` and `roleplay/tests/*.py` for `Path.home() / "dotfiles"`, `~/dotfiles` and `$HOME/dotfiles`. (rev 1) It skips lines whose first non-space character is `#`, and it skips its own file. An allowlist keyed by file and pattern, each entry with a one-line reason, covers the lines that remain on purpose. Start it with these, checked against `master` by the critique:
-    - `tests/fish/test_cc_worktree_wrapper.py` (lines 13, 81, 89, 191): it guards against the live checkout and must name it;
+  - `test_no_test_names_the_live_checkout`: scans `tests/**/*.py` and `roleplay/tests/*.py` for `Path.home() / "dotfiles"`, `~/dotfiles` and `$HOME/dotfiles`. (rev 1) It skips lines whose first non-space character is `#`, and it skips its own file. An allowlist (keyed as the rev 2 note below says), each entry with a one-line reason, covers the lines that remain on purpose. Start it with these, checked against `master` by the critique:
+    - `tests/fish/test_cc_worktree_wrapper.py` (lines 13 and 191; 81 and 89 are `#` comments the scan skips): it guards against the live checkout and must name it;
     - `tests/fish/test_trash.py` (line 24): the same guard;
-    - `tests/lib/python/test_cc_worktree.py` (line 152) and `tests/lib/python/test_llm_output.py` (lines 694, 705, 709, 787): docstrings and input strings that the code under test must handle.
+    - `tests/lib/python/test_cc_worktree.py` (line 152) and `tests/lib/python/test_llm_output.py` (lines 694, 705 and 787; 709 is a `#` comment): docstrings and input strings that the code under test must handle.
   - (rev 2) Each allowlist entry is keyed by file and the exact stripped line text, not by pattern, so a new live-path line in an allowlisted file still fails. CANARY edits no file outside its scope: a line that names the live checkout only as documentation is allowlisted with that reason.
-- R12.3 Remove the interim-red notice that ISOLATE added to `docs/testing.md` and CLAUDE.md, since every component passes again by then. (rev 2)
 - R12.2 Docs: in `docs/testing.md`, say that a bare `pytest` fails `test_home_is_a_throwaway` on purpose.
+- R12.3 Remove the interim-red notice that ISOLATE added to `docs/testing.md` and CLAUDE.md, since every component passes again by then. CANARY's check confirms the phrase is gone. (rev 2)
 
 ### R13 Neutral sample data in the astro tests (rev 2: moved out)
 
@@ -189,7 +189,7 @@ Revision 1 added a row PRIVACY here. The diff critique (`altera/reviews/20261119
 - The astro tests load `bin/astro` from the tree under test.
 - The revive "here" test passes when the runner's environment has `TMUX` and `TMUX_PANE` set.
 - The supervise key and bar tests pass when the runner's environment has `TMUX` set.
-- The clean-exit svc test has a written classification (one of the five R3.2 words, with the runs behind it) and passes three runs in a row. (rev 2)
+- The clean-exit svc test has a written classification (one of the five R3.2 words) and passes three runs in a row. (rev 2)
 - Every component's pytest runs with a throwaway `HOME`, XDG folders, git and jj identity, a pinned uv cache, and no terminal or Claude session variables.
 - The ensure-rcs tests read the MANIFEST of the tree under test.
 - The ccjj lock folder lands in the test home, not the real one.
@@ -235,12 +235,13 @@ Revision 1 added a row PRIVACY here. The diff critique (`altera/reviews/20261119
 - `CLAUDE.md`, "Testing" section: one paragraph saying that every run gets a throwaway home with `dotfiles` linked to the tree under test, and that tests must not rely on the real home (ISOLATE).
 - `docs/astro.md`, "Zodiacal Releasing (`zr`)": coordinates come from the saved chart, and the city is geocoded only as a fallback (ASTRO).
 - `docs/testing.md` and CLAUDE.md "Testing": the interim red after ISOLATE (ISOLATE) and the `PATH` rule (ISOLATE). (rev 1)
+- `docs/testing.md` and CLAUDE.md: CANARY removes the interim-red notice (R12.3). (rev 2)
 - `wiki/pages/supervise-svc.md`: only if SVC-EXIT changes `bin/svc-tmux` or `bin/supervise`.
 - `ai/skills/`: none.
 
 ## Technical Approach
 
-**Order.** The two tmux-only test fixes, REVIVE and SVC-KEYS, land first. Their done checks set `TMUX` in the command, so each check fails before its fix whatever the gate's environment is. After ISOLATE merges, the runner removes `TMUX`, and those checks still pass. ISOLATE comes next. Each later row then makes its own component pass under isolation, and each row's check runs only that component. CANARY comes last, because its static scan fails until HOOKS, ASTRO and REST-A remove the live-checkout paths.
+**Order (rev 2).** The tmux-dependent rows, REVIVE, SVC-KEYS and then SVC-EXIT, land first, while the runner still passes `TMUX` through, so each can reproduce its failure and its check fails before its fix. ISOLATE waits for all three. After ISOLATE merges, the runner removes `TMUX`, and those checks still pass because their fixes no longer depend on it. Each later row then makes its own component pass under isolation, and each row's check runs only that component. CANARY comes last, because its static scan fails until HOOKS, ASTRO and REST-A remove the live-checkout paths.
 
 **Audit results (requirement 4).** The test files are the same on `master` and the checked-out commit. Verdicts by component:
 
@@ -295,7 +296,7 @@ No per-component seconds were measured, and this spec gives none. TIMING makes e
 - Coordinates instead of the geocoded city could move a period by more than one day. R5.5 says to stop and report rather than widen the tolerance.
 - SVC-EXIT may find a product bug in `bin/svc-tmux`. That is live on merge (R3).
 
-**Cost estimate (rev 2).** 12 missions, from 15 to 40 minutes each, about 6.5 worker-hours, plus a mission critique and a merge review for each. The spec critique estimates roughly **25-35 5h points** over several windows and **10-18 7d points**; `.alt/usage/costs.jsonl` has no mission records yet, so these rest on no measured data. The 7d window was at 32% at the critique.
+**Cost estimate (rev 2).** 12 missions, from 15 to 40 minutes each, 375 minutes (about 6.25 worker-hours) in total, plus a mission critique and a merge review for each. The spec critique estimates roughly **25-35 5h points** over several windows and **10-18 7d points**; `.alt/usage/costs.jsonl` has no mission records yet, so these rest on no measured data. The 7d window was at 32% at the critique.
 
 ### Mission Breakdown
 
@@ -304,20 +305,20 @@ No per-component seconds were measured, and this spec gives none. TIMING makes e
 | 1 | REVIVE | Revive "here" test clears tmux variables; add tmux-keyed test | `tests/lib/python/test_revive.py` | 15m | – | P1 |
 | 2 | SVC-KEYS | supervise pane tests run without the outer `TMUX` | `tests/svc/test_svc.py` | 25m | – | P1 |
 | 3 | SVC-EXIT | Diagnose and fix the clean-exit svc test; write a report | `tests/svc/test_svc.py`, maybe `bin/svc-tmux`, `.cc/reports/` | 40m | SVC-KEYS | P1 |
-| 4 | ISOLATE | Runner gives each component a throwaway home and identity, and pins uv | `lib/python/run_tests.py`, `test_run_tests.py`, `docs/testing.md`, `CLAUDE.md` | 40m | SVC-EXIT | P1 |
+| 4 | ISOLATE | Runner gives each component a throwaway home and identity, and pins uv | `lib/python/run_tests.py`, `test_run_tests.py`, `docs/testing.md`, `CLAUDE.md` | 40m | SVC-EXIT, REVIVE | P1 |
 | 5 | ASTRO | Zodiacal-releasing helper uses saved coordinates; conftest loads the tree under test | `bin/astro`, `bin/astro-zr-helper`, `tests/bin/astro/`, `docs/astro.md` | 35m | ISOLATE | P1 |
 | 6 | HOOKS | ensure-rcs tests run against a throwaway home linked to the tree | `tests/hooks/` | 35m | ISOLATE | P1 |
 | 7 | CCJJ | ccjj tests own their home, lock folder and jj identity | `tests/lib/python/test_ccjj.py` | 25m | ISOLATE | P2 |
 | 8 | FISH | Fish panes get their own home; fish component passes under isolation | `tests/fish/` | 35m | ISOLATE | P2 |
 | 9 | REST-A | roleplay, mods and lua pass under isolation | `roleplay/tests/`, `lib/python/run_tests.py` (opt-out only), `docs/testing.md` | 35m | ISOLATE | P2 |
-| 10 | REST-B | Remaining bin, service and lib/python components pass under isolation | `tests/bin/`, `tests/services/`, `tests/lib/python/`, `docs/testing.md` | 40m | CCJJ, HOOKS, REST-A | P2 |
+| 10 | REST-B | Remaining bin, service and lib/python components pass under isolation | test folders of `bin/cc-peers`, `bin/scratch`, `bin/ytdl`, `bin/exocortex-id`, `services/`, and `tests/lib/python/` except `test_revive.py`; `lib/python/run_tests.py` (opt-out only); `docs/testing.md` | 40m | CCJJ, HOOKS, REST-A | P2 |
 | 11 | TIMING | Summary prints per-component wall time | `lib/python/run_tests.py`, `test_run_tests.py`, `docs/testing.md` | 25m | REST-A, REST-B | P2 |
-| 12 | CANARY | Guard tests: throwaway home, linked tree, no live-checkout paths | `tests/lib/python/test_hermetic_env.py`, `docs/testing.md`, `CLAUDE.md` (notice removal only) | 25m | ASTRO, HOOKS, REST-A, REST-B, TIMING | P2 |
+| 12 | CANARY | Guard tests: throwaway home, linked tree, no live-checkout paths | `tests/lib/python/test_hermetic_env.py`, `docs/testing.md`, `CLAUDE.md` (notice removal only) | 25m | ASTRO, HOOKS, FISH, REST-A, REST-B, TIMING | P2 |
 | 13 | GATE-RUN | Operator step: run the gate command from a fresh clone outside `~/dotfiles`, once in tmux and once outside. Confirm PASSED, and copy the per-component times into `docs/testing.md` | — | 30m | CANARY, SVC-EXIT, FISH, REVIVE | P2 |
 
-(rev 2) ISOLATE waits for SVC-EXIT, because after ISOLATE the runner strips `TMUX` and SVC-EXIT could no longer reproduce its tmux cases. GATE-RUN also waits for REVIVE.
+(rev 2) ISOLATE waits for SVC-EXIT and REVIVE, because after ISOLATE the runner strips `TMUX` and they could no longer reproduce their tmux cases. CANARY waits for FISH, whose files its allowlist pins. GATE-RUN also waits for REVIVE.
 
-(rev 1, rev 2) One owner per shared file: `lib/python/run_tests.py` goes ISOLATE, then REST-A, then REST-B (opt-out only), then TIMING; `docs/testing.md` goes ISOLATE, REST-A, REST-B, TIMING, CANARY; `tests/hooks/test_cc_worktree_nudge.py` belongs to HOOKS. The deps above enforce that order.
+(rev 1, rev 2) One owner per shared file: `lib/python/run_tests.py` goes ISOLATE, then REST-A, then REST-B (opt-out only), then TIMING; `docs/testing.md` goes ISOLATE, REST-A, REST-B, TIMING, CANARY; `tests/hooks/test_cc_worktree_nudge.py` belongs to HOOKS; `CLAUDE.md` goes ISOLATE, then CANARY (notice removal). The deps above enforce that order.
 
 ### Done checks
 
@@ -383,7 +384,7 @@ No per-component seconds were measured, and this spec gives none. TIMING makes e
 {"v":1,"timeout":"15m","checks":[
  {"kind":"command","title":"roleplay component","run":"uv run lib/python/run_tests.py roleplay -v","stdout_contains":["test_roll_sees_a_throwaway_home PASSED"],"stdout_matches":"\\b[1-9]\\d+ passed"},
  {"kind":"command","title":"mods component","run":"uv run lib/python/run_tests.py mods -v","stdout_matches":"test_mod_suite_passes\\[[^\\]]+\\] PASSED"},
- {"kind":"command","title":"lua component","run":"uv run lib/python/run_tests.py lib/lua","stdout_matches":"\\b(1[0-9]|2[0-9]) passed(?![^\\n]*skipped)"}
+ {"kind":"command","title":"lua component","run":"uv run lib/python/run_tests.py lib/lua","stdout_matches":"\\b[12][0-9] passed(, \\d+ warnings?)? in "}
 ]}
 ```
 
@@ -412,7 +413,8 @@ No per-component seconds were measured, and this spec gives none. TIMING makes e
 - **CANARY**
 ```donecheck
 {"v":1,"timeout":"5m","checks":[
- {"kind":"command","title":"hermetic guard","run":"uv run lib/python/run_tests.py lib/python/test_hermetic_env.py -v","stdout_contains":["test_home_is_a_throwaway PASSED","test_dotfiles_in_home_is_the_tree_under_test PASSED","test_no_test_names_the_live_checkout PASSED"]}
+ {"kind":"command","title":"hermetic guard","run":"uv run lib/python/run_tests.py lib/python/test_hermetic_env.py -v","stdout_contains":["test_home_is_a_throwaway PASSED","test_dotfiles_in_home_is_the_tree_under_test PASSED","test_no_test_names_the_live_checkout PASSED"]},
+ {"kind":"command","title":"interim notice removed","run":"if grep -q 'until HOOKS, ASTRO and REST-A land' docs/testing.md CLAUDE.md; then echo notice-present; exit 1; else echo notice-removed; fi","stdout_contains":["notice-removed"]}
 ]}
 ```
 

@@ -22,6 +22,9 @@ Set up Altera properly in dotfiles: setup review, the same review gates as Alter
 - Q22 done: bulk-ask rule added to rcs/claude-user-claude.md.
 - Committed f5db1a2b (workflow, prompts, config, sitrep). Hooks read master, so master must move to it.
 - Spec 20261119-121426 (test fixes, 12 missions) approved by the operator (Q27); its four Open Questions accepted as recommended (Q28). Spec critique running via `alt spec approve --wait`.
+- Spec rev 2 committed b86ca0f8 (PRIVACY moved out per Q32; diff critique r-004 saved). Rev 2 diff check r-005 running; then `alt recon mission --spec`.
+- 148b8ceb (other session's doc commit) approved for landing per Q31.
+- Privacy spec recon r-006 running (astro fixture personal data, own spec).
 - Clean-clone gate run: same 36 failures as ~/dotfiles, 16m45s.
 - altera/config.json has checkout_landing auto uncommitted (claimed by this session); committing it makes a non-artifact commit the operator must land.
 
@@ -29,8 +32,6 @@ Set up Altera properly in dotfiles: setup review, the same review gates as Alter
 
 Next ID: Q33
 
-- Q31 (land the doc commit): operator approves `alt checkout land 148b8ceb` (another session's proc-label doc commit blocks the spec commits).
-- Q32 (privacy task): diff critique r-004 BLOCKED row PRIVACY (fixture shared by 6 more astro files; chart-specific assertions). Recommend moving it to its own spec; non-PRIVACY minors already folded in (rev 2, uncommitted).
 
 
 ## Notes
