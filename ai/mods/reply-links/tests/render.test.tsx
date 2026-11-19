@@ -39,7 +39,7 @@ test('an answer button fills an empty box, a link after it appends', async ($, o
   await ui.press({ key: 'b1-0' })
   expect(box.text).toBe('Q1 (renew certificate): yes')
   await ui.press({ key: 'n3' })
-  expect(box.text).toBe('Q1 (renew certificate): yes\nTry the band too')
+  expect(box.text).toBe('Q1 (renew certificate): yes\nN1')
   await ui.unmount()
 })
 
@@ -50,9 +50,9 @@ test('a Where-next ID draws as a filled button, its text beside it', async ($, o
   expect((await ui.find({ key: 'md1' }))?.type).toBe('Markdown')
   expect((await ui.find({ key: 'lead2' }))?.text).toBe('- 💡 ')
   await ui.press({ key: 'n2' })
-  expect(box.text).toBe('Try more')
+  expect(box.text).toBe('N2')
   await ui.press({ key: 'n1' })
-  expect(box.text).toBe('Try more\nFinish it')
+  expect(box.text).toBe('N2\nN1')
   await ui.unmount()
 })
 

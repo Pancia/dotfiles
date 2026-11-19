@@ -26,8 +26,8 @@
 //   🧭 **Where next:**
 //   - N3 💡 Try the inline version          a Where-next item, only in that
 //                                           list: its ID is drawn as a filled
-//                                           button, "[ N3 ]", that fills its
-//                                           text. An indented line after it
+//                                           button, "[ N3 ]", that fills the
+//                                           bare ID, "N3". An indented line after it
 //                                           wraps on with the item.
 //
 // Links get a placeholder https address (Markdown draws only https, http and
@@ -243,13 +243,10 @@ export function linkify(src: string): Linked {
     if (n) {
       const [, lead = '', id = '', rest = ''] = n
       const shown = rest.replace(/^[\s:.—–-]+/, '')
-      const prompt = shown
-        .replace(/^(?:💡|🔮)\s*/u, '')
-        .replace(/\*\*/g, '')
-        .trim()
       flush()
       const bullet = /^(\s*)([-*])\s+(?:(💡|🔮)\s*)?$/u.exec(lead)
-      const href = add({ kind: 'fill', text: prompt || id })
+      // The bare ID: a reply of only "N3" is taken as that item's prompt.
+      const href = add({ kind: 'fill', text: id })
       // The item's own links: `links` pushes onto `hrefs`, so take them off.
       const text = links(shown)
       segments.push({
