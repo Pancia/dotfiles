@@ -27,7 +27,10 @@ Set up Altera properly in dotfiles: setup review, the same review gates as Alter
 
 ## Open Questions
 
-Next ID: Q29
+Next ID: Q33
+
+- Q31 (land the doc commit): operator approves `alt checkout land 148b8ceb` (another session's proc-label doc commit blocks the spec commits).
+- Q32 (privacy task): diff critique r-004 BLOCKED row PRIVACY (fixture shared by 6 more astro files; chart-specific assertions). Recommend moving it to its own spec; non-PRIVACY minors already folded in (rev 2, uncommitted).
 
 
 ## Notes
