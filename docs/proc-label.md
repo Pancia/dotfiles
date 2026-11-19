@@ -96,6 +96,7 @@ process.title = 'my-app';
 | asmr-board | `cmds/.../asmr-board/cmds.rb` |
 | lakshmi (cmds) | `cmds/.../lakshmi/cmds.rb` |
 | pymodoro | `bin/pymodoro` |
+| Inari bots' claude children (`claude (guide)`, `claude (inari-cc)`) | `tools/inari/bin/claude-labeled` in the AKR vault, used as the SDK's `cli_path`. Round brackets on purpose: `bin/claude-watchdog` exempts `claude [..]` as an interactive session |
 | youtube-transcribe | `services/youtube-transcribe/dotfiles-services-youtube-transcribe.sh` |
 | wget-server | `services/wget_server/script.sh` |
 | lakshmi (service) | `services/lakshmi/script.sh` |
