@@ -186,6 +186,16 @@ class Pane:
             pass
 
 
+def no_tmux_env():
+    """os.environ without TMUX and TMUX_PANE.
+
+    supervise treats a set TMUX as "in a tmux window", where q stops the
+    service but keeps the supervisor. Pane tests that expect q to exit must
+    not inherit the runner's tmux, whatever runner starts them.
+    """
+    return {k: v for k, v in os.environ.items() if k not in ("TMUX", "TMUX_PANE")}
+
+
 @pytest.fixture
 def panes():
     made = []
@@ -202,7 +212,7 @@ def gen(proj, name="web"):
 
 
 def test_keys_restart_suspend_resume_quit(proj, panes):
-    p = panes([SUP, "web"], proj)  # no command: comes from svc_cmd
+    p = panes([SUP, "web"], proj, env=no_tmux_env())  # no command: comes from svc_cmd
     assert p.until(lambda: (proj / ".web-port").exists()), p.text()
     p.send(b"r")
     assert p.until(lambda: gen(proj) == ["2"]), p.text()
@@ -234,7 +244,7 @@ def test_q_under_tmux_stops_but_keeps_the_supervisor(proj, panes):
 
 
 def test_bar_separator_and_panel_render(proj, panes):
-    p = panes([SUP, "web"], proj, rows=12, cols=100)
+    p = panes([SUP, "web"], proj, rows=12, cols=100, env=no_tmux_env())
     assert p.until(lambda: "● up" in p.lines()[-1]), p.text()
     bar = p.lines()[-1]
     assert "web" in bar and "r restart" in bar and "? help" in bar
@@ -256,7 +266,7 @@ def test_bar_separator_and_panel_render(proj, panes):
 
 def test_tty_mode_restored_after_ctrl_c(proj, panes):
     out = proj / "stty.txt"
-    p = panes(["bash", "-c", f"{SUP} web; stty -a > {out}"], proj)
+    p = panes(["bash", "-c", f"{SUP} web; stty -a > {out}"], proj, env=no_tmux_env())
     assert p.until(lambda: (proj / ".web-port").exists()), p.text()
     p.send(b"\x03")
     # p.until, not wait_for: it keeps reading the pty. An unread pty fills its
@@ -273,7 +283,7 @@ def test_tty_mode_restored_after_ctrl_c(proj, panes):
 def test_closing_the_terminal_stops_and_drains(proj, panes):
     """A closed pane HUPs supervise. That used to mean 'restart', and the
     restart then died on the dead tty, orphaning the child with no pidfile."""
-    p = panes([SUP, "web"], proj)
+    p = panes([SUP, "web"], proj, env=no_tmux_env())
     assert p.until(lambda: (proj / ".web-port").exists()), p.text()
     assert marked(proj.mark)
     os.close(p.fd)  # the terminal goes away
