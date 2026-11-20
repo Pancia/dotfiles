@@ -84,6 +84,17 @@ runner prints `isolation off: <reason>`. Use it only for a component that cannot
 run otherwise, and list the component and its reason here. No component opts out
 yet.
 
+Checked under isolation and needing no opt-out (row REST-A):
+
+- `roleplay`: each test passes its own `tmp_path` home to the scripts it runs,
+  and `test_roll_sees_a_throwaway_home` pins that. The shared home for `run()`
+  comes from `tmp_path_factory`, so no folder leaks;
+- `mods`: `claude plugin test` runs each mod's test files with no fs, network or
+  process access, so the throwaway home changes nothing. It needs `claude` on
+  `PATH`; without it the suites skip;
+- `lib/lua`: `harness.lua` takes its own paths. It needs `lua5.4`; without it
+  every test skips.
+
 **Interim red** (row ISOLATE of the hermetic-test-suite spec added the isolation):
 after this row merges, `hooks`, `astro` and `roleplay` fail under `cmds test` until HOOKS, ASTRO and REST-A land.
 Those components still read the live checkout or the real home, and each of those

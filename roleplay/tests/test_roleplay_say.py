@@ -35,6 +35,8 @@ class Env:
         self.tmp = tmp_path
         self.stub_dir = tmp_path / "stub"
         self.stub_dir.mkdir()
+        self.home = tmp_path / "home"
+        self.home.mkdir()
         self.reply = tmp_path / "reply.json"
         self.set_reply({"structured_output": {"line": "A dry remark."}})
         (tmp_path / "roster.tsv").write_text(ROSTER, encoding="utf-8")
@@ -56,7 +58,7 @@ class Env:
     def run(self, *args, stdin="", extra_env=None):
         env = {
             "PATH": f"{self.stub_dir}:{JQ_DIR}:/usr/bin:/bin",
-            "HOME": str(Path.home()),
+            "HOME": str(self.home),
             "ROLEPLAY_ROSTER": str(self.tmp / "roster.tsv"),
             "ROLEPLAY_EXAMPLES": str(self.tmp / "examples.md"),
             "ROLEPLAY_SEED": "1",
@@ -117,7 +119,7 @@ def test_odds_are_left_out_when_the_lookup_finds_nothing(e):
     assert real != fake
     r = subprocess.run(
         [str(fake / "roleplay-say"), "x"], capture_output=True, text=True,
-        env={"PATH": f"{e.stub_dir}:{JQ_DIR}:/usr/bin:/bin", "HOME": str(Path.home()),
+        env={"PATH": f"{e.stub_dir}:{JQ_DIR}:/usr/bin:/bin", "HOME": str(e.home),
              "ROLEPLAY_EXAMPLES": str(e.tmp / "examples.md")},
     )
     assert r.stdout == '🎭 «Test Hero» 🧪 TESTVERSE — "A dry remark."\n', r.stderr
