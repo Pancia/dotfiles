@@ -46,7 +46,11 @@ nothing), and the source path in messages is the resolved tree path.
 
 ## Process Improvements
 
-None.
+- The brief's line numbers and its list of destinations matched the file
+  exactly, which made the change mechanical. Keep briefs at that level of detail.
+- `alt mission-ready` waited about 12 minutes for a heavy slot held by another
+  repository's merge gate, for a done check that runs in about 10 seconds. A
+  light lane for short done checks would save that wait.
 
 ## Self-Improvement Notes
 
