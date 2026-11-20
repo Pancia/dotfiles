@@ -30,6 +30,8 @@ Set up Altera properly in dotfiles: setup review, the same review gates as Alter
 - Clean-clone gate run: same 36 failures as ~/dotfiles, 16m45s.
 - altera/config.json has checkout_landing auto uncommitted (claimed by this session); committing it makes a non-artifact commit the operator must land.
 
+- 2026-11-20 16:57: Altera's external record store (alt 68024bb4) is ready; dotfiles is its first user. Plan from the Altera liaison: restart daemon on 68024bb4 (running 9b1a50c7); drain (no new missions; review group g-001 must be accepted first); operator writes ~/.config/altera/artifacts.json (root ~/Vaults/altera-artifacts, bundle_dir = the vault's backup folder; never in a tracked file); operator runs `alt daemon pause`, `alt artifacts setup`, `alt artifacts migrate` from a plain terminal; commit the printed commit via jj (deletions + altera/config.json only); push; `alt daemon resume`, `alt liaison restart`, `alt sandbox check` (records_read, records_sibling). Undo: `alt artifacts migrate --to repo`. Another session has an uncommitted sketch change (calendar scheduler) that must be committed first.
+
 ## Open Questions
 
 Next ID: Q36
@@ -37,5 +39,7 @@ Next ID: Q36
 
 
 ## Notes
+
+- Standing permission (Q39, 2026-11-20): when another session's finished commit blocks artifact landing, the liaison approves it with `alt checkout land` without asking, and names the commits in its next reply.
 
 - Until altera/ is private: keep security work out of Altera; check altera/ changes before each push.
