@@ -101,7 +101,8 @@ for (const tier of ['prepend', 'append'] as const) {
   test(`with a wrapping mod ${tier === 'prepend' ? 'above' : 'beneath'}, both parts draw and press`, { plugins: [closer(tier)] }, async ($, on) => {
     const box = promptBox(on)
     const ui = await mount($, '**Q2 (push):** Push to master?\n【Q2: yes | no】')
-    expect((await ui.findAll({ type: 'Button' })).length).toBe(3)
+    // yes, no, submit, and the closer's vote.
+    expect((await ui.findAll({ type: 'Button' })).length).toBe(4)
     await ui.press({ key: 'b1-0' })
     expect(box.text).toBe('Q2 (push): yes')
     await ui.press({ plugin: 'rp', key: 'vote' })
@@ -113,7 +114,7 @@ test('with a pass-through mod beneath, the buttons still draw', {
   plugins: [{ name: 'passer', tier: 'append', register(on: On) { on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => next(e)) } }],
 }, async $ => {
   const ui = await mount($, '**Q2 (push):** Push to master?\n【Q2: yes | no】')
-  expect((await ui.findAll({ type: 'Button' })).length).toBe(2)
+  expect((await ui.findAll({ type: 'Button' })).length).toBe(3)
   await ui.unmount()
 })
 
@@ -154,7 +155,7 @@ test('a rewrite beneath is drawn, not the text this mod received', {
   const ui = await mount($, '**Q2 (push):** Push to master?\n【Q2: yes | no】')
   expect(await ui.find({ type: 'Markdown', text: /Push to main\?/ })).toBeDefined()
   expect(await ui.find({ type: 'Markdown', text: /master/ })).toBeUndefined()
-  expect((await ui.findAll({ type: 'Button' })).length).toBe(2)
+  expect((await ui.findAll({ type: 'Button' })).length).toBe(3)
   await ui.unmount()
 })
 
@@ -163,7 +164,7 @@ test('answers rewritten beneath become the buttons', {
 }, async ($, on) => {
   const box = promptBox(on)
   const ui = await mount($, '**Q2 (push):** Push to master?\n【Q2: yes | no】')
-  expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['[ keep ]', '[ drop ]'])
+  expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['[ keep ]', '[ drop ]', '[ submit ↵ ]'])
   await ui.press({ key: 'b1-1' })
   expect(box.text).toBe('Q2 (push): drop')
   await ui.unmount()
@@ -208,4 +209,42 @@ test('the rule joins the system prompt in a terminal session only', async ($, on
   expect(await ids(['terminal'])).toEqual(['intro', 'reply-links:answer-buttons'])
   expect(await ids([])).toEqual(['intro'])
   expect(await ids(['terminal'], ['print'])).toEqual(['intro'])
+})
+
+function sender(on: On) {
+  const sent: { text: string; asUser?: true }[] = []
+  on('prompt.submit', (_, e) => {
+    sent.push({ text: e.text, asUser: e.origin.kind === 'plugin' ? e.origin.asUser : undefined })
+    return { text: e.text }
+  })
+  return sent
+}
+
+test('the submit button sends the box as the user, then empties it', async ($, on) => {
+  const box = promptBox(on)
+  const sent = sender(on)
+  const ui = await mount($, REPLY)
+  await ui.press({ key: 'n3' })
+  await ui.press({ key: 'submit' })
+  expect(sent).toEqual([{ text: 'N1', asUser: true }])
+  expect(box.text).toBe('')
+  await ui.unmount()
+})
+
+test('the submit button sends nothing from an empty box or a slash command', async ($, on) => {
+  const box = promptBox(on)
+  const sent = sender(on)
+  const ui = await mount($, REPLY)
+  await ui.press({ key: 'submit' })
+  box.text = '/compact'
+  await ui.press({ key: 'submit' })
+  expect(sent).toEqual([])
+  expect(box.text).toBe('/compact')
+  await ui.unmount()
+})
+
+test('a reply with links but no buttons gets no submit button', async $ => {
+  const ui = await mount($, '**Q2 (push)** — push to master?')
+  expect(await ui.find({ key: 'submit' })).toBeUndefined()
+  await ui.unmount()
 })
