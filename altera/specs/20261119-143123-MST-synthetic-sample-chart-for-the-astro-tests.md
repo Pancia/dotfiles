@@ -309,7 +309,7 @@ SCRUB comes last, because it deletes the old fixtures.
 
 | Order | Row | Mission | Scope | Est. | Deps | Pri |
 |---|---|---|---|---|---|---|
-| 1 | CORE | Derivation core, sample chart search, sample fixtures beside the old ones | `tests/bin/astro/derive_core.py`, `derive_sample_chart.py`, `test_derived_core.py`, `conftest.py` (add only), `docs/testing.md` | 40m | ASTRO, CANARY | P1 |
+| 1 | CORE | Derivation core, sample chart search, sample fixtures beside the old ones | `tests/bin/astro/derive_core.py`, `derive_sample_chart.py`, `test_derived_core.py`, `conftest.py` (add only), `docs/testing.md` | 40m | m-017, m-024 | P1 |
 | 2 | ZR-DERIVE | Zodiacal-releasing arithmetic in the derivation | `tests/bin/astro/derive_zr.py`, `test_derived_zr.py` | 30m | CORE | P1 |
 | 3 | ZR | Zodiacal-releasing tests on the sample chart | `tests/bin/astro/test_zr.py`, `test_derived_zr.py`, `docs/astro.md` | 35m | ZR-DERIVE | P1 |
 | 4 | HOUSES-NATAL | Natal tables, synthetic cusps and the transit-house test on the sample chart | `tests/bin/astro/derive_houses.py`, `test_derived_houses.py`, `test_houses.py` | 40m | CORE | P1 |
@@ -321,7 +321,7 @@ SCRUB comes last, because it deletes the old fixtures.
 | 10 | SCRUB | Delete the old fixtures; leak check that prints no values | `tests/bin/astro/conftest.py`, `old_chart_guard.py`, `test_old_chart_guard.py`, `docs/testing.md` | 35m | ZR, HOUSES-TRANSIT, FIXES, ECLIPSES, PARANS, LINES | P1 |
 | 11 | HISTORY | Operator step: answer the first Open Question. If the answer is a rewrite, the operator does it by hand after SCRUB, never a worker | — | 15m | SCRUB | P3 |
 
-ASTRO and CANARY in CORE's Deps cell are rows of the approved spec `20261119-121426-MST-green-hermetic-test-suite-for-the-merge-gate`, not of this table. `alt spec approve` warns about them. When those missions exist, replace the labels with their mission IDs. Until then, open no mission of this spec.
+CORE's deps `m-017` and `m-024` are the missions for rows ASTRO and CANARY of the approved spec `20261119-121426-MST-green-hermetic-test-suite-for-the-merge-gate`. (Updated 2026-11-20, when those missions were opened.)
 
 ### Done checks
 
