@@ -166,6 +166,13 @@ all state is under the project's own `.run/`.
   `.run/<name>.status` (`rc=N <date>`), and clears the port file so the next
   client fails fast. `svc status` shows `prev exit:`; `svc logs <name>` has the
   stacktrace. (`ready=wedged` = port open but probe timed out → hung; restart it.)
+- **Output is never cut off**: the `tee` that copies the child's output to the
+  pane and `.run/<name>.log` ignores TERM. Under bash 4+ it is in the child's
+  process group, so before this every drain killed it with output still in the
+  pipe: a service that crashed at once could leave no error in the pane or the
+  log, and a stop or restart lost its shutdown lines. It now ends when the last
+  writer closes the pipe. A process that leaves the group but keeps stdout open
+  holds the drain until its ~10s KILL.
 - **stdin caveat**: the child's stdin is a held-open FIFO (so a REPL prompt
   reading stdin blocks idle instead of taking SIGTTIN under job control). You
   **can't type into the terminal REPL** — drive the process via its socket/nREPL.
@@ -220,6 +227,9 @@ all state is under the project's own `.run/`.
 - **Windows**: a clean exit (Ctrl-C, `svc stop`, `down`) closes the window; a
   crash keeps it, error on screen, with a `<name> crashed (exit N) · svc-tmux up
   <name> to restart` line (`remain-on-exit failed` + `remain-on-exit-format`).
+  tmux draws that line with a line feed on the bottom row, so the pane's top
+  line scrolls into history: a script reading a dead pane captures with
+  `capture-pane -p -S -`, not the visible screen alone.
   `q` doesn't exit at all there (see Keys). `prefix s` / `prefix w` open the
   chooser with every service window showing.
 - `svc-tmux attach` nests when run inside tmux (it's a different server).
