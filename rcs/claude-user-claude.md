@@ -243,7 +243,7 @@ A published Claude artifact plays no sound for me, not even a WAV in an
 - For anything I must hear, write the page to `.cc/misc/` and open it locally:
   `open -a "Brave Browser" <file>`. Say that it is a local file.
 - Publish it as an artifact too only if I ask, and do not expect sound there.
-- Headless Brave runs Web Audio, so test sounds there: render each one in an
+- Headless Google Chrome runs Web Audio, so test sounds there: render each one in an
   `OfflineAudioContext` and check that it is not silent and does not clip.
 
 ## Cloud-only files in ~/Cloud

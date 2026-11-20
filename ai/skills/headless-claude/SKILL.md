@@ -15,6 +15,7 @@ claude-p --model haiku --output-format json 'x'     # -> full JSON envelope
 claude-p --output-format stream-json --verbose      # -> passthrough stream
 CLAUDE_P_TIMEOUT=60 claude-p 'prompt'               # default is 180s
 CLAUDE_P_SAFE=0 claude-p 'prompt'                   # keep CLAUDE.md/hooks/MCP
+CLAUDE_P_TOOLS=1 claude-p 'prompt'                  # keep claude's default tools
 ```
 
 Exit `0` ok · `1` claude errored or returned nothing · `124` timed out.
@@ -44,10 +45,20 @@ Three failure modes it closes, all observed in production:
   `type == "object"` and `.is_error == true` exit 0. A `-s` guard now runs first.
 - **LLM chatter where a payload is expected.** `--safe-mode` is passed **by
   default** (`CLAUDE_P_SAFE=0` opts out). It disables CLAUDE.md discovery, hooks,
-  skills, plugins, custom commands/agents and MCP config, while leaving auth, model
+  skills, plugins, custom commands/agents and MCP config. It leaves auth, model
   selection, built-in tools and permissions normal. Measured on a realistic
   "summarize this diff" prompt: **2/2 leaked roleplay bookends without it, 3/3 clean
   with it.**
+
+**A call whose prompt holds web or user-supplied text passes `--tools=`.** Safe
+mode does not turn tools off: the Bash, Read and other built-in tools stay, and the
+allow rules in `~/.claude/settings.json` still apply. Tested 2026-11-20: under
+`--safe-mode`, a pre-approved `git add` ran and an unapproved `touch` was denied. So
+a hostile tab title, transcript or page could steer the model into a pre-approved
+command. `claude-p` now passes `--tools=` by default when the caller gives no
+`--tools`; a caller's own `--tools=...` wins, and `CLAUDE_P_TOOLS=1` keeps claude's
+default set. `--json-schema` still works with no tools. A bare `claude -p` caller
+must pass `"--tools="` itself.
 
 Model pins: prefer floating aliases (`haiku`, `sonnet`) or a current id
 (`claude-sonnet-5`). Dated ids like `claude-sonnet-4-20250514` are the retirement
@@ -69,7 +80,8 @@ Still calling bare `claude -p` (deliberately, not pending migration):
 `scripts/score-day.py` / `scripts/invoice-from-worklog.py` all kill claude by pid,
 and `claude-p` runs it under `timeout -k` in a **new process group** — so killing the
 `claude-p` pid would orphan both `timeout` and `claude`, exactly the runaway the
-wrapper exists to prevent. They pass `--safe-mode` on their own argv instead.
+wrapper exists to prevent. They pass `--safe-mode` and `--tools=` on their own argv
+instead.
 (`~/projects/ereshkigal/bin/import-audio.fish` is a different repo and still unbounded.)
 
 ### Constraining headless output

@@ -42,7 +42,9 @@
 # is show you the real error instead of an empty one (see the -s guard below).
 #
 # Env: CLAUDE_P_TIMEOUT (default 180s), CLAUDE_P_KILL_AFTER (default 5s),
-#      CLAUDE_P_SAFE (default 1 — set 0 to keep CLAUDE.md, hooks and MCP).
+#      CLAUDE_P_SAFE (default 1 — set 0 to keep CLAUDE.md, hooks and MCP),
+#      CLAUDE_P_TOOLS (default 0 — no built-in tools unless --tools is passed;
+#      set 1 to keep claude's default tool set).
 # Exit: 0 ok · 1 claude reported an error / returned nothing · 124 timed out.
 
 set -uo pipefail
@@ -56,10 +58,16 @@ KILL_AFTER=${CLAUDE_P_KILL_AFTER:-5}
 mode=text
 args=()
 have_safe=0
+have_tools=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --safe-mode)
             have_safe=1
+            args+=("$1")
+            shift
+            ;;
+        --tools|--tools=*)
+            have_tools=1
             args+=("$1")
             shift
             ;;
@@ -88,9 +96,12 @@ done
 
 # A headless call wants a clean room, not my interactive setup. `--safe-mode`
 # disables CLAUDE.md discovery, skills, plugins, hooks, custom commands/agents
-# and MCP config, while leaving auth, model selection, built-in tools and
-# permissions normal. Measured on a realistic "summarize this diff" prompt: 2/2
-# runs leaked roleplay bookends without it, 3/3 clean with it.
+# and MCP config. It does NOT touch built-in tools or permissions: Bash, Read and
+# the rest stay available, and the allow rules in ~/.claude/settings.json still
+# apply (tested 2026-11-20: a pre-approved `git add` ran under --safe-mode, an
+# unapproved `touch` was denied). Tools are turned off separately, below.
+# Measured on a realistic "summarize this diff" prompt: 2/2 runs leaked roleplay
+# bookends without it, 3/3 clean with it.
 #
 # Default-on because every current caller wants that; CLAUDE_P_SAFE=0 to opt out,
 # because this is documented as a drop-in for `claude -p`. Losing hooks headless
@@ -103,6 +114,16 @@ done
 # `<output>` envelope (ai/templates/output_contract.md) or --json-schema on top.
 if [ "${CLAUDE_P_SAFE:-1}" != 0 ] && [ "$have_safe" -eq 0 ]; then
     args+=(--safe-mode)
+fi
+
+# Default to no built-in tools (user-approved 2026-11-20). Prompts here often hold
+# text that a website or another person controls, such as tab titles, transcripts
+# and session logs. `--tools=` is the equals form, so it cannot swallow the prompt,
+# and --json-schema still works without tools. It goes first, so a caller's `--`
+# cannot make it a positional argument. A caller's own --tools wins, and
+# CLAUDE_P_TOOLS=1 keeps claude's default tool set.
+if [ "${CLAUDE_P_TOOLS:-0}" != 1 ] && [ "$have_tools" -eq 0 ]; then
+    args=(--tools= "${args[@]+"${args[@]}"}")
 fi
 
 # Streaming callers read events as they arrive, so there is no envelope to

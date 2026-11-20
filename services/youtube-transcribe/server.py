@@ -1191,6 +1191,10 @@ async def run_claude_summary(transcript: str, prompt: str, job: Job | None = Non
     # in three), skills, plugins, hooks and MCP config, while leaving auth, model
     # selection and built-in tools normal.
     #
+    # --tools= (equals form, so it cannot swallow anything after it): the stdin
+    # holds the video's transcript, which its creator controls. Safe mode keeps
+    # built-in tools and the pre-approved Bash rules, and a summary needs no tools.
+    #
     # Deliberately NOT migrated to claude-p: the timeout path below kills this child
     # by pid, and claude-p runs claude under `timeout -k` in a *new process group*,
     # so killing the claude-p pid would orphan both timeout and claude — exactly the
@@ -1200,6 +1204,7 @@ async def run_claude_summary(transcript: str, prompt: str, job: Job | None = Non
         "claude",
         "-p",
         "--safe-mode",
+        "--tools=",
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,

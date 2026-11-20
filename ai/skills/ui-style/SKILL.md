@@ -131,8 +131,8 @@ CDN rules, phone width). This skill decides only the look.
 
 ## Check before calling it done
 
-1. Render it in both themes. For web, headless Brave:
-   `"/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" --headless=new --screenshot=OUT.png --window-size=1240,1400 file://PAGE`
+1. Render it in both themes. For web, use headless Google Chrome, not Brave, because headless Brave hangs while the user's own Brave is open (tested 2026-11-20). Give it its own profile folder (`DIR`, for example in a `scratch new` folder) and a time limit:
+   `timeout -k 3 40 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --user-data-dir=DIR --disable-gpu --no-first-run --virtual-time-budget=3000 --hide-scrollbars --screenshot=OUT.png --window-size=1240,1400 file://PAGE`
    Then set `data-theme="dark"` on `<html>` (in a copy of the page) and render it again.
 2. Look at the screenshot against **Principles** and **Never do**, one by one.
 3. Check that each status still reads without its color.
