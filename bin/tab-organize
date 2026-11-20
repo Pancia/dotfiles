@@ -309,7 +309,9 @@ def call_claude(summary, system_prompt):
     # Deliberately bare `claude -p`, not claude-p: we kill claude by process group,
     # and claude-p would orphan its own timeout+claude children.
     proc = subprocess.Popen(
-        ["claude", "-p", "--safe-mode", "--system-prompt", system_prompt,
+        # --tools='' (equals form): the prompt holds page-controlled titles and
+        # URLs, and safe-mode keeps built-in tools and pre-approved Bash rules.
+        ["claude", "-p", "--safe-mode", "--tools=", "--system-prompt", system_prompt,
          "--output-format", "stream-json", "--verbose", "--include-partial-messages"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
