@@ -381,6 +381,15 @@ not "not yet wired up" — it never runs at all, and rots silently. Four trees s
 unregistered for months; when they were finally registered, `tests/hooks` failed
 immediately because it still asserted the pre-XDG `~/.tmux.conf` destination.
 
+**Every run is isolated.** The runner starts each component's pytest, under `cmds test`
+too, with a throwaway `HOME` that holds a `dotfiles` symlink to the tree under test,
+its own XDG folders, and a test identity for git and jj (`GIT_CONFIG_GLOBAL`,
+`JJ_CONFIG`). It pins uv's cache to the real one, removes tmux, iTerm and Claude
+session variables (`TMUX`, `CLAUDE_*`, …), and puts the tree's `bin/` first on `PATH`
+with every other `dotfiles/bin` removed. Tests must not rely on the real home or the
+live checkout. Interim: after this row merges, `hooks`, `astro` and `roleplay` fail under `cmds test` until HOOKS, ASTRO and REST-A land.
+What is set and removed, and the `"isolation": False` opt-out: "Isolation" in [docs/testing.md](docs/testing.md).
+
 The component table (aliases, runners, deps) and the aggregate summary: [docs/testing.md](docs/testing.md). The `fish` component takes about 3 min, longer than the Bash tool's 2 min default timeout: run one file when you can, and give a full run a longer timeout.
 
 ### Claude Code Config (cc-config)
