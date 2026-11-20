@@ -434,3 +434,15 @@ def test_jj_repo_is_told_worktrees_are_git(jj_repo):
     assert r.returncode == 0
     assert "git" in r.stdout
     assert "jj" in r.stdout
+
+
+def test_git_sees_no_live_hooks_path():
+    """Defect: `rcs/gitconfig` sets `core.hooksPath = ~/dotfiles/git/hooks`, so
+    every `git commit` these tests make in a throwaway repo used to run the live
+    checkout's hooks. The runner's GIT_CONFIG_GLOBAL now points at a test
+    `.gitconfig` with no hooksPath; this pins that, so a run outside the runner
+    (a bare pytest on the operator's machine) fails here instead of silently
+    running live code."""
+    r = subprocess.run(["git", "config", "--global", "--get", "core.hooksPath"],
+                       capture_output=True, text=True)
+    assert r.stdout == "", "git sees a global core.hooksPath: %r" % r.stdout

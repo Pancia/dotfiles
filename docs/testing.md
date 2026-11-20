@@ -95,6 +95,28 @@ Checked under isolation and needing no opt-out (row REST-A):
 - `lib/lua`: `harness.lua` takes its own paths. It needs `lua5.4`; without it
   every test skips.
 
+Checked under isolation and needing no opt-out (row REST-B):
+
+- `bin/scratch`, `services/server_check`: already clean. `scratch` gives every
+  run its own `HOME` and `SCRATCH_ROOT` under `tmp_path`;
+- `bin/ytdl`: its three `HOME` settings are one sandbox (`HOME` in the env each
+  test builds) under `tmp_path`;
+- `bin/exocortex-id`: pure functions, no paths;
+- `bin/cc-peers`: reads `~/.claude` only through `--sessions-dir` and
+  `--projects-dir`, which every test passes;
+- `services/youtube_transcribe` (`yt`): `server.py` computes its folders from
+  `Path.home()` at import, and a stream run to its end calls `persist_job`. Before
+  isolation that wrote `test123.json` and `test456.json` into the real
+  `~/.local/state/youtube-transcribe/jobs/`; under isolation the folder is
+  missing and four tests failed. `tests/services/youtube_transcribe/conftest.py`
+  now points every server folder (storage, state, logs, jobs, temp) at the test's
+  `tmp_path`. `server.py` still creates `/tmp/youtube-transcribe` on import;
+- `lib/python`: passes as is. The git tests (`cc-peers`, `test_cc_worktree.py`,
+  `hooks/test_cc_worktree_nudge.py`) used to run the live `~/dotfiles/git/hooks`
+  through `core.hooksPath` from `rcs/gitconfig`. The runner's
+  `GIT_CONFIG_GLOBAL` drops it, and `test_git_sees_no_live_hooks_path` pins that:
+  outside the runner, on this machine, it fails.
+
 **Interim red** (row ISOLATE of the hermetic-test-suite spec added the isolation):
 after this row merges, `hooks`, `astro` and `roleplay` fail under `cmds test` until HOOKS, ASTRO and REST-A land.
 Those components still read the live checkout or the real home, and each of those

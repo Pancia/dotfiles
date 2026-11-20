@@ -286,3 +286,22 @@ class TestJobSections:
         restored = job_from_dict(data)
 
         assert restored.sections == ["1:00:00-1:05:00"]
+
+
+class TestJobPersistenceStaysInTheTestFolder:
+    """persist_job writes under the conftest's tmp folder, never the real state."""
+
+    def test_persist_job_writes_into_the_test_jobs_dir(self, server_dirs, tmp_path):
+        import server
+
+        job = Job(
+            id="persist-probe",
+            job_type=JobType.TRANSCRIBE,
+            url="https://youtube.com/watch?v=persistprobe",
+        )
+        server.persist_job(job)
+
+        written = server_dirs["JOBS_DIR"] / "persist-probe.json"
+        assert written.is_file()
+        assert tmp_path in written.parents
+        assert json.loads(written.read_text())["id"] == "persist-probe"
