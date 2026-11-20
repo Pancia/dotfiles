@@ -22,9 +22,10 @@
 # (lib/svc/conf.sh). Define there:
 #   SVC_SERVICES="a b c"                 # names for `svc status` with no arg
 #   svc_port_file() { case "$1" in ...esac; }   # name -> readiness/port file (optional)
-#   svc_eval() { ...; }                  # $1=port file; exit 0 if it answers (optional)
+#   svc_eval() { ...; }                  # $1=port file, empty if none; exit 0 if it answers (optional)
 # With svc_eval, status distinguishes up|wedged and restart waits for a real
 # round-trip; without it, a TCP connect to the port (if any) is the signal.
+# A service with svc_eval but no port file is up or down by the eval alone.
 # Bash-3.2-safe.
 set -euo pipefail
 
@@ -87,8 +88,7 @@ port_up() {  # $1 = numeric port
 # the eval its own process group so the watchdog can kill the WHOLE tree - a JVM
 # the eval spawns would otherwise orphan and leak on timeout.
 responsive() {
-  local pf rc; pf="$(svc_port_file "$1")"
-  [ -n "$pf" ] || return 1
+  local pf rc; pf="$(svc_port_file "$1")"   # may be empty: svc_eval then gets ""
   set -m
   ( svc_eval "$pf" >/dev/null 2>&1 ) &
   local ep=$!
@@ -111,7 +111,10 @@ ready_state() {  # echo up|down|wedged|suspended|n/a for a name
   if [ -e "$run_dir/$name.suspended" ] && live_sup "$name" >/dev/null 2>&1; then echo "suspended"; return; fi
   port="$(port_value "$name")"
   if [ -z "$port" ]; then
-    if [ -n "$(svc_port_file "$name")" ]; then echo "down"; else echo "n/a"; fi   # configured but absent
+    if [ -n "$(svc_port_file "$name")" ]; then echo "down"   # configured but absent
+    elif declare -F svc_eval >/dev/null; then
+      if responsive "$name"; then echo "up"; else echo "down"; fi   # no port: the eval is the only signal
+    else echo "n/a"; fi
     return
   fi
   if ! port_up "$port"; then echo "down"; return; fi

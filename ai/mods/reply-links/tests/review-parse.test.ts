@@ -83,7 +83,7 @@ test('P12 a numbered question puts its row under the text', async () => {
 
 test('P13 a Where-next item after a wrapped line is still a link', async () => {
   const l = linkify('🧭 **Where next:**\n- N1 a long item\n  that wraps\n- N2 second')
-  expect(fills(l)).toEqual(['a long item', 'second'])
+  expect(fills(l)).toEqual(['N1', 'N2'])
 })
 
 test('A1 a second answer to one question replaces the first', async () => {

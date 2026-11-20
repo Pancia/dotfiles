@@ -1,7 +1,8 @@
 // reply-links: in a reply, question labels and Where-next IDs become links,
 // and an answer line under a question (【Q4: yes* | no】, which RULE below
 // teaches the model) becomes a row of buttons. A click puts that text in the
-// prompt box. It never sends.
+// prompt box. Only the "[ submit ↵ ]" button at the end of such a reply sends:
+// it sends the box as the person's own message and empties it.
 //
 // Only the drawing changes: the stored reply, and what the model reads, stay
 // as written. A click is answered by the mod only in the fullscreen terminal;
@@ -115,6 +116,34 @@ export const register: Register = on => {
       }
     }
 
+    // Sends the prompt box as the person's own message, as Enter does, then
+    // empties the box if it still holds what was sent: a draft typed while
+    // the send waited for a running turn is kept.
+    const submit = async () => {
+      try {
+        const box = await $.prompt.read()
+        const text = box.text.trim()
+        if (text === '') {
+          $.ui.toast('The prompt box is empty.')
+          return
+        }
+        // A plugin's prompt does not run a slash command.
+        if (text.startsWith('/')) {
+          $.ui.toast('Press Enter to run a slash command.')
+          return
+        }
+        const sent = await $.prompt.submit({ text, asUser: true })
+        if (sent.drop !== undefined) {
+          $.ui.toast(`Not sent: ${sent.drop}`)
+          return
+        }
+        const after = await $.prompt.read()
+        if (after.text === box.text) await $.prompt.fill({ text: '' })
+      } catch (err) {
+        $.ui.toast(`Could not send the prompt: ${String(err)}`)
+      }
+    }
+
     const parts = linked.segments.map((s, i) =>
       s.kind === 'item' ? (
         // "- 💡 [ N1 ] text": the ID filled as an answer button is, the text
@@ -194,6 +223,7 @@ export const register: Register = on => {
       ),
     )
 
+    const hasButtons = linked.segments.some(s => s.kind !== 'markdown')
     const mine = (
       <Box flexDirection="row">
         <Box width={2} flexShrink={0}>
@@ -201,6 +231,17 @@ export const register: Register = on => {
         </Box>
         <Box flexDirection="column" flexGrow={1} flexShrink={1}>
           {parts}
+          {hasButtons ? (
+            // One send button at the end of a reply that has buttons.
+            <Box key="submitRow" flexDirection="row" marginTop={1}>
+              <Button key="submit" label="submit" plain onPress={() => submit()}>
+                {/* Green, so it is not read as the recommended answer. */}
+                <Text backgroundColor="success" color="inverseText" bold>
+                  {'[ submit ↵ ]'}
+                </Text>
+              </Button>
+            </Box>
+          ) : null}
         </Box>
       </Box>
     )
