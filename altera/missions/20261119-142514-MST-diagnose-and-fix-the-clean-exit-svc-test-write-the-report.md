@@ -11,7 +11,7 @@ Implement row SVC-EXIT (requirement R3) of the spec `altera/specs/20261119-12142
 ```donecheck
 {"v":1,"timeout":"10m","checks":[
  {"kind":"command","title":"clean exit three runs","run":"for i in 1 2 3; do uv run lib/python/run_tests.py svc/test_svc.py -v -k clean_exit_closes || exit 1; done","stdout_matches":"(?s)test_clean_exit_closes_the_window_crash_keeps_it PASSED.*test_clean_exit_closes_the_window_crash_keeps_it PASSED.*test_clean_exit_closes_the_window_crash_keeps_it PASSED"},
- {"kind":"command","title":"finding written","run":"head -1 .cc/reports/REPORT-svc-clean-exit.md","stdout_matches":"^Class: (test bug|product bug|timing|environment|not reproduced)$"}
+ {"kind":"command","title":"finding written","run":"head -1 .cc/reports/REPORT-svc-clean-exit.md","stdout_matches":"(?m)^Class: (test bug|product bug|timing|environment|not reproduced)$"}
 ]}
 ```
 

@@ -24,13 +24,15 @@ Set up Altera properly in dotfiles: setup review, the same review gates as Alter
 - Spec 20261119-121426 (test fixes, 12 missions) approved by the operator (Q27); its four Open Questions accepted as recommended (Q28). Spec critique running via `alt spec approve --wait`.
 - Spec rev 2 committed b86ca0f8 (PRIVACY moved out per Q32; diff critique r-004 saved). Rev 2 diff check r-005 running; then `alt recon mission --spec`.
 - 148b8ceb (other session's doc commit) approved for landing per Q31.
-- Privacy spec recon r-006 running (astro fixture personal data, own spec).
+- 2026-11-20: test-fix missions m-013..m-024 opened (Q33). Privacy spec 20261119-143123 (10 missions + operator HISTORY step; CORE deps m-017, m-024) approved by operator (Q34), critique running. Four other-session commits (reply-links, svc) approved for landing (Q35).
+- Privacy spec 20261119-143123 PARKED (Q36): its critique rejected it (tasks leave tests on the old fixtures; SCRUB's word grep cannot pass; 14 MINOR; real cost 40-60 7d points). Revise after the test fixes land and the 7d window resets (Mon 23:00), then `alt hook rerun 20261119-143123-MST-synthetic-sample-chart-for-the-astro-tests`.
+- 7d usage was 51% on 2026-11-20 (32% the day before). Both specs together estimate 18-33 7d points.
 - Clean-clone gate run: same 36 failures as ~/dotfiles, 16m45s.
 - altera/config.json has checkout_landing auto uncommitted (claimed by this session); committing it makes a non-artifact commit the operator must land.
 
 ## Open Questions
 
-Next ID: Q33
+Next ID: Q36
 
 
 
