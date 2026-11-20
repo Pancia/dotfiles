@@ -235,7 +235,8 @@ export const register: Register = on => {
             // One send button at the end of a reply that has buttons.
             <Box key="submitRow" flexDirection="row" marginTop={1}>
               <Button key="submit" label="submit" plain onPress={() => submit()}>
-                <Text backgroundColor="claude" color="inverseText" bold>
+                {/* Green, so it is not read as the recommended answer. */}
+                <Text backgroundColor="success" color="inverseText" bold>
                   {'[ submit ↵ ]'}
                 </Text>
               </Button>
