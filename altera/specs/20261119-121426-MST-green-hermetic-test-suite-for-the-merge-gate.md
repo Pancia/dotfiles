@@ -140,7 +140,7 @@ This spec was written against `master` at **1898647d** and re-checked by the spe
 ### R8 Fish panes keep the real home out (row FISH)
 
 - R8.1 `FishPane.run` in `tests/fish/conftest.py` (env at line 82) sets `HOME`, `XDG_DATA_HOME` and `XDG_CONFIG_HOME` under the pane's own state folder. Interactive fish writes `$XDG_DATA_HOME/fish/fish_history` even with `--no-config`, so the panes likely write test commands into the operator's history today. Confirm this.
-- R8.2 New file `tests/fish/test_pane_isolation.py` with `test_an_interactive_pane_writes_history_only_in_its_own_home`.
+- R8.2 New file `tests/fish/test_pane_isolation.py` with `test_an_interactive_pane_runs_in_its_own_home`: the pane's `HOME` and XDG folders resolve under this test's own `tmp_path`, `$HOME/dotfiles` resolves to `DOTFILES`, and `$fish_history` is empty. (rev 4, after `altera/reviews/missions/m-020-critique.md`: `fish --no-config -i` writes no history, so R8.1 is defence in depth, not a leak fix. The pane home gets a `dotfiles` link, and caller `env=` overrides keep winning; the m-020 brief has the details.)
 - R8.3 Make the whole `fish` component pass under isolation. Each changed `.fish` file passes `fish -n` (item 8). No `.fish` file is expected to change.
 - Only `tests/` changes.
 
@@ -193,7 +193,7 @@ Revision 1 added a row PRIVACY here. The diff critique (`altera/reviews/20261119
 - Every component's pytest runs with a throwaway `HOME`, XDG folders, git and jj identity, a pinned uv cache, and no terminal or Claude session variables.
 - The ensure-rcs tests read the MANIFEST of the tree under test.
 - The ccjj lock folder lands in the test home, not the real one.
-- Interactive fish panes write history only in their own home.
+- Interactive fish panes run in their own home, with no history.
 - `roleplay`, `mods` and `lib/lua` pass under isolation, or carry a written opt-out reason.
 - The remaining Python, bin and service components pass under isolation.
 - The run summary shows each component's wall time.
@@ -213,7 +213,7 @@ Revision 1 added a row PRIVACY here. The diff critique (`altera/reviews/20261119
  {"id":"AC6","text":"Every component's pytest runs with a throwaway HOME, XDG folders, git and jj identity, a pinned uv cache and no terminal or Claude variables.","checks":[{"row":"ISOLATE","check":"isolation unit tests"}]},
  {"id":"AC7","text":"The ensure-rcs tests read the MANIFEST of the tree under test.","checks":[{"row":"HOOKS","check":"hooks component"}]},
  {"id":"AC8","text":"The ccjj lock folder lands in the test home, not the real one.","checks":[{"row":"CCJJ","check":"ccjj file"}]},
- {"id":"AC9","text":"Interactive fish panes write history only in their own home.","checks":[{"row":"FISH","check":"fish component"}]},
+ {"id":"AC9","text":"Interactive fish panes run in their own home, with no history.","checks":[{"row":"FISH","check":"fish component"}]},
  {"id":"AC10","text":"roleplay, mods and lib/lua pass under isolation or carry a written opt-out reason.","checks":[{"row":"REST-A","check":"roleplay component"},{"row":"REST-A","check":"mods component"},{"row":"REST-A","check":"lua component"}]},
  {"id":"AC11","text":"The remaining Python, bin and service components pass under isolation.","checks":[{"row":"REST-B","check":"lib/python component"},{"row":"REST-B","check":"cc-peers component"},{"row":"REST-B","check":"scratch component"},{"row":"REST-B","check":"ytdl component"},{"row":"REST-B","check":"exocortex component"},{"row":"REST-B","check":"server-check component"},{"row":"REST-B","check":"youtube component"}]},
  {"id":"AC12","text":"The run summary shows each component's wall time.","checks":[{"row":"TIMING","check":"summary test"},{"row":"TIMING","check":"recorded two-component run"}]},
@@ -375,7 +375,7 @@ No per-component seconds were measured, and this spec gives none. TIMING makes e
 - **FISH**
 ```donecheck
 {"v":1,"timeout":"15m","checks":[
- {"kind":"command","title":"fish component","run":"uv run lib/python/run_tests.py fish -v","stdout_contains":["test_an_interactive_pane_writes_history_only_in_its_own_home PASSED"],"stdout_matches":"\\b[1-9]\\d{2,} passed"}
+ {"kind":"command","title":"fish component","run":"uv run lib/python/run_tests.py fish -v","stdout_contains":["test_an_interactive_pane_runs_in_its_own_home PASSED"],"stdout_matches":"\\b[1-9]\\d{2,} passed"}
 ]}
 ```
 
