@@ -1,10 +1,10 @@
 import { expect, test } from 'claude-code/testing'
 
-import { addToBox, linkify, parseAnswers } from '../hooks/linkify'
+import { addToBox, commandToBox, linkify, mayHaveCommand, parseAnswers } from '../hooks/linkify'
 import type { Linked } from '../hooks/linkify'
 
 const fills = (l: Linked) =>
-  [...l.actions.values()].map(a => (a.kind === 'fill' ? a.text : `open ${a.url}`))
+  [...l.actions.values()].map(a => (a.kind === 'open' ? `open ${a.url}` : a.kind === 'command' ? `run ${a.text}` : a.text))
 
 const rows = (l: Linked) =>
   l.segments.flatMap(s =>
@@ -138,4 +138,71 @@ test('addToBox fills, appends, completes a label and skips a repeat', async () =
   expect(addToBox('hi\n', 'Q1 (a): yes')).toBe('hi\nQ1 (a): yes')
   expect(addToBox('Q1 (a): ', 'Q1 (a): yes')).toBe('Q1 (a): yes')
   expect(addToBox('x\nQ1 (a): yes', 'Q1 (a): yes')).toBe('x\nQ1 (a): yes')
+})
+
+const CMDS = new Set(['cc:retro', 'clear', 'code-review'])
+
+const cmdRows = (l: Linked) =>
+  l.segments.flatMap(s => (s.kind === 'commands' ? [`${s.indent}:${s.commands.join(' ')}`] : []))
+
+test('a row of command buttons follows each paragraph or list that names them', async () => {
+  const l = linkify(
+    [
+      'Run `/cc:retro`, then /clear, then `/cc:retro` again.',
+      'Same paragraph.',
+      '',
+      'No commands here.',
+      '',
+      '  - try /clear',
+      '  - or `/code-review high`',
+      '',
+      '**Q1 (go):** Run /clear?',
+      '【Q1: yes | no】',
+    ].join('\n'),
+    CMDS,
+  )
+  expect(cmdRows(l)).toEqual(['0:/cc:retro /clear', '2:/clear /code-review high', '0:/clear'])
+  expect(l.segments.map(s => s.kind)).toEqual(['markdown', 'commands', 'markdown', 'commands', 'markdown', 'commands', 'buttons'])
+})
+
+test('a known command, in prose or code, joins the row; the text is left as written', async () => {
+  const src = 'When convenient: run `/cc:retro`. Or type /clear, or `/code-review high`.'
+  const l = linkify(src, CMDS)
+  expect(cmdRows(l)).toEqual(['0:/cc:retro /clear /code-review high'])
+  expect(markdown(l)).toEqual([src])
+  expect(fills(l)).toEqual([])
+})
+
+test('a fence ends the block, and the end of the reply gets its row', async () => {
+  const l = linkify('Run /clear\n```\n/clear\n```\nthen `/cc:retro`', CMDS)
+  expect(cmdRows(l)).toEqual(['0:/clear', '0:/cc:retro'])
+})
+
+test('an unknown name, a path, a URL or a fenced block stays as it is', async () => {
+  const src = [
+    'See /usr/bin and `/usr/bin`, a/clear, https://x.io/clear and [doc](/clear).',
+    '```',
+    '/clear',
+    '```',
+  ].join('\n')
+  expect(cmdRows(linkify(src, CMDS))).toEqual([])
+  expect(cmdRows(linkify('run /clear', new Set()))).toEqual([])
+})
+
+test('a command inside a question label is not linked twice', async () => {
+  const l = linkify('**Q3 (run /clear):** Clear now?', CMDS)
+  expect(fills(l)).toEqual(['Q3 (run /clear): '])
+})
+
+test('mayHaveCommand spots a candidate cheaply', async () => {
+  expect(mayHaveCommand('run `/cc:retro`')).toBe(true)
+  expect(mayHaveCommand('a\n/clear')).toBe(true)
+  expect(mayHaveCommand('no commands, a/b here')).toBe(false)
+})
+
+test('a command goes in an empty box or replaces a command, never a draft', async () => {
+  expect(commandToBox('', '/cc:retro')).toBe('/cc:retro')
+  expect(commandToBox('/clear', '/cc:retro')).toBe('/cc:retro')
+  expect(commandToBox('my draft', '/cc:retro')).toBe(null)
+  expect(commandToBox('/clear\nmore', '/cc:retro')).toBe(null)
 })

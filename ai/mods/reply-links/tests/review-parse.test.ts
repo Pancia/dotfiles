@@ -6,7 +6,7 @@ import { addToBox, linkify, parseAnswers } from '../hooks/linkify'
 import type { Linked } from '../hooks/linkify'
 
 const fills = (l: Linked) =>
-  [...l.actions.values()].map(a => (a.kind === 'fill' ? a.text : `open ${a.url}`))
+  [...l.actions.values()].map(a => (a.kind === 'open' ? `open ${a.url}` : a.text))
 const rows = (l: Linked) =>
   l.segments.flatMap(s =>
     s.kind === 'buttons' ? [s.answers.map(a => `${a.isPrimary ? '*' : ''}${a.label}=>${a.text}`)] : [],

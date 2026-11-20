@@ -2,7 +2,9 @@
 // and an answer line under a question (【Q4: yes* | no】, which RULE below
 // teaches the model) becomes a row of buttons. A click puts that text in the
 // prompt box. Only the "[ submit ↵ ]" button at the end of such a reply sends:
-// it sends the box as the person's own message and empties it.
+// it sends the box as the person's own message and empties it. A slash command
+// the session knows ("/cc:retro") gets a button in a row under its paragraph,
+// which puts it in the box, so Enter runs it; nothing runs on the click itself.
 //
 // Only the drawing changes: the stored reply, and what the model reads, stay
 // as written. A click is answered by the mod only in the fullscreen terminal;
@@ -10,13 +12,15 @@
 
 import type { Register } from 'claude-code'
 
-import { addToBox, isPlain, linkify } from './linkify'
+import { addToBox, commandToBox, isPlain, linkify, mayHaveCommand } from './linkify'
 import type { Action } from './linkify'
 
 const SECTION = 'reply-links:answer-buttons'
 
 // Drawn dim at the start of each row of answer buttons.
 const PREFIX = '↳ 💬'
+// And at the start of each row of slash-command buttons.
+const COMMAND_PREFIX = '↳ ⌘'
 
 // The fill of a button that is not the recommended one: a mid gray, seen on a
 // dark and a light terminal alike. `text` was white here: the theme is the
@@ -29,6 +33,12 @@ const FILL = 'rgb(185,185,185)'
 // once per session (after the cache boundary, so cached across its turns).
 // Each answer line then costs about 10 output tokens; 【 and 】 are one token
 // each on Opus 5.5 (measured 2026-11-17).
+// The session's command names, asked for again after a minute: a reply is
+// drawn many times, and a command added mid-session shows up soon enough.
+const COMMANDS_TTL_MS = 60_000
+let commandCache: { at: number; names: ReadonlySet<string> } | null = null
+const NONE: ReadonlySet<string> = new Set()
+
 const RULE = `# Answer buttons
 
 When a reply asks the user a question that has an ID (such as Q4) and a short, fixed set of answers, write an answer line for it:
@@ -66,8 +76,22 @@ export const register: Register = on => {
       return next(e)
     }
 
+    // The names of the slash commands, asked for only when a reply may hold
+    // one. A failed ask links no command; the rest still draws.
+    const commandsFor = async (text: string): Promise<ReadonlySet<string>> => {
+      if (!mayHaveCommand(text)) return NONE
+      if (commandCache && Date.now() - commandCache.at < COMMANDS_TTL_MS) return commandCache.names
+      try {
+        const names = new Set((await $.command.list()).map(c => c.name))
+        commandCache = { at: Date.now(), names }
+        return names
+      } catch {
+        return NONE
+      }
+    }
+
     // Cheap check first: a reply with nothing to draw goes on untouched.
-    const quick = linkify(e.props.text)
+    const quick = linkify(e.props.text, await commandsFor(e.props.text))
     if (isPlain(quick)) return next(e)
 
     // Run the plugins beneath first, then put our drawing where the engine's
@@ -83,7 +107,7 @@ export const register: Register = on => {
     // them; without one, our own props.
     const core = next.trace.find(t => t.plugin === 'engine')?.received
     const props = core?.component === 'AssistantMessage' && typeof core.props.text === 'string' ? core.props : e.props
-    const linked = props.text === e.props.text ? quick : linkify(props.text)
+    const linked = props.text === e.props.text ? quick : linkify(props.text, await commandsFor(props.text))
     if (isPlain(linked)) return inner
 
     const { Box, Text, Markdown, Button } = $.ui.resolve(e)
@@ -101,6 +125,19 @@ export const register: Register = on => {
       }
       try {
         const box = await $.prompt.read()
+        if (action.kind === 'command') {
+          const text = commandToBox(box.text, action.text)
+          if (text === null) {
+            $.ui.toast(`Empty the prompt box first: ${action.text} runs only from its start.`)
+            return
+          }
+          if (text === box.text) return
+          const filled = await $.prompt.fill({ text })
+          if (!filled.isFilled) {
+            $.ui.toast(filled.refusal === 'dialog' ? 'Close the dialog first, then click again.' : 'The prompt box did not take the text.')
+          }
+          return
+        }
         const text = addToBox(box.text, action.text)
         if (text === box.text) return
         // Append when only text is added, so a draft the read did not see
@@ -183,6 +220,28 @@ export const register: Register = on => {
           onLinkPress={link => run(linked.actions.get(link.href))}
           pressableLinks={s.hrefs}
         />
+      ) : s.kind === 'commands' ? (
+        // "↳ ⌘ [ /cc:retro ] [ /plainify ]" under the block that named them.
+        <Box
+          key={`cmds${i}`}
+          flexDirection="row"
+          flexWrap="wrap"
+          marginLeft={s.indent}
+          marginBottom={i < linked.segments.length - 1 ? 1 : 0}
+        >
+          <Box key={`lead${i}`} marginRight={1}>
+            <Text dimColor>{COMMAND_PREFIX}</Text>
+          </Box>
+          {s.commands.map((c, j) => (
+            <Box key={`cell${i}-${j}`} marginRight={2}>
+              <Button key={`c${i}-${j}`} label={c} plain onPress={() => run({ kind: 'command', text: c })}>
+                <Text backgroundColor={FILL} color="inverseText">
+                  {`[ ${c} ]`}
+                </Text>
+              </Button>
+            </Box>
+          ))}
+        </Box>
       ) : (
         // Right under its question; one blank row only when more text follows.
         <Box
@@ -223,7 +282,9 @@ export const register: Register = on => {
       ),
     )
 
-    const hasButtons = linked.segments.some(s => s.kind !== 'markdown')
+    // Command rows only fill the box, and a slash command is never sent:
+    // they bring no submit button.
+    const hasButtons = linked.segments.some(s => s.kind === 'buttons' || s.kind === 'item')
     const mine = (
       <Box flexDirection="row">
         <Box width={2} flexShrink={0}>

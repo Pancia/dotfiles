@@ -34,9 +34,21 @@
 // file links). The mod answers a plain click on one itself, so the address
 // never opens. hammerspoon:// links (copy, rolevote) would draw as plain text
 // in a mod's Markdown, so they get a placeholder too, and a click opens the
-// real URL. Nothing inside a code fence or a `code span` is changed or read.
+// real URL. Nothing inside a code fence or a `code span` is changed or read,
+// with one exception below.
+//
+// A slash command the session knows ("/cc:retro", in prose or as a whole
+// `code span`, with or without arguments) gets a button in a row under the
+// paragraph or list that names it; the text itself is left as written. A
+// block ends at a blank line, a fence, an answer line or the end. A click
+// fills the box with the command, so Enter runs it. The caller passes the
+// names it knows; with none, there is no row, so "/usr/bin" gets no button.
 
-export type Action = { kind: 'fill'; text: string } | { kind: 'open'; url: string }
+export type Action =
+  | { kind: 'fill'; text: string }
+  | { kind: 'open'; url: string }
+  // A slash command, "/cc:retro args": it must start the box to run.
+  | { kind: 'command'; text: string }
 
 export type Answer = { label: string; text: string; isPrimary: boolean }
 
@@ -46,6 +58,8 @@ export type Segment =
   // A Where-next item: `lead` is its bullet ("- "), `mark` its 💡 or 🔮,
   // `href` the key of its fill action, `rest` the markdown after the ID.
   | { kind: 'item'; indent: number; lead: string; mark: string; id: string; href: string; rest: string; hrefs: string[] }
+  // The slash commands of the paragraph or list above, as "/cc:retro".
+  | { kind: 'commands'; commands: string[]; indent: number }
 
 export type Linked = { segments: Segment[]; actions: Map<string, Action> }
 
@@ -68,6 +82,19 @@ const WHERE_NEXT = /\*\*Where next:?\*\*/
 const HS_LINK = /\]\((hammerspoon:\/\/[^)\s]+)\)/g
 const FENCE_OPEN = /^\s*(`{3,}|~{3,})/
 const BULLET = /^\s*[-*]\s/
+
+// A command name: "clear", "cc:retro", "code-review".
+const CMD_NAME = String.raw`[A-Za-z][\w-]*(?::[\w-]+)*`
+// In prose: after the line's start, a space, "(" or "*", and before the end,
+// a space or punctuation. A URL or a path such as "a/b" never matches.
+const CMD_PROSE = new RegExp(String.raw`(^|\s|\*|(?<!\])\()/(${CMD_NAME})(?=$|[\s.,;:!?)*])`, 'g')
+// A whole code span: "`/cc:retro`" or "`/code-review high`".
+const CMD_SPAN = new RegExp(String.raw`^(\`+)\s?/(${CMD_NAME})((?:\s[^\`]*)?)\s?\1$`)
+
+/** True when `src` may hold a slash command: worth asking for the names. */
+export function mayHaveCommand(src: string): boolean {
+  return new RegExp(String.raw`(^|[\s(*\`])/[A-Za-z]`, 'm').test(src)
+}
 
 /**
  * The line cut into text and code spans, alternating, text first. A span
@@ -115,13 +142,6 @@ function codeSplit(line: string): string[] {
   return parts
 }
 
-/** Applies `fn` to the parts of `line` outside code spans. */
-function outsideCode(line: string, fn: (part: string) => string): string {
-  return codeSplit(line)
-    .map((p, i) => (i % 2 === 1 ? p : fn(p)))
-    .join('')
-}
-
 /** The lines outside code fences, with code spans cut out. */
 function proseLines(src: string): string[] {
   const out: string[] = []
@@ -167,7 +187,7 @@ export function parseAnswers(body: string, label: string): Answer[] {
     .filter(a => a.label !== '')
 }
 
-export function linkify(src: string): Linked {
+export function linkify(src: string, commands: ReadonlySet<string> = new Set()): Linked {
   const actions = new Map<string, Action>()
   const add = (a: Action): string => {
     const href = `${BASE}${actions.size}`
@@ -191,19 +211,48 @@ export function linkify(src: string): Linked {
     hrefs.push(href)
     return href
   }
+  // The commands named since the last row of them, each once, in order.
+  let pending: string[] = []
+  const command = (text: string) => {
+    if (!pending.includes(text)) pending.push(text)
+  }
+  const prose = (part: string) => {
+    let out = part
+      .replace(HS_LINK, (_, url: string) => `](${link({ kind: 'open', url })})`)
+      .replace(Q_BOLD, (_, q: string, colon: string) =>
+        `**[${q}](${link({ kind: 'fill', text: `${q}: ` })})${colon}**`,
+      )
+    // The text is left as written; the command only joins the row.
+    if (commands.size > 0) {
+      for (const m of part.matchAll(CMD_PROSE)) {
+        if (commands.has(m[2] ?? '')) command(`/${m[2]}`)
+      }
+    }
+    return out
+  }
+  const span = (code: string) => {
+    const m = commands.size > 0 ? CMD_SPAN.exec(code) : null
+    if (m && commands.has(m[2] ?? '')) command(`/${m[2]}${(m[3] ?? '').trimEnd()}`)
+    return code
+  }
   const links = (s: string) =>
-    outsideCode(s, part =>
-      part
-        .replace(HS_LINK, (_, url: string) => `](${link({ kind: 'open', url })})`)
-        .replace(Q_BOLD, (_, q: string, colon: string) =>
-          `**[${q}](${link({ kind: 'fill', text: `${q}: ` })})${colon}**`,
-        ),
-    )
+    codeSplit(s)
+      .map((p, i) => (i % 2 === 1 ? span(p) : prose(p)))
+      .join('')
+  // The row of command buttons under the paragraph or list that named them.
+  let blockIndent = 0
+  const commandRow = () => {
+    if (pending.length === 0) return
+    flush()
+    segments.push({ kind: 'commands', commands: pending, indent: blockIndent })
+    pending = []
+  }
 
   const label = labels(src)
   const questionIndent = new Map<string, number>()
   let fence: { char: string; len: number } | null = null
   let inWhereNext = false
+  let atBlockStart = true
 
   for (const line of src.split('\n')) {
     const f = FENCE_OPEN.exec(line)?.[1]
@@ -214,13 +263,26 @@ export function linkify(src: string): Linked {
       continue
     }
     if (f) {
+      commandRow()
       fence = { char: f[0] ?? '`', len: f.length }
       md.push(line)
       continue
     }
 
+    // A blank line, or the "⏳"/"👀" lines that end a reply, close a block.
+    if (line.trim() === '' || /^\s*(⏳|👀)/u.test(line)) {
+      commandRow()
+      atBlockStart = true
+    }
+    if (line.trim() !== '' && atBlockStart) {
+      blockIndent = /^\s*/.exec(line)?.[0].length ?? 0
+      atBlockStart = false
+    }
+
     const a = ANSWER_LINE.exec(line)
     if (a) {
+      commandRow()
+      atBlockStart = true
       const [, own = '', id = '', body = ''] = a
       const answers = parseAnswers(body, label.get(id) ?? id)
       if (answers.length > 0) {
@@ -276,6 +338,7 @@ export function linkify(src: string): Linked {
     // A Markdown element answers at most 256 links: cut a long run early.
     if (hrefs.length >= MAX_LINKS) flush()
   }
+  commandRow()
   flush()
 
   return { segments, actions }
@@ -310,4 +373,16 @@ export function addToBox(box: string, text: string): string {
   }
   if (lines.some(l => l.trim() === text.trim())) return box
   return box + (box.endsWith('\n') ? '' : '\n') + text
+}
+
+/**
+ * What the prompt box holds after a press puts the slash command `text` in
+ * `box`, or null when it cannot go in: a command runs only from the start of
+ * the box, so it takes an empty box, or replaces a box that holds only another
+ * command (an earlier click). A draft of the person's own is never touched.
+ */
+export function commandToBox(box: string, text: string): string | null {
+  const t = box.trim()
+  if (t === '' || (t.startsWith('/') && !t.includes('\n'))) return text
+  return null
 }
