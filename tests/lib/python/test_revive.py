@@ -398,18 +398,36 @@ def in_pane(store, monkeypatch):
 
 class TestThisPane:
     def test_a_pane_whose_last_shell_only_ran_revive_speaks_for_the_real_ghost(
-            self, store, monkeypatch, capsys):
-        monkeypatch.setenv("ITERM_SESSION_ID", f"w1t11p0:{G}")
+            self, in_pane, monkeypatch, capsys):
         monkeypatch.setattr(revive, "ccs_entries", lambda: [])
-        write_record(store / "ghosts" / f"{G}-100.rec", {"guid": G, "cwd": "/real"},
+        write_record(in_pane / "ghosts" / f"{G}-100.rec", {"guid": G, "cwd": "/real"},
                      [("cmd", "make test")])
-        newer = write_record(store / "ghosts" / f"{G}-200.rec", {"guid": G, "cwd": "/x"},
+        newer = write_record(in_pane / "ghosts" / f"{G}-200.rec", {"guid": G, "cwd": "/x"},
                              [("cmd", "revive")])
         os.utime(newer, (time.time() + 60, time.time() + 60))
         assert revive.cmd_get("here") == 0
         fields = capsys.readouterr().out.rstrip("\n").split("\t")
         assert fields[1] == "/real"
         assert fields[3] == "make test", "and `revive` is never offered back"
+
+    def test_here_under_tmux_finds_the_tmux_pane_ghost(self, store, monkeypatch, capsys):
+        """Inside tmux the pane key is `<guid>-<tmux pane number>`.
+
+        Pins this_pane_key()'s tmux suffix: the test sets its own TMUX and
+        TMUX_PANE, so it holds whether or not the runner keeps the outer ones.
+        """
+        monkeypatch.setenv("ITERM_SESSION_ID", f"w1t11p0:{G}")
+        monkeypatch.setenv("TMUX", "/tmp/fake-tmux-socket,1,0")
+        monkeypatch.setenv("TMUX_PANE", "%7")
+        monkeypatch.setattr(revive, "ccs_entries", lambda: [])
+        write_record(store / "ghosts" / f"{G}-100.rec", {"guid": G, "cwd": "/bare"},
+                     [("cmd", "bare")])
+        write_record(store / "ghosts" / f"{G}-7-100.rec", {"guid": G, "cwd": "/tmux"},
+                     [("cmd", "in tmux")])
+        assert revive.cmd_get("here") == 0
+        fields = capsys.readouterr().out.rstrip("\n").split("\t")
+        assert fields[1] == "/tmux", "the tmux pane's ghost, not the bare iTerm pane's"
+        assert fields[3] == "in tmux"
 
     def test_here_prints_what_gets_revived_after_the_history(
             self, store, monkeypatch, capsys):
