@@ -130,11 +130,11 @@ This spec was written against `master` at **1898647d** and re-checked by the spe
 
 ### R7 ccjj tests own their home and identity (row CCJJ)
 
-- R7.1 In `tests/lib/python/test_ccjj.py`:
-  - an autouse fixture sets `HOME` to `tmp_path / "home"`;
-  - `Repo.__init__` and `Repo.run` (lines 36–72) pass `JJ_USER`, `JJ_EMAIL` and a `JJ_CONFIG` file;
-  - the lock-folder tests (around lines 1275–1300 and 1956) then resolve under that home.
-- R7.2 New test: `test_the_shared_lock_is_under_the_test_home`.
+(rev 4, after the mission critique `altera/reviews/missions/m-019-critique.md`; the brief of m-019 holds the full text.)
+
+- R7.1 In `tests/lib/python/test_ccjj.py`, one autouse fixture sets, with `monkeypatch.setenv`, `HOME` to `tmp_path / "home"`, the four XDG variables under it, `JJ_CONFIG` (a file it writes), `JJ_USER` and `JJ_EMAIL`. Every jj and ccjj subprocess inherits them, so no call site needs its own case. The lock tests then resolve under that home.
+- R7.2 New test `test_the_shared_lock_is_under_the_test_home`: the lock path equals the one under this test's own `tmp_path / "home"`, so it fails when only the ISOLATE runner isolates.
+- R7.3 New test `test_jj_repo_config_stays_in_the_test_home`: `jj config set --repo` (used by `test_a_new_file_over_the_size_limit_still_fails_closed`) writes its per-repo entry under the test home, and the real config folder gains no entry (read-only count).
 - Only `tests/` changes.
 
 ### R8 Fish panes keep the real home out (row FISH)
@@ -367,8 +367,8 @@ No per-component seconds were measured, and this spec gives none. TIMING makes e
 
 - **CCJJ**
 ```donecheck
-{"v":1,"timeout":"10m","checks":[
- {"kind":"command","title":"ccjj file","run":"uv run lib/python/run_tests.py lib/python/test_ccjj.py -v","stdout_contains":["test_the_shared_lock_is_under_the_test_home PASSED"],"stdout_matches":"\\b[1-9]\\d{2,} passed"}
+{"v":1,"timeout":"15m","checks":[
+ {"kind":"command","title":"ccjj file","run":"uv run lib/python/run_tests.py lib/python/test_ccjj.py -v","stdout_contains":["test_the_shared_lock_is_under_the_test_home PASSED","test_jj_repo_config_stays_in_the_test_home PASSED"],"stdout_matches":"\\b[1-9]\\d{2,} passed"}
 ]}
 ```
 
