@@ -27,6 +27,7 @@ import atexit
 import base64
 import datetime
 import fcntl
+import glob
 import json
 import os
 import shlex
@@ -2164,11 +2165,28 @@ def claim_one(args, sid, jdir, path_arg, shared, multi=False):
     path = rel_literal(path_arg)
     wins = claimable_windows(jdir, path)
     if not wins:
-        hint = ("  A window needs two Bash calls with a working-copy change between\n"
-                "  them, and `commit-mine` archives windows when it commits. After\n"
-                "  that, only paths a commit left behind can still be claimed."
-                if os.path.isfile(marker(ROOT, MARKER_OPTIN))
-                else "  Enable them with `ccjj bash-windows on`.")
+        if not os.path.isfile(marker(ROOT, MARKER_OPTIN)):
+            hint = "  Enable them with `ccjj bash-windows on`."
+        elif not os.path.isfile(os.path.join(jdir, ".last")) and not glob.glob(
+                os.path.join(journal_root(), repo_key(ROOT), "archive", "*",
+                             glob.escape(sid) + "*")):
+            # The Bash hook picks the repo from the session's working folder,
+            # not from the paths a command wrote. A session working elsewhere
+            # (a `cd` outside its folders does not last past the call) never
+            # gets a window here, so the two-call hint below would mislead.
+            # No .last and no archived journal means no Bash call of this
+            # session ever ran here: a commit archives the whole journal,
+            # .last included, which is what the archive check rules out.
+            hint = ("  Bash windows follow the session's working folder, and this\n"
+                    "  session's working folder was never in this repo, so no Bash\n"
+                    "  call of yours was recorded here. Write such files with the\n"
+                    "  Write tool, which records by the file's own repo, or commit\n"
+                    "  them from this repo with `commit-mine --also %s`."
+                    % shlex.quote(path))
+        else:
+            hint = ("  A window needs two Bash calls with a working-copy change between\n"
+                    "  them, and `commit-mine` archives windows when it commits. After\n"
+                    "  that, only paths a commit left behind can still be claimed.")
         die("no Bash windows are live for session %s, and none were kept for %s.\n%s"
             % (sid[:8], path, hint), 2)
 
