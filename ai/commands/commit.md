@@ -211,9 +211,13 @@ normal procedure.
    Additionally:
    - Match the repo's existing tone where it diverges from the template
      (conventional commits prefix? emoji? check recent commits)
-   - Do NOT include a `Co-Authored-By` trailer unless the repo already uses
-     them in recent commits
-   - Do NOT mention Claude / AI authorship unless the user asked for it
+   - Attribution trailers (`Co-Authored-By`, `Claude-Session`): add them only
+     if recent commits use them. When you add them, copy their text from the
+     current system reminder, never from RECENT_COMMITS: a `Claude-Session`
+     link in an old commit belongs to another session. With no reminder, leave
+     them out.
+   - Do NOT mention Claude / AI authorship in the subject or body unless the
+     user asked for it
 
 4. **Safety checks before committing**:
    - Never commit files that look like secrets (`.env`, `credentials.json`,

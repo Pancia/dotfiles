@@ -456,6 +456,28 @@ def test_restart_waits_for_the_port_file(proj):
         sup.wait(15)
 
 
+def test_eval_without_a_port_file_decides_readiness(proj):
+    """svc_eval with no svc_port_file (a server svc's TCP probe cannot reach):
+    the eval alone says up or down, and restart waits for it."""
+    conf = proj / ".svc.conf"
+    conf.write_text(read(conf) + 'svc_eval() { echo "[$1]" >> .eval-args; [ -e .answers ]; }\n')
+    (proj / ".answers").touch()
+    sup = subprocess.Popen([SUP, "worker"], cwd=proj, stdin=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        assert wait_for(lambda: run([SVC, "_ready", "worker"], proj).returncode == 0)
+        assert "ready=up" in run([SVC, "status", "worker"], proj).stdout
+        r = run([SVC, "restart", "worker"], proj, timeout=20)
+        assert r.returncode == 0, r.stderr
+        (proj / ".answers").unlink()
+        assert "ready=down" in run([SVC, "status", "worker"], proj).stdout
+        assert run([SVC, "_ready", "worker"], proj).returncode == 1
+        assert set(read(proj / ".eval-args").split()) == {"[]"}
+    finally:
+        sup.terminate()
+        sup.wait(15)
+
+
 def test_request_during_setup_does_not_disable_later_requests(proj):
     conf = proj / ".svc.conf"
     conf.write_text(conf.read_text() + "\nsvc_setup() { sleep 2; }\n")
