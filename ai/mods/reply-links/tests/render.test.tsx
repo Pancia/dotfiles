@@ -248,3 +248,27 @@ test('a reply with links but no buttons gets no submit button', async $ => {
   expect(await ui.find({ key: 'submit' })).toBeUndefined()
   await ui.unmount()
 })
+
+test('a slash command button fills an empty box, and never a draft', async ($, on) => {
+  const box = promptBox(on)
+  const toasts: string[] = []
+  on('ui.toast', (_, e) => {
+    toasts.push(String((e as { text?: unknown }).text ?? e))
+    return { value: undefined }
+  })
+  on('command.list', () => ({
+    value: [{ name: 'cc:retro', description: 'Retro', source: 'plugin' }],
+  }))
+  const ui = await mount($, 'When convenient: run `/cc:retro`.')
+  // The paragraph as written (md0), then the row (cmds1) with one button.
+  expect(await ui.find({ type: 'Markdown', text: 'When convenient: run `/cc:retro`.' })).toBeDefined()
+  expect((await ui.find({ key: 'c1-0' }))?.text).toBe('[ /cc:retro ]')
+  await ui.press({ key: 'c1-0' })
+  expect(box.text).toBe('/cc:retro')
+  box.text = 'my draft'
+  await ui.press({ key: 'c1-0' })
+  expect(box.text).toBe('my draft')
+  expect(toasts.length).toBe(1)
+  expect(await ui.find({ key: 'submit' })).toBe(undefined)
+  await ui.unmount()
+})
