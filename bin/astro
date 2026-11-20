@@ -2963,11 +2963,17 @@ class ZRCalculator:
         return ZR_LOT_ALIASES.get(lot.lower(), lot)
 
     def _birth_payload(self, bd: BirthData) -> dict:
-        return {
+        payload = {
             'year': bd.year, 'month': bd.month, 'day': bd.day,
             'hour': bd.hour, 'minute': bd.minute,
             'city': bd.city, 'nation': bd.nation,
         }
+        # A saved chart carries its coordinates and timezone; send them so the
+        # helper skips the network geocoder. BirthData's defaults (0.0, 0.0,
+        # "") mean "not geocoded", and then the helper geocodes the city.
+        if bd.tz_str and (bd.lat, bd.lng) != (0.0, 0.0):
+            payload.update(lat=bd.lat, lng=bd.lng, tz_str=bd.tz_str)
+        return payload
 
     def timeline(self, chart: NatalChart, lot: str, level: int = 1,
                  max_level: int = 4, lifespan: int = 100) -> list[ZRPeriod]:

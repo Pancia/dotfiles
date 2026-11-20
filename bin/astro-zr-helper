@@ -9,13 +9,19 @@ Reads JSON request from stdin:
   {
     "command": "timeline" | "snapshot",
     "birth": {"year": Y, "month": M, "day": D, "hour": H, "minute": Mi,
-              "city": "...", "nation": "..."},
+              "city": "...", "nation": "...",
+              "lat": 51.48, "lng": 0.0, "tz_str": "Europe/London"},
     "lot": "Part of Fortune",
     "max_level": 4,
     "lifespan": 100,                   # timeline only
     "level": 1,                        # timeline only (1..4)
     "age": 32                          # snapshot only
   }
+
+The birth time is local time at the birth place. When "birth" has "lat" and
+"lng", the chart is built from those coordinates and "tz_str" with no
+geocoding; "city" is only the place's display name. Without them the helper
+geocodes "city, nation" over the network (Nominatim).
 
 Writes JSON response to stdout.
 """
@@ -185,9 +191,19 @@ def _build_chart(req):
     b = req['birth']
     birth_str = (f"{b['year']:04d}-{b['month']:02d}-{b['day']:02d} "
                  f"{b['hour']:02d}:{b['minute']:02d}")
-    location = b.get('city', '')
-    if b.get('nation'):
-        location = f"{location}, {b['nation']}"
+    if b.get('lat') is not None and b.get('lng') is not None:
+        # Saved coordinates: stellium skips the geocoder (and, with a
+        # timezone, the timezone lookup) for a dict location.
+        location = {
+            'latitude': float(b['lat']),
+            'longitude': float(b['lng']),
+            'timezone': b.get('tz_str') or None,
+            'name': b.get('city', ''),
+        }
+    else:
+        location = b.get('city', '')
+        if b.get('nation'):
+            location = f"{location}, {b['nation']}"
 
     canonical_engine = _build_canonical_engine_class()
 
