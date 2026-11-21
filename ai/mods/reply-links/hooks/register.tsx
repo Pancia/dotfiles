@@ -314,9 +314,9 @@ export const register: Register = on => {
       ),
     )
 
-    // Command rows only fill the box, and a slash command is never sent:
-    // they bring no submit button.
-    const hasButtons = linked.segments.some(s => s.kind === 'buttons' || s.kind === 'item')
+    // Every reply this mod draws ends in the submit button, whatever it holds:
+    // answer rows, Where-next IDs, command rows or links alone.
+    const hasButtons = true
     const mine = (
       <Box flexDirection="row">
         <Box width={2} flexShrink={0}>

@@ -170,11 +170,12 @@ test('answers rewritten beneath become the buttons', {
   await ui.unmount()
 })
 
-test('an answer line removed beneath leaves no buttons', {
+test('an answer line removed beneath leaves no answer buttons', {
   plugins: [noAnswerLine],
 }, async $ => {
   const ui = await mount($, '**Q2 (push):** Push to master?\n【Q2: yes | no】')
-  expect((await ui.findAll({ type: 'Button' })).length).toBe(0)
+  // The label link is still drawn, so the reply keeps only its submit button.
+  expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['[ submit ↵ ]'])
   await ui.unmount()
 })
 
@@ -243,9 +244,9 @@ test('the submit button sends nothing from an empty box or a slash command', asy
   await ui.unmount()
 })
 
-test('a reply with links but no buttons gets no submit button', async $ => {
+test('a reply with links alone still gets the submit button', async $ => {
   const ui = await mount($, '**Q2 (push)** — push to master?')
-  expect(await ui.find({ key: 'submit' })).toBeUndefined()
+  expect(await ui.find({ key: 'submit' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -269,7 +270,8 @@ test('a slash command button fills an empty box, and never a draft', async ($, o
   await ui.press({ key: 'c1-0' })
   expect(box.text).toBe('my draft')
   expect(toasts).toEqual(['Empty the prompt box first: /cc:retro runs only from its start.'])
-  expect(await ui.find({ key: 'submit' })).toBe(undefined)
+  // A reply with a command row alone ends in the submit button too.
+  expect(await ui.find({ key: 'submit' })).toBeDefined()
   await ui.unmount()
 })
 
