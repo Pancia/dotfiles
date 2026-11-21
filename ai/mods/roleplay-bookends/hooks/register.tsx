@@ -66,13 +66,20 @@ const KEEP = 40
 // looked in the wrong folder" for a reply where the assistant admitted it,
 // 6 times in 8 on that reply; this one 0 in 10 (2026-11-17,
 // .cc/reports/REPORT-roleplay-who-did-what.md).
+// The "keep its technical detail out" sentences replaced "about this specific
+// work", which pulled counts and IDs into lines ("98 tabs", "Q38"). Old and new
+// on 5 real turns: .cc/scripts/bookend-prompt-ab.py (2026-11-20; its output
+// quotes transcripts, so it stays in .cc/private/).
 export const SYS =
   "You write one short in-character line for a character who bookends an AI coding assistant's replies to its user, " +
   'and speaks to the user. There are three parties. The user wrote only their request. ' +
   'The assistant did the work and wrote the reply, so in the reply "I" and "we" mean the assistant and "you" means the user. ' +
   'The character is neither: it watches and comments. ' +
   'Never say "you" or "I" for something the assistant did, found, said or admitted; if the line mentions it, the assistant did it. ' +
-  "At most 25 words, in the character's own voice, about this specific work. " +
+  "At most 25 words, in the character's own voice. " +
+  'Start from this moment, but keep its technical detail out: no file names, commands, tools, counts or code terms. ' +
+  'If the line names the work, use everyday words, like "the backup". ' +
+  'Say what the moment means, as a feeling or a small truth the character sees in it. ' +
   'A plain status sentence with no character in it is a failure. ' +
   "Do not use jargon from the character's universe to describe the technical work. " +
   'Never repeat the example lines. Output only the line itself: no quotes, no name, no preamble.'
