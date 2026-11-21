@@ -39,3 +39,4 @@ tmux-which-key.config.yaml      -> $HOME/.config/tmux/plugins/tmux-which-key/con
 zprint.edn                      -> $HOME/.zprint.edn
 hermes-commands.json            -> $HOME/.config/hermes/commands.json
 browser-tab-tree.config.json    -> $HOME/.config/browser-tab-tree/config.json
+altera-artifacts.json           -> $HOME/.config/altera/artifacts.json
