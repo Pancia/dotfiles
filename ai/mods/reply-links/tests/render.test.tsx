@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
@@ -268,7 +268,78 @@ test('a slash command button fills an empty box, and never a draft', async ($, o
   box.text = 'my draft'
   await ui.press({ key: 'c1-0' })
   expect(box.text).toBe('my draft')
-  expect(toasts.length).toBe(1)
+  expect(toasts).toEqual(['Empty the prompt box first: /cc:retro runs only from its start.'])
   expect(await ui.find({ key: 'submit' })).toBe(undefined)
+  await ui.unmount()
+})
+
+const listing = (on: On, names: string[]) => {
+  let calls = 0
+  on('command.list', () => {
+    calls++
+    return { value: names.map(name => ({ name, description: name, source: 'builtin' })) }
+  })
+  return () => calls
+}
+
+test('a command click into a box read as empty appends, never replaces', async ($, on) => {
+  const modes: string[] = []
+  on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
+  on('prompt.fill', (_, e) => {
+    modes.push(e.mode ?? 'replace')
+    return { isFilled: true, text: e.text, cursor: e.text.length }
+  })
+  listing(on, ['clear'])
+  const ui = await mount($, 'Run /clear.')
+  await ui.press({ key: 'c1-0' })
+  expect(modes).toEqual(['append'])
+  await ui.unmount()
+})
+
+test('a draft that starts with "/" is kept', async ($, on) => {
+  const box = promptBox(on)
+  on('ui.toast', () => ({ value: undefined }))
+  listing(on, ['clear'])
+  const ui = await mount($, 'Run /clear.')
+  box.text = '/Users/anthony/x.log shows an error, why?'
+  await ui.press({ key: 'c1-0' })
+  expect(box.text).toBe('/Users/anthony/x.log shows an error, why?')
+  await ui.unmount()
+})
+
+test('an answer click replaces a command a click left', async ($, on) => {
+  const box = promptBox(on)
+  listing(on, ['clear'])
+  const ui = await mount($, '**Q1 (go):** Run /clear?\n【Q1: yes | no】')
+  // md0 (question), row1 (answers), cmds2 (its command), then submit.
+  await ui.press({ key: 'c2-0' })
+  expect(box.text).toBe('/clear')
+  await ui.press({ key: 'b1-0' })
+  expect(box.text).toBe('Q1 (go): yes')
+  await ui.unmount()
+})
+
+test('a failed command list draws no row and is not asked on every draw', async ($, on) => {
+  let calls = 0
+  on('command.list', () => {
+    calls++
+    throw new Error('down')
+  })
+  for (let i = 0; i < 3; i++) {
+    const ui = await mount($, 'Run /clear.')
+    expect(await ui.find({ key: 'c1-0' })).toBeUndefined()
+    await ui.unmount()
+  }
+  expect(calls).toBe(1)
+})
+
+test('a command list that never answers lets the reply draw, with no row', async ($, on) => {
+  on('command.list', () => new Promise<never>(() => undefined))
+  const clock = mock.clock(on)
+  const mounting = mount($, 'Run /clear.')
+  await clock.advance(1_000)
+  // The mount ends: the reply is drawn as the engine draws it, with no row.
+  const ui = await mounting
+  expect((await ui.findAll({ type: 'Button' })).length).toBe(0)
   await ui.unmount()
 })
