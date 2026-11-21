@@ -1,7 +1,7 @@
 {
   "repo_path": "",
   "default_branch": "master",
-  "test_command": "",
+  "test_command": "alt heavy run --label dotfiles-test -- uv run lib/python/run_tests.py",
   "constraints": {
     "max_workers": 1,
     "max_queue_depth": 10
@@ -69,6 +69,9 @@
   },
   "tui_hotkeys": {},
   "checkout_landing": "auto",
+  "merge_gate": {
+    "mode": "observe"
+  },
   "landing": {
     "mode": "review",
     "accept": "local"
