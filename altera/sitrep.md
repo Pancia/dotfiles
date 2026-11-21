@@ -38,6 +38,8 @@ Set up Altera properly in dotfiles: setup review, the same review gates as Alter
 
 - Hammerspoon calendar seed: the trigger key has no occurrence date and expires after 48 h, so a daily tagged event (focus/notify) fires only every third day. Parked with the sched idea (sketch, slice 2).
 
+- 2026-11-20 19:35: test-fix group g-001 accepted (Q45) and landed on master; main checkout synced onto master. landing_accept local, checkout_landing auto, test_command (heavy slot, full suite, ~9 min) with merge_gate_mode observe (Q46) committed d417d66c. Next: operator runs the record move (pause, setup, migrate). Switch the gate to enforce after a few green merges.
+
 ## Open Questions
 
 Next ID: Q36
