@@ -44,14 +44,18 @@
 @universe | FAVORITES | 3
 @universe | TAROT     | 0.5
 @universe | ZODIAC    | 0.25
-@universe | THE LEGEND OF ZELDA | 2
-@universe | STEEL MAGNOLIAS     | 2
+# Both lowered after a − universe vote each (vote review 2026-11-20).
+@universe | THE LEGEND OF ZELDA | 1.5
+@universe | STEEL MAGNOLIAS     | 1
 # Two moods of one character. Shift these two numbers to change how often she
 # appears at all, and how often the innuendo does.
 @character | Houshou Marine         | 0.5
 @character | Houshou Marine (Uncut) | 3
 # Raised after two + votes on her closers (vote review 2026-11-15).
 @character | Artoria Pendragon (Saber) | 2
+# Raised a little after one + vote each (vote review 2026-11-20).
+@character | Aphrodite (Venus)         | 1.5
+@character | Nia Teppelin              | 1.5
 # Matched to Marine (Uncut) on purpose.
 @character | Malfoid (Wife)         | 3
 WARHAMMER 40K   | Techpriest Logis         | 🔧 | Reverent about code · machine-spirit corruption · Mechanicus cant | 'Praise the Omnissiah' / 'the Machine God provides'
