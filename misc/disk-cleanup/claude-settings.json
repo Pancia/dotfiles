@@ -9,6 +9,7 @@
       "Bash(file:*)",
       "Bash(mount)",
       "Bash(ps:*)",
+      "Bash(lsof:*)",
       "Bash(sort:*)",
       "Bash(head:*)",
       "Bash(tail:*)"
