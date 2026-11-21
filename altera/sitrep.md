@@ -32,6 +32,12 @@ Set up Altera properly in dotfiles: setup review, the same review gates as Alter
 
 - 2026-11-20 16:57: Altera's external record store (alt 68024bb4) is ready; dotfiles is its first user. Plan from the Altera liaison: restart daemon on 68024bb4 (running 9b1a50c7); drain (no new missions; review group g-001 must be accepted first); operator writes ~/.config/altera/artifacts.json (root ~/Vaults/altera-artifacts, bundle_dir = the vault's backup folder; never in a tracked file); operator runs `alt daemon pause`, `alt artifacts setup`, `alt artifacts migrate` from a plain terminal; commit the printed commit via jj (deletions + altera/config.json only); push; `alt daemon resume`, `alt liaison restart`, `alt sandbox check` (records_read, records_sibling). Undo: `alt artifacts migrate --to repo`. Another session has an uncommitted sketch change (calendar scheduler) that must be committed first.
 
+- PARKED idea (2026-11-20, from a standalone session on the user's behalf): calendar-driven personal scheduler `sched`. Sketch altera/sketches/20261120-142137-MST-calendar-driven-personal-scheduler-sched.md (committed by the liaison). Do not spec or open missions until the user raises it again. Brief .cc/misc/scheduler/recon-brief.md and probes .cc/scripts/sched-ek-*.py belong to that session.
+
+## Open Bugs
+
+- Hammerspoon calendar seed: the trigger key has no occurrence date and expires after 48 h, so a daily tagged event (focus/notify) fires only every third day. Parked with the sched idea (sketch, slice 2).
+
 ## Open Questions
 
 Next ID: Q36

@@ -85,15 +85,25 @@ const BULLET = /^\s*[-*]\s/
 
 // A command name: "clear", "cc:retro", "code-review".
 const CMD_NAME = String.raw`[A-Za-z][\w-]*(?::[\w-]+)*`
-// In prose: after the line's start, a space, "(" or "*", and before the end,
-// a space or punctuation. A URL or a path such as "a/b" never matches.
-const CMD_PROSE = new RegExp(String.raw`(^|\s|\*|(?<!\])\()/(${CMD_NAME})(?=$|[\s.,;:!?)*])`, 'g')
+// In prose: "/clear", maybe after "*" or "_" (bold, italic), and before the
+// end, a space or punctuation; a "." or ":" only before a space or the end, so
+// "/config.json" is no command. What may come before it is checked in
+// `prose`: the line's start, a space, or a "(" that opens no link target.
+const CMD_PROSE = new RegExp(String.raw`(\*{1,3}|_{1,3})?/(${CMD_NAME})(?=$|[\s,;!?)*_]|[.:](?=\s|$))`, 'g')
+const LIST_MARK = /^\s*(?:[-*+]|\d+[.)])\s/
+const HEADING = /^\s{0,3}#{1,6}\s/
+const END_LINE = /^\s*(⏳|👀)/u
+// Lines whose text is not prose: a reference definition, a block quote.
+const NOT_PROSE = /^\s{0,3}(?:\[[^\]]+\]:\s|>)/
 // A whole code span: "`/cc:retro`" or "`/code-review high`".
 const CMD_SPAN = new RegExp(String.raw`^(\`+)\s?/(${CMD_NAME})((?:\s[^\`]*)?)\s?\1$`)
 
-/** True when `src` may hold a slash command: worth asking for the names. */
+/**
+ * True when `src` may hold a slash command: worth asking for the names. Any
+ * "/" before a letter, so it never misses one; the names are cached.
+ */
 export function mayHaveCommand(src: string): boolean {
-  return new RegExp(String.raw`(^|[\s(*\`])/[A-Za-z]`, 'm').test(src)
+  return /\/[A-Za-z]/.test(src)
 }
 
 /**
@@ -216,28 +226,37 @@ export function linkify(src: string, commands: ReadonlySet<string> = new Set()):
   const command = (text: string) => {
     if (!pending.includes(text)) pending.push(text)
   }
-  const prose = (part: string) => {
-    let out = part
+  // `first`: the part opens the line, so its start is the line's start.
+  const prose = (part: string, first: boolean, scan: boolean) => {
+    const out = part
       .replace(HS_LINK, (_, url: string) => `](${link({ kind: 'open', url })})`)
       .replace(Q_BOLD, (_, q: string, colon: string) =>
         `**[${q}](${link({ kind: 'fill', text: `${q}: ` })})${colon}**`,
       )
     // The text is left as written; the command only joins the row.
-    if (commands.size > 0) {
+    if (scan && commands.size > 0) {
       for (const m of part.matchAll(CMD_PROSE)) {
-        if (commands.has(m[2] ?? '')) command(`/${m[2]}`)
+        const at = m.index ?? 0
+        const before = part[at - 1]
+        const opens =
+          before === undefined
+            ? first
+            : /\s/.test(before) || (before === '(' && part[at - 2] !== ']')
+        // A name may hold "_", so "_/x_" takes the closing "_" into it.
+        const name = m[1]?.startsWith('_') ? (m[2] ?? '').replace(/_+$/, '') : (m[2] ?? '')
+        if (opens && commands.has(name)) command(`/${name}`)
       }
     }
     return out
   }
-  const span = (code: string) => {
-    const m = commands.size > 0 ? CMD_SPAN.exec(code) : null
+  const span = (code: string, scan: boolean) => {
+    const m = scan && commands.size > 0 ? CMD_SPAN.exec(code) : null
     if (m && commands.has(m[2] ?? '')) command(`/${m[2]}${(m[3] ?? '').trimEnd()}`)
     return code
   }
-  const links = (s: string) =>
+  const links = (s: string, scan = true) =>
     codeSplit(s)
-      .map((p, i) => (i % 2 === 1 ? span(p) : prose(p)))
+      .map((p, i) => (i % 2 === 1 ? span(p, scan) : prose(p, i === 0, scan)))
       .join('')
   // The row of command buttons under the paragraph or list that named them.
   let blockIndent = 0
@@ -250,45 +269,80 @@ export function linkify(src: string, commands: ReadonlySet<string> = new Set()):
 
   const label = labels(src)
   const questionIndent = new Map<string, number>()
-  let fence: { char: string; len: number } | null = null
+  let fence: { char: string; len: number; margin: boolean } | null = null
   let inWhereNext = false
-  let atBlockStart = true
+
+  // Where a block ends, so its row goes in: never inside a list item, where a
+  // cut would split the item's Markdown and draw its rest as code. A block
+  // ends before a blank line's next text at the margin that is no list item,
+  // a margin fence, a heading, the Where-next line, the "⏳"/"👀" lines; after
+  // a heading, a margin fence or an answer line; and at the end.
+  let atStart = true
+  let prevBlank = false
+  let cutNext = false
+  let fenceEnded = false
+  let blockIsList = false
+  let inIndentedCode = false
 
   for (const line of src.split('\n')) {
     const f = FENCE_OPEN.exec(line)?.[1]
     if (fence) {
       // A closing fence is its marker alone: "```js" inside does not close.
-      if (f && f[0] === fence.char && f.length >= fence.len && /^\s*[`~]+\s*$/.test(line)) fence = null
+      if (f && f[0] === fence.char && f.length >= fence.len && /^\s*[`~]+\s*$/.test(line)) {
+        if (fence.margin) cutNext = true
+        else fenceEnded = true
+        fence = null
+      }
       md.push(line)
       continue
-    }
-    if (f) {
-      commandRow()
-      fence = { char: f[0] ?? '`', len: f.length }
-      md.push(line)
-      continue
-    }
-
-    // A blank line, or the "⏳"/"👀" lines that end a reply, close a block.
-    if (line.trim() === '' || /^\s*(⏳|👀)/u.test(line)) {
-      commandRow()
-      atBlockStart = true
-    }
-    if (line.trim() !== '' && atBlockStart) {
-      blockIndent = /^\s*/.exec(line)?.[0].length ?? 0
-      atBlockStart = false
     }
 
     const a = ANSWER_LINE.exec(line)
     if (a) {
-      commandRow()
-      atBlockStart = true
       const [, own = '', id = '', body = ''] = a
       const answers = parseAnswers(body, label.get(id) ?? id)
       if (answers.length > 0) {
         flush()
         segments.push({ kind: 'buttons', answers, indent: own.length || (questionIndent.get(id) ?? 0) })
       }
+      // The question's commands go under its answers, not between them.
+      commandRow()
+      cutNext = true
+      prevBlank = false
+      continue
+    }
+
+    const blank = line.trim() === ''
+    if (!blank) {
+      const indent = /^\s*/.exec(line)?.[0].length ?? 0
+      const cut =
+        atStart ||
+        cutNext ||
+        END_LINE.test(line) ||
+        WHERE_NEXT.test(line) ||
+        HEADING.test(line) ||
+        (f !== undefined && indent === 0) ||
+        // Text at the margin after a list item's fence is no lazy line of it.
+        (fenceEnded && indent === 0 && !LIST_MARK.test(line)) ||
+        (prevBlank && !(blockIsList && (LIST_MARK.test(line) || indent > 0)))
+      if (cut) {
+        commandRow()
+        blockIndent = indent
+        blockIsList = false
+      }
+      // After a blank line, four spaces outside a list open an indented code block.
+      inIndentedCode = indent >= 4 && !blockIsList && (prevBlank || inIndentedCode)
+      if (LIST_MARK.test(line) && !inIndentedCode) blockIsList = true
+      cutNext = HEADING.test(line)
+      fenceEnded = false
+      atStart = false
+    }
+    prevBlank = blank
+    const scan = !inIndentedCode && !NOT_PROSE.test(line)
+
+    if (f) {
+      fence = { char: f[0] ?? '`', len: f.length, margin: /^[`~]/.test(line) }
+      md.push(line)
       continue
     }
 
@@ -334,7 +388,7 @@ export function linkify(src: string, commands: ReadonlySet<string> = new Set()):
       continue
     }
 
-    md.push(links(line))
+    md.push(links(line, scan))
     // A Markdown element answers at most 256 links: cut a long run early.
     if (hrefs.length >= MAX_LINKS) flush()
   }
@@ -376,13 +430,30 @@ export function addToBox(box: string, text: string): string {
 }
 
 /**
+ * True when the box holds only a slash command a click could have put there:
+ * a known name with nothing after it, or one of the reply's own commands
+ * (`offered`, arguments and all). A path or a command the person typed with
+ * words of their own is a draft.
+ */
+export function isLoneCommand(box: string, commands: ReadonlySet<string>, offered: readonly string[]): boolean {
+  const t = box.trim()
+  if (offered.includes(t)) return true
+  const m = new RegExp(String.raw`^/(${CMD_NAME})$`).exec(t)
+  return m !== null && commands.has(m[1] ?? '')
+}
+
+/**
  * What the prompt box holds after a press puts the slash command `text` in
  * `box`, or null when it cannot go in: a command runs only from the start of
- * the box, so it takes an empty box, or replaces a box that holds only another
- * command (an earlier click). A draft of the person's own is never touched.
+ * the box, so it takes an empty box, or replaces a lone command (an earlier
+ * click). A draft of the person's own is never touched.
  */
-export function commandToBox(box: string, text: string): string | null {
-  const t = box.trim()
-  if (t === '' || (t.startsWith('/') && !t.includes('\n'))) return text
+export function commandToBox(
+  box: string,
+  text: string,
+  commands: ReadonlySet<string>,
+  offered: readonly string[],
+): string | null {
+  if (box.trim() === '' || isLoneCommand(box, commands, offered)) return text
   return null
 }

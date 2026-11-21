@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
@@ -170,11 +170,12 @@ test('answers rewritten beneath become the buttons', {
   await ui.unmount()
 })
 
-test('an answer line removed beneath leaves no buttons', {
+test('an answer line removed beneath leaves no answer buttons', {
   plugins: [noAnswerLine],
 }, async $ => {
   const ui = await mount($, '**Q2 (push):** Push to master?\n【Q2: yes | no】')
-  expect((await ui.findAll({ type: 'Button' })).length).toBe(0)
+  // The label link is still drawn, so the reply keeps only its submit button.
+  expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['[ submit ↵ ]'])
   await ui.unmount()
 })
 
@@ -188,10 +189,17 @@ test('a label link then its answer button completes the label', async ($, on) =>
   await ui.unmount()
 })
 
-test('a plain reply, a summary and the main screen get no buttons', async $ => {
+test('a plain reply gets the submit button alone, drawn as written', async $ => {
+  const ui = await mount($, 'Just prose.')
+  expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['[ submit ↵ ]'])
+  expect(await ui.find({ type: 'Markdown', text: 'Just prose.' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a summary and an empty block get no buttons', async $ => {
   for (const props of [
-    { text: 'Just prose.', isFirstOfReply: true },
     { text: '**Q2 (push):** Push?\n【Q2: yes | no】', isFirstOfReply: true, isSummary: true as const },
+    { text: '  \n', isFirstOfReply: true },
   ]) {
     const ui = await $.ui.mount({ plugin: 'reply-links', surface: 'terminal', component: 'AssistantMessage', props })
     expect((await ui.findAll({ type: 'Button' })).length).toBe(0)
@@ -243,9 +251,9 @@ test('the submit button sends nothing from an empty box or a slash command', asy
   await ui.unmount()
 })
 
-test('a reply with links but no buttons gets no submit button', async $ => {
+test('a reply with links alone still gets the submit button', async $ => {
   const ui = await mount($, '**Q2 (push)** — push to master?')
-  expect(await ui.find({ key: 'submit' })).toBeUndefined()
+  expect(await ui.find({ key: 'submit' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -268,7 +276,79 @@ test('a slash command button fills an empty box, and never a draft', async ($, o
   box.text = 'my draft'
   await ui.press({ key: 'c1-0' })
   expect(box.text).toBe('my draft')
-  expect(toasts.length).toBe(1)
-  expect(await ui.find({ key: 'submit' })).toBe(undefined)
+  expect(toasts).toEqual(['Empty the prompt box first: /cc:retro runs only from its start.'])
+  // A reply with a command row alone ends in the submit button too.
+  expect(await ui.find({ key: 'submit' })).toBeDefined()
+  await ui.unmount()
+})
+
+const listing = (on: On, names: string[]) => {
+  let calls = 0
+  on('command.list', () => {
+    calls++
+    return { value: names.map(name => ({ name, description: name, source: 'builtin' })) }
+  })
+  return () => calls
+}
+
+test('a command click into a box read as empty appends, never replaces', async ($, on) => {
+  const modes: string[] = []
+  on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
+  on('prompt.fill', (_, e) => {
+    modes.push(e.mode ?? 'replace')
+    return { isFilled: true, text: e.text, cursor: e.text.length }
+  })
+  listing(on, ['clear'])
+  const ui = await mount($, 'Run /clear.')
+  await ui.press({ key: 'c1-0' })
+  expect(modes).toEqual(['append'])
+  await ui.unmount()
+})
+
+test('a draft that starts with "/" is kept', async ($, on) => {
+  const box = promptBox(on)
+  on('ui.toast', () => ({ value: undefined }))
+  listing(on, ['clear'])
+  const ui = await mount($, 'Run /clear.')
+  box.text = '/Users/anthony/x.log shows an error, why?'
+  await ui.press({ key: 'c1-0' })
+  expect(box.text).toBe('/Users/anthony/x.log shows an error, why?')
+  await ui.unmount()
+})
+
+test('an answer click replaces a command a click left', async ($, on) => {
+  const box = promptBox(on)
+  listing(on, ['clear'])
+  const ui = await mount($, '**Q1 (go):** Run /clear?\n【Q1: yes | no】')
+  // md0 (question), row1 (answers), cmds2 (its command), then submit.
+  await ui.press({ key: 'c2-0' })
+  expect(box.text).toBe('/clear')
+  await ui.press({ key: 'b1-0' })
+  expect(box.text).toBe('Q1 (go): yes')
+  await ui.unmount()
+})
+
+test('a failed command list draws no row and is not asked on every draw', async ($, on) => {
+  let calls = 0
+  on('command.list', () => {
+    calls++
+    throw new Error('down')
+  })
+  for (let i = 0; i < 3; i++) {
+    const ui = await mount($, 'Run /clear.')
+    expect(await ui.find({ key: 'c1-0' })).toBeUndefined()
+    await ui.unmount()
+  }
+  expect(calls).toBe(1)
+})
+
+test('a command list that never answers lets the reply draw, with no row', async ($, on) => {
+  on('command.list', () => new Promise<never>(() => undefined))
+  const clock = mock.clock(on)
+  const mounting = mount($, 'Run /clear.')
+  await clock.advance(1_000)
+  // The mount ends: the reply is drawn with no command row, submit alone.
+  const ui = await mounting
+  expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['[ submit ↵ ]'])
   await ui.unmount()
 })

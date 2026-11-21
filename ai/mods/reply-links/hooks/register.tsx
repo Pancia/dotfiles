@@ -1,8 +1,9 @@
 // reply-links: in a reply, question labels and Where-next IDs become links,
 // and an answer line under a question (【Q4: yes* | no】, which RULE below
 // teaches the model) becomes a row of buttons. A click puts that text in the
-// prompt box. Only the "[ submit ↵ ]" button at the end of such a reply sends:
-// it sends the box as the person's own message and empties it. A slash command
+// prompt box. Only the "[ submit ↵ ]" button, at the end of every reply block
+// (plain ones too), sends: it sends the box as the person's own message and
+// empties it. A slash command
 // the session knows ("/cc:retro") gets a button in a row under its paragraph,
 // which puts it in the box, so Enter runs it; nothing runs on the click itself.
 //
@@ -12,7 +13,7 @@
 
 import type { Register } from 'claude-code'
 
-import { addToBox, commandToBox, isPlain, linkify, mayHaveCommand } from './linkify'
+import { addToBox, commandToBox, isLoneCommand, linkify, mayHaveCommand } from './linkify'
 import type { Action } from './linkify'
 
 const SECTION = 'reply-links:answer-buttons'
@@ -29,16 +30,22 @@ const COMMAND_PREFIX = '↳ ⌘'
 // A raw color, a little lighter than the theme's `inactive` (153).
 const FILL = 'rgb(185,185,185)'
 
+// The session's command names, asked for again after a minute: a reply is
+// drawn many times, and a command added mid-session shows up soon enough. A
+// failed ask is kept 10 s, so a broken list is not asked on every draw, and
+// one ask is shared by the draws that wait on it. A reply waits at most 1 s
+// for it, then draws with no command row.
+const COMMANDS_TTL_MS = 60_000
+const COMMANDS_FAIL_TTL_MS = 10_000
+const COMMANDS_WAIT_MS = 1_000
+const NONE: ReadonlySet<string> = new Set()
+let commandCache: { at: number; ttl: number; names: ReadonlySet<string> } | null = null
+let commandAsk: Promise<ReadonlySet<string>> | null = null
+
 // The system-prompt section that asks for answer lines: about 250 tokens,
 // once per session (after the cache boundary, so cached across its turns).
 // Each answer line then costs about 10 output tokens; 【 and 】 are one token
 // each on Opus 5.5 (measured 2026-11-17).
-// The session's command names, asked for again after a minute: a reply is
-// drawn many times, and a command added mid-session shows up soon enough.
-const COMMANDS_TTL_MS = 60_000
-let commandCache: { at: number; names: ReadonlySet<string> } | null = null
-const NONE: ReadonlySet<string> = new Set()
-
 const RULE = `# Answer buttons
 
 When a reply asks the user a question that has an ID (such as Q4) and a short, fixed set of answers, write an answer line for it:
@@ -77,22 +84,45 @@ export const register: Register = on => {
     }
 
     // The names of the slash commands, asked for only when a reply may hold
-    // one. A failed ask links no command; the rest still draws.
+    // one. A failed or slow ask gives no command row; the rest still draws.
     const commandsFor = async (text: string): Promise<ReadonlySet<string>> => {
       if (!mayHaveCommand(text)) return NONE
-      if (commandCache && Date.now() - commandCache.at < COMMANDS_TTL_MS) return commandCache.names
+      if (commandCache && Date.now() - commandCache.at < commandCache.ttl) return commandCache.names
+      commandAsk ??= $.command
+        .list()
+        .then(list => {
+          const names: ReadonlySet<string> = new Set(list.map(c => c.name))
+          commandCache = { at: Date.now(), ttl: COMMANDS_TTL_MS, names }
+          return names
+        })
+        .catch(() => {
+          commandCache = { at: Date.now(), ttl: COMMANDS_FAIL_TTL_MS, names: NONE }
+          return NONE
+        })
+        .finally(() => {
+          commandAsk = null
+        })
+      // A refused timer must not fail the drawing: then wait for the ask alone.
+      let timer: { cancel: () => void } | undefined
+      const late = new Promise<ReadonlySet<string>>(resolve => {
+        try {
+          timer = $.clock.after(COMMANDS_WAIT_MS, () => resolve(NONE))
+        } catch {
+          // No timer here.
+        }
+      })
       try {
-        const names = new Set((await $.command.list()).map(c => c.name))
-        commandCache = { at: Date.now(), names }
-        return names
-      } catch {
-        return NONE
+        return await Promise.race([commandAsk, late])
+      } finally {
+        timer?.cancel()
       }
     }
 
-    // Cheap check first: a reply with nothing to draw goes on untouched.
-    const quick = linkify(e.props.text, await commandsFor(e.props.text))
-    if (isPlain(quick)) return next(e)
+    // Every reply block is drawn here, so each ends in the submit button; an
+    // empty one goes on untouched.
+    if (e.props.text.trim() === '') return next(e)
+    const names = await commandsFor(e.props.text)
+    const quick = linkify(e.props.text, names)
 
     // Run the plugins beneath first, then put our drawing where the engine's
     // own node is in what they returned, so a wrapper beneath (the roleplay
@@ -107,8 +137,11 @@ export const register: Register = on => {
     // them; without one, our own props.
     const core = next.trace.find(t => t.plugin === 'engine')?.received
     const props = core?.component === 'AssistantMessage' && typeof core.props.text === 'string' ? core.props : e.props
-    const linked = props.text === e.props.text ? quick : linkify(props.text, await commandsFor(props.text))
-    if (isPlain(linked)) return inner
+    const known = props.text === e.props.text ? names : await commandsFor(props.text)
+    const linked = props.text === e.props.text ? quick : linkify(props.text, known)
+    // The commands this reply offers, for telling a click's command in the
+    // box from a draft.
+    const offered = linked.segments.flatMap(s => (s.kind === 'commands' ? s.commands : []))
 
     const { Box, Text, Markdown, Button } = $.ui.resolve(e)
 
@@ -125,20 +158,20 @@ export const register: Register = on => {
       }
       try {
         const box = await $.prompt.read()
+        let text: string
         if (action.kind === 'command') {
-          const text = commandToBox(box.text, action.text)
-          if (text === null) {
+          const put = commandToBox(box.text, action.text, known, offered)
+          if (put === null) {
             $.ui.toast(`Empty the prompt box first: ${action.text} runs only from its start.`)
             return
           }
-          if (text === box.text) return
-          const filled = await $.prompt.fill({ text })
-          if (!filled.isFilled) {
-            $.ui.toast(filled.refusal === 'dialog' ? 'Close the dialog first, then click again.' : 'The prompt box did not take the text.')
-          }
-          return
+          text = put
+        } else {
+          // An answer replaces a lone command a click left: under it, the
+          // answer would go to the command as its arguments.
+          const base = isLoneCommand(box.text, known, offered) ? '' : box.text
+          text = addToBox(base, action.text)
         }
-        const text = addToBox(box.text, action.text)
         if (text === box.text) return
         // Append when only text is added, so a draft the read did not see
         // (it answers '' before the box is mounted) is never replaced.
@@ -282,9 +315,9 @@ export const register: Register = on => {
       ),
     )
 
-    // Command rows only fill the box, and a slash command is never sent:
-    // they bring no submit button.
-    const hasButtons = linked.segments.some(s => s.kind === 'buttons' || s.kind === 'item')
+    // Every reply this mod draws ends in the submit button, whatever it holds:
+    // answer rows, Where-next IDs, command rows or links alone.
+    const hasButtons = true
     const mine = (
       <Box flexDirection="row">
         <Box width={2} flexShrink={0}>

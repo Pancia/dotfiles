@@ -320,9 +320,17 @@ When the cleanup is finished, do two more things:
 EOF
 )"
 
-cd "$HOME"
+# Start Claude in a folder of its own, not $HOME. Claude Code never remembers
+# folder trust for $HOME, so it asked on every run. --add-dir keeps reads in
+# home free of prompts; "additionalDirectories" in settings does not accept
+# home (tested 2026-11-20). The equals form stops --add-dir taking the prompt.
+# The tracked settings allow only read-only commands; trash and edits still ask.
+WORKDIR="${XDG_DATA_HOME:-$HOME/.local/share}/disk-cleanup"
+mkdir -p "$WORKDIR/.claude"
+ln -sfn "$(cd "$HERE/.." && pwd)/misc/disk-cleanup/claude-settings.json" "$WORKDIR/.claude/settings.json"
+cd "$WORKDIR"
 if command -v fish >/dev/null 2>&1; then
-    exec fish -c 'my-claude-code-wrapper --process-label disk-cleanup "$DISK_CLEANUP_PROMPT"'
+    exec fish -c 'my-claude-code-wrapper --process-label disk-cleanup --add-dir="$HOME" "$DISK_CLEANUP_PROMPT"'
 else
-    exec claude "$DISK_CLEANUP_PROMPT"
+    exec claude --add-dir="$HOME" "$DISK_CLEANUP_PROMPT"
 fi
