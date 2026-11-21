@@ -76,6 +76,8 @@ Lots: `fortune` (default), `spirit`, `eros`, `necessity`, `courage`, `victory`, 
 
 Uses [stellium](https://github.com/katelouie/stellium) with built-in Valens-method nested levels (L1 years → L2 months → L3 days → L4 hours). Date output is verified against astro-seek's ZR calculator.
 
+The chart's saved coordinates and timezone (`lat`, `lng`, `tz_str`) are used, so no geocoder runs. The city is geocoded (Nominatim, over the network) only when the chart has none: `tz_str` is empty, or `lat` and `lng` are both `0.0`.
+
 **Note:** `bin/astro-zr-helper` patches three deviations from canonical Valens ZR found in stellium 0.18.1 by subclassing its `ZodiacalReleasingEngine`:
 
 1. **Year length** — stellium uses 365.25-day solar years for L1; canon uses 360-day schematic years. Patched: `LEVEL_MULTIPLIERS = {1: 360, 2: 30, 3: 1, 4: 1/12}`.

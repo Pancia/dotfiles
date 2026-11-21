@@ -26,7 +26,9 @@ warnings.filterwarnings(
 @pytest.fixture(scope="session")
 def astro_module():
     """Import the astro script as a module."""
-    astro_path = Path.home() / "dotfiles" / "bin" / "astro"
+    # The tree under test (tests/bin/astro/conftest.py → repo root), not the
+    # live ~/dotfiles checkout.
+    astro_path = Path(__file__).resolve().parents[3] / "bin" / "astro"
     # File has no .py extension, so we must specify the loader explicitly
     loader = importlib.machinery.SourceFileLoader("astro", str(astro_path))
     spec = importlib.util.spec_from_file_location("astro", astro_path, loader=loader)

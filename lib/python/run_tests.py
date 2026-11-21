@@ -4,9 +4,15 @@ Multi-language test runner for dotfiles.
 Dispatches to pytest, busted, or fishtape based on component config.
 """
 
+import contextlib
+import functools
+import os
 import re
 import subprocess
 import sys
+import tempfile
+import time
+from collections.abc import Iterator
 from pathlib import Path
 
 # Derived from this file's location, not $HOME, so a clone or worktree
@@ -17,6 +23,10 @@ TESTS_DIR = DOTFILES / "tests"
 
 # Component configuration: runner + dependencies + aliases
 # source_path: path to source code for coverage (relative to DOTFILES)
+# isolation: False runs the component's pytest with the inherited environment
+#   instead of a throwaway home (see isolated_env). It needs an
+#   "isolation_reason" string, which the runner prints, and a line in
+#   docs/testing.md. Use it only for a component that cannot run otherwise.
 #
 # Every directory under tests/ that holds tests must be registered here --
 # run_all() iterates this dict, so an unregistered tree never runs at all.
@@ -182,10 +192,17 @@ def format_counts(counts: dict[str, int]) -> str:
     return ", ".join(parts) if parts else "no tests ran"
 
 
-def stream(cmd: list[str]) -> tuple[int, list[str]]:
-    """Run cmd, echoing output live, and return (exit_code, captured_lines)."""
+def stream(cmd: list[str], env: dict[str, str] | None = None) -> tuple[int, list[str]]:
+    """Run cmd, echoing output live, and return (exit_code, captured_lines).
+
+    env None inherits this process's environment."""
     proc = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+        env=env,
     )
     lines = []
     assert proc.stdout is not None
@@ -194,6 +211,166 @@ def stream(cmd: list[str]) -> tuple[int, list[str]]:
         sys.stdout.flush()
         lines.append(line)
     return proc.wait(), lines
+
+
+# --- Isolation ---------------------------------------------------------------
+#
+# Every pytest the runner starts gets a throwaway HOME (test_home) and an
+# environment built from the real one (isolated_env). So no test reads or
+# writes the real ~/.config, ~/.local/state or ~/.claude, git and jj commit
+# under a test identity, and a run inside tmux or a Claude session behaves like
+# one outside it. This lives here, not in a conftest fixture, so it covers every
+# component alike (roleplay too, through the tests/roleplay symlink) and also the
+# paths a test module computes at import time.
+
+TEST_USER = "Dotfiles Test"
+TEST_EMAIL = "dotfiles-test@example.invalid"
+
+# Dropped outright: a test must not see the terminal, tmux or Claude session it
+# was started from.
+DROPPED_VARS = (
+    "TMUX",
+    "TMUX_PANE",
+    "ITERM_SESSION_ID",
+    "TERM_SESSION_ID",
+    "CLAUDECODE",
+    "SVC_FS_CONFIG",
+    "SVC_TMUX_SOCKET",
+)
+DROPPED_PREFIXES = ("CLAUDE_", "CCS_", "CC_JJ_")
+
+
+def _is_dotfiles_bin(entry: str, real_home: str | None) -> bool:
+    """A PATH entry that is some checkout's dotfiles/bin folder."""
+    path = Path(os.path.expanduser(entry))
+    if path.parts[-2:] == ("dotfiles", "bin"):
+        return True
+    if not real_home:
+        return False
+    live = Path(real_home) / "dotfiles" / "bin"
+    if os.path.normpath(path) == os.path.normpath(live):
+        return True
+    with contextlib.suppress(OSError):
+        return path.resolve() == live.resolve()
+    return False
+
+
+def isolated_env(base: dict, home: Path, uv_cache: str, uv_python: str) -> dict:
+    """The environment for one test run: base, with HOME moved into `home`.
+
+    Pure: reads nothing but its arguments. `home` is a test_home(); `uv_cache`
+    and `uv_python` are the real uv folders, so uv does not download every
+    dependency and Python again into the throwaway home.
+    """
+    env = {
+        k: v
+        for k, v in base.items()
+        if k not in DROPPED_VARS and not k.startswith(DROPPED_PREFIXES)
+    }
+    home = Path(home)
+    env["HOME"] = str(home)
+    env["XDG_CONFIG_HOME"] = str(home / ".config")
+    env["XDG_DATA_HOME"] = str(home / ".local" / "share")
+    env["XDG_STATE_HOME"] = str(home / ".local" / "state")
+    env["XDG_CACHE_HOME"] = str(home / ".cache")
+
+    env["GIT_CONFIG_GLOBAL"] = str(home / ".gitconfig")
+    env["GIT_CONFIG_NOSYSTEM"] = "1"
+    env["JJ_CONFIG"] = str(home / ".config" / "jj" / "config.toml")
+    env["JJ_USER"] = TEST_USER
+    env["JJ_EMAIL"] = TEST_EMAIL
+
+    env["UV_CACHE_DIR"] = uv_cache
+    env["UV_PYTHON_INSTALL_DIR"] = uv_python
+
+    # The tree's own bin goes first and every other dotfiles/bin goes: the live
+    # ~/dotfiles/bin is on the operator's PATH, so a command run by bare name
+    # would otherwise be the live copy, not the one under test.
+    tree_bin = str(DOTFILES / "bin")
+    real_home = base.get("HOME")
+    rest = [
+        p
+        for p in base.get("PATH", "").split(os.pathsep)
+        if p and os.path.normpath(p) != tree_bin and not _is_dotfiles_bin(p, real_home)
+    ]
+    env["PATH"] = os.pathsep.join([tree_bin, *rest])
+    return env
+
+
+@contextlib.contextmanager
+def test_home() -> Iterator[Path]:
+    """A throwaway HOME, removed on exit.
+
+    Holds `dotfiles` linked to the tree under test (scripts hard-code
+    $HOME/dotfiles, e.g. rcs/claude-ensure-rcs-hook.sh), the four XDG folders,
+    and git and jj configs that carry only a test identity.
+    """
+    with tempfile.TemporaryDirectory(
+        prefix="dotfiles-test-home-", ignore_cleanup_errors=True
+    ) as tmp:
+        # Resolved, so /var/folders and /private/var/folders never disagree.
+        home = Path(tmp).resolve()
+        (home / "dotfiles").symlink_to(DOTFILES, target_is_directory=True)
+        for sub in (".config", ".local/share", ".local/state", ".cache"):
+            (home / sub).mkdir(parents=True, exist_ok=True)
+        (home / ".gitconfig").write_text(
+            "[user]\n"
+            f"\tname = {TEST_USER}\n"
+            f"\temail = {TEST_EMAIL}\n"
+            "[init]\n"
+            "\tdefaultBranch = master\n"
+        )
+        vcs_cfg = home / ".config" / "jj"
+        vcs_cfg.mkdir(parents=True, exist_ok=True)
+        (vcs_cfg / "config.toml").write_text(
+            f'[user]\nname = "{TEST_USER}"\nemail = "{TEST_EMAIL}"\n'
+        )
+        yield home
+
+
+# test_home is a context manager, not a test: keep pytest from collecting it
+# when a test module does `from run_tests import test_home`.
+test_home.__test__ = False
+
+
+def _uv_dir(var: str, subcommand: list[str]) -> str:
+    if os.environ.get(var):
+        return os.environ[var]
+    return subprocess.run(
+        ["uv", *subcommand], capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+@functools.lru_cache(maxsize=1)
+def uv_folders() -> tuple[str, str]:
+    """(cache dir, python install dir) from the real environment, read once.
+
+    Read before HOME moves: under the throwaway home uv would pick fresh, empty
+    folders and download every dependency and Python again on every run.
+    """
+    return (
+        _uv_dir("UV_CACHE_DIR", ["cache", "dir"]),
+        _uv_dir("UV_PYTHON_INSTALL_DIR", ["python", "dir"]),
+    )
+
+
+def component_of(target: Path) -> str | None:
+    """The COMPONENTS entry a test path (or node id) belongs to, if any."""
+    try:
+        rel = Path(str(target).split("::", 1)[0]).relative_to(TESTS_DIR).as_posix()
+    except ValueError:
+        return None
+    owners = [c for c in COMPONENTS if rel == c or rel.startswith(c + "/")]
+    return max(owners, key=len) if owners else None
+
+
+def opt_out_reason(targets: list[Path]) -> str | None:
+    """The isolation_reason when the targets' component sets isolation False."""
+    for target in targets:
+        config = COMPONENTS.get(component_of(target) or "", {})
+        if config.get("isolation", True) is False:
+            return config.get("isolation_reason") or "(no reason given)"
+    return None
 
 
 def run_pytest(
@@ -225,7 +402,17 @@ def run_pytest(
         extra_args.append("--color=yes")
 
     cmd.extend(["pytest", *map(str, targets)] + extra_args)
-    code, lines = stream(cmd)
+
+    reason = opt_out_reason(targets)
+    if reason is not None:
+        print(f"isolation off: {reason}")
+        code, lines = stream(cmd)
+        return code, parse_counts(lines)
+
+    uv_cache, uv_python = uv_folders()
+    with test_home() as home:
+        env = isolated_env(dict(os.environ), home, uv_cache, uv_python)
+        code, lines = stream(cmd, env=env)
     return code, parse_counts(lines)
 
 
@@ -276,19 +463,29 @@ def run_component(component: str, extra_args: list[str]) -> tuple[int, dict[str,
     return runner(target, config.get("deps", []), extra_args)
 
 
-def print_summary(results: list[tuple[str, int, dict[str, int]]]) -> None:
+# One summary row: (name, exit code, counts, wall seconds).
+Result = tuple[str, int, dict[str, int], float]
+
+
+def format_seconds(seconds: float) -> str:
+    """Wall time as the summary prints it: `[12.3s]`."""
+    return f"[{seconds:.1f}s]"
+
+
+def print_summary(results: list[Result]) -> None:
     """Aggregate line: every component runs in its own pytest, so without this
     the output just ends with the *last* component's tally and reads as if
-    nothing else ran."""
-    width = max((len(name) for name, _, _ in results), default=0)
+    nothing else ran. Each line, and the total, ends with its wall time."""
+    width = max((len(name) for name, _, _, _ in results), default=0)
     totals: dict[str, int] = {}
     failed_components = []
+    total_seconds = sum(seconds for _, _, _, seconds in results)
 
     print()
     print("=" * 72)
     print(f"cmds test summary — {DOTFILES}")
     print("=" * 72)
-    for name, code, counts in results:
+    for name, code, counts, seconds in results:
         ok = code == 0
         if not ok:
             failed_components.append(name)
@@ -296,10 +493,10 @@ def print_summary(results: list[tuple[str, int, dict[str, int]]]) -> None:
             totals[key] = totals.get(key, 0) + val
         status = "PASS" if ok else "FAIL"
         detail = format_counts(counts) if counts else f"exit {code}"
-        print(f"  {status}  {name:<{width}}  {detail}")
+        print(f"  {status}  {name:<{width}}  {detail}  {format_seconds(seconds)}")
 
     print("-" * 72)
-    total_detail = format_counts(totals)
+    total_detail = f"{format_counts(totals)}  {format_seconds(total_seconds)}"
     if failed_components:
         print(
             f"  FAILED — {len(results)} components, "
@@ -315,14 +512,15 @@ def run_all(extra_args: list[str], components: list[str] | None = None) -> int:
     """Run components (all of them by default), return worst exit code."""
     names = components if components is not None else list(COMPONENTS)
     exit_code = 0
-    results: list[tuple[str, int, dict[str, int]]] = []
+    results: list[Result] = []
 
     for component in names:
         target = TESTS_DIR / component
         if not target.exists():
             continue
+        start = time.monotonic()
         result, counts = run_component(component, extra_args)
-        results.append((component, result, counts))
+        results.append((component, result, counts, time.monotonic() - start))
         if result != 0:
             exit_code = result
 
@@ -412,11 +610,12 @@ def run_many(positionals: list[str], extra_args: list[str]) -> int:
         return run_unit_group(component, targets, extra_args)[0]
 
     exit_code = 0
-    results: list[tuple[str, int, dict[str, int]]] = []
+    results: list[Result] = []
     for component, targets in groups.items():
+        start = time.monotonic()
         code, counts = run_unit_group(component, targets, extra_args)
         name = component if component is not None else "(no component)"
-        results.append((name, code, counts))
+        results.append((name, code, counts, time.monotonic() - start))
         if code != 0:
             exit_code = code
     print_summary(results)

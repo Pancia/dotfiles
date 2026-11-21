@@ -19,6 +19,7 @@ These tests pin down the three Valens-canon fixes in astro-zr-helper:
        cycle until the parent's duration is exhausted (not stopped at
        12 signs).
 """
+import dataclasses
 from datetime import date
 
 import pytest
@@ -536,3 +537,45 @@ class TestPeriodContinuity:
 
     def test_l4_spirit_continuous(self, l4_spirit):
         self._check_continuous(l4_spirit)
+
+
+# ---------------------------------------------------------------------------
+# Saved coordinates — the helper builds the chart without a geocoder
+# ---------------------------------------------------------------------------
+
+def _sample_birth(astro_module, **coords):
+    """Neutral sample data: an invented name at a public place."""
+    return astro_module.BirthData(
+        full_name="Sample Person",
+        year=2000, month=1, day=1, hour=12, minute=0,
+        city="Greenwich", nation="GB",
+        **coords,
+    )
+
+
+class TestSavedCoordinates:
+    """A chart with saved coordinates never consults the network geocoder."""
+
+    def test_birth_payload_sends_saved_coordinates(self, astro_module, zr_calc):
+        bd = _sample_birth(astro_module, lat=51.4769, lng=-0.0005,
+                           tz_str="Europe/London")
+        payload = zr_calc._birth_payload(bd)
+        assert payload['lat'] == 51.4769
+        assert payload['lng'] == -0.0005
+        assert payload['tz_str'] == "Europe/London"
+        assert payload['city'] == "Greenwich"
+
+    def test_birth_payload_without_coordinates_keeps_the_city(self, astro_module,
+                                                               zr_calc):
+        payload = zr_calc._birth_payload(_sample_birth(astro_module))
+        assert payload['city'] == "Greenwich"
+        assert payload['nation'] == "GB"
+        assert not {'lat', 'lng', 'tz_str'} & payload.keys()
+
+    def test_timeline_ignores_the_city_when_coordinates_are_given(
+            self, astro_module, zr_calc, natal_chart):
+        # An ungeocodable city: the helper fails if it consults a geocoder.
+        bd = dataclasses.replace(natal_chart.birth_data, city="Nowhere-Invalid")
+        chart = dataclasses.replace(natal_chart, birth_data=bd)
+        periods = zr_calc.timeline(chart, "fortune", level=1)
+        _assert_matches(periods, L1_FORTUNE)

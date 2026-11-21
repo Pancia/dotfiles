@@ -50,6 +50,23 @@ class FishPane:
         self.extra_init = extra_init
         self.env = env or {}
 
+    def home(self):
+        """The pane's own HOME, below its state folder, made on first use.
+
+        `fish --no-config -i` writes no history (`$fish_history` is empty), so
+        this is defence in depth: nothing a pane runs reads or writes the real
+        home or its XDG folders. Like the runner's `test_home()`, it holds a
+        `dotfiles` link to the tree under test, because revive.fish runs
+        `~/dotfiles/lib/python/revive.py` and sources `~/dotfiles/fish/...`.
+        """
+        home = os.path.join(self.state_dir, "pane-home")
+        for sub in (".config", os.path.join(".local", "share")):
+            os.makedirs(os.path.join(home, sub), exist_ok=True)
+        link = os.path.join(home, "dotfiles")
+        if not os.path.islink(link):
+            os.symlink(DOTFILES, link)
+        return home
+
     def run(self, commands, budget=14.0, settle=SETTLE, powercut=False):
         """Type `commands` into a fresh shell. Returns everything it printed.
 
@@ -77,16 +94,24 @@ class FishPane:
                 "    revive-banner\n"
                 "end\n" + self.extra_init
             )
+        home = self.home()
         pid, fd = pty.fork()
         if pid == 0:
-            env = dict(
-                os.environ,
+            # Defaults first, then the caller's env on top: a caller may set
+            # any of these (test_revive_nvim passes its own XDG folders), and
+            # repeating a name as a keyword to dict() would raise TypeError
+            # here, inside the child, where the test cannot see it.
+            env = dict(os.environ)
+            env.update(
                 TERM="xterm-256color",
+                HOME=home,
+                XDG_CONFIG_HOME=os.path.join(home, ".config"),
+                XDG_DATA_HOME=os.path.join(home, ".local", "share"),
                 XDG_STATE_HOME=self.state_dir,
                 ITERM_SESSION_ID=f"w0t0p0:{self.guid}",
                 TERM_PROGRAM="pytest.app",
-                **self.env,
             )
+            env.update(self.env)
             env.pop("TMUX", None)
             env.pop("TMUX_PANE", None)
             os.execvpe("fish", ["fish", "--no-config", "-i", "-C", f"source {init}"], env)

@@ -1,6 +1,10 @@
 """lib/python/run_tests.py -- how `cmds test <arg>` picks what to run."""
 
+import os
+import subprocess
 import sys
+import tempfile
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -140,6 +144,36 @@ def test_several_components_report_the_failing_exit_code(dispatch, monkeypatch, 
     assert "FAIL  bin/astro" in capsys.readouterr().out
 
 
+def fake_clock(monkeypatch, *readings):
+    """Make time.monotonic() return these readings in turn."""
+    ticks = iter(readings)
+    monkeypatch.setattr(run_tests.time, "monotonic", lambda: next(ticks))
+
+
+def test_summary_shows_each_components_time(dispatch, monkeypatch, capsys):
+    def fake_pytest(target, deps, extra, source_path=None):
+        return (1 if target == [ZR] else 0), {"passed": 3}
+
+    monkeypatch.setattr(run_tests, "run_pytest", fake_pytest)
+    # fish runs from 100.0 to 112.34, bin/astro from 200.0 to 201.0.
+    fake_clock(monkeypatch, 100.0, 112.34, 200.0, 201.0)
+    dispatch("fish/test_chpwd.py", "bin/astro/test_zr.py")
+    lines = capsys.readouterr().out.splitlines()
+    assert "  PASS  fish       3 passed  [12.3s]" in lines
+    assert "  FAIL  bin/astro  3 passed  [1.0s]" in lines
+    assert lines[-2] == "           6 passed  [13.3s]"
+
+
+def test_run_all_times_each_component_and_the_total(monkeypatch, capsys):
+    monkeypatch.setattr(run_tests, "run_component", lambda c, extra: (0, {"passed": 1}))
+    fake_clock(monkeypatch, 0.0, 2.0, 5.0, 5.25)
+    assert run_tests.run_all([], ["hooks", "fish"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert "  PASS  hooks  1 passed  [2.0s]" in lines
+    assert "  PASS  fish   1 passed  [0.2s]" in lines
+    assert lines[-2] == "  PASSED — 2 components, 2 passed  [2.2s]"
+
+
 def test_a_whole_component_absorbs_files_inside_it(dispatch):
     _, calls = dispatch("fish/test_chpwd.py", "fish")
     assert calls == [("component", "fish", [])]
@@ -168,7 +202,7 @@ def test_an_unknown_second_path_exits_2_and_runs_nothing(dispatch, capsys):
 
 def test_run_pytest_passes_every_target(monkeypatch):
     seen = []
-    monkeypatch.setattr(run_tests, "stream", lambda cmd: (seen.append(cmd), (0, []))[1])
+    monkeypatch.setattr(run_tests, "stream", lambda cmd, env=None: (seen.append(cmd), (0, []))[1])
     run_tests.run_pytest([CHPWD, TRASH], ["dep"], ["-v"])
     cmd = seen[0]
     i = cmd.index("pytest", cmd.index("dep"))
@@ -177,7 +211,7 @@ def test_run_pytest_passes_every_target(monkeypatch):
 
 def test_run_pytest_cov_without_source_path_covers_every_target(monkeypatch):
     seen = []
-    monkeypatch.setattr(run_tests, "stream", lambda cmd: (seen.append(cmd), (0, []))[1])
+    monkeypatch.setattr(run_tests, "stream", lambda cmd, env=None: (seen.append(cmd), (0, []))[1])
     run_tests.run_pytest([CHPWD, TRASH], [], ["--cov"])
     assert f"--cov={CHPWD}" in seen[0] and f"--cov={TRASH}" in seen[0]
     assert "--cov" not in seen[0]
@@ -190,3 +224,152 @@ def test_a_component_name_is_not_matched_as_a_string_prefix(dispatch, monkeypatc
     monkeypatch.setattr(run_tests, "TESTS_DIR", tmp_path)
     _, calls = dispatch("fishing/x.py")
     assert calls == [("pytest", tmp_path / "fishing/x.py", [], [], None)]
+
+
+# --- Isolation: every pytest runs under a throwaway home -----------------------
+
+TEST_HOME = Path("/tmp/dotfiles-test-home-fake")
+TREE_BIN = str(run_tests.DOTFILES / "bin")
+
+
+def _env(base, home=TEST_HOME, uv_cache="/uv/cache", uv_python="/uv/python"):
+    return run_tests.isolated_env(base, home, uv_cache, uv_python)
+
+
+def test_isolated_env_points_home_and_xdg_into_the_test_home():
+    base = {
+        "HOME": "/Users/real",
+        "XDG_CONFIG_HOME": "/Users/real/.config",
+        "XDG_STATE_HOME": "/Users/real/.local/state",
+        "PATH": "/usr/bin",
+    }
+    before = dict(base)
+    env = _env(base)
+    assert env["HOME"] == str(TEST_HOME)
+    assert env["XDG_CONFIG_HOME"] == str(TEST_HOME / ".config")
+    assert env["XDG_DATA_HOME"] == str(TEST_HOME / ".local/share")
+    assert env["XDG_STATE_HOME"] == str(TEST_HOME / ".local/state")
+    assert env["XDG_CACHE_HOME"] == str(TEST_HOME / ".cache")
+    assert env["GIT_CONFIG_GLOBAL"] == str(TEST_HOME / ".gitconfig")
+    assert env["GIT_CONFIG_NOSYSTEM"] == "1"
+    assert env["JJ_CONFIG"] == str(TEST_HOME / ".config/jj/config.toml")
+    assert env["JJ_USER"] == run_tests.TEST_USER
+    assert env["JJ_EMAIL"] == run_tests.TEST_EMAIL
+    assert not any("/Users/real" in v for v in env.values())
+    assert base == before, "isolated_env must not change its input"
+
+
+def test_isolated_env_keeps_the_uv_folders():
+    base = {"HOME": "/Users/real", "UV_CACHE_DIR": "/elsewhere", "PATH": ""}
+    env = _env(base, uv_cache="/Users/real/.cache/uv",
+               uv_python="/Users/real/.local/share/uv/python")
+    assert env["UV_CACHE_DIR"] == "/Users/real/.cache/uv"
+    assert env["UV_PYTHON_INSTALL_DIR"] == "/Users/real/.local/share/uv/python"
+
+
+def test_isolated_env_drops_terminal_and_claude_variables():
+    dropped = {
+        "TMUX": "/tmp/tmux-501/default,1,0",
+        "TMUX_PANE": "%3",
+        "ITERM_SESSION_ID": "w0t0p0:ABC",
+        "TERM_SESSION_ID": "w0t0p0:ABC",
+        "CLAUDECODE": "1",
+        "SVC_FS_CONFIG": "/x",
+        "SVC_TMUX_SOCKET": "svc-x",
+        "CLAUDE_CODE_SESSION_ID": "s",
+        "CLAUDE_PROJECT_DIR": "/p",
+        "CCS_TITLE": "t",
+        "CC_JJ_SESSION": "j",
+    }
+    kept = {"TERM": "xterm-256color", "LANG": "en_US.UTF-8", "TMPDIR": "/tmp/x",
+            "TMUX_PLUGIN_MANAGER_PATH": "/t", "ITERM_PROFILE": "Default"}
+    env = _env({**dropped, **kept, "HOME": "/Users/real", "PATH": "/usr/bin"})
+    assert not set(dropped) & set(env)
+    for key, value in kept.items():
+        assert env[key] == value
+
+
+def test_isolated_env_puts_the_tree_bin_first_on_path():
+    base = {
+        "HOME": "/Users/real",
+        "PATH": os.pathsep.join([
+            "/usr/local/bin",
+            "/Users/real/dotfiles/bin",
+            "/Volumes/clone/dotfiles/bin/",
+            TREE_BIN,
+            "/usr/bin",
+            "/bin",
+        ]),
+    }
+    path = _env(base)["PATH"].split(os.pathsep)
+    assert path == [TREE_BIN, "/usr/local/bin", "/usr/bin", "/bin"]
+
+
+def test_isolated_env_with_no_path_still_has_the_tree_bin():
+    assert _env({"HOME": "/Users/real"})["PATH"] == TREE_BIN
+
+
+def test_test_home_links_dotfiles_to_the_tree_under_test():
+    with run_tests.test_home() as home:
+        assert home.name.startswith("dotfiles-test-home-")
+        assert Path(tempfile.gettempdir()).resolve() in home.parents
+        link = home / "dotfiles"
+        assert link.is_symlink()
+        assert link.resolve() == run_tests.DOTFILES
+        assert (link / "lib/python/run_tests.py").is_file()
+        for sub in (".config", ".local/share", ".local/state", ".cache"):
+            assert (home / sub).is_dir()
+
+        def git_get(key):
+            return subprocess.run(
+                ["git", "config", "--file", str(home / ".gitconfig"), "--get", key],
+                capture_output=True, text=True, check=True,
+            ).stdout.strip()
+
+        assert git_get("user.name") == run_tests.TEST_USER
+        assert git_get("user.email") == run_tests.TEST_EMAIL
+        assert git_get("init.defaultBranch") == "master"
+        vcs = tomllib.loads((home / ".config/jj/config.toml").read_text())
+        assert vcs["user"] == {"name": run_tests.TEST_USER, "email": run_tests.TEST_EMAIL}
+    assert not home.exists(), "the test home is removed on exit"
+
+
+def test_run_pytest_runs_under_the_isolated_env(monkeypatch):
+    seen = {}
+
+    def fake_stream(cmd, env=None):
+        home = Path(env["HOME"])
+        seen.update(cmd=cmd, env=env, home=home,
+                    linked=(home / "dotfiles").resolve() == run_tests.DOTFILES)
+        return 0, ["==== 1 passed in 0.01s ====\n"]
+
+    monkeypatch.setattr(run_tests, "stream", fake_stream)
+    monkeypatch.setattr(run_tests, "uv_folders", lambda: ("/uv/cache", "/uv/python"))
+    monkeypatch.setenv("TMUX", "/tmp/tmux-501/default,1,0")
+    monkeypatch.setenv("CLAUDECODE", "1")
+    monkeypatch.setenv("HOME", "/Users/real")
+
+    code, counts = run_tests.run_pytest(CHPWD, [], ["-v"])
+
+    assert (code, counts) == (0, {"passed": 1})
+    env = seen["env"]
+    assert seen["home"].name.startswith("dotfiles-test-home-")
+    assert seen["linked"]
+    assert env == run_tests.isolated_env(
+        {**os.environ}, seen["home"], "/uv/cache", "/uv/python")
+    assert "TMUX" not in env and "CLAUDECODE" not in env
+    assert env["UV_CACHE_DIR"] == "/uv/cache"
+    assert not seen["home"].exists(), "the test home is gone once pytest returns"
+
+
+def test_an_opted_out_component_inherits_the_environment(monkeypatch, capsys):
+    seen = []
+    monkeypatch.setattr(run_tests, "stream",
+                        lambda cmd, env=None: (seen.append(env), (0, []))[1])
+    fish = {**run_tests.COMPONENTS["fish"], "isolation": False,
+            "isolation_reason": "needs the real home for a reason"}
+    monkeypatch.setitem(run_tests.COMPONENTS, "fish", fish)
+    run_tests.run_pytest(CHPWD, [], [])
+    assert seen == [None]
+    assert "isolation off: needs the real home for a reason" in capsys.readouterr().out
+

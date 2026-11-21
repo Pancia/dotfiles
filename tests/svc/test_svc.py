@@ -50,6 +50,7 @@ svc_cmd() {{ case "$1" in
   slow)   echo "sleep 2; exec python3 serve.py .slow-port {mark}" ;;
   worker) echo "exec python3 serve.py '' {mark}" ;;
   broken) echo "echo boom-message; exit 3" ;;
+  graceful) echo "trap 'echo shutdown-message; exit 0' TERM; echo graceful-up; while :; do sleep 0.1; done" ;;
 esac; }}
 """
 
@@ -186,6 +187,16 @@ class Pane:
             pass
 
 
+def no_tmux_env():
+    """os.environ without TMUX and TMUX_PANE.
+
+    supervise treats a set TMUX as "in a tmux window", where q stops the
+    service but keeps the supervisor. Pane tests that expect q to exit must
+    not inherit the runner's tmux, whatever runner starts them.
+    """
+    return {k: v for k, v in os.environ.items() if k not in ("TMUX", "TMUX_PANE")}
+
+
 @pytest.fixture
 def panes():
     made = []
@@ -202,7 +213,7 @@ def gen(proj, name="web"):
 
 
 def test_keys_restart_suspend_resume_quit(proj, panes):
-    p = panes([SUP, "web"], proj)  # no command: comes from svc_cmd
+    p = panes([SUP, "web"], proj, env=no_tmux_env())  # no command: comes from svc_cmd
     assert p.until(lambda: (proj / ".web-port").exists()), p.text()
     p.send(b"r")
     assert p.until(lambda: gen(proj) == ["2"]), p.text()
@@ -234,7 +245,7 @@ def test_q_under_tmux_stops_but_keeps_the_supervisor(proj, panes):
 
 
 def test_bar_separator_and_panel_render(proj, panes):
-    p = panes([SUP, "web"], proj, rows=12, cols=100)
+    p = panes([SUP, "web"], proj, rows=12, cols=100, env=no_tmux_env())
     assert p.until(lambda: "● up" in p.lines()[-1]), p.text()
     bar = p.lines()[-1]
     assert "web" in bar and "r restart" in bar and "? help" in bar
@@ -256,7 +267,7 @@ def test_bar_separator_and_panel_render(proj, panes):
 
 def test_tty_mode_restored_after_ctrl_c(proj, panes):
     out = proj / "stty.txt"
-    p = panes(["bash", "-c", f"{SUP} web; stty -a > {out}"], proj)
+    p = panes(["bash", "-c", f"{SUP} web; stty -a > {out}"], proj, env=no_tmux_env())
     assert p.until(lambda: (proj / ".web-port").exists()), p.text()
     p.send(b"\x03")
     # p.until, not wait_for: it keeps reading the pty. An unread pty fills its
@@ -273,7 +284,7 @@ def test_tty_mode_restored_after_ctrl_c(proj, panes):
 def test_closing_the_terminal_stops_and_drains(proj, panes):
     """A closed pane HUPs supervise. That used to mean 'restart', and the
     restart then died on the dead tty, orphaning the child with no pidfile."""
-    p = panes([SUP, "web"], proj)
+    p = panes([SUP, "web"], proj, env=no_tmux_env())
     assert p.until(lambda: (proj / ".web-port").exists()), p.text()
     assert marked(proj.mark)
     os.close(p.fd)  # the terminal goes away
@@ -791,15 +802,35 @@ def test_killing_the_session_leaves_no_orphan(proj, tmux_env):
 @needs_tmux
 def test_clean_exit_closes_the_window_crash_keeps_it(proj, tmux_env):
     assert run([SVC_TMUX, "up", "--wait", "web"], proj, tmux_env).returncode == 0
-    run([SVC, "stop", "web"], proj)
+    run([SVC, "stop", "web"], proj, tmux_env)
     assert wait_for(lambda: "web" not in tm(tmux_env, "list-windows", "-a", "-F", "#{window_name}").split())
 
     run([SVC_TMUX, "up", "--wait", "--timeout", "10", "broken"], proj, tmux_env)
-    dead = tm(tmux_env, "list-windows", "-a", "-F", "#{window_name} #{pane_dead}")
-    assert "broken 1" in dead, dead
+    dead = lambda: tm(tmux_env, "list-windows", "-a", "-F", "#{window_name} #{pane_dead}")
+    assert wait_for(lambda: "broken 1" in dead().splitlines()), dead()
     session = run([SVC_TMUX, "session"], proj, tmux_env).stdout.strip()
-    screen = tm(tmux_env, "capture-pane", "-p", "-t", f"={session}:=broken")
-    assert "broken crashed (exit 3)" in screen and "boom-message" in screen, screen
+    # -S -: tmux writes the "crashed" line with a line feed on the bottom row, which
+    # scrolls the pane's first line - often boom-message itself - into history.
+    screen = lambda: tm(tmux_env, "capture-pane", "-p", "-S", "-", "-t", f"={session}:=broken")
+    assert wait_for(lambda: "broken crashed (exit 3)" in screen() and "boom-message" in screen()), screen()
+    assert "boom-message" in read(proj / ".run/broken.log")
+
+
+def test_stop_keeps_the_service_shutdown_output(proj):
+    """The tee to the pane and log shares the child's process group under bash 4+,
+    so the drain's TERM reaches it too. It must outlive the child, or a service's
+    last words - a shutdown line here, a crash's error in the test above - are lost."""
+    sup = subprocess.Popen([SUP, "graceful"], cwd=proj, stdin=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        assert wait_for(lambda: "graceful-up" in read(proj / ".run/graceful.log"))
+        run([SVC, "stop", "graceful"], proj)
+        assert sup.wait(15) == 0
+        assert "shutdown-message" in read(proj / ".run/graceful.log")
+    finally:
+        if sup.poll() is None:
+            sup.terminate()
+            sup.wait(15)
 
 
 @needs_tmux

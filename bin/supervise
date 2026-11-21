@@ -431,7 +431,13 @@ while :; do
     gen=$((gen + 1))
     # Tee to the pane AND the log; $! is the command (not tee) - relied on for signalling.
     # stdin <- held-open FIFO so a REPL read blocks instead of taking SIGTTIN on the tty.
-    "$@" < "$stdinfifo" > >(tee -a "$logfile") 2>&1 &
+    # tee ignores TERM: under bash 4+ it sits in the child's process group, so every
+    # drain_group TERM hit it too, and it died with output still in the pipe - a
+    # fast crash then showed no error in the pane or the log, and a stop lost the
+    # service's shutdown lines. It now ends at EOF, when the last writer is gone;
+    # drain_group waits for that, and its ~10s KILL still ends a tee held open by
+    # a process that left the group.
+    "$@" < "$stdinfifo" > >(trap '' TERM; exec tee -a "$logfile") 2>&1 &
     child=$!
     echo "$gen $child" > "$genfile"
     if [ -n "$keys_pid" ]; then

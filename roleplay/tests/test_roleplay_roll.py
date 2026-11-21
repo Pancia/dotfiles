@@ -10,7 +10,6 @@ import json
 import os
 import re
 import subprocess
-import tempfile
 from collections import Counter
 from pathlib import Path
 
@@ -26,8 +25,19 @@ REAL_ROSTER = ROOT / "roster.tsv"
 
 
 # Hook mode with --votes writes a roll log under $XDG_STATE_HOME. Every run gets a throwaway
-# HOME and XDG_STATE_HOME, so the suite can never touch the real log.
-_FAKE_HOME = Path(tempfile.mkdtemp(prefix="roleplay-test-home-"))
+# HOME and XDG_STATE_HOME, so the suite can never touch the real log. The folder comes from
+# tmp_path_factory, so pytest owns it and prunes it with its other old temp folders; a
+# module-level mkdtemp leaked one folder per run. `run` is a plain function called from
+# dozens of tests, so the autouse fixture below hands it the folder through this global.
+_FAKE_HOME = None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _fake_home(tmp_path_factory):
+    global _FAKE_HOME
+    _FAKE_HOME = tmp_path_factory.mktemp("roleplay-test-home")
+    yield _FAKE_HOME
+    _FAKE_HOME = None
 
 
 def run(*args, roster=None, seed=None, odds=None, log=None, state=None):
@@ -696,21 +706,42 @@ def _install(tmp_path):
     return root, script
 
 
-def _roll(path):
-    """Run a script path with no roster override at all."""
+def _home(tmp_path):
+    """This test's own throwaway HOME, never the real one."""
+    home = tmp_path / "home"
+    home.mkdir(exist_ok=True)
+    return home
+
+
+def _roll(path, home):
+    """Run a script path with no roster override at all, under `home`."""
     return subprocess.run(
         [str(path), "--plain"],
         capture_output=True,
         text=True,
-        env={"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": str(Path.home())},
+        env={"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": str(home)},
     )
+
+
+def test_roll_sees_a_throwaway_home(tmp_path):
+    """`_roll` hands the script this test's own home. The real roleplay-roll does
+    not print HOME, so a stub reports what it saw. Being under some temp folder is
+    not enough: the isolating test runner already gives every run one."""
+    stub = tmp_path / "print-home"
+    stub.write_text('#!/bin/sh\nprintf \'%s\' "$HOME"\n', encoding="utf-8")
+    stub.chmod(0o755)
+    home = _home(tmp_path)
+    r = _roll(stub, home)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout == str(home)
+    assert Path(r.stdout) != Path.home()
 
 
 def test_finds_sibling_roster_without_a_symlink(tmp_path):
     """Baseline: direct invocation resolves ../roster.tsv. If this fails the
     symlink tests below prove nothing."""
     _, script = _install(tmp_path)
-    assert "Hermes" in _roll(script).stdout
+    assert "Hermes" in _roll(script, _home(tmp_path)).stdout
 
 
 def test_relative_symlink_resolves_to_the_real_roster(tmp_path):
@@ -720,7 +751,7 @@ def test_relative_symlink_resolves_to_the_real_roster(tmp_path):
     linkdir.mkdir()
     link = linkdir / "roleplay-roll"
     link.symlink_to(os.path.relpath(script, linkdir))
-    assert "Hermes" in _roll(link).stdout
+    assert "Hermes" in _roll(link, _home(tmp_path)).stdout
 
 
 def test_absolute_symlink_resolves_to_the_real_roster(tmp_path):
@@ -728,7 +759,7 @@ def test_absolute_symlink_resolves_to_the_real_roster(tmp_path):
     _, script = _install(tmp_path)
     link = tmp_path / "abs-roleplay-roll"
     link.symlink_to(script)
-    assert "Hermes" in _roll(link).stdout
+    assert "Hermes" in _roll(link, _home(tmp_path)).stdout
 
 
 def test_chained_symlinks_resolve(tmp_path):
@@ -738,7 +769,7 @@ def test_chained_symlinks_resolve(tmp_path):
     second = tmp_path / "second"
     first.symlink_to(script)
     second.symlink_to(first)
-    assert "Hermes" in _roll(second).stdout
+    assert "Hermes" in _roll(second, _home(tmp_path)).stdout
 
 
 def test_symlink_next_to_a_decoy_roster_ignores_the_decoy(tmp_path):
@@ -752,19 +783,19 @@ def test_symlink_next_to_a_decoy_roster_ignores_the_decoy(tmp_path):
     )
     link = linkdir / "roleplay-roll"
     link.symlink_to(script)
-    out = _roll(link).stdout
+    out = _roll(link, _home(tmp_path)).stdout
     assert "Hermes" in out
     assert "Decoy" not in out
 
 
-def test_dotfiles_bin_symlink_is_wired_up():
+def test_dotfiles_bin_symlink_is_wired_up(tmp_path):
     """The wiring in this repo specifically. Skips cleanly for a standalone copy,
     which has no parent tree to link from."""
     shim = ROOT.parent / "bin" / "roleplay-roll"
     if not shim.is_symlink():
         pytest.skip("not installed in a dotfiles tree")
     assert shim.resolve() == SCRIPT.resolve()
-    assert "«" in _roll(shim).stdout
+    assert "«" in _roll(shim, _home(tmp_path)).stdout
 
 
 # --------------------------------------------------------------------------

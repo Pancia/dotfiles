@@ -6,6 +6,7 @@ so a regression here would not announce itself.
 """
 import json
 import os
+import pwd
 import re
 import shlex
 import shutil
@@ -21,6 +22,45 @@ DOTFILES = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 CCJJ = os.path.join(DOTFILES, "lib", "python", "ccjj.py")
 
 pytestmark = pytest.mark.skipif(shutil.which("jj") is None, reason="jj not installed")
+
+
+TEST_USER = "ccjj test"
+TEST_EMAIL = "ccjj-test@example.invalid"
+
+
+@pytest.fixture(autouse=True)
+def _own_home(tmp_path, monkeypatch):
+    """Each test gets its own HOME, XDG folders and jj identity.
+
+    ccjj puts its shared lock at ~/.local/state/ai-jj-commit through
+    expanduser, and `jj config set --repo` writes under the user config
+    folder, so without this the tests create and delete files in the real
+    home. The runner's isolation (run_tests.py) does the same for the whole
+    run, but this file must stay hermetic without it, and a home per test
+    keeps one test's lock from being seen by the next. Every jj and ccjj
+    subprocess inherits os.environ, so no call site needs its own case.
+    """
+    home = tmp_path / "home"
+    folders = {
+        "XDG_CONFIG_HOME": home / ".config",
+        "XDG_DATA_HOME": home / ".local" / "share",
+        "XDG_STATE_HOME": home / ".local" / "state",
+        "XDG_CACHE_HOME": home / ".cache",
+    }
+    for path in folders.values():
+        path.mkdir(parents=True, exist_ok=True)
+    vcs_config = folders["XDG_CONFIG_HOME"] / "jj" / "config.toml"
+    vcs_config.parent.mkdir(parents=True, exist_ok=True)
+    vcs_config.write_text(
+        '[user]\nname = "%s"\nemail = "%s"\n' % (TEST_USER, TEST_EMAIL))
+
+    monkeypatch.setenv("HOME", str(home))
+    for name, path in folders.items():
+        monkeypatch.setenv(name, str(path))
+    monkeypatch.setenv("JJ_CONFIG", str(vcs_config))
+    monkeypatch.setenv("JJ_USER", TEST_USER)
+    monkeypatch.setenv("JJ_EMAIL", TEST_EMAIL)
+    return home
 
 
 @pytest.fixture(autouse=True)
@@ -1962,6 +2002,66 @@ def test_audit_backs_off_while_a_commit_is_in_flight(repo):
         assert "in progress" in r.stderr
     finally:
         shutil.rmtree(lockdir, ignore_errors=True)
+
+
+# ------------------------------------------------- the tests own their home
+
+def test_the_shared_lock_is_under_the_test_home(repo, tmp_path):
+    """The lock tests above create and delete ~/.local/state/ai-jj-commit
+    entries, so ~ must be this test's own home. The runner's throwaway home
+    is not enough: it is shared by the whole run, and without the runner it
+    is the real one. So the path is checked against tmp_path, which only
+    this file's fixture can put HOME under."""
+    expected = os.path.join(str(tmp_path / "home"), ".local", "state",
+                            "ai-jj-commit", repo.root.replace("/", "_") + ".lock")
+    assert os.path.expanduser(
+        "~/.local/state/ai-jj-commit/%s.lock" % repo.root.replace("/", "_")) == expected
+
+    # ccjj computes the same path: a live lock there makes it back off.
+    repo.write("f.txt", "a\n")
+    repo.commit("base")
+    repo.write("f.txt", "A\n")
+    repo.record("S1", "f.txt", old="a", new="A", original="a\n")
+    os.makedirs(expected)
+    with open(os.path.join(expected, "pid"), "w") as fh:
+        fh.write("%d %s\n" % (os.getpid(), _my_lstart()))
+    r = repo.run("commit", "-m", "x", sid="S1")
+    assert r.returncode == 4, r.stdout + r.stderr
+    assert "in progress" in r.stderr
+
+
+def _real_repo_config_counts():
+    """Entries in the folders where the operator's own jj keeps per-repo
+    config, by the real home from the password database rather than $HOME.
+    Read only: this lists and never writes. None for a folder that is absent."""
+    real = pwd.getpwuid(os.getuid()).pw_dir
+    counts = {}
+    for d in (os.path.join(real, ".config", "jj", "repos"),
+              os.path.join(real, "Library", "Application Support", "jj", "repos")):
+        try:
+            counts[d] = len(os.listdir(d))
+        except OSError:
+            counts[d] = None
+    return counts
+
+
+def test_jj_repo_config_stays_in_the_test_home(repo, tmp_path):
+    """`jj config set --repo` (test_a_new_file_over_the_size_limit_still_fails_closed)
+    writes its entry under the user config folder, not inside .jj, so with the
+    real home each run left one more entry in the operator's config."""
+    before = _real_repo_config_counts()
+    r = repo.jj_("config", "set", "--repo", "snapshot.max-new-file-size", "10")
+    assert r.returncode == 0, r.stderr
+
+    r = repo.jj_("config", "path", "--repo")
+    assert r.returncode == 0, r.stderr
+    path = os.path.realpath(r.stdout.strip())
+    home = os.path.realpath(str(tmp_path / "home"))
+    assert path.startswith(home + os.sep), path
+    with open(path) as fh:
+        assert "max-new-file-size" in fh.read()
+
+    assert _real_repo_config_counts() == before
 
 
 # ------------------------------------------- test-drive findings (third pass)
