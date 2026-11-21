@@ -1,0 +1,14 @@
+Summary: Reviewed 2ecb7d1 (worker/w-51) against alt/review/g-001 818ef59. The change meets R12.1 to R12.3 and every success criterion in the brief, and no blocking problem was found; two minor notes follow.
+- MINOR: `tests/lib/python/test_hermetic_env.py:123` adds `test_allowlist_has_no_stale_entries`, which the brief did not ask for. It is useful, and `docs/testing.md` documents it, but it couples the allowlisted files to this test: rewording one of the eleven allowlisted docstrings (for example in `tests/lib/python/test_llm_output.py`) now fails this test, so whoever edits that docstring must also update `ALLOWED`.
+- MINOR: `CLAUDE.md:390` does more than remove the notice. It replaces the "Interim:" sentence with a clause that names `test_hermetic_env.py` and says a bare `pytest` fails on purpose. The clause is accurate and small, but it is a little more than the brief's "notice removal only" scope.
+
+Checked with no finding:
+- Lost work: `refs/alt/tasks/m-024` is the tip, so nothing is lost. The one commit adds one test file and a worklog, and edits `docs/testing.md` and `CLAUDE.md`. No existing file, branch or ref is deleted or rewritten.
+- R12.1: the three required tests exist (lines 84, 94 and 117). `test_home_is_a_throwaway` uses `pwd.getpwuid`, resolves symlinks on both sides, and uses `tempfile.gettempdir()` with `is_relative_to`, as the critique asked. The scan covers `tests/**/*.py` and `roleplay/tests/*.py`, skips `#` lines and its own file, and catches the three spellings.
+- Allowlist: the key is (file, exact stripped line) and each entry has a one-line reason (line 31). I ran the scan's patterns over the tip with `git grep`. It found 11 non-comment lines, and these match the 11 entries exactly: the brief's eight entries plus the critique's four (`tests/fish/conftest.py:60`, `tests/fish/test_pane_isolation.py:19`, `tests/hooks/test_ensure_rcs.py:30`, `tests/lib/python/test_cc_worktree.py:440`).
+- `tests/roleplay` is a symlink, and in Python before 3.13 `rglob` does not follow it, so no roleplay file is scanned twice. A double scan would cause no false failure anyway.
+- R12.2: `docs/testing.md` ("The guard", after REST-B's note) says that a bare `pytest` fails `test_home_is_a_throwaway` on purpose.
+- R12.3: the whole four-line "Interim red" paragraph is gone from `docs/testing.md`, and the "Interim:" sentence is gone from `CLAUDE.md`. `git grep` finds no "until HOOKS, ASTRO and REST-A land" and no "Interim" in either file at the tip.
+- Checklist: 2) no live path changes. 3) no private content. 4) the tests read only the environment and the tree. 5) the file is in the registered `lib/python` component. 8) and 9) do not apply. 10) the docs are updated.
+- Done check: it runs the new file through the runner and greps the notice phrase in both files, so it tests this change.
+- No test was run during this review.
