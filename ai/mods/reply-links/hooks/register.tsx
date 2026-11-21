@@ -1,8 +1,9 @@
 // reply-links: in a reply, question labels and Where-next IDs become links,
 // and an answer line under a question (【Q4: yes* | no】, which RULE below
 // teaches the model) becomes a row of buttons. A click puts that text in the
-// prompt box. Only the "[ submit ↵ ]" button at the end of such a reply sends:
-// it sends the box as the person's own message and empties it. A slash command
+// prompt box. Only the "[ submit ↵ ]" button, at the end of every reply block
+// (plain ones too), sends: it sends the box as the person's own message and
+// empties it. A slash command
 // the session knows ("/cc:retro") gets a button in a row under its paragraph,
 // which puts it in the box, so Enter runs it; nothing runs on the click itself.
 //
@@ -12,7 +13,7 @@
 
 import type { Register } from 'claude-code'
 
-import { addToBox, commandToBox, isLoneCommand, isPlain, linkify, mayHaveCommand } from './linkify'
+import { addToBox, commandToBox, isLoneCommand, linkify, mayHaveCommand } from './linkify'
 import type { Action } from './linkify'
 
 const SECTION = 'reply-links:answer-buttons'
@@ -117,10 +118,11 @@ export const register: Register = on => {
       }
     }
 
-    // Cheap check first: a reply with nothing to draw goes on untouched.
+    // Every reply block is drawn here, so each ends in the submit button; an
+    // empty one goes on untouched.
+    if (e.props.text.trim() === '') return next(e)
     const names = await commandsFor(e.props.text)
     const quick = linkify(e.props.text, names)
-    if (isPlain(quick)) return next(e)
 
     // Run the plugins beneath first, then put our drawing where the engine's
     // own node is in what they returned, so a wrapper beneath (the roleplay
@@ -137,7 +139,6 @@ export const register: Register = on => {
     const props = core?.component === 'AssistantMessage' && typeof core.props.text === 'string' ? core.props : e.props
     const known = props.text === e.props.text ? names : await commandsFor(props.text)
     const linked = props.text === e.props.text ? quick : linkify(props.text, known)
-    if (isPlain(linked)) return inner
     // The commands this reply offers, for telling a click's command in the
     // box from a draft.
     const offered = linked.segments.flatMap(s => (s.kind === 'commands' ? s.commands : []))

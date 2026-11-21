@@ -189,10 +189,17 @@ test('a label link then its answer button completes the label', async ($, on) =>
   await ui.unmount()
 })
 
-test('a plain reply, a summary and the main screen get no buttons', async $ => {
+test('a plain reply gets the submit button alone, drawn as written', async $ => {
+  const ui = await mount($, 'Just prose.')
+  expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['[ submit ↵ ]'])
+  expect(await ui.find({ type: 'Markdown', text: 'Just prose.' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a summary and an empty block get no buttons', async $ => {
   for (const props of [
-    { text: 'Just prose.', isFirstOfReply: true },
     { text: '**Q2 (push):** Push?\n【Q2: yes | no】', isFirstOfReply: true, isSummary: true as const },
+    { text: '  \n', isFirstOfReply: true },
   ]) {
     const ui = await $.ui.mount({ plugin: 'reply-links', surface: 'terminal', component: 'AssistantMessage', props })
     expect((await ui.findAll({ type: 'Button' })).length).toBe(0)
@@ -340,8 +347,8 @@ test('a command list that never answers lets the reply draw, with no row', async
   const clock = mock.clock(on)
   const mounting = mount($, 'Run /clear.')
   await clock.advance(1_000)
-  // The mount ends: the reply is drawn as the engine draws it, with no row.
+  // The mount ends: the reply is drawn with no command row, submit alone.
   const ui = await mounting
-  expect((await ui.findAll({ type: 'Button' })).length).toBe(0)
+  expect((await ui.findAll({ type: 'Button' })).map(b => b.text)).toEqual(['[ submit ↵ ]'])
   await ui.unmount()
 })
