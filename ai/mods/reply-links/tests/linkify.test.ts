@@ -212,6 +212,24 @@ test('a word, a glob, a file name or code that is not prose gets no button', asy
   expect(cmdRows(linkify('(or /clear)', CMDS))).toEqual(['0:/clear'])
 })
 
+test('a glob, a comment or indented code anywhere gets no button', async () => {
+  const none = [
+    'matches **/clear files and _/clear here',
+    '<!-- /clear -->',
+    '<!--',
+    'run /clear',
+    '-->',
+  ].join('\n')
+  expect(cmdRows(linkify(none, CMDS))).toEqual([])
+  // Indented code at the reply's start, after a heading, after a fence, in an item.
+  expect(cmdRows(linkify('    /clear\nText.', CMDS))).toEqual([])
+  expect(cmdRows(linkify('## Example\n    /clear', CMDS))).toEqual([])
+  expect(cmdRows(linkify('```\nx\n```\n    /clear', CMDS))).toEqual([])
+  expect(cmdRows(linkify('- step one:\n\n        /clear', CMDS))).toEqual([])
+  // Text of the item, at its own indent, still counts.
+  expect(cmdRows(linkify('- step one:\n\n  then /clear', CMDS))).toEqual(['0:/clear'])
+})
+
 test('a command inside a question label gets a row, and no link of its own', async () => {
   const l = linkify('**Q3 (run /clear):** Clear now?', CMDS)
   expect(fills(l)).toEqual(['Q3 (run /clear): '])

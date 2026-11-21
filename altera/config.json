@@ -68,9 +68,9 @@
     ]
   },
   "tui_hotkeys": {},
-  "checkout_landing": "warn",
+  "checkout_landing": "auto",
   "landing": {
     "mode": "review",
-    "accept": "manual"
+    "accept": "local"
   }
 }
