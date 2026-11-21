@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -462,19 +463,29 @@ def run_component(component: str, extra_args: list[str]) -> tuple[int, dict[str,
     return runner(target, config.get("deps", []), extra_args)
 
 
-def print_summary(results: list[tuple[str, int, dict[str, int]]]) -> None:
+# One summary row: (name, exit code, counts, wall seconds).
+Result = tuple[str, int, dict[str, int], float]
+
+
+def format_seconds(seconds: float) -> str:
+    """Wall time as the summary prints it: `[12.3s]`."""
+    return f"[{seconds:.1f}s]"
+
+
+def print_summary(results: list[Result]) -> None:
     """Aggregate line: every component runs in its own pytest, so without this
     the output just ends with the *last* component's tally and reads as if
-    nothing else ran."""
-    width = max((len(name) for name, _, _ in results), default=0)
+    nothing else ran. Each line, and the total, ends with its wall time."""
+    width = max((len(name) for name, _, _, _ in results), default=0)
     totals: dict[str, int] = {}
     failed_components = []
+    total_seconds = sum(seconds for _, _, _, seconds in results)
 
     print()
     print("=" * 72)
     print(f"cmds test summary — {DOTFILES}")
     print("=" * 72)
-    for name, code, counts in results:
+    for name, code, counts, seconds in results:
         ok = code == 0
         if not ok:
             failed_components.append(name)
@@ -482,10 +493,10 @@ def print_summary(results: list[tuple[str, int, dict[str, int]]]) -> None:
             totals[key] = totals.get(key, 0) + val
         status = "PASS" if ok else "FAIL"
         detail = format_counts(counts) if counts else f"exit {code}"
-        print(f"  {status}  {name:<{width}}  {detail}")
+        print(f"  {status}  {name:<{width}}  {detail}  {format_seconds(seconds)}")
 
     print("-" * 72)
-    total_detail = format_counts(totals)
+    total_detail = f"{format_counts(totals)}  {format_seconds(total_seconds)}"
     if failed_components:
         print(
             f"  FAILED — {len(results)} components, "
@@ -501,14 +512,15 @@ def run_all(extra_args: list[str], components: list[str] | None = None) -> int:
     """Run components (all of them by default), return worst exit code."""
     names = components if components is not None else list(COMPONENTS)
     exit_code = 0
-    results: list[tuple[str, int, dict[str, int]]] = []
+    results: list[Result] = []
 
     for component in names:
         target = TESTS_DIR / component
         if not target.exists():
             continue
+        start = time.monotonic()
         result, counts = run_component(component, extra_args)
-        results.append((component, result, counts))
+        results.append((component, result, counts, time.monotonic() - start))
         if result != 0:
             exit_code = result
 
@@ -598,11 +610,12 @@ def run_many(positionals: list[str], extra_args: list[str]) -> int:
         return run_unit_group(component, targets, extra_args)[0]
 
     exit_code = 0
-    results: list[tuple[str, int, dict[str, int]]] = []
+    results: list[Result] = []
     for component, targets in groups.items():
+        start = time.monotonic()
         code, counts = run_unit_group(component, targets, extra_args)
         name = component if component is not None else "(no component)"
-        results.append((name, code, counts))
+        results.append((name, code, counts, time.monotonic() - start))
         if code != 0:
             exit_code = code
     print_summary(results)

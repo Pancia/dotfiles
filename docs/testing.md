@@ -26,6 +26,50 @@ passed` and concluded the other 300 tests hadn't executed.
 `DOTFILES` is derived from `__file__`, not `$HOME/dotfiles`, so a clone or worktree
 elsewhere tests itself; the resolved root is printed at the top of every run.
 
+## Run time
+
+Each line of the summary ends with that component's wall time, and the last
+line ends with the total:
+
+```
+  PASS  bin/exocortex-id       64 passed  [0.4s]
+  PASS  services/server_check  10 passed  [0.9s]
+------------------------------------------------------------------------
+  PASSED — 2 components, 74 passed  [1.4s]
+```
+
+A time is seconds with one decimal, in square brackets. The runner measures it
+with `time.monotonic()` around each component's pytest, so it includes pytest's
+start-up and the install of the component's `uv --with` dependencies, not only
+the tests. The total is the sum of the component times. The summary prints only
+when more than one component runs; a single component or file shows only
+pytest's own `in 1.23s` line.
+
+Known figures, before any measured run:
+
+- The full run takes about 14 minutes.
+- `fish` takes about 3 minutes, because each pty test waits 2.6 s for fish to
+  start (`SETTLE` in `tests/fish/conftest.py`).
+
+Test functions per component, counted from the source (`parametrize` adds more):
+
+| Component | Tests | Main cost |
+|---|---|---|
+| `lib/python` | 445 | 214 of them are ccjj tests that call jj |
+| `fish` | 166 | pty tests |
+| `services/youtube_transcribe` | 127 | |
+| `bin/astro` | 107 | uv helper subprocesses |
+| `hooks` | 103 | |
+| `roleplay` | 99 | |
+| `bin/ytdl` | 46 | |
+| `bin/scratch` | 38 | |
+| `bin/exocortex-id` | 37 | |
+| `svc` | 33 | a tmux server per test, waits up to 15–30 s |
+| `lib/lua` | 15 | |
+| `bin/cc-peers` | 14 | |
+| `services/server_check` | 10 | |
+| `mods` | 2 | `claude plugin test` each, 300 s timeout |
+
 ## Isolation
 
 The runner (`lib/python/run_tests.py`) starts every pytest with a throwaway home

@@ -144,6 +144,36 @@ def test_several_components_report_the_failing_exit_code(dispatch, monkeypatch, 
     assert "FAIL  bin/astro" in capsys.readouterr().out
 
 
+def fake_clock(monkeypatch, *readings):
+    """Make time.monotonic() return these readings in turn."""
+    ticks = iter(readings)
+    monkeypatch.setattr(run_tests.time, "monotonic", lambda: next(ticks))
+
+
+def test_summary_shows_each_components_time(dispatch, monkeypatch, capsys):
+    def fake_pytest(target, deps, extra, source_path=None):
+        return (1 if target == [ZR] else 0), {"passed": 3}
+
+    monkeypatch.setattr(run_tests, "run_pytest", fake_pytest)
+    # fish runs from 100.0 to 112.34, bin/astro from 200.0 to 201.0.
+    fake_clock(monkeypatch, 100.0, 112.34, 200.0, 201.0)
+    dispatch("fish/test_chpwd.py", "bin/astro/test_zr.py")
+    lines = capsys.readouterr().out.splitlines()
+    assert "  PASS  fish       3 passed  [12.3s]" in lines
+    assert "  FAIL  bin/astro  3 passed  [1.0s]" in lines
+    assert lines[-2] == "           6 passed  [13.3s]"
+
+
+def test_run_all_times_each_component_and_the_total(monkeypatch, capsys):
+    monkeypatch.setattr(run_tests, "run_component", lambda c, extra: (0, {"passed": 1}))
+    fake_clock(monkeypatch, 0.0, 2.0, 5.0, 5.25)
+    assert run_tests.run_all([], ["hooks", "fish"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert "  PASS  hooks  1 passed  [2.0s]" in lines
+    assert "  PASS  fish   1 passed  [0.2s]" in lines
+    assert lines[-2] == "  PASSED — 2 components, 2 passed  [2.2s]"
+
+
 def test_a_whole_component_absorbs_files_inside_it(dispatch):
     _, calls = dispatch("fish/test_chpwd.py", "fish")
     assert calls == [("component", "fish", [])]
