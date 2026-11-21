@@ -46,6 +46,6 @@ Next ID: Q36
 
 ## Notes
 
-- Standing permission (Q39, 2026-11-20): when another session's finished commit blocks artifact landing, the liaison approves it with `alt checkout land` without asking, and names the commits in its next reply.
+- Standing permission (Q39, 2026-11-20): when another session's finished commit blocks artifact landing, the liaison approves it with `alt checkout land` without asking, and names the commits in its next reply. Q44 extends this to the liaison's own commits.
 
 - Until altera/ is private: keep security work out of Altera; check altera/ changes before each push.
