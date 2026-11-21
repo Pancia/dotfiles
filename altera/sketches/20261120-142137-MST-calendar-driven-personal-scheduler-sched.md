@@ -186,3 +186,18 @@ tests/lib/lua/test_sched_due.py            # drives sched_due.lua via the existi
 - `docs/live-transcribe.md:4`: what a stable permission grant for a background binary costs (signed bundle)
 - `tests/lib/lua/harness.lua`, `docs/testing.md`: where `sched_due.lua` tests run
 - `.cc/misc/scheduler/recon-brief.md`: the brief for this sketch
+
+## Decisions and probe results (2026-11-20, main session)
+
+User decisions: Q1 schedule lives in Calendar.app; Q2 run missed jobs late if under 2 h, else one "missed" notice; Q3 the runner is the Hammerspoon seed. The user has no iPhone, so the phone/iCloud cases are moot. The idea is parked (see `altera/sitrep.md`): no spec or missions until the user raises it again.
+
+`.cc/scripts/sched-ek-probe.py` (read-only) found no iCloud source. The only writable calendar was the local "Calendar"; the rest are subscriptions. The user then made a local "Automations" calendar (On My Mac).
+
+`.cc/scripts/sched-ek-write-test.py` made test events in Automations, read them back through a fresh store, and deleted them. Results:
+
+- Occurrences of a recurring event share `eventIdentifier` and `calendarItemIdentifier`; `occurrenceDate` differs per day. Confirmed.
+- The predicate returns past occurrences (2 days back). Confirmed.
+- **Correction to step "Occurrence identity":** a moved ("this event only") occurrence does **not** keep its original `occurrenceDate`; it follows the new start. Instead its `eventIdentifier` gains a suffix `/RID=<seconds since 2001-01-01>`, which encodes the original date (817009200 → 2026-11-21 20:00 local, the original slot). Its `calendarItemIdentifier` changes, and `hasRecurrenceRules` is false, `isDetached` true.
+- A moved one-off event keeps its `eventIdentifier` and `calendarItemIdentifier`; its `occurrenceDate` follows the new start.
+
+Resulting key rule: `hasRecurrenceRules` true → `eventIdentifier @ occurrence_epoch`; false (one-off or detached) → `eventIdentifier` alone. So a moved occurrence or a moved one-off that already ran does not run again; to rerun, duplicate the event. This settles the open question on one-off edits.
