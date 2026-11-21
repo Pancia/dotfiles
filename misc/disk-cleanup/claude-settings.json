@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(du:*)",
+      "Bash(df:*)",
+      "Bash(ls:*)",
+      "Bash(stat:*)",
+      "Bash(wc:*)",
+      "Bash(file:*)",
+      "Bash(mount)",
+      "Bash(ps:*)",
+      "Bash(sort:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)"
+    ]
+  }
+}
