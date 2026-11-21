@@ -1,4 +1,0 @@
-Summary: Reviewed fcbb18ae (worker/w-36) against alt/review/g-001 d921c9f8. The change meets R7.1 to R7.3 and every success criterion by reading, touches only tests/lib/python/test_ccjj.py plus its worklog, and the stored self-check passed at this exact tree (879b97bc); no BLOCKING finding.
-- MINOR: tests/lib/python/test_ccjj.py:2064 compares entry counts in the operator's real jj repos folders before and after; a concurrent jj or an un-isolated test run elsewhere on the machine that adds an entry in that window makes this test fail spuriously. Rare, and it fails loud rather than silent.
-- MINOR: tests/lib/python/test_ccjj.py:2009 and :2048 take `repo` as well as `tmp_path`, where the brief's signatures named only `tmp_path`; this is harmless and needed for the backs-off and `jj config` checks.
-- MINOR: tests/lib/python/test_ccjj.py:60 sets JJ_CONFIG to the same file jj already finds through XDG_CONFIG_HOME; redundant but as R7.1 asks.

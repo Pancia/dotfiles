@@ -1,6 +1,0 @@
-Summary: Reviewed ad063b7a (worker/w-40) against alt/review/g-001 fcbb18ae. The change meets R8.1 to R8.3 and every Success Criterion; no blocking finding.
-
-The diff touches only `tests/fish/conftest.py`, the new `tests/fish/test_pane_isolation.py` and the worklog. `refs/alt/tasks/m-020` is the tip, and ISOLATE (0d2046cc) is an ancestor. `FishPane.run` builds defaults and then applies `self.env`, so caller overrides still win. The pane home holds a `dotfiles` link to the tree. The new test compares `$HOME` exactly against this test's own `tmp_path`, so it fails with the env change reverted, as the worklog reports. The worklog records the history probe, done with a temp home only. No live path, `.fish` file or doc changed, and no CANARY-pinned line changed. The stored done check passed at this tip: the fish component, 173 passed.
-
-- MINOR: tests/fish/conftest.py:107 sets HOME, XDG_CONFIG_HOME and XDG_DATA_HOME for the pane, but not XDG_CACHE_HOME. The pane still inherits the runner's cache folder. R8.1 does not ask for it, and the runner already isolates it.
-- MINOR: tests/fish/test_pane_isolation.py:33 checks only that DATA and CONFIG lie under the pane home, not their exact paths. This is enough for R8.2.
