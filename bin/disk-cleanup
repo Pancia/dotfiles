@@ -148,6 +148,57 @@ build_report() {
     local denied
     denied="$(awk '$0 == "=== could not read ===" {f = 1; next} /^=== /{f = 0} f && NF' "$LATEST" \
         | sort -r | awk '{ if (index(prev, $0 "/") != 1) print; prev = $0 }' | sort || true)"
+
+    # Fold the folders whose unreadable children are mostly empty sandbox
+    # shells (hundreds of app containers) into one line each. Named, not a
+    # count threshold: a threshold would also fold ~ and ~/Library, and the
+    # session must see Desktop, Mail and Messages by name. Each pair is
+    # "folder<TAB>its section header" (the header gives the "of M" total).
+    # Report only: the snapshot keeps every path for the diff's notes.
+    local fold_pairs user_tmp user_cache
+    user_tmp="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || true)"; user_tmp="${user_tmp%/}"
+    user_cache="$(getconf DARWIN_USER_CACHE_DIR 2>/dev/null || true)"; user_cache="${user_cache%/}"
+    fold_pairs="$HOME/Library/Containers"$'\t'"~/Library/Containers"
+    fold_pairs+=$'\n'"$HOME/Library/Group Containers"$'\t'"~/Library/Group Containers"
+    [[ -n "$user_tmp" ]] && fold_pairs+=$'\n'"$user_tmp"$'\t'
+    [[ -n "$user_cache" ]] && fold_pairs+=$'\n'"$user_cache"$'\t'"$user_cache"
+    if [[ -n "$denied" ]]; then
+        denied="$(printf '%s\n' "$denied" | DC_FOLD="$fold_pairs" awk -v snap="$LATEST" '
+            BEGIN {
+                np = split(ENVIRON["DC_FOLD"], pairs, "\n")
+                for (i = 1; i <= np; i++) {
+                    t = index(pairs[i], "\t")
+                    P[i] = substr(pairs[i], 1, t - 1); H[i] = substr(pairs[i], t + 1)
+                }
+                while ((getline line < snap) > 0) {
+                    if (line ~ /^=== .* ===$/) { sec = substr(line, 5, length(line) - 8); continue }
+                    t = index(line, "\t")
+                    if (t == 0) continue
+                    for (i = 1; i <= np; i++)
+                        if (H[i] != "" && sec == H[i] && substr(line, t + 1) != P[i]) {
+                            tot[i]++; row[substr(line, t + 1)] = 1
+                        }
+                }
+            }
+            {
+                # du prints no row for a child it cannot open at all, so the
+                # total is the rows plus the denied children without one.
+                for (i = 1; i <= np; i++)
+                    if (index($0, P[i] "/") == 1) {
+                        cnt[i]++
+                        if (tot[i] && !($0 in row)) tot[i]++
+                        next
+                    }
+                print
+            }
+            END {
+                for (i = 1; i <= np; i++) {
+                    if (!cnt[i]) continue
+                    if (tot[i]) printf "%s/ (%d of %d could not be read)\n", P[i], cnt[i], tot[i]
+                    else printf "%s/ (%d folders could not be read)\n", P[i], cnt[i]
+                }
+            }' | sort || true)"
+    fi
     if [[ -n "$denied" ]]; then
         printf '  could not read at scan time (sizes below are too small or missing):\n'
         while IFS= read -r path; do
@@ -304,12 +355,12 @@ Help me free up disk space on this Mac. Start with the report at ${REPORT} and t
 Investigate the biggest and fastest-growing directories with du/ls to find what is actually in them, then give me a concrete list of deletion candidates with sizes, safest first. Say what each one is and whether I can get it back. Do not propose something the notes say I kept, unless it has grown a lot or the reason no longer holds. Do not delete anything without asking me, and use trash rather than rm.
 
 Check these before you trust a number:
-- The snapshot usually runs in the background without access to protected folders. Desktop, Documents, Downloads, Mail, Messages, Photos, Music, app containers and the Trash can be missing or too small. The unmeasured line in the report shows the total, and the report lists the folders the scan could not open. Measure the readable ones directly, and say which ones you cannot read.
+- The snapshot usually runs in the background without access to protected folders. Desktop, Documents, Downloads, Mail, Messages, Photos, Music, app containers and the Trash can be missing or too small. The unmeasured line in the report shows the total, and the report lists the folders the scan could not open. Measure the readable ones directly, and say which ones you cannot read. The per-user temp and cache folders (getconf DARWIN_USER_TEMP_DIR and DARWIN_USER_CACHE_DIR) are inside /private. Measure them directly too, because they change by GBs in a day.
 - The / and /System rows in the raw snapshot count the data volume twice. Ignore them.
 - UV_LINK_MODE=hardlink is set, so uv cache files are shared with existing environments. Clearing the cache frees only files with one hard link. Count those, not the du total.
-- Trash frees no space until it is emptied, so say that when you propose it. Cleanup commands such as go clean, uv cache clean and brew cleanup skip the Trash and delete permanently, so ask about those separately.
+- Trash frees no space until it is emptied, so say that when you propose it. trash moves files into ~/.Trash. If ls ~/.Trash says Operation not permitted, you cannot size or empty it: measure each item before you trash it, give the total, and tell me to empty the Trash in Finder. Cleanup commands such as go clean, uv cache clean and brew cleanup skip the Trash and delete permanently, so ask about those separately.
 - A network mount looks like a folder. Check mount before you treat a folder as local disk, and never delete from a mount.
-- Before you clear a cache or build folder, confirm nothing is using it. List programs with ps -axo pid=,comm=, because pgrep -f also matches the long prompts of running agent sessions. Folders under /private/tmp/claude-501 can belong to live sessions.
+- Before you clear a cache or build folder, confirm nothing is using it. List programs with ps -axo pid=,comm=, because pgrep -f also matches the long prompts of running agent sessions. Folders under /private/tmp/claude-501 can belong to live sessions. In a temp folder, run lsof -Fn once and match its output on the /private/var/folders spelling, because lsof does not print the /var spelling that getconf gives. A folder's own date changes only when an entry directly in it changes, so also check its contents with find DIR -newermt '-1 day' -print -quit.
 - Before you call a tool or SDK unused, check what actually points at it: PATH, environment variables and project config.
 - Before you trash a build folder, confirm git tracks nothing in it. Read the output, because a folder outside a repository also prints one line.
 - A project with no git remote, or an environment with no dependency list, cannot simply be recreated. Say so.

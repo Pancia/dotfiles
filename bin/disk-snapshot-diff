@@ -80,23 +80,20 @@ echo ""
 
 # Parse a snapshot file into section -> (path -> size_kb) mappings
 # Output format: section<TAB>path<TAB>size_kb
+# One awk pass. The old bash loop forked two awks per line and took about 20 s
+# on two real snapshots. Lines are "size<TAB>path"; a path may hold spaces.
 parse_snapshot() {
-    local file="$1"
-    local section=""
-    while IFS= read -r line; do
-        if [[ "$line" =~ ^===\ (.+)\ ===$ ]]; then
-            section="${BASH_REMATCH[1]}"
-        elif [[ "$section" == "could not read" && -n "$line" ]]; then
-            printf '%s\t%s\t%s\n' "$section" "$line" "-"
-        elif [[ -n "$line" && -n "$section" ]]; then
-            local size path
-            size="$(echo "$line" | awk '{print $1}')"
-            path="$(echo "$line" | awk '{$1=""; print substr($0,2)}')"
-            if [[ -n "$size" && -n "$path" && "$size" =~ ^[0-9]+$ ]]; then
-                printf '%s\t%s\t%s\n' "$section" "$path" "$size"
-            fi
-        fi
-    done < "$file"
+    awk '
+        /^=== .* ===$/ { section = substr($0, 5, length($0) - 8); next }
+        section == "" || $0 == "" { next }
+        section == "could not read" { printf "%s\t%s\t-\n", section, $0; next }
+        {
+            tab = index($0, "\t")
+            if (tab < 2) next
+            size = substr($0, 1, tab - 1)
+            path = substr($0, tab + 1)
+            if (size ~ /^[0-9]+$/ && path != "") printf "%s\t%s\t%s\n", section, path, size
+        }' "$1"
 }
 
 # Build associative arrays from parsed data
@@ -128,12 +125,18 @@ done
 
 # Group by section and compute deltas
 had_output=false
+no_baseline=()
 while IFS= read -r section; do
     section_lines=()
 
     # A section added to the scan after OLD was taken has no baseline, so every
-    # entry in it would read as NEW.
-    [[ -n "${old_sections[$section]:-}" && -n "${new_sections[$section]:-}" ]] || continue
+    # entry in it would read as NEW. Skip it, but say so below: with a baseline
+    # about 30 days back, silence would read as "no growth" for a month.
+    if [[ -z "${old_sections[$section]:-}" ]]; then
+        [[ -n "${new_sections[$section]:-}" ]] && no_baseline+=("$section")
+        continue
+    fi
+    [[ -n "${new_sections[$section]:-}" ]] || continue
 
     while IFS= read -r key; do
         [[ "$key" != "$section|"* ]] && continue
@@ -177,4 +180,10 @@ done < <(printf '%s\n' "${!sections_seen[@]}" | sort)
 
 if ! $had_output; then
     echo "No significant changes (threshold: $(human_size "$THRESHOLD_KB"))."
+fi
+
+if [[ ${#no_baseline[@]} -gt 0 ]]; then
+    [[ "$had_output" == true ]] || echo ""
+    echo "Not compared (no such section in $old_date, so no baseline yet):"
+    printf '  %s\n' "${no_baseline[@]}"
 fi

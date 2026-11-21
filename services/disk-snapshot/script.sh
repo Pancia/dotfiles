@@ -14,7 +14,8 @@ OUT="${TODAY}_$(date +%H%M%S).txt"
 TMP="${OUT}.partial"
 ERR="${OUT}.err"
 DENIED="${OUT}.denied"
-trap 'rm -f "$TMP" "$ERR" "$DENIED"' EXIT
+TMPDU="${OUT}.tmpdu"
+trap 'rm -f "$TMP" "$ERR" "$DENIED" "$TMPDU"' EXIT
 : > "$DENIED"
 
 log() { echo "$*" >&2; }
@@ -105,6 +106,84 @@ scan "~/Library/Containers" local_du -d 1 -k "$HOME/Library/Containers" >> "$TMP
 scan "~/Library/Group Containers" local_du -d 1 -k "$HOME/Library/Group Containers" >> "$TMP"
 scan "~/Documents" local_du -d 1 -k "$HOME/Documents" >> "$TMP"
 scan "~/Downloads" local_du -d 1 -k "$HOME/Downloads" >> "$TMP"
+
+# The per-user temp and cache folders. Agents and test runs fill them fast,
+# and the "/" scan shows them only inside the one "/private" row.
+# - getconf, never $TMPDIR: launchd may leave TMPDIR unset, and set -u aborts.
+# - The section header must be the bare path, with no trailing slash (getconf
+#   prints one). disk-cleanup takes a section's root from its header and drops
+#   that root row; with any other header the root row stays first and the
+#   descendant filter then hides every child.
+# - Keep getconf's /var spelling. A /private/var spelling would make the
+#   report's deepest-only filter drop "/private" from the could-not-read list.
+user_tmp="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || true)"
+user_tmp="${user_tmp%/}"
+user_cache="$(getconf DARWIN_USER_CACHE_DIR 2>/dev/null || true)"
+user_cache="${user_cache%/}"
+
+# Cache-folder names are bundle ids and stay the same, so depth 1 compares
+# well across snapshots.
+if [ -n "$user_cache" ] && [ -d "$user_cache" ]; then
+    scan "$user_cache" local_du -d 1 -k "$user_cache" >> "$TMP"
+fi
+
+# Temp-folder names mostly end in a random suffix, so the same kind of entry
+# never matches from one snapshot to the next, and each one is too small to
+# list. Group them by name instead (tmp.* for mktemp, tmp???????? for Python's
+# tempfile, prefix-* for "prefix-<digits or random>"). Rows:
+#   - each group of 2 or more entries;
+#   - each single entry of 100 MB or more (a big live cache must not hide in
+#     the remainder);
+#   - "(other small)": the rest, so the section always adds up to the total.
+# One du run feeds both the rows and the denied list. du exits 1 when it meets
+# a folder it cannot open, so the || true is required: under set -e and
+# pipefail an unguarded failure ends the script, and the trap then deletes the
+# partial file, so no snapshot is written at all.
+if [ -n "$user_tmp" ] && [ -d "$user_tmp" ]; then
+    log "Scanning $user_tmp (by name) ..."
+    { local_du -d 1 -k "$user_tmp" 2>"$ERR" || true; } > "$TMPDU"
+    {
+        echo "=== $user_tmp (by name) ==="
+        awk -F'\t' -v root="$user_tmp" -v big=102400 '
+            function randomish(tok,   up, lo, t) {
+                if (tok ~ /[0-9]/) return 1
+                t = tok; up = gsub(/[A-Z]/, "", t)
+                t = tok; lo = gsub(/[a-z]/, "", t)
+                return length(tok) >= 8 && up >= 3 && lo >= 2
+            }
+            function group_key(name,   stem, sep, last, i, found) {
+                # Python tempfile: "tmp" plus 8 characters, no separator rule
+                # first, because those 8 can include "_".
+                if (name ~ /^tmp[a-z0-9_]{8}$/) return "tmp????????"
+                stem = name; found = 0
+                while (match(stem, /[-._][^-._]+$/)) {
+                    last = substr(stem, RSTART + 1)
+                    if (!randomish(last)) break
+                    sep = substr(stem, RSTART, 1)
+                    stem = substr(stem, 1, RSTART - 1)
+                    found = 1
+                }
+                if (!found || stem == "") return name
+                return stem sep "*"
+            }
+            $2 == root || $2 == "" { next }
+            {
+                name = substr($2, length(root) + 2)
+                k = group_key(name)
+                n[k]++; kb[k] += $1
+            }
+            END {
+                for (k in n) {
+                    if (n[k] >= 2 || kb[k] >= big) printf "%d\t%s/%s\n", kb[k], root, k
+                    else rest += kb[k]
+                }
+                if (rest > 0) printf "%d\t%s/(other small)\n", rest, root
+            }' "$TMPDU" | sort -t$'\t' -k2
+        echo ""
+    } >> "$TMP"
+    denied_entries "$user_tmp" 1 < "$ERR" >> "$DENIED" || true
+    log "Done scanning $user_tmp"
+fi
 
 # The git-repos section below cannot see a project with no .git.
 scan "~/projects" local_du -d 1 -k "$HOME/projects" >> "$TMP"
