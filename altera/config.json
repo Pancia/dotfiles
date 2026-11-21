@@ -75,5 +75,8 @@
   "landing": {
     "mode": "review",
     "accept": "local"
+  },
+  "artifacts": {
+    "location": "external"
   }
 }
