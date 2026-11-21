@@ -387,7 +387,7 @@ its own XDG folders, and a test identity for git and jj (`GIT_CONFIG_GLOBAL`,
 `JJ_CONFIG`). It pins uv's cache to the real one, removes tmux, iTerm and Claude
 session variables (`TMUX`, `CLAUDE_*`, …), and puts the tree's `bin/` first on `PATH`
 with every other `dotfiles/bin` removed. Tests must not rely on the real home or the
-live checkout. Interim: after this row merges, `hooks`, `astro` and `roleplay` fail under `cmds test` until HOOKS, ASTRO and REST-A land.
+live checkout; `tests/lib/python/test_hermetic_env.py` checks this, so a bare `pytest` fails on purpose.
 What is set and removed, and the `"isolation": False` opt-out: "Isolation" in [docs/testing.md](docs/testing.md).
 
 The component table (aliases, runners, deps) and the aggregate summary: [docs/testing.md](docs/testing.md). The `fish` component takes about 3 min, longer than the Bash tool's 2 min default timeout: run one file when you can, and give a full run a longer timeout.

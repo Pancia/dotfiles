@@ -161,7 +161,18 @@ Checked under isolation and needing no opt-out (row REST-B):
   `GIT_CONFIG_GLOBAL` drops it, and `test_git_sees_no_live_hooks_path` pins that:
   outside the runner, on this machine, it fails.
 
-**Interim red** (row ISOLATE of the hermetic-test-suite spec added the isolation):
-after this row merges, `hooks`, `astro` and `roleplay` fail under `cmds test` until HOOKS, ASTRO and REST-A land.
-Those components still read the live checkout or the real home, and each of those
-rows makes its component pass under isolation.
+**The guard** (`tests/lib/python/test_hermetic_env.py`, in `lib/python`):
+
+- `test_home_is_a_throwaway`: `HOME` is not the real home and lies under the
+  system temp folder. **A bare `pytest` fails it on purpose**: that run uses the
+  real home, so it is not the environment the gate tests. Run through the
+  runner;
+- `test_dotfiles_in_home_is_the_tree_under_test`: `$HOME/dotfiles` resolves to
+  this tree;
+- `test_no_test_names_the_live_checkout`: scans `tests/**/*.py` and
+  `roleplay/tests/*.py` for `Path.home() / "dotfiles"`, `~/dotfiles` and
+  `$HOME/dotfiles`, skipping `#` comment lines. A line that must stay (a
+  docstring, or a guard against the live checkout) goes in `ALLOWED`, keyed by
+  file and its exact stripped text, with a one-line reason. A new live-path line
+  in an allowlisted file still fails, and `test_allowlist_has_no_stale_entries`
+  fails when an entry no longer matches a line.
