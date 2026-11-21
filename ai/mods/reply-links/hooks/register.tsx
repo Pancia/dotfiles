@@ -40,7 +40,12 @@ const COMMANDS_FAIL_TTL_MS = 10_000
 const COMMANDS_WAIT_MS = 1_000
 const NONE: ReadonlySet<string> = new Set()
 let commandCache: { at: number; ttl: number; names: ReadonlySet<string> } | null = null
-let commandAsk: Promise<ReadonlySet<string>> | null = null
+let commandAsk: { at: number; names: Promise<ReadonlySet<string>> } | null = null
+// True when a draw gave up waiting on the ask, so its answer should redraw.
+let missedDraw = false
+// The last command a click put in the box: a later answer click, in any
+// reply block, replaces it rather than going under it as its arguments.
+let lastCommand: string | null = null
 
 // The system-prompt section that asks for answer lines: about 250 tokens,
 // once per session (after the cache boundary, so cached across its turns).
@@ -85,34 +90,61 @@ export const register: Register = on => {
 
     // The names of the slash commands, asked for only when a reply may hold
     // one. A failed or slow ask gives no command row; the rest still draws.
+    // The engine's clock, which a test moves; the process's if it is refused.
+    const clockNow = async () => {
+      try {
+        return await $.clock.now()
+      } catch {
+        return Date.now()
+      }
+    }
     const commandsFor = async (text: string): Promise<ReadonlySet<string>> => {
       if (!mayHaveCommand(text)) return NONE
-      if (commandCache && Date.now() - commandCache.at < commandCache.ttl) return commandCache.names
-      commandAsk ??= $.command
-        .list()
-        .then(list => {
-          const names: ReadonlySet<string> = new Set(list.map(c => c.name))
-          commandCache = { at: Date.now(), ttl: COMMANDS_TTL_MS, names }
-          return names
-        })
-        .catch(() => {
-          commandCache = { at: Date.now(), ttl: COMMANDS_FAIL_TTL_MS, names: NONE }
-          return NONE
-        })
-        .finally(() => {
-          commandAsk = null
-        })
+      const now = await clockNow()
+      if (commandCache && now - commandCache.at < commandCache.ttl) return commandCache.names
+      // An ask that has not answered in 10 s is taken as lost, and asked again.
+      if (commandAsk && now - commandAsk.at > COMMANDS_FAIL_TTL_MS) commandAsk = null
+      if (!commandAsk) {
+        const ask: { at: number; names: Promise<ReadonlySet<string>> } = { at: now, names: Promise.resolve(NONE) }
+        ask.names = $.command
+          .list()
+          .then(async list => {
+            const names: ReadonlySet<string> = new Set(list.map(c => c.name))
+            commandCache = { at: await clockNow(), ttl: COMMANDS_TTL_MS, names }
+            // A block drawn while this ask was late has no row: draw again.
+            if (missedDraw) {
+              missedDraw = false
+              try {
+                $.ui.invalidate('ui.render')
+              } catch {
+                // The next redraw shows the row instead.
+              }
+            }
+            return names
+          })
+          .catch(async () => {
+            commandCache = { at: await clockNow(), ttl: COMMANDS_FAIL_TTL_MS, names: NONE }
+            return NONE
+          })
+          .finally(() => {
+            if (commandAsk === ask) commandAsk = null
+          })
+        commandAsk = ask
+      }
       // A refused timer must not fail the drawing: then wait for the ask alone.
       let timer: { cancel: () => void } | undefined
       const late = new Promise<ReadonlySet<string>>(resolve => {
         try {
-          timer = $.clock.after(COMMANDS_WAIT_MS, () => resolve(NONE))
+          timer = $.clock.after(COMMANDS_WAIT_MS, () => {
+            missedDraw = true
+            resolve(NONE)
+          })
         } catch {
           // No timer here.
         }
       })
       try {
-        return await Promise.race([commandAsk, late])
+        return await Promise.race([commandAsk.names, late])
       } finally {
         timer?.cancel()
       }
@@ -138,6 +170,8 @@ export const register: Register = on => {
     const core = next.trace.find(t => t.plugin === 'engine')?.received
     const props = core?.component === 'AssistantMessage' && typeof core.props.text === 'string' ? core.props : e.props
     const known = props.text === e.props.text ? names : await commandsFor(props.text)
+    // A block a plugin beneath emptied draws as it gave it, with no button.
+    if (props.text.trim() === '') return inner
     const linked = props.text === e.props.text ? quick : linkify(props.text, known)
     // The commands this reply offers, for telling a click's command in the
     // box from a draft.
@@ -158,9 +192,13 @@ export const register: Register = on => {
       }
       try {
         const box = await $.prompt.read()
+        // A block with no "/" asked for no names: use the session's, and the
+        // command a click in another block may have left.
+        const names = known.size > 0 ? known : (commandCache?.names ?? NONE)
+        const ours = lastCommand === null ? offered : [...offered, lastCommand]
         let text: string
         if (action.kind === 'command') {
-          const put = commandToBox(box.text, action.text, known, offered)
+          const put = commandToBox(box.text, action.text, names, ours)
           if (put === null) {
             $.ui.toast(`Empty the prompt box first: ${action.text} runs only from its start.`)
             return
@@ -169,7 +207,7 @@ export const register: Register = on => {
         } else {
           // An answer replaces a lone command a click left: under it, the
           // answer would go to the command as its arguments.
-          const base = isLoneCommand(box.text, known, offered) ? '' : box.text
+          const base = isLoneCommand(box.text, names, ours) ? '' : box.text
           text = addToBox(base, action.text)
         }
         if (text === box.text) return
@@ -180,6 +218,8 @@ export const register: Register = on => {
           : await $.prompt.fill({ text })
         if (!filled.isFilled) {
           $.ui.toast(filled.refusal === 'dialog' ? 'Close the dialog first, then click again.' : 'The prompt box did not take the text.')
+        } else {
+          lastCommand = action.kind === 'command' ? action.text : null
         }
       } catch (err) {
         $.ui.toast(`Could not fill the prompt box: ${String(err)}`)
@@ -315,9 +355,6 @@ export const register: Register = on => {
       ),
     )
 
-    // Every reply this mod draws ends in the submit button, whatever it holds:
-    // answer rows, Where-next IDs, command rows or links alone.
-    const hasButtons = true
     const mine = (
       <Box flexDirection="row">
         <Box width={2} flexShrink={0}>
@@ -325,17 +362,16 @@ export const register: Register = on => {
         </Box>
         <Box flexDirection="column" flexGrow={1} flexShrink={1}>
           {parts}
-          {hasButtons ? (
-            // One send button at the end of a reply that has buttons.
-            <Box key="submitRow" flexDirection="row" marginTop={1}>
-              <Button key="submit" label="submit" plain onPress={() => submit()}>
-                {/* Green, so it is not read as the recommended answer. */}
-                <Text backgroundColor="success" color="inverseText" bold>
-                  {'[ submit ↵ ]'}
-                </Text>
-              </Button>
-            </Box>
-          ) : null}
+          {/* One send button at the end of every reply block, whatever it
+              holds: answer rows, Where-next IDs, command rows or prose alone. */}
+          <Box key="submitRow" flexDirection="row" marginTop={1}>
+            <Button key="submit" label="submit" plain onPress={() => submit()}>
+              {/* Green, so it is not read as the recommended answer. */}
+              <Text backgroundColor="success" color="inverseText" bold>
+                {'[ submit ↵ ]'}
+              </Text>
+            </Button>
+          </Box>
         </Box>
       </Box>
     )

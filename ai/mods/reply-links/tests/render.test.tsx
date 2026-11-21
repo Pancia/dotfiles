@@ -328,6 +328,64 @@ test('an answer click replaces a command a click left', async ($, on) => {
   await ui.unmount()
 })
 
+test('an answer click in a later block replaces a command a click left', async ($, on) => {
+  const box = promptBox(on)
+  listing(on, ['clear'])
+  const first = await mount($, 'Run /clear.')
+  await first.press({ key: 'c1-0' })
+  expect(box.text).toBe('/clear')
+  await first.unmount()
+  // This block names no command, so it asks for no names of its own.
+  const second = await mount($, '**Q1 (go):** Ok?\n【Q1: yes | no】')
+  await second.press({ key: 'b1-0' })
+  expect(box.text).toBe('Q1 (go): yes')
+  await second.unmount()
+})
+
+test('a block a mod beneath empties gets no submit button', {
+  plugins: [{
+    name: 'emptier',
+    tier: 'append',
+    register(on: On) {
+      on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => next({ ...e, props: { ...e.props, text: '' } }))
+    },
+  }],
+}, async $ => {
+  const ui = await mount($, 'Some text.')
+  expect((await ui.findAll({ type: 'Button' })).length).toBe(0)
+  await ui.unmount()
+})
+
+test('a list that answers late redraws, and a lost ask is asked again', async ($, on) => {
+  const clock = mock.clock(on)
+  let calls = 0
+  const redraws: unknown[] = []
+  on('ui.invalidate', (_, e) => {
+    redraws.push(e)
+    return { value: undefined }
+  })
+  on('command.list', async () => {
+    calls++
+    if (calls === 1) return new Promise<never>(() => undefined)
+    await clock.sleep(2_000)
+    return { value: [{ name: 'clear', description: '', source: 'builtin' }] }
+  })
+  // The first ask never answers: the block draws after 1 s with no row.
+  let mounting = mount($, 'Run /clear.')
+  await clock.advance(1_000)
+  await (await mounting).unmount()
+  // Past 10 s it is taken as lost; the next ask answers 2 s late.
+  await clock.advance(10_000)
+  mounting = mount($, 'Run /clear.')
+  await clock.advance(1_000)
+  const ui = await mounting
+  expect(await ui.find({ key: 'c1-0' })).toBeUndefined()
+  await clock.advance(1_500)
+  expect(calls).toBe(2)
+  expect(redraws.length).toBe(1)
+  await ui.unmount()
+})
+
 test('a failed command list draws no row and is not asked on every draw', async ($, on) => {
   let calls = 0
   on('command.list', () => {

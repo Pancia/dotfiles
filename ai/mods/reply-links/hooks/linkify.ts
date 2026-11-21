@@ -91,6 +91,7 @@ const CMD_NAME = String.raw`[A-Za-z][\w-]*(?::[\w-]+)*`
 // `prose`: the line's start, a space, or a "(" that opens no link target.
 const CMD_PROSE = new RegExp(String.raw`(\*{1,3}|_{1,3})?/(${CMD_NAME})(?=$|[\s,;!?)*_]|[.:](?=\s|$))`, 'g')
 const LIST_MARK = /^\s*(?:[-*+]|\d+[.)])\s/
+const ITEM_TEXT = /^\s*(?:[-*+]|\d+[.)])\s+/
 const HEADING = /^\s{0,3}#{1,6}\s/
 const END_LINE = /^\s*(⏳|👀)/u
 // Lines whose text is not prose: a reference definition, a block quote.
@@ -243,8 +244,11 @@ export function linkify(src: string, commands: ReadonlySet<string> = new Set()):
             ? first
             : /\s/.test(before) || (before === '(' && part[at - 2] !== ']')
         // A name may hold "_", so "_/x_" takes the closing "_" into it.
-        const name = m[1]?.startsWith('_') ? (m[2] ?? '').replace(/_+$/, '') : (m[2] ?? '')
-        if (opens && commands.has(name)) command(`/${name}`)
+        const lead = m[1] ?? ''
+        const name = lead.startsWith('_') ? (m[2] ?? '').replace(/_+$/, '') : (m[2] ?? '')
+        // "**/x**" is bold; "**/x" with no closing run is a glob.
+        const closed = lead === '' || part.startsWith(lead, at + lead.length + 1 + name.length)
+        if (opens && closed && commands.has(name)) command(`/${name}`)
       }
     }
     return out
@@ -282,7 +286,10 @@ export function linkify(src: string, commands: ReadonlySet<string> = new Set()):
   let cutNext = false
   let fenceEnded = false
   let blockIsList = false
+  // The column where the last list item's text starts: "  - x" → 4.
+  let itemText = 0
   let inIndentedCode = false
+  let inComment = false
 
   for (const line of src.split('\n')) {
     const f = FENCE_OPEN.exec(line)?.[1]
@@ -330,15 +337,28 @@ export function linkify(src: string, commands: ReadonlySet<string> = new Set()):
         blockIndent = indent
         blockIsList = false
       }
-      // After a blank line, four spaces outside a list open an indented code block.
-      inIndentedCode = indent >= 4 && !blockIsList && (prevBlank || inIndentedCode)
-      if (LIST_MARK.test(line) && !inIndentedCode) blockIsList = true
+      // Four spaces past where text may start open an indented code block:
+      // outside a list after a blank line or at a block's start (the reply's,
+      // a heading's, a fence's); in a list item, four past the item's text,
+      // after a blank line.
+      inIndentedCode = blockIsList
+        ? indent >= itemText + 4 && (prevBlank || inIndentedCode)
+        : indent >= 4 && (prevBlank || inIndentedCode || cut)
+      const mark = inIndentedCode ? null : ITEM_TEXT.exec(line)
+      if (mark) {
+        blockIsList = true
+        itemText = mark[0].length
+      }
       cutNext = HEADING.test(line)
       fenceEnded = false
       atStart = false
     }
     prevBlank = blank
-    const scan = !inIndentedCode && !NOT_PROSE.test(line)
+    // Nothing in an HTML comment is prose: "<!-- /clear -->".
+    const commented = inComment || line.includes('<!--')
+    if (line.lastIndexOf('<!--') > line.lastIndexOf('-->')) inComment = true
+    else if (line.includes('-->')) inComment = false
+    const scan = !inIndentedCode && !commented && !NOT_PROSE.test(line)
 
     if (f) {
       fence = { char: f[0] ?? '`', len: f.length, margin: /^[`~]/.test(line) }
@@ -396,11 +416,6 @@ export function linkify(src: string, commands: ReadonlySet<string> = new Set()):
   flush()
 
   return { segments, actions }
-}
-
-/** True when the reply holds nothing for the mod to draw. */
-export function isPlain(l: Linked): boolean {
-  return l.actions.size === 0 && l.segments.every(s => s.kind === 'markdown')
 }
 
 const ANSWER_KEY = new RegExp(String.raw`^(Q\d+(?: ${PARENS})?): `)
